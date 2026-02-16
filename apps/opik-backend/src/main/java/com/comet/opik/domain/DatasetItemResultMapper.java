@@ -8,12 +8,12 @@ import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -184,44 +184,24 @@ class DatasetItemResultMapper {
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
     };
 
-    private static List<EvaluatorItem> getEvaluators(Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
+    private static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("evaluators")) {
             return null;
         }
-        try {
-            return Optional.ofNullable(row.get("evaluators", String.class))
-                    .filter(s -> !s.isBlank() && !"[]".equals(s))
-                    .map(s -> {
-                        try {
-                            return JsonUtils.getMapper().readValue(s, EVALUATOR_LIST_TYPE);
-                        } catch (JsonProcessingException e) {
-                            return (List<EvaluatorItem>) null;
-                        }
-                    })
-                    .orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
+        return Optional.ofNullable(row.get("evaluators", String.class))
+                .filter(s -> !s.isBlank() && !"[]".equals(s))
+                .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .orElse(null);
     }
 
-    private static ExecutionPolicy getExecutionPolicy(Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
+    private static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("execution_policy")) {
             return null;
         }
-        try {
-            return Optional.ofNullable(row.get("execution_policy", String.class))
-                    .filter(s -> !s.isBlank())
-                    .map(s -> {
-                        try {
-                            return JsonUtils.getMapper().readValue(s, ExecutionPolicy.class);
-                        } catch (JsonProcessingException e) {
-                            return (ExecutionPolicy) null;
-                        }
-                    })
-                    .orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
+        return Optional.ofNullable(row.get("execution_policy", String.class))
+                .filter(s -> !s.isBlank())
+                .map(s -> JsonUtils.readValue(s, ExecutionPolicy.class))
+                .orElse(null);
     }
 
     private static Map<String, JsonNode> getData(Row row) {

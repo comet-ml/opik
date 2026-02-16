@@ -3668,12 +3668,12 @@ class DatasetVersionResourceTest {
 
             var evaluators = List.of(
                     EvaluatorItem.builder()
-                            .name("hallucination-check")
+                            .name(UUID.randomUUID().toString())
                             .type(EvaluatorType.LLM_JUDGE)
                             .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
                             .build(),
                     EvaluatorItem.builder()
-                            .name("toxicity-score")
+                            .name(UUID.randomUUID().toString())
                             .type(EvaluatorType.CODE_METRIC)
                             .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.5}"))
                             .build());
@@ -3685,7 +3685,7 @@ class DatasetVersionResourceTest {
 
             var items = List.of(DatasetItem.builder()
                     .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
                     .evaluators(evaluators)
                     .executionPolicy(executionPolicy)
                     .build());
@@ -3703,15 +3703,8 @@ class DatasetVersionResourceTest {
             assertThat(returnedItems).hasSize(1);
 
             var returnedItem = returnedItems.getFirst();
-            assertThat(returnedItem.evaluators()).hasSize(2);
-            assertThat(returnedItem.evaluators().get(0).name()).isEqualTo("hallucination-check");
-            assertThat(returnedItem.evaluators().get(0).type()).isEqualTo(EvaluatorType.LLM_JUDGE);
-            assertThat(returnedItem.evaluators().get(1).name()).isEqualTo("toxicity-score");
-            assertThat(returnedItem.evaluators().get(1).type()).isEqualTo(EvaluatorType.CODE_METRIC);
-
-            assertThat(returnedItem.executionPolicy()).isNotNull();
-            assertThat(returnedItem.executionPolicy().runsPerItem()).isEqualTo(3);
-            assertThat(returnedItem.executionPolicy().passThreshold()).isEqualTo(2);
+            assertThat(returnedItem.evaluators()).isEqualTo(evaluators);
+            assertThat(returnedItem.executionPolicy()).isEqualTo(executionPolicy);
         }
 
         @Test
@@ -3721,14 +3714,14 @@ class DatasetVersionResourceTest {
 
             var originalEvaluators = List.of(
                     EvaluatorItem.builder()
-                            .name("original-evaluator")
+                            .name(UUID.randomUUID().toString())
                             .type(EvaluatorType.LLM_JUDGE)
                             .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
                             .build());
 
             var items = List.of(DatasetItem.builder()
                     .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
                     .evaluators(originalEvaluators)
                     .build());
 
@@ -3750,7 +3743,7 @@ class DatasetVersionResourceTest {
             // Edit only evaluators — data stays the same
             var newEvaluators = List.of(
                     EvaluatorItem.builder()
-                            .name("new-evaluator")
+                            .name(UUID.randomUUID().toString())
                             .type(EvaluatorType.CODE_METRIC)
                             .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.8}"))
                             .build());
@@ -3777,8 +3770,7 @@ class DatasetVersionResourceTest {
             // Verify the evaluator was actually updated
             var v2Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
-            assertThat(v2Items.getFirst().evaluators()).hasSize(1);
-            assertThat(v2Items.getFirst().evaluators().getFirst().name()).isEqualTo("new-evaluator");
+            assertThat(v2Items.getFirst().evaluators()).isEqualTo(newEvaluators);
         }
 
         @Test
@@ -3793,7 +3785,7 @@ class DatasetVersionResourceTest {
 
             var items = List.of(DatasetItem.builder()
                     .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
                     .executionPolicy(originalPolicy)
                     .build());
 
@@ -3840,9 +3832,7 @@ class DatasetVersionResourceTest {
             // Verify the execution policy was actually updated
             var v2Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
-            assertThat(v2Items.getFirst().executionPolicy()).isNotNull();
-            assertThat(v2Items.getFirst().executionPolicy().runsPerItem()).isEqualTo(5);
-            assertThat(v2Items.getFirst().executionPolicy().passThreshold()).isEqualTo(3);
+            assertThat(v2Items.getFirst().executionPolicy()).isEqualTo(newPolicy);
         }
 
         @Test
@@ -3852,7 +3842,7 @@ class DatasetVersionResourceTest {
 
             var items = List.of(DatasetItem.builder()
                     .source(DatasetItemSource.SDK)
-                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
                     .build());
 
             var batch = DatasetItemBatch.builder()
@@ -3868,7 +3858,7 @@ class DatasetVersionResourceTest {
 
             var newEvaluators = List.of(
                     EvaluatorItem.builder()
-                            .name("batch-evaluator")
+                            .name(UUID.randomUUID().toString())
                             .type(EvaluatorType.LLM_JUDGE)
                             .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
                             .build());
@@ -3891,13 +3881,8 @@ class DatasetVersionResourceTest {
             assertThat(latestItems).hasSize(1);
 
             var updatedItem = latestItems.getFirst();
-            assertThat(updatedItem.evaluators()).hasSize(1);
-            assertThat(updatedItem.evaluators().getFirst().name()).isEqualTo("batch-evaluator");
-            assertThat(updatedItem.evaluators().getFirst().type()).isEqualTo(EvaluatorType.LLM_JUDGE);
-
-            assertThat(updatedItem.executionPolicy()).isNotNull();
-            assertThat(updatedItem.executionPolicy().runsPerItem()).isEqualTo(4);
-            assertThat(updatedItem.executionPolicy().passThreshold()).isEqualTo(2);
+            assertThat(updatedItem.evaluators()).isEqualTo(newEvaluators);
+            assertThat(updatedItem.executionPolicy()).isEqualTo(newPolicy);
         }
     }
 }

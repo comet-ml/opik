@@ -19,7 +19,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -35,7 +34,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -1762,9 +1760,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
                                 .map(arr -> new HashSet<>(Arrays.asList(arr)))
                                 .orElseGet(HashSet::new);
-                        var evaluatorsHash = Optional.ofNullable(row.get("evaluators_hash", Long.class)).orElse(0L);
-                        var executionPolicyHash = Optional.ofNullable(row.get("execution_policy_hash", Long.class))
-                                .orElse(0L);
+                        var evaluatorsHash = row.get("evaluators_hash", Long.class);
+                        var executionPolicyHash = row.get("execution_policy_hash", Long.class);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
@@ -2687,22 +2684,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         if (evaluators == null || evaluators.isEmpty()) {
             return "[]";
         }
-        try {
-            return JsonUtils.getMapper().writeValueAsString(evaluators);
-        } catch (JsonProcessingException e) {
-            throw new UncheckedIOException(e);
-        }
+        return JsonUtils.writeValueAsString(evaluators);
     }
 
     private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
         if (executionPolicy == null) {
             return "";
         }
-        try {
-            return JsonUtils.getMapper().writeValueAsString(executionPolicy);
-        } catch (JsonProcessingException e) {
-            throw new UncheckedIOException(e);
-        }
+        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override
