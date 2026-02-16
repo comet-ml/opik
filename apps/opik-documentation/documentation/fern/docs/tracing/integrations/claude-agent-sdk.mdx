@@ -1,42 +1,94 @@
 ---
-description: Configure Claude telemetry and understand Opik compatibility.
+description: Configure Claude telemetry and route OpenTelemetry output to Opik-compatible endpoints.
 headline: Claude Agent SDK | Opik Documentation
-og:description: Claude telemetry setup is environment-variable driven; verify signal compatibility with Opik ingestion.
+og:description: Claude telemetry is configured with environment variables; this guide clarifies Opik endpoint modes and signal caveats.
 og:site_name: Opik Documentation
 og:title: Claude Agent SDK Integration - Opik
 title: Observability for Claude Agent SDK with Opik
 ---
 
-Claude's official telemetry setup is environment-variable based (no Python tracer bootstrap in their docs).
+Claude's official telemetry setup is environment-variable based.
 
-## Official telemetry setup (Claude docs)
+## When this guide applies
+
+Use this guide if you run Claude tooling that emits OpenTelemetry telemetry and you want to route that telemetry into an Opik-compatible OTLP pipeline.
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended for deterministic routing)
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName`
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - none by default (depends on your auth setup)
+
+        Optional headers:
+        - `projectName` (recommended)
+        - auth headers if your instance enforces auth
+    </Tab>
+</Tabs>
+
+## Claude telemetry configuration (official pattern)
+
+Intent:
+Enable Claude telemetry exporters.
+
+Applies when:
+You run Claude tooling that supports telemetry environment variables.
+
+Minimal valid input:
+- enable telemetry
+- choose exporters
+- set OTLP protocol + endpoint
 
 ```bash wordWrap
-# 1) Enable telemetry
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
-
-# 2) Choose exporters
 export OTEL_METRICS_EXPORTER=otlp
 export OTEL_LOGS_EXPORTER=otlp
-
-# 3) OTLP target
 export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-
-# 4) Optional auth header
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your-token"
-
-# 5) Run Claude
+# Optional if your collector/export path requires auth
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <token>"
 claude
 ```
 
-## Important compatibility note
+## Signal compatibility note
 
-Claude telemetry docs currently describe **metrics and events/logs** signals. Opik's tracing UI is built around **trace spans**. That means this integration is configuration-compatible at OTLP transport level, but signal compatibility depends on what your backend path ingests.
-
-If your goal is Opik trace analysis specifically, verify that the emitted signal path includes traces from your application stack (not only metrics/events).
+Claude monitoring docs currently describe metrics and events/logs signals. Opik's tracing views are span-oriented. If you need trace-level analysis in Opik, verify your telemetry path emits spans compatible with your Opik ingestion setup.
 
 ## Source references
 
 - [Claude Code monitoring (official)](https://code.claude.com/docs/en/monitoring-usage)
-- [OpenTelemetry environment variables spec](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
+- [OpenTelemetry SDK environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)
