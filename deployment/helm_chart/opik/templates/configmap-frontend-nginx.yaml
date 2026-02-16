@@ -146,7 +146,7 @@ data:
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
-            {{ $k }} {{ $v }};
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
 
             proxy_http_version 1.1;
@@ -184,7 +184,7 @@ data:
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         {{- range $k, $v := .Values.component.frontend.aiBackendUpstreamConfig }}
-            {{ $k }} {{ $v }};
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
 
             proxy_http_version 1.1;
