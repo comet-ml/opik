@@ -11,7 +11,7 @@ const OPTIONS = {
   TEST_PROMPTS:
     "Test prompts – Test prompts across models and providers approaches",
   RUN_EVALUATIONS:
-    "Run evaluations – Run experiments and and track performance across versions of your app",
+    "Run evaluations – Run experiments and track performance across versions of your app",
 } as const;
 
 const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
