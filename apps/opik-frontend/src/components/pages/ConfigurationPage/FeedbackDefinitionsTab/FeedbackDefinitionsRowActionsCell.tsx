@@ -89,7 +89,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
               setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
-            className="text-destructive focus:text-destructive"
+            variant="destructive"
           >
             <Trash className="mr-2 size-4" />
             Delete

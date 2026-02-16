@@ -39,10 +39,7 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={deleteDataset}
-            className="text-destructive focus:text-destructive"
-          >
+          <DropdownMenuItem onClick={deleteDataset} variant="destructive">
             <Trash className="mr-2 size-4" />
             Delete
           </DropdownMenuItem>

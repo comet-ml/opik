@@ -73,10 +73,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
             Clone
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={handleDelete}
-            className="text-destructive focus:text-destructive"
-          >
+          <DropdownMenuItem onClick={handleDelete} variant="destructive">
             <Trash className="mr-2 size-4" />
             Delete
           </DropdownMenuItem>

@@ -611,7 +611,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => setPopupOpen(true)}
-              className="text-destructive focus:text-destructive"
+              variant="destructive"
             >
               <Trash className="mr-2 size-4" />
               Delete trace
