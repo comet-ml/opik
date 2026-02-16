@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/resizable";
 import ThreadComments from "./ThreadComments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion } from "@/components/ui/accordion";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import ThreadAnnotations from "./ThreadAnnotations";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
@@ -392,14 +393,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <TooltipWrapper
               content={`Estimated cost ${formatCost(
                 thread?.total_estimated_cost,
+                { modifier: "full" },
               )}`}
             >
               <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
                 <Coins className="size-4 shrink-0" />
                 <span className="comet-body-s-accented truncate">
-                  {formatCost(thread?.total_estimated_cost, {
-                    modifier: "short",
-                  })}
+                  {formatCost(thread?.total_estimated_cost)}
                 </span>
               </div>
             </TooltipWrapper>
@@ -441,7 +441,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <MediaProvider media={media}>
             {media.length > 0 && (
               <div className="mb-4 px-6">
-                <AttachmentsList media={media} />
+                <Accordion type="multiple" defaultValue={["attachments"]}>
+                  <AttachmentsList media={media} />
+                </Accordion>
               </div>
             )}
             <div style={bodyStyle}>
