@@ -193,7 +193,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     }
     if (isPythonCodeRule(defaultRule)) {
       const args =
-        "arguments" in defaultRule.code ? defaultRule.code.arguments : undefined;
+        "arguments" in defaultRule.code
+          ? defaultRule.code.arguments
+          : undefined;
       return !!args && Object.keys(args).length > 0;
     }
     return false;
@@ -331,6 +333,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     formScope,
     formUIRuleType,
     form,
+    pythonCodeDefaults,
   ]);
 
   const handleScopeChange = useCallback(
@@ -365,7 +368,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         applyChange();
       }
     },
-    [form, requestConfirm],
+    [form, requestConfirm, pythonCodeDefaults],
   );
 
   const { mutate: createMutate } = useRuleCreateMutation();
