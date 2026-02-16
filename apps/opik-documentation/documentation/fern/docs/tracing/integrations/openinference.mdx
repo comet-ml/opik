@@ -44,17 +44,17 @@ title: Observability for OpenInference with Opik
 ```python
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from openinference.instrumentation.langchain import LangChainInstrumentor
 
-# Configure OpenTelemetry exporter
-provider = TracerProvider()
-provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
+resource = Resource.create({"service.name": "openinference-langchain-app"})
+provider = TracerProvider(resource=resource)
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
 
-# Enable OpenInference instrumentation
 LangChainInstrumentor().instrument(tracer_provider=provider)
 
 # Run your app as usual (LangChain calls now emit OTEL spans)
@@ -78,3 +78,9 @@ Any unsupported attributes are still preserved in span input/metadata.
 - Set `projectName` in headers to avoid data landing in the default project
 
 If you would like deeper mapping for a specific OpenInference package, open an issue on [GitHub](https://github.com/comet-ml/opik/issues).
+
+## Source references
+
+- [OpenInference project](https://github.com/Arize-ai/openinference)
+- [OpenInference Python instrumentation docs](https://arize-ai.github.io/openinference/python/openinference-instrumentation/)
+- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)
