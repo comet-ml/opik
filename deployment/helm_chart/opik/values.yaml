@@ -315,10 +315,16 @@ component:
         hosts: []
         secretName: ""
 
+  # Configuration for the AI backend service.
+  # Disabled by default; enable to run the AI backend in-cluster.
   ai-backend:
+    # Whether to deploy the AI backend component (default: false).
     enabled: false
+    # ServiceAccount configuration for the AI backend pods.
     serviceAccount:
+      # Create a dedicated ServiceAccount for the AI backend (default: true).
       create: true
+      # Name of the ServiceAccount used by the AI backend pods.
       name: opik-ai-backend
     metrics:
       enabled: false
