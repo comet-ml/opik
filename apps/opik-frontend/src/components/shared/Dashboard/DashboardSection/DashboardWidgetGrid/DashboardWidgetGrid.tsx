@@ -22,8 +22,8 @@ import {
   selectUpdateLayout,
   selectWidgetResolver,
 } from "@/store/DashboardStore";
-import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
-import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
+import DashboardWidgetGridEmpty from "../DashboardWidgetGridEmpty";
+import DashboardWidgetDisabled from "../../DashboardWidget/DashboardWidgetDisabled";
 
 const ResponsiveGridLayout = WidthProvider(GridLayout);
 

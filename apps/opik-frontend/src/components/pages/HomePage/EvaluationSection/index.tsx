@@ -1,14 +1,16 @@
 import usePluginsStore from "@/store/PluginsStore";
 import EvaluationSectionContent from "./EvaluationSection";
 
-const EvaluationSectionEntry = () => {
-  const EvaluationSection = usePluginsStore((state) => state.EvaluationSection);
+const EvaluationSection = () => {
+  const EvaluationSectionComponent = usePluginsStore(
+    (state) => state.EvaluationSection,
+  );
 
-  if (EvaluationSection) {
-    return <EvaluationSection />;
+  if (EvaluationSectionComponent) {
+    return <EvaluationSectionComponent />;
   }
 
   return <EvaluationSectionContent canViewExperiments />;
 };
 
-export default EvaluationSectionEntry;
+export default EvaluationSection;
