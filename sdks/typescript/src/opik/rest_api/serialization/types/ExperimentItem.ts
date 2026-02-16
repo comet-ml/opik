@@ -14,6 +14,8 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         experimentId: core.serialization.property("experiment_id", core.serialization.string()),
         datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
         feedbackScores: core.serialization.property(
@@ -40,6 +42,8 @@ export declare namespace ExperimentItem {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
+        project_id?: string | null;
+        project_name?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
         feedback_scores?: FeedbackScore.Raw[] | null;

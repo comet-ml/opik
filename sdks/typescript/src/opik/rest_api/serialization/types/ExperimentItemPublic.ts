@@ -13,6 +13,7 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
     experimentId: core.serialization.property("experiment_id", core.serialization.string()),
     datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
     traceId: core.serialization.property("trace_id", core.serialization.string()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -29,6 +30,7 @@ export declare namespace ExperimentItemPublic {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
+        project_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;
