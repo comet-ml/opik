@@ -3911,5 +3911,138 @@ class DatasetVersionResourceTest {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(422);
             }
         }
+
+        @Test
+        @DisplayName("Success: Apply changes with version-level evaluators and executionPolicy, then fetch version")
+        void applyChanges__whenVersionLevelEvaluatorsAndPolicy__thenVersionFieldsReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create initial items to get a base version
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+
+            // Apply changes with version-level evaluators and executionPolicy
+            var versionEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build(),
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.CODE_METRIC)
+                            .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.5}"))
+                            .build());
+
+            var versionPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(3)
+                    .passThreshold(2)
+                    .build();
+
+            var newItem = DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .addedItems(List.of(newItem))
+                    .evaluators(versionEvaluators)
+                    .executionPolicy(versionPolicy)
+                    .tags(List.of("with-evaluators"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.evaluators()).isEqualTo(versionEvaluators);
+            assertThat(version2.executionPolicy()).isEqualTo(versionPolicy);
+
+            // Also verify via list versions API
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            var latestVersion = versions.content().getFirst();
+            assertThat(latestVersion.evaluators()).isEqualTo(versionEvaluators);
+            assertThat(latestVersion.executionPolicy()).isEqualTo(versionPolicy);
+        }
+
+        @Test
+        @DisplayName("Success: Version-level evaluators/executionPolicy carry forward when bumping via item change")
+        void applyChanges__whenBumpWithoutEvaluators__thenCarriedForwardFromBase() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Create initial items to get a base version
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+
+            // Set evaluators/executionPolicy on version via apply changes
+            var versionEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+
+            var versionPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(5)
+                    .passThreshold(3)
+                    .build();
+
+            var newItem = DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build();
+
+            var changes1 = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .addedItems(List.of(newItem))
+                    .evaluators(versionEvaluators)
+                    .executionPolicy(versionPolicy)
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes1, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.evaluators()).isEqualTo(versionEvaluators);
+            assertThat(version2.executionPolicy()).isEqualTo(versionPolicy);
+
+            // Now bump again WITHOUT setting evaluators/executionPolicy — they should carry forward
+            var anotherItem = DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build();
+
+            var changes2 = DatasetItemChanges.builder()
+                    .baseVersion(version2.id())
+                    .addedItems(List.of(anotherItem))
+                    .build();
+
+            var version3 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes2, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version3.evaluators()).isEqualTo(versionEvaluators);
+            assertThat(version3.executionPolicy()).isEqualTo(versionPolicy);
+        }
     }
 }
