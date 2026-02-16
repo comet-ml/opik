@@ -69,6 +69,7 @@ const QueueItemRowActionsCell: React.FC<
               setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            className="text-destructive focus:text-destructive"
           >
             <Trash className="mr-2 size-4" />
             Remove from queue
