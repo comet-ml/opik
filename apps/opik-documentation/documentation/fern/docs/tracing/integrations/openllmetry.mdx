@@ -1,5 +1,5 @@
 ---
-description: Send OpenLLMetry traces to Opik through OpenTelemetry OTLP.
+description: Send OpenLLMetry traces to Opik via OTLP with deployment-mode configuration and validation guidance.
 headline: OpenLLMetry | Opik Documentation
 og:description: Integrate Traceloop OpenLLMetry with Opik for LLM observability using
   OpenTelemetry.
@@ -9,6 +9,10 @@ title: Observability for OpenLLMetry with Opik
 ---
 
 [OpenLLMetry](https://github.com/traceloop/openllmetry) is an OpenTelemetry-native instrumentation toolkit for LLM apps. Opik accepts OpenLLMetry spans via OTLP, so you can keep your instrumentation vendor-neutral.
+
+## When this guide applies
+
+Use this when your app is instrumented with Traceloop/OpenLLMetry and exports telemetry through standard OTEL environment variables.
 
 ## Prerequisites
 
@@ -41,6 +45,19 @@ title: Observability for OpenLLMetry with Opik
 
 ## Example (Python)
 
+Intent:
+Initialize OpenLLMetry so framework spans are emitted using your existing OTEL exporter settings.
+
+Applies when:
+You use the Traceloop Python SDK.
+
+Required inputs:
+- `Traceloop.init(...)`
+- OTEL endpoint/header env vars
+
+Optional inputs:
+- app metadata fields supported by your SDK version
+
 ```python
 from traceloop.sdk import Traceloop
 
@@ -51,6 +68,16 @@ Traceloop.init(app_name="my-openllmetry-app")
 ```
 
 ## Example (Node.js)
+
+Intent:
+Initialize OpenLLMetry in Node so instrumentation uses your configured OTEL export path.
+
+Applies when:
+You use Traceloop TypeScript/Node SDK.
+
+Required inputs:
+- `initialize(...)`
+- OTEL endpoint/header env vars
 
 ```ts
 import { initialize } from "@traceloop/node-server-sdk";
@@ -71,6 +98,12 @@ With OpenLLMetry instrumentation, Opik will typically capture:
 - request/response payloads
 - token usage fields
 - tool execution spans and metadata
+
+## Validation
+
+1. Run an instrumented request (Python or Node).
+2. Confirm spans are exported via OTLP and appear in Opik.
+3. Validate model/provider and usage fields on a sample trace.
 
 ## Troubleshooting
 

@@ -1,5 +1,5 @@
 ---
-description: Send OpenInference semantic attributes to Opik over OpenTelemetry/OTLP.
+description: Route OpenInference-instrumented telemetry to Opik via OTLP with clear setup and validation steps.
 headline: OpenInference | Opik Documentation
 og:description: Use OpenInference instrumentation with Opik via the OpenTelemetry
   endpoint for vendor-neutral tracing.
@@ -9,6 +9,10 @@ title: Observability for OpenInference with Opik
 ---
 
 [OpenInference](https://github.com/Arize-ai/openinference) defines semantic conventions and instrumentation packages for LLM applications. Since it emits OpenTelemetry spans, you can route OpenInference traces directly to Opik.
+
+## When this guide applies
+
+Use this when your app already uses OpenInference instrumentors and you want those OTel spans exported to Opik.
 
 ## Prerequisites
 
@@ -41,21 +45,24 @@ title: Observability for OpenInference with Opik
 
 ## Example (Python + LangChain instrumentation)
 
-```python
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+Intent:
+Attach OpenInference LangChain instrumentation so framework spans include OpenInference semantic attributes.
 
+Applies when:
+You use LangChain and manage instrumentation/bootstrap code in Python.
+
+Required inputs:
+- OpenInference LangChain instrumentor
+- configured OTEL endpoint + headers
+
+Optional inputs:
+- explicit `service.name`
+- additional framework instrumentors
+
+```python
 from openinference.instrumentation.langchain import LangChainInstrumentor
 
-resource = Resource.create({"service.name": "openinference-langchain-app"})
-provider = TracerProvider(resource=resource)
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-trace.set_tracer_provider(provider)
-
-LangChainInstrumentor().instrument(tracer_provider=provider)
+LangChainInstrumentor().instrument()
 
 # Run your app as usual (LangChain calls now emit OTEL spans)
 ```
@@ -70,6 +77,12 @@ For OpenInference/OpenLLMetry style spans, Opik maps common attributes into nati
 - tool span input/output (when present)
 
 Any unsupported attributes are still preserved in span input/metadata.
+
+## Validation
+
+1. Run one request through your instrumented flow.
+2. Confirm trace spans arrive in Opik.
+3. Check mapped fields (model/provider, usage, tool inputs/outputs) on resulting traces.
 
 ## Troubleshooting
 
