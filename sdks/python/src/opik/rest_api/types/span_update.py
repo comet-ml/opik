@@ -35,6 +35,7 @@ class SpanUpdate(UniversalBaseModel):
     usage: typing.Optional[typing.Dict[str, int]] = None
     total_estimated_cost: typing.Optional[float] = None
     error_info: typing.Optional[ErrorInfo] = None
+    ttft: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
