@@ -418,6 +418,12 @@ component:
         #     - path: /
         #       port: 5173
         #       pathType: Prefix
+        #     - path: /api
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /opik-ai
+        #       port: 5173
+        #       pathType: Prefix
       tls:
         enabled: false
         hosts: []
