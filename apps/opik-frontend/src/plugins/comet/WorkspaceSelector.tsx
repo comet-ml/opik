@@ -258,7 +258,7 @@ const WorkspaceSelector: React.FC = () => {
                   <DropdownMenuSubTrigger className="size-6 justify-center p-0 text-light-slate [&>svg]:ml-0" />
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[244px] p-1">
-                      <div className="flex items-center gap-1 px-2 py-2 pl-8">
+                      <div className="flex items-center gap-1 p-2 pl-8">
                         <span className="comet-body-s-accented text-foreground">
                           Switch organization
                         </span>
