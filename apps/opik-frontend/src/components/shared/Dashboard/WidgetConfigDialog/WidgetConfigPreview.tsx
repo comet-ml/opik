@@ -10,7 +10,7 @@ const WidgetConfigPreview: React.FunctionComponent = () => {
   const previewWidget = useDashboardStore(selectPreviewWidget);
 
   const WidgetComponent = previewWidget
-    ? widgetResolver?.(previewWidget.type)?.Widget
+    ? widgetResolver?.({ type: previewWidget.type })?.Widget
     : null;
 
   if (!WidgetComponent || !previewWidget) {

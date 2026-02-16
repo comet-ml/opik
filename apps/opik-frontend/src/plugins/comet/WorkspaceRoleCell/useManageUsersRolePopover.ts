@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 import {
-  getPermissionByType,
-  isUserPermissionValid,
+  getUserPermissionValue,
   updatePermissionByType,
 } from "@/plugins/comet/lib/permissions";
 import {
@@ -23,10 +22,10 @@ const useManageUsersRolePopover = (
   permissions: UserPermission[] = [],
   setPermissions: (permissions: UserPermission[]) => void,
 ) => {
-  const wsManagementPermissionValue = getPermissionByType(
+  const wsManagementPermissionValue = getUserPermissionValue(
     permissions,
     ManagementPermissionsNames.MANAGEMENT,
-  )?.permissionValue;
+  );
 
   const onRadioChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,11 +58,9 @@ const useManageUsersRolePopover = (
         label: "Invite Users (IU)",
         text: "Invite users to workspace",
         value: ManagementPermissionsNames.INVITE_USERS,
-        checked: isUserPermissionValid(
-          getPermissionByType(
-            permissions,
-            ManagementPermissionsNames.INVITE_USERS,
-          )?.permissionValue,
+        checked: !!getUserPermissionValue(
+          permissions,
+          ManagementPermissionsNames.INVITE_USERS,
         ),
         disabled: false,
         color: "primary" as const,
@@ -73,7 +70,7 @@ const useManageUsersRolePopover = (
 
     return {
       controlType: "radio" as const,
-      controlValue: wsManagementPermissionValue,
+      controlValue: wsManagementPermissionValue?.toString(),
       onChange: onRadioChange,
       options: [
         {
@@ -89,14 +86,13 @@ const useManageUsersRolePopover = (
           label: "Workspace Member",
           text: "Limited permissions. You can give customized ones",
           controlType: "radio" as const,
-          list:
-            wsManagementPermissionValue === WORKSPACE_MEMBER_VALUE
-              ? {
-                  options: checkboxOptions,
-                  controlType: "checkbox" as const,
-                  onChange: onCheckboxChange,
-                }
-              : null,
+          list: wsManagementPermissionValue
+            ? null
+            : {
+                options: checkboxOptions,
+                controlType: "checkbox" as const,
+                onChange: onCheckboxChange,
+              },
         },
       ],
     };

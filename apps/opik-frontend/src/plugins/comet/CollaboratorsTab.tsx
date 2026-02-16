@@ -24,10 +24,7 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
@@ -179,12 +176,12 @@ const CollaboratorsTab = () => {
         (permission) => permission.userName === userName,
       )?.permissions;
 
-      const permissionByType = getPermissionByType(
+      const isWorkspaceOwner = !!getUserPermissionValue(
         userPermissions || [],
         ManagementPermissionsNames.MANAGEMENT,
       );
 
-      const role = isUserPermissionValid(permissionByType?.permissionValue)
+      const role = isWorkspaceOwner
         ? WORKSPACE_ROLE_TYPE.owner
         : WORKSPACE_ROLE_TYPE.member;
 
