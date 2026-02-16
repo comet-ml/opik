@@ -10,6 +10,7 @@ import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/Wi
 import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
 import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
+import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -32,6 +33,8 @@ type PluginStore = {
   EvaluationSection: React.ComponentType | null;
   ExperimentsGuard: React.ComponentType | null;
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
+  PromptPageExperimentsTabTrigger: React.ComponentType | null;
+  PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -56,6 +59,8 @@ const PLUGIN_NAMES = [
   "EvaluationSection",
   "ExperimentsGuard",
   "StartPreferenceExperimentsLink",
+  "PromptPageExperimentsTabTrigger",
+  "PromptPageExperimentsTabContent",
   "init",
 ];
 
@@ -78,6 +83,8 @@ const usePluginsStore = create<PluginStore>((set) => ({
   EvaluationSection: null,
   ExperimentsGuard: null,
   StartPreferenceExperimentsLink: null,
+  PromptPageExperimentsTabTrigger: null,
+  PromptPageExperimentsTabContent: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
