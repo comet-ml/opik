@@ -1,7 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
-import useUserPermission from "@/plugins/comet/useUserPermission";
 
 export const getExperimentById = async (
   { signal }: QueryFunctionContext,
@@ -22,12 +21,9 @@ export default function useExperimentById(
   params: UseExperimentByIdParams,
   options?: QueryConfig<Experiment>,
 ) {
-  const { canViewExperiments } = useUserPermission();
-
   return useQuery({
     queryKey: ["experiment", params],
     queryFn: (context) => getExperimentById(context, params),
     ...options,
-    enabled: (options?.enabled ?? true) && canViewExperiments,
   });
 }
