@@ -584,8 +584,8 @@ minio:
   enabled: true
   image:
     registry: docker.io
-    repository: minio/minio
-    tag: "RELEASE.2025-03-12T18-04-18Z"
+    repository: cloudpirates/image-minio
+    tag: "RELEASE.2025-10-15T17-29-55Z-hardened"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   config:
@@ -863,9 +863,8 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
-  selectorLabels:
-    name: zookeeper-opik
-    instance: opik
+  commonLabels:
+    app.kubernetes.io/name: zookeeper-opik
 
     # resources:
     #   requests:
