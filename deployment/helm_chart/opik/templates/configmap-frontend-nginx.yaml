@@ -43,7 +43,7 @@ data:
     }
     {{- if (index .Values.component "ai-backend").enabled }}
     upstream ai-backend {
-      server {{ include "opik.name" $ }}-ai-backend:{{ ((index .Values.component "ai-backend").service.ports | first).port }};
+      server {{ include "opik.name" $ }}-ai-backend:{{- range (index .Values.component "ai-backend").service.ports }}{{- if eq .name "http" }}{{ .port }}{{- end }}{{- end }};
       keepalive 16;
     }
     {{- end }}
