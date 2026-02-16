@@ -21,4 +21,5 @@ export interface SpanUpdate {
     usage?: Record<string, number>;
     totalEstimatedCost?: number;
     errorInfo?: OpikApi.ErrorInfo;
+    ttft?: number;
 }
