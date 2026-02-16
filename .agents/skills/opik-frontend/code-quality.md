@@ -67,28 +67,24 @@ const handleClick = () => {};  // Too vague
 ## Import Order
 
 ```typescript
-// 1. React and external libraries
+// 1. React
 import React, { useState, useCallback } from "react";
+
+// 2. External libraries (tanstack, zod, axios, lucide-react, etc.)
 import { useQuery } from "@tanstack/react-query";
+import { SquareArrowOutUpRight } from "lucide-react";
+import get from "lodash/get";
 
-// 2. UI components
+// 3. Internal imports (@/) — no strict ordering required
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-
-// 3. Shared components
 import DataTable from "@/components/shared/DataTable/DataTable";
-
-// 4. Hooks and utilities
+import useAppStore from "@/store/AppStore";
+import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import { cn } from "@/lib/utils";
-import useEntityStore from "@/store/EntityStore";
-
-// 5. Lodash utilities (grouped)
-import isString from "lodash/isString";
-import isEmpty from "lodash/isEmpty";
-
-// 6. Types and constants
 import { COLUMN_TYPE } from "@/types/shared";
 ```
+
+Internal `@/` imports have no strict order. Do not reorder existing imports for style.
 
 ## Dependency Architecture
 

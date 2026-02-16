@@ -939,6 +939,72 @@ class WorkspacesResourceTest {
                                     " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"));
         }
 
+        static Stream<Arguments> colorMapProvider() {
+            return Stream.of(
+                    Arguments.of(Map.of("accuracy", "#FF0000", "hallucination", "#00FF00")),
+                    Arguments.of((Map<String, String>) null));
+        }
+
+        @ParameterizedTest
+        @MethodSource("colorMapProvider")
+        @DisplayName("when upserting workspace configuration with various color map values, then return success")
+        void upsertWorkspaceConfiguration__whenColorMap__thenReturnSuccess(Map<String, String> colorMap) {
+            var configuration = WorkspaceConfiguration.builder()
+                    .colorMap(colorMap)
+                    .build();
+
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            var result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.colorMap()).isEqualTo(colorMap);
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration with invalid color hex, then return validation error")
+        void upsertWorkspaceConfiguration__whenInvalidColorHex__thenReturnValidationError() {
+            var colorMap = Map.of("accuracy", "not-a-color");
+            var configuration = WorkspaceConfiguration.builder()
+                    .colorMap(colorMap)
+                    .build();
+
+            try (var response = workspaceResourceClient.callUpsertWorkspaceConfiguration(
+                    configuration, API_KEY, WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration with truncation toggle, then return success")
+        void upsertWorkspaceConfiguration__whenTruncationToggle__thenReturnSuccess() {
+            var configuration = WorkspaceConfiguration.builder()
+                    .truncationOnTables(false)
+                    .build();
+
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            var result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.truncationOnTables()).isFalse();
+        }
+
+        @Test
+        @DisplayName("when upserting workspace configuration with all properties, then return all properties")
+        void upsertWorkspaceConfiguration__whenAllProperties__thenReturnAll() {
+            var timeout = Duration.ofMinutes(15);
+            var colorMap = Map.of("score1", "#AABBCC");
+            var configuration = WorkspaceConfiguration.builder()
+                    .timeoutToMarkThreadAsInactive(timeout)
+                    .truncationOnTables(true)
+                    .colorMap(colorMap)
+                    .build();
+
+            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
+
+            var result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
+            assertThat(result.timeoutToMarkThreadAsInactive()).isEqualTo(timeout);
+            assertThat(result.truncationOnTables()).isTrue();
+            assertThat(result.colorMap()).isEqualTo(colorMap);
+        }
+
         @Test
         @DisplayName("when upserting workspace configuration with null timeout, then return success with null")
         void upsertWorkspaceConfiguration__whenNullTimeout__thenReturnSuccessWithNull() {

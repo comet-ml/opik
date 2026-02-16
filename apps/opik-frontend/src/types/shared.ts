@@ -9,6 +9,7 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  group?: string;
   action?: {
     href?: string;
   };
@@ -97,6 +98,7 @@ export type ColumnData<T> = {
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  statisticTooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
   sortable?: boolean;
   disposable?: boolean;

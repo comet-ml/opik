@@ -1,37 +1,31 @@
 import React from "react";
 import { HeaderContext } from "@tanstack/react-table";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { generateTagVariant } from "@/lib/traces";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
 import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { formatNumericData } from "@/lib/utils";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const FeedbackScoreHeader = <TData,>(
   context: HeaderContext<TData, unknown>,
 ) => {
   const { column } = context;
   const { header, custom } = column.columnDef.meta ?? {};
-  const { colorMap, feedbackKey, prefixIcon, scoreValue } = (custom ??
+  const { colorMap, scoreName, prefixIcon, scoreValue } = (custom ??
     {}) as FeedbackScoreCustomMeta;
 
-  // Use color from colorMap if available, otherwise fall back to default
-  const color =
-    feedbackKey && colorMap?.[feedbackKey]
-      ? colorMap[feedbackKey]
-      : TAG_VARIANTS_COLOR_MAP[generateTagVariant(header ?? "")!];
+  const { getColor } = useWorkspaceColorMap();
+  const effectiveColorKey = scoreName ?? header ?? "";
+  const color = getColor(effectiveColorKey, colorMap);
 
   const { className, onClickHandler, renderSort } = useSortableHeader({
     column,
   });
 
   const formattedScore =
-    scoreValue !== undefined
-      ? typeof scoreValue === "number"
-        ? formatNumericData(scoreValue)
-        : scoreValue
-      : null;
+    scoreValue !== undefined ? formatScoreDisplay(scoreValue) : null;
 
   return (
     <HeaderWrapper
@@ -41,10 +35,12 @@ const FeedbackScoreHeader = <TData,>(
       onClick={onClickHandler}
     >
       {prefixIcon}
-      <div
-        className="mr-0.5 size-2 shrink-0 rounded-[2px] bg-[--color-bg]"
-        style={{ "--color-bg": color } as React.CSSProperties}
-      ></div>
+      <ColorIndicator
+        label={scoreName ?? header ?? ""}
+        color={color}
+        variant="square"
+        className="mr-0.5 shrink-0"
+      />
       {header ? (
         <TooltipWrapper content={header} side="top">
           <span className="truncate">{header}</span>

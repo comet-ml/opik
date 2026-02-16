@@ -249,7 +249,7 @@ Evaluates how relevant the output is to the input question:
 ```typescript
 import { AnswerRelevance } from "opik";
 
-// Using default model (gpt-4o)
+// Using default model (gpt-5-nano)
 const metric = new AnswerRelevance();
 
 // With custom model ID
@@ -259,7 +259,7 @@ const metricWithModel = new AnswerRelevance({
 
 // With LanguageModel instance
 import { openai } from "@ai-sdk/openai";
-const customModel = openai("gpt-4o");
+const customModel = openai("gpt-5-nano");
 const metricWithCustomModel = new AnswerRelevance({ model: customModel });
 
 // Usage
@@ -384,6 +384,224 @@ console.log(score.reason); // Explanation of usefulness score
 - **0.5**: Somewhat useful - partially helpful
 - **0.0**: Not useful - doesn't help address the input
 
+### GEval
+
+GEval is a task-agnostic LLM-as-a-judge metric that allows you to define custom evaluation criteria. The metric first generates a chain-of-thought (CoT) evaluation plan, then scores the output on a 0-10 scale (normalized to 0.0-1.0).
+
+```typescript
+import { GEval } from "opik";
+
+const metric = new GEval({
+  taskIntroduction: "You evaluate the politeness of customer service responses.",
+  evaluationCriteria: "Score from 0 (rude) to 10 (very polite). Consider tone, word choice, and empathy.",
+  model: "gpt-4o",
+});
+
+const score = await metric.score({
+  output: "Thanks so much for your patience! I'm happy to help resolve this for you.",
+});
+
+console.log(score.value); // 0.0 to 1.0
+console.log(score.reason); // Explanation of the score
+```
+
+#### Parameters
+
+- `taskIntroduction` (required): Description of what should be evaluated
+- `evaluationCriteria` (required): Detailed criteria defining what "good" looks like
+- `model` (optional): Model to use for evaluation (defaults to "gpt-4o")
+- `name` (optional): Custom metric name (defaults to "g_eval_metric")
+- `temperature` (optional): Sampling temperature for generation
+- `seed` (optional): Seed for reproducible outputs
+- `maxTokens` (optional): Maximum response length
+- `modelSettings` (optional): Advanced model configuration
+
+#### Score Range
+
+- **1.0**: Perfect score (10/10 from the judge)
+- **0.5**: Average score (5/10 from the judge)
+- **0.0**: Lowest score (0/10 from the judge)
+
+#### How It Works
+
+GEval uses a two-stage process:
+
+1. **Chain of Thought Generation**: Creates step-by-step evaluation instructions based on your task and criteria (cached for reuse)
+2. **Scoring**: Evaluates the output using the CoT, returning a score with reasoning
+
+When using OpenAI models, GEval leverages logprobs to compute a weighted average of score probabilities for more robust scoring.
+
+### Built-in GEval Judges
+
+Opik provides pre-configured GEval judges for common evaluation scenarios. Each extends `GEval` with domain-specific prompts:
+
+#### QARelevanceJudge
+
+Evaluates whether an answer directly addresses the question:
+
+```typescript
+import { QARelevanceJudge } from "opik";
+
+const judge = new QARelevanceJudge({ model: "gpt-4o" });
+
+const score = await judge.score({
+  output: `QUESTION: What causes rainbows?
+ANSWER: Rainbows are caused by refraction and reflection of light in water droplets.`,
+});
+
+console.log(score.value); // High score for relevant answer
+```
+
+#### SummarizationConsistencyJudge
+
+Checks if a summary is faithful to the source material:
+
+```typescript
+import { SummarizationConsistencyJudge } from "opik";
+
+const judge = new SummarizationConsistencyJudge();
+
+const score = await judge.score({
+  output: `SOURCE: The company announced Q4 revenue of $2.5M.
+SUMMARY: The company had strong Q4 performance with $2.5M revenue.`,
+});
+```
+
+#### SummarizationCoherenceJudge
+
+Evaluates the structure and clarity of summaries:
+
+```typescript
+import { SummarizationCoherenceJudge } from "opik";
+
+const judge = new SummarizationCoherenceJudge();
+
+const score = await judge.score({
+  output: "SUMMARY: First, the project started. Then it ended. Finally, it began.",
+});
+
+console.log(score.value); // Low score for incoherent summary
+```
+
+#### DialogueHelpfulnessJudge
+
+Assesses how helpful an assistant reply is in dialogue context:
+
+```typescript
+import { DialogueHelpfulnessJudge } from "opik";
+
+const judge = new DialogueHelpfulnessJudge();
+
+const transcript = `USER: How do I reset my password?
+ASSISTANT: Visit settings and click reset.
+USER: I cannot see that option.
+ASSISTANT: Please contact support.`;
+
+const score = await judge.score({ output: transcript });
+```
+
+#### Bias Detection Judges
+
+Detect various forms of bias in responses:
+
+```typescript
+import {
+  DemographicBiasJudge,
+  GenderBiasJudge,
+  PoliticalBiasJudge,
+  ReligiousBiasJudge,
+  RegionalBiasJudge,
+} from "opik";
+
+// Demographic bias
+const demographicJudge = new DemographicBiasJudge();
+const score1 = await demographicJudge.score({
+  output: "People from X group are always late.",
+});
+
+// Gender bias
+const genderJudge = new GenderBiasJudge();
+const score2 = await genderJudge.score({
+  output: "Women are naturally worse at math.",
+});
+
+// Political bias
+const politicalJudge = new PoliticalBiasJudge();
+const score3 = await politicalJudge.score({
+  output: "Vote for candidate X because Y is corrupt.",
+});
+```
+
+#### Agent Evaluation Judges
+
+Evaluate agent task completion and tool usage:
+
+```typescript
+import { AgentTaskCompletionJudge, AgentToolCorrectnessJudge } from "opik";
+
+// Task completion
+const taskJudge = new AgentTaskCompletionJudge();
+const score1 = await taskJudge.score({
+  output: "Agent gathered quotes, compared options, and booked travel.",
+});
+
+// Tool correctness
+const toolJudge = new AgentToolCorrectnessJudge();
+const score2 = await toolJudge.score({
+  output: "Tool weather_api called with city='Paris' but response ignored.",
+});
+```
+
+#### PromptUncertaintyJudge
+
+Estimates how ambiguous a prompt is:
+
+```typescript
+import { PromptUncertaintyJudge } from "opik";
+
+const judge = new PromptUncertaintyJudge();
+
+const score = await judge.score({
+  output: "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes.",
+});
+
+console.log(score.value); // High score indicates high uncertainty
+```
+
+#### ComplianceRiskJudge
+
+Flags non-compliant or risky claims in regulated sectors:
+
+```typescript
+import { ComplianceRiskJudge } from "opik";
+
+const judge = new ComplianceRiskJudge({ model: "gpt-4o" });
+
+const score = await judge.score({
+  output: "This pill cures diabetes in a week.",
+});
+
+console.log(score.value); // High score indicates high risk
+```
+
+#### Available Judges
+
+All built-in GEval judges:
+
+- `QARelevanceJudge` - Answer relevance to questions
+- `SummarizationConsistencyJudge` - Summary faithfulness
+- `SummarizationCoherenceJudge` - Summary structure and clarity
+- `DialogueHelpfulnessJudge` - Assistant helpfulness in dialogue
+- `DemographicBiasJudge` - Demographic stereotyping
+- `GenderBiasJudge` - Gender stereotyping
+- `PoliticalBiasJudge` - Political bias
+- `ReligiousBiasJudge` - Religious bias
+- `RegionalBiasJudge` - Geographic/cultural bias
+- `AgentTaskCompletionJudge` - Agent task fulfillment
+- `AgentToolCorrectnessJudge` - Agent tool usage correctness
+- `PromptUncertaintyJudge` - Prompt ambiguity
+- `ComplianceRiskJudge` - Regulatory compliance risk
+
 ## Configuring LLM Judge Metrics
 
 ### Model Configuration
@@ -397,12 +615,12 @@ import { google } from "@ai-sdk/google";
 import { Hallucination } from "opik";
 
 // Using model ID string
-const metric1 = new Hallucination({ model: "gpt-4o" });
+const metric1 = new Hallucination({ model: "gpt-5-nano" });
 const metric2 = new Hallucination({ model: "claude-3-5-sonnet-latest" });
 const metric3 = new Hallucination({ model: "gemini-2.0-flash" });
 
 // Using LanguageModel instance
-const customModel = openai("gpt-4o");
+const customModel = openai("gpt-5-nano");
 const metric4 = new Hallucination({ model: customModel });
 ```
 
@@ -461,7 +679,7 @@ import { AnswerRelevance, Hallucination } from "opik";
 
 // Use GPT-4o for answer relevance
 const relevanceMetric = new AnswerRelevance({
-  model: openai("gpt-4o"),
+  model: openai("gpt-5-nano"),
 });
 
 // Use Claude for hallucination detection
@@ -485,7 +703,7 @@ For most use cases, use model ID strings directly:
 ```typescript
 import { Hallucination } from "opik";
 
-const metric = new Hallucination({ model: "gpt-4o" });
+const metric = new Hallucination({ model: "gpt-5-nano" });
 ```
 
 The Opik SDK handles model configuration internally for optimal evaluation performance.
@@ -514,11 +732,11 @@ await metric.score({
 Match model capabilities to metric requirements:
 
 ```typescript
-// Complex reasoning: Use GPT-4o or Claude Sonnet
-const complexMetric = new AnswerRelevance({ model: "gpt-4o" });
+// Complex reasoning: Use GPT-5 or Claude Sonnet
+const complexMetric = new AnswerRelevance({ model: "gpt-5" });
 
 // Simple checks: Use faster, cheaper models
-const simpleMetric = new Moderation({ model: "gpt-4o-mini" });
+const simpleMetric = new Moderation({ model: "gpt-5-nano" });
 ```
 
 ### 4. Handle Errors Gracefully
@@ -607,7 +825,7 @@ import { Hallucination, AnswerRelevance } from "opik";
 
 // Configure generation parameters
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.3, // Lower = more deterministic
   seed: 42, // For reproducible outputs
   maxTokens: 1000, // Maximum response length
@@ -636,7 +854,7 @@ For provider-specific advanced parameters, use `modelSettings`:
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.5,
   modelSettings: {
     topP: 0.9, // Nucleus sampling
@@ -656,7 +874,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
 
 // OpenAI with structured outputs
-const openaiModel = openai("gpt-4o", {
+const openaiModel = openai("gpt-5-nano", {
   structuredOutputs: true,
 });
 

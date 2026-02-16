@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.4](https://img.shields.io/badge/Version-1.10.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.4](https://img.shields.io/badge/AppVersion-1.10.4-informational?style=flat-square)
+![Version: 1.10.13](https://img.shields.io/badge/Version-1.10.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.13](https://img.shields.io/badge/AppVersion-1.10.13-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -82,7 +82,7 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
@@ -153,7 +153,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -232,7 +232,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
-| component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
 | component.backend.ingress.hosts | list | `[]` |  |
@@ -327,7 +326,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
-| component.frontend.image.tag | string | `"latest"` |  |
 | component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
 | component.frontend.ingress.hosts | list | `[]` |  |
@@ -364,7 +362,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
-| component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
@@ -372,7 +369,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
-| component.python-backend.image.tag | string | `"latest"` |  |
 | component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
 | component.python-backend.ingress.hosts | list | `[]` |  |
@@ -381,14 +377,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
-| component.python-backend.networkPolicy.enabled | bool | `true` |  |
-| component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[2] | string | `"172.16.0.0/12"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[3] | string | `"192.0.0.0/24"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[4] | string | `"198.18.0.0/15"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
-| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
+| component.python-backend.networkPolicy.additionalRules | list | `[]` |  |
+| component.python-backend.networkPolicy.annotations | object | `{}` |  |
+| component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |

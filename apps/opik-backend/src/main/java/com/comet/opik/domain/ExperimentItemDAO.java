@@ -54,6 +54,7 @@ class ExperimentItemDAO {
                 dataset_item_id,
                 trace_id,
                 workspace_id,
+                project_id,
                 created_by,
                 last_updated_by
             )
@@ -66,6 +67,7 @@ class ExperimentItemDAO {
                         :dataset_item_id<item.index>,
                         :trace_id<item.index>,
                         :workspace_id,
+                        :project_id<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>
                     )
@@ -231,6 +233,7 @@ class ExperimentItemDAO {
                 ei.experiment_id,
                 ei.dataset_item_id,
                 ei.trace_id,
+                ei.project_id,
                 tfs.input,
                 tfs.output,
                 tfs.feedback_scores_array,
@@ -399,6 +402,13 @@ class ExperimentItemDAO {
                 statement.bind("experiment_id" + index, item.experimentId());
                 statement.bind("dataset_item_id" + index, item.datasetItemId());
                 statement.bind("trace_id" + index, item.traceId());
+
+                if (item.projectId() != null) {
+                    statement.bind("project_id" + index, item.projectId().toString());
+                } else {
+                    statement.bindNull("project_id" + index, String.class);
+                }
+
                 statement.bind("created_by" + index, userName);
                 statement.bind("last_updated_by" + index, userName);
                 index++;

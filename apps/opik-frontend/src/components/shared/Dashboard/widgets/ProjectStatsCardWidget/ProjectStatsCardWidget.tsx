@@ -17,20 +17,25 @@ import { TRACE_DATA_TYPE } from "@/constants/traces";
 import {
   getMetricDefinition,
   formatMetricValue,
+  formatMetricTooltipValue,
   isFeedbackScoreMetric,
   extractFeedbackScoreName,
-  formatFeedbackScoreValue,
 } from "./metrics";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
-const renderMetricDisplay = (label: string, value: string) => (
+const renderMetricDisplay = (
+  label: string,
+  value: string,
+  tooltipValue?: string,
+) => (
   <div className="flex h-full flex-col items-stretch justify-center">
     <TooltipWrapper content={label}>
       <div className="comet-body truncate text-center text-muted-foreground">
         {label}
       </div>
     </TooltipWrapper>
-    <TooltipWrapper content={value}>
+    <TooltipWrapper content={tooltipValue ?? value}>
       <div className="comet-title-xl mt-2 truncate text-center">{value}</div>
     </TooltipWrapper>
   </div>
@@ -205,7 +210,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
       return renderMetricDisplay(
         `Average ${scoreName}`,
-        scoreValue !== undefined ? formatFeedbackScoreValue(scoreValue) : "-",
+        scoreValue !== undefined ? formatScoreDisplay(scoreValue) : "-",
       );
     }
 
@@ -232,6 +237,9 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       selectedValue !== undefined
         ? formatMetricValue(selectedValue, metricDef)
         : "-",
+      selectedValue !== undefined
+        ? formatMetricTooltipValue(selectedValue, metricDef)
+        : undefined,
     );
   };
 

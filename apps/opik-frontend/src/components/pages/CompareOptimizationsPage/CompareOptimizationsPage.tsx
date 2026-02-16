@@ -171,6 +171,7 @@ const CompareOptimizationsPage: React.FC = () => {
           bestExperiment={bestExperiment}
           baselineExperiment={baselineExperiment}
           scoreMap={scoreMap}
+          status={optimization?.status}
         />
       </PageBodyStickyContainer>
 
