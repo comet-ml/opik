@@ -117,9 +117,9 @@ export const THINKING_LEVEL_OPTIONS_PRO: Array<{
   label: string;
   value: "low" | "high";
 }> = [
-  { label: "Low", value: "low" },
-  { label: "High (Default)", value: "high" },
-];
+    { label: "Low", value: "low" },
+    { label: "High (Default)", value: "high" },
+  ];
 
 // Thinking level options for Gemini 3 Flash models (all 4 levels)
 // Flash supports: minimal, low, medium, high
@@ -127,11 +127,11 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
   label: string;
   value: "minimal" | "low" | "medium" | "high";
 }> = [
-  { label: "Minimal", value: "minimal" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-];
+    { label: "Minimal", value: "minimal" },
+    { label: "Low", value: "low" },
+    { label: "Medium", value: "medium" },
+    { label: "High (Default)", value: "high" },
+  ];
 
 // Legacy export for backwards compatibility.
 // Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
@@ -144,12 +144,12 @@ export const ANTHROPIC_THINKING_EFFORT_OPTIONS: Array<{
   label: string;
   value: "adaptive" | "low" | "medium" | "high" | "max";
 }> = [
-  { label: "Adaptive", value: "adaptive" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-  { label: "Max", value: "max" },
-];
+    { label: "Adaptive", value: "adaptive" },
+    { label: "Low", value: "low" },
+    { label: "Medium", value: "medium" },
+    { label: "High (Default)", value: "high" },
+    { label: "Max", value: "max" },
+  ];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
@@ -791,7 +791,7 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -806,25 +806,25 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
 };
 
 export const DEFAULT_PYTHON_CODE_TRACE_DATA_DIRECT: PythonCodeDetailsTraceForm =
-  {
-    metric:
-      "from typing import Any\n" +
-      "from opik.evaluation.metrics import base_metric, score_result\n" +
-      "\n" +
-      "class MyCustomMetric(base_metric.BaseMetric):\n" +
-      '    def __init__(self, name: str = "my_custom_metric"):\n' +
-      "        self.name = name\n" +
-      "\n" +
-      "    def score(self, input: dict, output: dict, metadata: dict, **ignored_kwargs: Any):\n" +
-      "        # Add you logic here\n" +
-      "\n" +
-      "        return score_result.ScoreResult(\n" +
-      "            value=0,\n" +
-      "            name=self.name,\n" +
-      '            reason="Optional reason for the score"\n' +
-      "        )",
-    arguments: {},
-  };
+{
+  metric:
+    "from typing import Any\n" +
+    "from opik.evaluation.metrics import base_metric, score_result\n" +
+    "\n" +
+    "class MyCustomMetric(base_metric.BaseMetric):\n" +
+    '    def __init__(self, name: str = "my_custom_metric"):\n' +
+    "        self.name = name\n" +
+    "\n" +
+    "    def score(self, input: dict, output: dict, metadata: dict, **ignored_kwargs: Any):\n" +
+    "        # Add your logic here\n" +
+    "\n" +
+    "        return score_result.ScoreResult(\n" +
+    "            value=0,\n" +
+    "            name=self.name,\n" +
+    '            reason="Optional reason for the score"\n' +
+    "        )",
+  arguments: {},
+};
 
 export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
   metric:
@@ -847,7 +847,7 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
     "        # conversation is a List[Dict] where each dict has:\n" +
     '        # {"role": "user" | "assistant", "content": "message text"}\n' +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -866,7 +866,7 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -890,7 +890,7 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA_DIRECT: PythonCodeDetailsSpanForm = {
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: dict, output: dict, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
