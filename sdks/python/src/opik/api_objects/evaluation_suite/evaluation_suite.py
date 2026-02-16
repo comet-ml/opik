@@ -173,6 +173,7 @@ class EvaluationSuite:
         experiment_tags: Optional[List[str]] = None,
         verbose: int = 1,
         worker_threads: int = 16,
+        evaluator_model: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite against a task function.
@@ -191,6 +192,8 @@ class EvaluationSuite:
             experiment_tags: Optional list of tags to associate with the experiment.
             verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
             worker_threads: Number of threads for parallel task execution.
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
+                If not provided, uses the default model.
 
         Returns:
             EvaluationSuiteResult with pass/fail status based on execution policy.
@@ -200,13 +203,11 @@ class EvaluationSuite:
             ...     response = call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
             ...     return {"input": data, "output": response}
             >>>
-            >>> result = suite.run(task=my_llm_task)
+            >>> result = suite.run(task=my_llm_task, evaluator_model="gpt-4o")
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
-        # The evaluate function reads evaluators and execution_policy from
-        # the dataset's metadata (set by create_evaluation_suite).
-        eval_result = opik_evaluator.evaluate(
+        eval_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=task,
             experiment_name_prefix=experiment_name_prefix,
@@ -217,6 +218,7 @@ class EvaluationSuite:
             experiment_tags=experiment_tags,
             verbose=verbose,
             task_threads=worker_threads,
+            evaluator_model=evaluator_model,
         )
 
         return suite_result_constructor.build_suite_result(eval_result)

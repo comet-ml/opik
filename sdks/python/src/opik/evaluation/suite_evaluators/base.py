@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, TypeVar
+from typing import Any, Optional, TypeVar
 
 from opik.evaluation.metrics import base_metric
 
@@ -34,16 +34,16 @@ class BaseSuiteEvaluator(base_metric.BaseMetric):
     def from_config(
         cls,
         config: Any,
-        name: str,
+        model: Optional[str] = None,
         track: bool = True,
-        project_name: str | None = None,
+        project_name: Optional[str] = None,
     ) -> "BaseSuiteEvaluator":
         """
         Create an evaluator instance from a configuration.
 
         Args:
             config: The configuration object.
-            name: The name of the evaluator.
+            model: The model name to use. If not provided, uses the default model.
             track: Whether to track the evaluator.
             project_name: Optional project name for tracking.
 

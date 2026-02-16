@@ -224,6 +224,98 @@ def evaluate(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
+        evaluator_model=None,
+    )
+
+
+def evaluate_suite(
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    *,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 1,
+    task_threads: int = 16,
+    evaluator_model: Optional[str] = None,
+) -> evaluation_result.EvaluationResult:
+    """
+    Run evaluation on a dataset configured as an evaluation suite.
+
+    This function is designed for evaluation suites where evaluators and execution
+    policies are stored in the dataset itself. Unlike the general `evaluate` function,
+    this function:
+    - Does not accept scoring_metrics (they come from the dataset)
+    - Does not accept trial_count (it comes from the dataset's execution_policy)
+    - Does not accept dataset_sampler or nb_samples (suites evaluate all items)
+
+    The dataset should be created via `opik_client.create_evaluation_suite()` which
+    sets up the evaluators and execution policy on the dataset object.
+
+    Args:
+        dataset: A Dataset instance configured as an evaluation suite.
+
+        task: A callable that takes a dict (the item's data) and returns
+            a dict with "input" and "output" keys for the evaluators.
+
+        experiment_name_prefix: Optional prefix for auto-generated experiment name.
+
+        experiment_name: Optional explicit name for the experiment.
+
+        project_name: Optional project name for tracking.
+
+        experiment_config: Optional configuration dict for the experiment.
+
+        prompts: Optional list of Prompt objects to associate with the experiment.
+
+        experiment_tags: Optional list of tags to associate with the experiment.
+
+        verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
+
+        task_threads: Number of threads for parallel task execution.
+
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
+            If not provided, uses the default model.
+
+    Returns:
+        EvaluationResult containing test results for building suite results.
+    """
+    client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
+
+    experiment_ = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        tags=experiment_tags,
+        dataset_version_id=None,
+    )
+
+    return _evaluate_task(
+        client=client,
+        experiment=experiment_,
+        dataset=dataset,
+        task=task,
+        scoring_metrics=[],
+        project_name=project_name,
+        verbose=verbose,
+        nb_samples=None,
+        task_threads=task_threads,
+        scoring_key_mapping=None,
+        dataset_item_ids=None,
+        dataset_sampler=None,
+        trial_count=1,
+        experiment_scoring_functions=[],
+        dataset_filter_string=None,
+        evaluator_model=evaluator_model,
     )
 
 
@@ -243,7 +335,8 @@ def _evaluate_task(
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
-    dataset_filter_string: Optional[str] = None,
+    dataset_filter_string: Optional[str],
+    evaluator_model: Optional[str],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -255,6 +348,7 @@ def _evaluate_task(
             workers=task_threads,
             verbose=verbose,
             scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=evaluator_model,
         )
         test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
@@ -403,6 +497,7 @@ def evaluate_experiment(
             workers=scoring_threads,
             verbose=verbose,
             scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=None,
         )
         test_results = evaluation_engine.evaluate_test_cases(
             test_cases=test_cases,
@@ -657,6 +752,7 @@ def evaluate_prompt(
             workers=task_threads,
             verbose=verbose,
             scoring_key_mapping=None,
+            evaluator_model=None,
         )
         test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
@@ -877,6 +973,7 @@ def evaluate_optimization_trial(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
+        evaluator_model=None,
     )
 
 
@@ -981,6 +1078,7 @@ def evaluate_on_dict_items(
             workers=scoring_threads,
             verbose=verbose,
             scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=None,
         )
 
         # Use the new evaluate_items method

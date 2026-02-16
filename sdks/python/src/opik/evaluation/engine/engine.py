@@ -60,6 +60,7 @@ def get_item_execution_policy(
 
 def _extract_item_evaluators(
     dataset_item_content: Dict[str, Any],
+    evaluator_model: Optional[str],
 ) -> List[base_metric.BaseMetric]:
     """
     Extract evaluators from dataset item content.
@@ -69,6 +70,7 @@ def _extract_item_evaluators(
 
     Args:
         dataset_item_content: The dataset item content dict.
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
 
     Returns:
         List of evaluator instances extracted from the item content.
@@ -82,7 +84,7 @@ def _extract_item_evaluators(
     for config_dict in evaluator_configs:
         try:
             config = opik_llm_judge_config.LLMJudgeConfig(**config_dict)
-            evaluator = llm_judge.LLMJudge.from_config(config)
+            evaluator = llm_judge.LLMJudge.from_config(config, model=evaluator_model)
             evaluators.append(evaluator)
         except Exception as e:
             LOGGER.warning(
@@ -125,12 +127,14 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         scoring_key_mapping: Optional[ScoringKeyMappingType],
+        evaluator_model: Optional[str],
     ) -> None:
         self._client = client
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
         self._scoring_key_mapping = scoring_key_mapping
+        self._evaluator_model = evaluator_model
 
         # Separate suite-level metrics into regular and task-span categories
         self._suite_regular_metrics, self._suite_task_span_metrics = (
@@ -156,7 +160,9 @@ class EvaluationEngine:
     ) -> metrics_evaluator.MetricsEvaluator:
         """Build a MetricsEvaluator with suite-level + item-level metrics."""
         all_metrics: List[base_metric.BaseMetric] = list(self._suite_regular_metrics)
-        item_evaluators = _extract_item_evaluators(dataset_item_content)
+        item_evaluators = _extract_item_evaluators(
+            dataset_item_content, evaluator_model=self._evaluator_model
+        )
         all_metrics.extend(item_evaluators)
 
         return metrics_evaluator.MetricsEvaluator(

@@ -154,6 +154,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
             Each string should describe what the output should satisfy.
         name: The name of the evaluator (used as prefix for score names).
             Defaults to "llm_judge".
+        model: The model name to use for evaluation. If not provided,
+            uses the default model (gpt-5-nano).
         track: Whether to track the evaluator. Defaults to True.
         project_name: Optional project name for tracking.
         seed: Optional seed value for reproducible model generation.
@@ -182,6 +184,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self,
         assertions: List[str],
         name: str = "llm_judge",
+        model: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
         seed: Optional[int] = None,
@@ -193,7 +196,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         self._seed = seed
         self._temperature = temperature
-        self._model_name: str = llm_judge_config.DEFAULT_MODEL_NAME
+        self._model_name: str = model or llm_judge_config.DEFAULT_MODEL_NAME
         self._init_model(temperature=temperature)
 
     @property
@@ -353,7 +356,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
     def from_config(
         cls,
         config: llm_judge_config.LLMJudgeConfig,
-        name: Optional[str] = None,
+        model: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> "LLMJudge":
@@ -365,7 +368,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Args:
             config: LLMJudgeConfig with model, messages, variables, and schema.
-            name: The name of the evaluator. If not provided, uses the name from config.
+            model: The model name to use. If not provided, uses the default model.
             track: Whether to track the evaluator. Defaults to True.
             project_name: Optional project name for tracking.
 
@@ -386,7 +389,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         return cls(
             assertions=assertion_texts,
-            name=name if name is not None else config.name,
+            name=config.name,
+            model=model,
             track=track,
             project_name=project_name,
             seed=config.model.seed,
