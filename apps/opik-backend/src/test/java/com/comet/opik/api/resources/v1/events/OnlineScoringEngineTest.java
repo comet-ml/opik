@@ -1745,36 +1745,17 @@ class OnlineScoringEngineTest {
         assertThat(replacements.get("input")).contains("questions");
     }
 
-    @Test
-    @DisplayName("renderMessages with empty variablesMap should render templates using dot-notation variables")
-    void testRenderMessagesWithEmptyVariablesMap() throws JsonProcessingException {
-        // Given - template with dot-notation variables (no mapping needed)
-        List<LlmAsJudgeMessage> messages = List.of(
-                LlmAsJudgeMessage.builder()
-                        .role(ChatMessageType.USER)
-                        .content("Question: {{input.questions.question1}}\nAnswer: {{output.output}}")
-                        .build());
-
-        var traceId = generator.generate();
-        var projectId = generator.generate();
-        var trace = createTrace(traceId, projectId);
-
-        // When - pass empty map to trigger direct JSONPath mode
-        var renderedMessages = OnlineScoringEngine.renderMessages(messages, Map.of(), trace);
-
-        // Then
-        assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
-        var messageText = userMessage.singleText();
-
-        assertThat(messageText).contains("Question: " + SUMMARY_STR);
-        assertThat(messageText).contains("Answer: " + OUTPUT_STR);
+    static Stream<Arguments> emptyOrNullVariablesMap() {
+        return Stream.of(
+                arguments("empty map", Map.of()),
+                arguments("null", null));
     }
 
-    @Test
-    @DisplayName("renderMessages with null variablesMap should render templates using dot-notation variables")
-    void testRenderMessagesWithNullVariablesMap() throws JsonProcessingException {
-        // Given - template with dot-notation variables (no mapping needed)
+    @ParameterizedTest(name = "renderMessages with {0} variablesMap should render templates using dot-notation variables")
+    @MethodSource("emptyOrNullVariablesMap")
+    void testRenderMessagesWithEmptyOrNullVariablesMap(String desc, Map<String, String> variablesMap)
+            throws JsonProcessingException {
+        // Given
         List<LlmAsJudgeMessage> messages = List.of(
                 LlmAsJudgeMessage.builder()
                         .role(ChatMessageType.USER)
@@ -1785,8 +1766,8 @@ class OnlineScoringEngineTest {
         var projectId = generator.generate();
         var trace = createTrace(traceId, projectId);
 
-        // When - pass null to trigger direct JSONPath mode
-        var renderedMessages = OnlineScoringEngine.renderMessages(messages, null, trace);
+        // When
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, variablesMap, trace);
 
         // Then
         assertThat(renderedMessages).hasSize(1);
