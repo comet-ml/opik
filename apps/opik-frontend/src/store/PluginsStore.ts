@@ -29,6 +29,7 @@ type PluginStore = {
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   PromptPage: React.ComponentType | null;
   EvaluationSection: React.ComponentType | null;
+  ExperimentsGuard: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -52,6 +53,7 @@ const PLUGIN_NAMES = [
   "DashboardWidgetGrid",
   "PromptPage",
   "EvaluationSection",
+  "ExperimentsGuard",
   "init",
 ];
 
@@ -73,6 +75,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   DashboardWidgetGrid: null,
   PromptPage: null,
   EvaluationSection: null,
+  ExperimentsGuard: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
