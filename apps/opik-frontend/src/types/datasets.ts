@@ -69,6 +69,7 @@ export enum DATASET_ITEM_DRAFT_STATUS {
 
 export interface DatasetItem {
   id: string;
+  dataset_item_id?: string;
   data: object;
   source: DATASET_ITEM_SOURCE;
   trace_id?: string;
