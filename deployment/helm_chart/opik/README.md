@@ -83,9 +83,9 @@ Call opik api on http://localhost:5173/api
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
-| oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
-| oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.10.0 |
+| oci://registry-1.docker.io/cloudpirates | redis | 0.23.0 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.6.0 |
 
 ## Values
 
@@ -453,8 +453,8 @@ Call opik api on http://localhost:5173/api
 | minio.fullnameOverride | string | `"opik-minio"` |  |
 | minio.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | minio.image.registry | string | `"docker.io"` |  |
-| minio.image.repository | string | `"minio/minio"` |  |
-| minio.image.tag | string | `"RELEASE.2025-03-12T18-04-18Z"` |  |
+| minio.image.repository | string | `"cloudpirates/image-minio"` |  |
+| minio.image.tag | string | `"RELEASE.2025-10-15T17-29-55Z-hardened"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
 | minio.replicaCount | int | `1` |  |
@@ -489,6 +489,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
+| zookeeper.commonLabels."app.kubernetes.io/name" | string | `"zookeeper-opik"` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
 | zookeeper.extraEnvVars[0].value | string | `"512M"` |  |
@@ -506,8 +507,6 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
-| zookeeper.selectorLabels.instance | string | `"opik"` |  |
-| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------
