@@ -428,9 +428,7 @@ def _evaluate_suite_task(
     total_time = time.time() - start_time
 
     if verbose >= 1:
-        report.display_experiment_results(
-            dataset.name, total_time, test_results, []
-        )
+        report.display_experiment_results(dataset.name, total_time, test_results, [])
 
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,

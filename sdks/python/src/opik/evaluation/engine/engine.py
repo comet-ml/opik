@@ -637,8 +637,8 @@ class EvaluationEngine:
         scoring_metrics: List[base_metric.BaseMetric],
         scoring_key_mapping: Optional[ScoringKeyMappingType],
     ) -> List[test_result.TestResult]:
-        regular_metrics, _ = (
-            metrics_evaluator.split_into_regular_and_task_span_metrics(scoring_metrics)
+        regular_metrics, _ = metrics_evaluator.split_into_regular_and_task_span_metrics(
+            scoring_metrics
         )
 
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
