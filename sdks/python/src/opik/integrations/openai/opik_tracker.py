@@ -35,6 +35,8 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.audio.speech.create()` and
+      `openai_client.audio.speech.with_streaming_response.create()` (TTS)
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
       `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
       and `write_to_file()` on downloaded content
@@ -57,6 +59,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    if hasattr(openai_client, "audio"):
+        _patch_openai_tts(openai_client, project_name)
 
     if hasattr(openai_client, "videos"):
         _patch_openai_videos(openai_client, project_name)
@@ -155,6 +160,34 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_tts(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import tts
+
+    if not hasattr(openai_client.audio, "speech"):
+        return
+
+    provider = _get_provider(openai_client)
+    tts_decorator_factory = tts.TtsCreateTrackDecorator(provider=provider)
+
+    if hasattr(openai_client.audio.speech, "create"):
+        decorator = tts_decorator_factory.track(
+            type="llm",
+            name="audio.speech.create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = decorator(
+            openai_client.audio.speech.create
+        )
+
+        # Invalidate the cached with_streaming_response property so it picks
+        # up the patched create method when next accessed.
+        if "with_streaming_response" in openai_client.audio.speech.__dict__:
+            del openai_client.audio.speech.__dict__["with_streaming_response"]
 
 
 def _patch_openai_videos(
