@@ -268,7 +268,9 @@ class TestReplayCallbackFlow:
 
         # Register a failed message directly in the DB
         msg = _create_trace_message(message_id=1)
-        rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        rm.database_manager.register_message(
+            msg, status=db_manager.MessageStatus.failed
+        )
 
         # Wait for the message to be processed (requires connection) to trigger replay by the replay manager
         tested.flush(timeout=5)
@@ -286,7 +288,9 @@ class TestReplayCallbackFlow:
 
         for i in range(5):
             msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
-            rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+            rm.database_manager.register_message(
+                msg, status=db_manager.MessageStatus.failed
+            )
 
         tested.flush(timeout=5)
 
@@ -329,8 +333,8 @@ class TestStreamerReplayManagerLifecycleEndToEnd:
 
         # ReplayManager should be running
         assert rm.is_alive()
-        assert rm.db_manager.initialized
-        assert not rm.db_manager.closed
+        assert rm.database_manager.initialized
+        assert not rm.database_manager.closed
 
         # Put a regular message through the streamer
         msg = _create_trace_message(message_id=1)
@@ -348,7 +352,7 @@ class TestStreamerReplayManagerLifecycleEndToEnd:
 
         # Verify cleanup
         assert not rm.is_alive()
-        assert rm.db_manager.closed
+        assert rm.database_manager.closed
 
     def test_lifecycle__failed_message_replayed_on_flush(
         self,
@@ -365,7 +369,7 @@ class TestStreamerReplayManagerLifecycleEndToEnd:
         rm.message_sent_failed(1, failure_reason="server down")
 
         # Verify it's in a failed state
-        db_msg = rm.db_manager.get_db_message(1)
+        db_msg = rm.database_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.status == db_manager.MessageStatus.failed
 

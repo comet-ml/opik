@@ -18,7 +18,7 @@ from opik.rest_api.types import (
 
 from . import message_processors
 from .. import encoder_helpers, messages
-from ..replay import replay_manager
+from ..replay import replay_manager, db_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +71,14 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             return
 
         # register a message with the replay manager
-        self._replay_manager.register_message(message)
+        if self._replay_manager.has_server_connection:
+            self._replay_manager.register_message(message)
+        else:
+            # register a message as failed and skip sending it to the backend
+            self._replay_manager.register_message(
+                message, status=db_manager.MessageStatus.failed
+            )
+            return
 
         should_unregister_message = True
         try:

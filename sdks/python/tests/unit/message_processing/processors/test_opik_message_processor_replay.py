@@ -17,7 +17,7 @@ from opik.message_processing import messages
 from opik.message_processing.processors.online_message_processor import (
     OpikMessageProcessor,
 )
-from opik.message_processing.replay import replay_manager
+from opik.message_processing.replay import replay_manager, db_manager
 from opik.rest_api import core as rest_api_core
 from opik import exceptions
 
@@ -161,6 +161,81 @@ class TestRegisterMessage:
         inactive_processor.process(msg)
 
         mock_replay.register_message.assert_not_called()
+
+
+class TestNoServerConnection:
+    """Tests for when has_server_connection is False — messages should be
+    registered as failed and the handler should NOT execute."""
+
+    @pytest.fixture
+    def offline_replay(self) -> mock.MagicMock:
+        m = mock.MagicMock(spec=replay_manager.ReplayManager)
+        m.has_server_connection = False
+        return m
+
+    @pytest.fixture
+    def offline_processor(
+        self,
+        mock_rest_client: mock.MagicMock,
+        mock_file_uploader: mock.MagicMock,
+        offline_replay: mock.MagicMock,
+    ) -> OpikMessageProcessor:
+        return OpikMessageProcessor(
+            rest_client=mock_rest_client,
+            file_upload_manager=mock_file_uploader,
+            fallback_replay_manager=offline_replay,
+        )
+
+    def test_process__no_connection__registers_message_as_failed(
+        self,
+        offline_processor: OpikMessageProcessor,
+        offline_replay: mock.MagicMock,
+    ):
+        """When there is no server connection, register_message must be called
+        with status=MessageStatus.failed."""
+        msg = _create_trace_message(message_id=10)
+        offline_processor.process(msg)
+
+        offline_replay.register_message.assert_called_once_with(
+            msg, status=db_manager.MessageStatus.failed
+        )
+
+    def test_process__no_connection__handler_not_called(
+        self,
+        offline_processor: OpikMessageProcessor,
+        offline_replay: mock.MagicMock,
+        mock_rest_client: mock.MagicMock,
+    ):
+        """When there is no server connection, the REST API handler must NOT
+        be invoked."""
+        msg = _create_trace_message()
+        offline_processor.process(msg)
+
+        mock_rest_client.traces.create_trace.assert_not_called()
+
+    def test_process__no_connection__unregister_not_called(
+        self,
+        offline_processor: OpikMessageProcessor,
+        offline_replay: mock.MagicMock,
+    ):
+        """When there is no server connection, unregister_message must NOT be
+        called since the handler is skipped."""
+        msg = _create_trace_message()
+        offline_processor.process(msg)
+
+        offline_replay.unregister_message.assert_not_called()
+
+    def test_process__no_connection__message_sent_failed_not_called(
+        self,
+        offline_processor: OpikMessageProcessor,
+        offline_replay: mock.MagicMock,
+    ):
+        """message_sent_failed should NOT be called — it is only for connection
+        errors that occur during handler execution."""
+        msg = _create_trace_message()
+        offline_processor.process(msg)
+
+        offline_replay.message_sent_failed.assert_not_called()
 
 
 class TestUnregisterMessage:

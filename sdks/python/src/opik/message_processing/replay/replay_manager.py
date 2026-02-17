@@ -78,7 +78,7 @@ class ReplayManager(threading.Thread):
             self._db_manager.close()
 
     @property
-    def db_manager(self) -> db_manager.DBManager:
+    def database_manager(self) -> db_manager.DBManager:
         return self._db_manager
 
     @property
@@ -86,7 +86,11 @@ class ReplayManager(threading.Thread):
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
 
-    def register_message(self, message: messages.BaseMessage) -> None:
+    def register_message(
+        self,
+        message: messages.BaseMessage,
+        status: db_manager.MessageStatus = db_manager.MessageStatus.registered,
+    ) -> None:
         """Registers a message to be replayed if the connection is lost."""
         with self._replay_lock:
             # set message ID if not set yet
@@ -95,7 +99,7 @@ class ReplayManager(threading.Thread):
                 self._next_message_id += 1
 
         try:
-            self._db_manager.register_message(message)
+            self._db_manager.register_message(message, status=status)
         except Exception as ex:
             LOGGER.error(
                 "Failed to register message for replay, reason: %s", ex, exc_info=True
