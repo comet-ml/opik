@@ -249,7 +249,7 @@ class TestLocalEmulatorMessageProcessorProcess:
             in capture_log.text
         )
 
-    def test_process__create_trace_message__retry_message_skipped__calls_dispatch_message_once(
+    def test_process__create_trace_message__retry_message_not_skipped_when_entity_missing(
         self,
     ):
         processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
@@ -291,7 +291,52 @@ class TestLocalEmulatorMessageProcessorProcess:
             processor.process(message_1)
             processor.process(message_2)
 
-        mock_dispatch.assert_called_once_with(message_1)
+        assert mock_dispatch.call_count == 2
+        mock_dispatch.assert_any_call(message_1)
+        mock_dispatch.assert_any_call(message_2)
+
+    def test_process__create_trace_message__duplicate_retry_skipped_when_entity_exists(
+        self,
+    ):
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
+        message = messages.CreateTraceMessage(
+            trace_id="test_trace_1",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.test_datetime,
+            input={"key": "value"},
+            output={"result": "success"},
+            metadata={"meta": "data"},
+            tags=["tag1", "tag2"],
+            error_info=None,
+            thread_id="thread_123",
+            last_updated_at=self.test_datetime,
+        )
+        retry_message = messages.CreateTraceMessage(
+            trace_id="test_trace_1",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.test_datetime,
+            input={"key": "value"},
+            output={"result": "success"},
+            metadata={"meta": "data"},
+            tags=["tag1", "tag2"],
+            error_info=None,
+            thread_id="thread_123",
+            last_updated_at=self.test_datetime,
+        )
+        retry_message.delivery_attempts = 2
+
+        processor.process(message)
+
+        with patch.object(processor, "_dispatch_message") as mock_dispatch:
+            processor.process(retry_message)
+
+        mock_dispatch.assert_not_called()
 
 
 class TestLocalEmulatorMessageProcessorTraceTreesProperty:
