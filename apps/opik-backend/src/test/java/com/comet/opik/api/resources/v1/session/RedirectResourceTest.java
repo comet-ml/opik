@@ -67,7 +67,7 @@ class RedirectResourceTest {
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String NON_EXISTING_WORKSPACE_NAME = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = UUID.randomUUID().toString();
-    private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
+    private static final String TRACE_REDIRECT_URL = "%s/%s/projects/%s/traces?tab=logs&logsType=traces&trace=%s";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
@@ -180,8 +180,8 @@ class RedirectResourceTest {
                 workspaceNameForRedirectRequest, getBaseUrlEncoded(), expectedStatus);
         if (expectedStatus == 303) {
             assertThat(redirectURL).isEqualTo(
-                    PROJECT_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
-                            trace.projectId()));
+                    TRACE_REDIRECT_URL.formatted(wireMock.runtimeInfo().getHttpBaseUrl(), workspaceName,
+                            trace.projectId(), trace.id()));
         }
     }
 

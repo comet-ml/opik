@@ -84,6 +84,7 @@ import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages"
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -548,6 +549,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   workspaceName,
                 },
                 search: {
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {
                       id: "thread_id_filter",
