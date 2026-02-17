@@ -73,9 +73,9 @@ turn evaluate.
     </Step>
     <Step title="2. Create our agent app">
         The `run_simulation` function expects an `app` callable with the following contract: it
-        receives a `user_message` string and a `thread_id` keyword argument, and returns the
-        assistant's response as a string. The app is responsible for managing its own conversation
-        history using the `thread_id`.
+        receives a `user_message` string and a `thread_id` keyword argument, and returns a message
+        dict `{"role": "assistant", "content": "..."}`. The app is responsible for managing its own
+        conversation history using the `thread_id`.
 
         Here is an example using LangChain:
 
@@ -93,17 +93,17 @@ turn evaluate.
 
         agent_history = {}
 
-        def run_agent(user_message: str, *, thread_id: str, **kwargs) -> str:
+        def run_agent(user_message: str, *, thread_id: str, **kwargs) -> dict[str, str]:
             if thread_id not in agent_history:
                 agent_history[thread_id] = []
-            
+
             agent_history[thread_id].append({"role": "user", "content": user_message})
             messages = agent_history[thread_id]
 
             response = agent.invoke({"messages": messages}, config={"callbacks": [opik_tracer]})
             agent_history[thread_id] = response["messages"]
 
-            return response["messages"][-1].content
+            return {"role": "assistant", "content": response["messages"][-1].content}
         ```
     </Step>
     <Step title="3. Run the simulations">
