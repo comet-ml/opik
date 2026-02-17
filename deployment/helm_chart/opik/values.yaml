@@ -492,6 +492,7 @@ component:
         - "'self'"
         - "'unsafe-inline'"
         - "'unsafe-eval'"
+        - https://www.googletagmanager.com
         # Add external services here, e.g.:
         # - "https://cdn.example.com"
       # Styles allowed to load
