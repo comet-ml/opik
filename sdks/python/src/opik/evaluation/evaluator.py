@@ -510,7 +510,7 @@ def _evaluate_suite_task(
             experiment_=experiment,
             default_execution_policy=execution_policy,
             total_items=total,
-            show_score_postfix=False,
+            show_scores_in_progress_bar=False,
         )
 
     total_time = time.time() - start_time
