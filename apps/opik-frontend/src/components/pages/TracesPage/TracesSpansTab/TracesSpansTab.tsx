@@ -52,7 +52,11 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateColumnsOrder,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
@@ -260,10 +264,24 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
+const DEFAULT_SPANS_ORDER: string[] = [
+  "start_time",
+  "input",
+  "output",
+  "error_info",
+  "name",
+  "type",
+  "duration",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+];
+
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
 const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
 const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
 const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
+const COLUMNS_ORDER_V2_KEY_SUFFIX = `${COLUMNS_ORDER_KEY_SUFFIX}-v2`;
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
@@ -644,9 +662,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
+    `${type}-${COLUMNS_ORDER_V2_KEY_SUFFIX}`,
     {
-      defaultValue: [],
+      defaultValue: migrateColumnsOrder(
+        `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
+        type === TRACE_DATA_TYPE.spans ? DEFAULT_SPANS_ORDER : [],
+      ),
     },
   );
 
