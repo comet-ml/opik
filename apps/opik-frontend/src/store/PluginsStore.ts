@@ -31,7 +31,7 @@ type PluginStore = {
   WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   EvaluationSection: React.ComponentType | null;
-  ExperimentsGuard: React.ComponentType | null;
+  ExperimentsPageGuard: React.ComponentType | null;
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
@@ -57,7 +57,7 @@ const PLUGIN_NAMES = [
   "WidgetConfigDialogAddStep",
   "DashboardWidgetGrid",
   "EvaluationSection",
-  "ExperimentsGuard",
+  "ExperimentsPageGuard",
   "StartPreferenceExperimentsLink",
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
@@ -81,7 +81,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   WidgetConfigDialogAddStep: null,
   DashboardWidgetGrid: null,
   EvaluationSection: null,
-  ExperimentsGuard: null,
+  ExperimentsPageGuard: null,
   StartPreferenceExperimentsLink: null,
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,
