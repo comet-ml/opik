@@ -11,6 +11,7 @@ import { trackOpenAI } from "../src/trackOpenAI";
 describe("trackOpenAI", () => {
   beforeEach(() => {
     withTracingMock.mockReset();
+    withTracingMock.mockImplementation((value: unknown) => value);
   });
 
   it("does not clobber explicitly configured provider", () => {
@@ -24,7 +25,7 @@ describe("trackOpenAI", () => {
     };
 
     const tracked = trackOpenAI(sdk, { provider: "explicit-provider" });
-    tracked.chat.completions.create;
+    tracked.chat.completions.create();
 
     expect(withTracingMock).toHaveBeenCalledTimes(1);
     expect(withTracingMock.mock.calls[0]?.[1].provider).toBe(
@@ -41,7 +42,7 @@ describe("trackOpenAI", () => {
     };
 
     const tracked = trackOpenAI(sdk);
-    tracked.completions.create;
+    tracked.completions.create();
 
     expect(withTracingMock).toHaveBeenCalledTimes(1);
     expect(withTracingMock.mock.calls[0]?.[1].provider).toBe("openrouter");
