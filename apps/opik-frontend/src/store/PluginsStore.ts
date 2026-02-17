@@ -11,6 +11,7 @@ import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/Dashboar
 import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
+import { DashboardsViewGuardProps } from "@/plugins/comet/DashboardsViewGuard";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -33,6 +34,7 @@ type PluginStore = {
   EvaluationSection: React.ComponentType | null;
   ExperimentsGuard: React.ComponentType | null;
   DashboardsGuard: React.ComponentType | null;
+  DashboardsViewGuard: React.ComponentType<DashboardsViewGuardProps> | null;
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
@@ -60,6 +62,7 @@ const PLUGIN_NAMES = [
   "EvaluationSection",
   "ExperimentsGuard",
   "DashboardsGuard",
+  "DashboardsViewGuard",
   "StartPreferenceExperimentsLink",
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
@@ -85,6 +88,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   EvaluationSection: null,
   ExperimentsGuard: null,
   DashboardsGuard: null,
+  DashboardsViewGuard: null,
   StartPreferenceExperimentsLink: null,
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,

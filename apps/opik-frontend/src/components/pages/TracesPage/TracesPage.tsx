@@ -1,4 +1,3 @@
-import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
@@ -22,6 +21,8 @@ import ViewSelector, {
 import useProjectTabs, {
   PROJECT_TAB,
 } from "@/components/pages/TracesPage/useProjectTabs";
+import usePluginsStore from "@/store/PluginsStore";
+import useViewQueryParam from "@/hooks/useViewQueryParam";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -29,6 +30,10 @@ const TracesPage = () => {
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+
+  const DashboardsViewGuard = usePluginsStore(
+    (state) => state.DashboardsViewGuard,
   );
 
   const { data: project } = useProjectById(
@@ -45,13 +50,7 @@ const TracesPage = () => {
   const { activeTab, logsType, setLogsType, handleTabChange } =
     useProjectTabs();
 
-  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
-    "view",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const { view, setView } = useViewQueryParam();
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
@@ -113,6 +112,9 @@ const TracesPage = () => {
 
   return (
     <>
+      {DashboardsViewGuard && (
+        <DashboardsViewGuard view={view} setView={setView} />
+      )}
       <PageBodyScrollContainer>
         <PageBodyStickyContainer
           className="mb-4 mt-6 flex items-center justify-between"
