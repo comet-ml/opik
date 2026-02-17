@@ -167,7 +167,7 @@ class SpanCost(base_metric.BaseMetric):
         - Uses LiteLLM's built-in cost calculation for spans without `total_cost`
         - Supports a wide range of models and providers with up-to-date pricing
         - Spans without usage data or without a recognized model will be skipped
-        - Raises `MetricComputationError` when `task_span` is missing
+        - Returns a soft-failed score when `task_span` is missing
     """
 
     def __init__(
@@ -208,14 +208,18 @@ class SpanCost(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with the calculated cost value.
 
         Raises:
-            MetricComputationError: If `task_span` is missing from runtime inputs.
             MetricComputationError: If all spans with usage data failed cost calculation,
                 indicating a critical error in the metric computation.
         """
         if task_span is None:
-            raise opik.exceptions.MetricComputationError(
-                "SpanCost could not compute because `task_span` was not provided "
-                "by the evaluation runtime."
+            return score_result.ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=(
+                    "SpanCost could not compute because `task_span` was not provided "
+                    "by the evaluation runtime."
+                ),
+                scoring_failed=True,
             )
 
         accumulator = _CostAccumulator()
