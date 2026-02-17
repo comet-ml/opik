@@ -1,7 +1,6 @@
 from datetime import datetime
 import uuid
 from opik.id_helpers import uuid4_to_uuid7
-import time
 
 
 def test_uuid4_to_uuid7__generates_valid_uuidv7():
@@ -42,8 +41,7 @@ def test_uuid4_to_uuid7__sequential_timestamps__maintains_temporal_ordering():
     test_uuids = []
 
     for i in range(NB_ID):
-        test_uuids.append((datetime.now(), str(uuid.uuid4())))
-        time.sleep(0.01)
+        test_uuids.append((datetime.fromtimestamp(i), str(uuid.uuid4())))
 
     # Convert UUIDs
     uuids_v7 = [str(uuid4_to_uuid7(ts, uuid4)) for ts, uuid4 in test_uuids]
@@ -59,11 +57,9 @@ def test_uuid4_to_uuid7__different_uuid4_same_timestamp():
     # Create test data with known timestamps and UUIDs
     NB_ID = 5
     test_uuids = []
-    timestamp = datetime.now()
 
     for i in range(NB_ID):
-        test_uuids.append((timestamp, str(uuid.uuid4())))
-        time.sleep(0.01)
+        test_uuids.append((datetime.fromtimestamp(i), str(uuid.uuid4())))
 
     # Convert UUIDs
     uuids_v7 = [str(uuid4_to_uuid7(ts, uuid4)) for ts, uuid4 in test_uuids]
