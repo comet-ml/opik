@@ -1,27 +1,33 @@
+import path from "path";
+import { getTrackOpikClient, _resetTrackOpikClientCache } from "@/decorators/track";
 import { describe, expect, beforeEach, afterEach, it } from "vitest";
 
 describe("Lazy loading config", () => {
   const originalEnvironmentVariables = { ...process.env };
+  const invalidConfigPath = path.resolve(
+    __dirname,
+    "./examples/invalid-opik-config.ini"
+  );
 
-  beforeEach(async () => {
+  beforeEach(() => {
+    process.env.OPIK_CONFIG_PATH = invalidConfigPath;
+
     // Clear environment variables to simulate missing config
     delete process.env.OPIK_URL_OVERRIDE;
     delete process.env.OPIK_API_KEY;
     delete process.env.OPIK_WORKSPACE;
     delete process.env.OPIK_PROJECT_NAME;
     delete process.env.OPIK_CONFIG_PATH;
+    process.env.OPIK_API_KEY = "";
 
-    // Clear the cached client
-    const { _resetTrackOpikClientCache } = await import("@/decorators/track");
     _resetTrackOpikClientCache();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     // Restore original environment
     process.env = { ...originalEnvironmentVariables };
 
     // Clear the cached client
-    const { _resetTrackOpikClientCache } = await import("@/decorators/track");
     _resetTrackOpikClientCache();
   });
 
@@ -40,12 +46,10 @@ describe("Lazy loading config", () => {
   it("should throw error when using internal getTrackOpikClient without valid config", async () => {
     // Set cloud URL but no API key to trigger validation error
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/opik/api";
-    delete process.env.OPIK_API_KEY;
-
-    // Import from internal path since it's not publicly exported
-    const { getTrackOpikClient } = await import("@/decorators/track");
+    process.env.OPIK_API_KEY = "";
 
     expect(() => {
+      expect(process.env.OPIK_API_KEY).toBe("");
       getTrackOpikClient();
     }).toThrow("OPIK_API_KEY is not set");
   });
@@ -53,7 +57,7 @@ describe("Lazy loading config", () => {
   it("should throw error when using track decorator function without valid config", async () => {
     // Set cloud URL but no API key to trigger validation error
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/opik/api";
-    delete process.env.OPIK_API_KEY;
+    process.env.OPIK_API_KEY = "";
 
     const { track } = await import("opik");
 
@@ -67,6 +71,7 @@ describe("Lazy loading config", () => {
 
     // But calling the wrapped function should throw when it tries to initialize the client
     expect(() => {
+      expect(process.env.OPIK_API_KEY).toBe("");
       trackedFunction();
     }).toThrow("OPIK_API_KEY is not set");
   });
@@ -77,7 +82,6 @@ describe("Lazy loading config", () => {
     delete process.env.OPIK_API_KEY;
     delete process.env.OPIK_WORKSPACE;
 
-    const { getTrackOpikClient } = await import("@/decorators/track");
     const { Opik } = await import("opik");
 
     // Should not throw with valid local config
@@ -97,7 +101,6 @@ describe("Lazy loading config", () => {
     delete process.env.OPIK_API_KEY;
 
     const { flushAll } = await import("opik");
-    const { getTrackOpikClient } = await import("@/decorators/track");
 
     // Initialize the client
     const client = getTrackOpikClient();

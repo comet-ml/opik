@@ -9,9 +9,14 @@ import { mockAPIFunction } from "@tests/mockUtils";
 describe("Opik client config", () => {
   let loggerErrorSpy: MockInstance<typeof logger.error>;
   const originalEnvironmentVariables = { ...process.env };
+  const invalidConfigPath = path.resolve(
+    __dirname,
+    "./examples/invalid-opik-config.ini"
+  );
 
   beforeEach(() => {
     loggerErrorSpy = vi.spyOn(logger, "error");
+    process.env.OPIK_CONFIG_PATH = invalidConfigPath;
   });
 
   afterEach(() => {
