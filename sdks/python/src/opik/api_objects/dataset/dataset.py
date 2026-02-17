@@ -542,6 +542,9 @@ class Dataset(DatasetExportOperations):
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
 
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
+
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
         Insert new items into the dataset. A new dataset version will be created.
@@ -555,9 +558,6 @@ class Dataset(DatasetExportOperations):
             for item in items
         ]
         self.__internal_api__insert_items_as_dataclasses__(dataset_items)
-
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
 
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""

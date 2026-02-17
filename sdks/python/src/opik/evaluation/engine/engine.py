@@ -235,6 +235,7 @@ class EvaluationEngine:
             verbose=self._verbose,
             desc=description,
             total=total_items,
+            show_score_postfix=False,
         ) as executor:
             for item in dataset_items:
                 item_policy = get_item_execution_policy(item, default_execution_policy)
