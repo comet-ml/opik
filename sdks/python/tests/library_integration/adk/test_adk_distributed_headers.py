@@ -110,6 +110,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY_BUT_NONE,
                                     )
                                 ],
                             ),
@@ -137,6 +138,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY_BUT_NONE,
                                     )
                                 ],
                             ),
@@ -256,6 +258,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY_BUT_NONE,
                                     )
                                 ],
                             ),
@@ -283,6 +286,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY_BUT_NONE,
                                     )
                                 ],
                             ),

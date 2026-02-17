@@ -124,7 +124,7 @@ def test_langchain__distributed_headers__happyflow(
         tags=["tag_d1", "tag_d2"],
     )
     trace_data.init_end_time()
-    client.trace(**trace_data.__dict__)
+    client.trace(**trace_data.as_parameters)
 
     span_data = span.SpanData(
         trace_id=trace_data.id,
@@ -139,7 +139,7 @@ def test_langchain__distributed_headers__happyflow(
     span_data.init_end_time().update(
         output={"output": "custom-distributed-headers--output"},
     )
-    client.span(**span_data.__dict__)
+    client.span(**span_data.as_parameters)
 
     distributed_headers = DistributedTraceHeadersDict(
         opik_trace_id=span_data.trace_id,
@@ -397,7 +397,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
     trace_data.init_end_time().update(
         output={"output": "output-of-manually-created-trace"}
     )
-    client.trace(**trace_data.__dict__)
+    client.trace(**trace_data.as_parameters)
 
     opik.flush_tracker()
 
@@ -499,7 +499,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.span(**span_data.as_parameters)
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(

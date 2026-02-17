@@ -232,6 +232,7 @@ def test_openai_beta_chat_completion_stream__generator_tracked_correctly(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -247,6 +248,7 @@ def test_openai_beta_chat_completion_stream__generator_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -296,6 +298,7 @@ def test_openai_beta_chat_completion_stream__include_usage_is_not_enabled__usage
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -311,6 +314,7 @@ def test_openai_beta_chat_completion_stream__include_usage_is_not_enabled__usage
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -367,6 +371,7 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -382,6 +387,7 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -395,6 +401,7 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -410,6 +417,7 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -463,6 +471,7 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called__genera
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -478,6 +487,7 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called__genera
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -528,6 +538,7 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called_after_s
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -543,6 +554,7 @@ def test_openai_beta_chat_completion_stream__get_final_completion_called_after_s
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -595,6 +607,7 @@ def test_async_openai_beta_chat_completion_stream__data_tracked_correctly(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -610,6 +623,7 @@ def test_async_openai_beta_chat_completion_stream__data_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -662,6 +676,7 @@ def test_async_openai_beta_chat_completion_stream__get_final_completion_called_t
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -677,6 +692,7 @@ def test_async_openai_beta_chat_completion_stream__get_final_completion_called_t
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )

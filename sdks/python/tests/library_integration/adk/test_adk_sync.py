@@ -119,6 +119,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
         },
         thread_id=SESSION_ID,
         project_name="adk-test",
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -134,6 +135,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -164,6 +166,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -248,6 +251,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "parts": [{"text": "What is the weather in New York?"}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -262,6 +266,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -290,6 +295,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -315,6 +321,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "parts": [{"text": "What is the time in New York?"}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -329,6 +336,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -359,6 +367,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -419,6 +428,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -444,6 +454,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
             ),
@@ -471,6 +482,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
             ),
@@ -563,6 +575,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "parts": [{"text": "What is the weather in New York?"}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -577,6 +590,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -617,6 +631,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -693,6 +708,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             "parts": [{"text": "What is the weather in New York?"}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -707,6 +723,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
                 model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -735,6 +752,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
                 model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -824,6 +842,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             "parts": [{"text": "What is the weather in New York?"}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -838,6 +857,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
                 model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -866,6 +886,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
                 provider="openai",  # not necessary supported by opik, just taken from the prefix of litellm model
                 model=ANY_STRING.starting_with(model_name.split("/")[-1]),
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -947,6 +968,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -972,6 +994,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
             ),
@@ -999,6 +1022,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
             ),
@@ -1067,6 +1091,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1081,6 +1106,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(  # from tool callback
                 id=ANY_BUT_NONE,
@@ -1117,6 +1143,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
+                                ttft=ANY_BUT_NONE,
                             )
                         ],
                     )
@@ -1135,6 +1162,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -1284,6 +1312,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
         },
         thread_id=SESSION_ID,
         project_name="adk-test",
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1299,6 +1328,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1329,6 +1359,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                ttft=ANY_BUT_NONE,
             ),
         ],
     )
@@ -1393,6 +1424,7 @@ def test_adk__agent_with_response_schema__happyflow(
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1407,6 +1439,7 @@ def test_adk__agent_with_response_schema__happyflow(
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -1598,6 +1631,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
             "message": ANY_STRING,
             "traceback": ANY_STRING,
         },
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1613,6 +1647,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1693,6 +1728,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
         output=ANY_DICT,
         metadata=ANY_DICT,
         end_time=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1708,6 +1744,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                 model=MODEL_NAME,
                 provider=provider,
                 last_updated_at=ANY_BUT_NONE,
+                ttft=ANY_BUT_NONE,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1746,6 +1783,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                         model=MODEL_NAME,
                         provider=provider,
                         last_updated_at=ANY_BUT_NONE,
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,

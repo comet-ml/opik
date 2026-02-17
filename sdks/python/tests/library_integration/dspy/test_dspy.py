@@ -398,7 +398,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
     trace_data.init_end_time().update(
         output={"output": "output-of-manually-created-trace"}
     )
-    client.trace(**trace_data.__dict__)
+    client.trace(**trace_data.as_parameters)
 
     opik.flush_tracker()
 
@@ -475,7 +475,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.span(**span_data.as_parameters)
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(

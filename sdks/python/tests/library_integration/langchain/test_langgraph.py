@@ -879,7 +879,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.span(**span_data.as_parameters)
 
     callback.flush()
 
@@ -1022,7 +1022,7 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
     trace_data.init_end_time().update(
         output={"output": "output-of-manually-created-trace"}
     )
-    client.trace(**trace_data.__dict__)
+    client.trace(**trace_data.as_parameters)
 
     callback.flush()
 
