@@ -223,6 +223,7 @@ class EvaluationEngine:
         description: str,
         total_items: Optional[int],
         default_execution_policy: ExecutionPolicy,
+        show_score_postfix: bool = True,
     ) -> List[test_result.TestResult]:
         """
         Execute tasks with full parallelism and item-based progress.
@@ -235,7 +236,7 @@ class EvaluationEngine:
             verbose=self._verbose,
             desc=description,
             total=total_items,
-            show_score_postfix=False,
+            show_score_postfix=show_score_postfix,
         ) as executor:
             for item in dataset_items:
                 item_policy = get_item_execution_policy(item, default_execution_policy)
@@ -369,6 +370,7 @@ class EvaluationEngine:
         description: str,
         total_items: Optional[int],
         default_execution_policy: ExecutionPolicy,
+        show_score_postfix: bool = True,
     ) -> List[test_result.TestResult]:
         """
         Shared execution logic. Runs the task, scores with regular metrics,
@@ -385,6 +387,7 @@ class EvaluationEngine:
             description=description,
             total_items=total_items,
             default_execution_policy=default_execution_policy,
+            show_score_postfix=show_score_postfix,
         )
 
         if not task_span_metrics:
@@ -423,6 +426,7 @@ class EvaluationEngine:
         default_execution_policy: ExecutionPolicy,
         total_items: Optional[int],
         description: str = "Evaluation",
+        show_score_postfix: bool = True,
     ) -> List[test_result.TestResult]:
         """
         Run a task on dataset items in parallel, then score results with metrics.
@@ -450,6 +454,7 @@ class EvaluationEngine:
             description=description,
             total_items=total_items,
             default_execution_policy=default_execution_policy,
+            show_score_postfix=show_score_postfix,
         )
 
     def score_test_cases(
