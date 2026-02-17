@@ -43,7 +43,7 @@ def test_uuid4_to_uuid7__sequential_timestamps__maintains_temporal_ordering():
 
     for i in range(NB_ID):
         test_uuids.append((datetime.now(), str(uuid.uuid4())))
-        time.sleep(0.5)
+        time.sleep(0.01)
 
     # Convert UUIDs
     uuids_v7 = [str(uuid4_to_uuid7(ts, uuid4)) for ts, uuid4 in test_uuids]
@@ -63,7 +63,7 @@ def test_uuid4_to_uuid7__different_uuid4_same_timestamp():
 
     for i in range(NB_ID):
         test_uuids.append((timestamp, str(uuid.uuid4())))
-        time.sleep(0.5)
+        time.sleep(0.01)
 
     # Convert UUIDs
     uuids_v7 = [str(uuid4_to_uuid7(ts, uuid4)) for ts, uuid4 in test_uuids]
