@@ -54,7 +54,10 @@ export const parseInputArgs = (
   return {
     model: args.model as string | undefined,
     input: parseInputFormat(args),
-    modelParameters: extractModelParameters(args),
+    modelParameters: {
+      ...extractModelParameters(args),
+      ...extractOpenRouterRoutingParams(args),
+    },
   };
 };
 
@@ -83,6 +86,36 @@ const extractModelParameters = (
       args[name] !== undefined ? { ...params, [name]: args[name] } : params,
     {}
   );
+};
+
+const extractOpenRouterRoutingParams = (
+  args: Record<string, unknown>
+): Record<string, unknown> => {
+  const providerValue = args.provider;
+
+  if (typeof providerValue === "string") {
+    return {
+      openrouter_routing: {
+        order: [providerValue],
+      },
+    };
+  }
+
+  if (
+    providerValue === null ||
+    Array.isArray(providerValue) ||
+    typeof providerValue !== "object"
+  ) {
+    return {};
+  }
+
+  if (Object.keys(providerValue).length === 0) {
+    return {};
+  }
+
+  return {
+    openrouter_routing: providerValue,
+  };
 };
 
 const parseInputFormat = (
@@ -559,7 +592,50 @@ const extractMetadataFromResponse = (res: object): Record<string, unknown> => {
     "error",
   ] as const;
 
-  return extractFieldsFromResponse(res, metadataKeys);
+  const coreMetadata = extractFieldsFromResponse(res, metadataKeys);
+  const openRouterMetadata = extractOpenRouterMetadataFromResponse(res);
+
+  return {
+    ...coreMetadata,
+    ...openRouterMetadata,
+  };
+};
+
+const extractOpenRouterMetadataFromResponse = (
+  res: object
+): Record<string, unknown> => {
+  const openRouterMetadataKeys = [
+    "provider_name",
+    "provider_id",
+    "model_provider",
+    "routing",
+    "provider",
+  ] as const;
+
+  const extracted = extractFieldsFromResponse(res, openRouterMetadataKeys);
+  const metadata: Record<string, unknown> = {};
+
+  if (extracted.provider !== undefined) {
+    metadata.openrouter_provider = extracted.provider;
+  }
+
+  if (extracted.routing !== undefined) {
+    metadata.openrouter_routing = extracted.routing;
+  }
+
+  if (extracted.provider_name !== undefined) {
+    metadata.openrouter_provider_name = extracted.provider_name;
+  }
+
+  if (extracted.provider_id !== undefined) {
+    metadata.openrouter_provider_id = extracted.provider_id;
+  }
+
+  if (extracted.model_provider !== undefined) {
+    metadata.openrouter_model_provider = extracted.model_provider;
+  }
+
+  return metadata;
 };
 
 const extractFieldsFromResponse = <T extends string>(
