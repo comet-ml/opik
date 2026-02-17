@@ -58,6 +58,7 @@ const OptimizationRowActionsCell: React.FunctionComponent<
               setOpen(true);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            variant="destructive"
           >
             <Trash className="mr-2 size-4" />
             Delete

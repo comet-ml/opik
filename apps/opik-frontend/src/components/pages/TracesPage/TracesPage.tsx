@@ -8,6 +8,7 @@ import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
+import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
@@ -17,9 +18,8 @@ import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector";
 import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import useProjectTabs, {
-  PROJECT_TAB,
-} from "@/components/pages/TracesPage/useProjectTabs";
+import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
+import { PROJECT_TAB } from "@/constants/traces";
 import usePluginsStore from "@/store/PluginsStore";
 import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
@@ -46,8 +46,15 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  const { activeTab, logsType, setLogsType, handleTabChange } =
-    useProjectTabs();
+  const {
+    activeTab,
+    logsType,
+    needsDefaultResolution,
+    setLogsType,
+    handleTabChange,
+  } = useProjectTabs({
+    projectId,
+  });
 
   const { view, setView } = useViewQueryParam();
 
@@ -150,7 +157,7 @@ const TracesPage = () => {
             <div className="text-muted-slate">{project.description}</div>
           </PageBodyStickyContainer>
         )}
-        {renderContent()}
+        {needsDefaultResolution ? <Loader /> : renderContent()}
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
         <SetGuardrailDialog
