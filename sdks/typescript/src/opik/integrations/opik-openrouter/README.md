@@ -8,7 +8,7 @@ Seamlessly integrate [Opik](https://www.comet.com/docs/opik/) observability with
 ## Features
 
 - 🔍 **Dedicated OpenRouter Integration**
-- 🎯 **Explicit provider stamping**
+- 🎯 **Explicit source attribution**
 - 📊 **Hierarchical tracing** for OpenRouter chat calls
 - 🧩 **OpenAI SDK-compatible behavior** through OpenRouter's compatible API contract
 

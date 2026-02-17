@@ -34,6 +34,59 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS = [
 RESPONSE_KEYS_TO_LOG_AS_OUTPUT = ["choices"]
 
 
+def _parse_openrouter_model_metadata(model: Any) -> Dict[str, Any]:
+    if not isinstance(model, str) or not model.strip():
+        return {}
+
+    base_model, *variants = model.split(":")
+
+    metadata: Dict[str, Any] = {
+        "openrouter_model_base": base_model,
+    }
+
+    if variants:
+        metadata["openrouter_model_variants"] = variants
+
+    return metadata
+
+
+def _extract_openrouter_request_metadata(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+
+    fallback_models = kwargs.get("models")
+    if isinstance(fallback_models, list):
+        metadata["openrouter_fallback_models"] = fallback_models
+
+    metadata.update(_parse_openrouter_model_metadata(kwargs.get("model")))
+    return metadata
+
+
+def _extract_openrouter_response_metadata(response: Dict[str, Any]) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+
+    openrouter_field_map = {
+        "provider": "openrouter_provider",
+        "provider_name": "openrouter_provider_name",
+        "provider_id": "openrouter_provider_id",
+        "model_provider": "openrouter_model_provider",
+        "routing": "openrouter_routing",
+        "web_search": "openrouter_web_search",
+    }
+
+    for source_key, metadata_key in openrouter_field_map.items():
+        value = response.get(source_key)
+        if value is not None:
+            metadata[metadata_key] = value
+
+    metadata.update(_parse_openrouter_model_metadata(response.get("model")))
+
+    fallback_models = response.get("models")
+    if isinstance(fallback_models, list):
+        metadata["openrouter_fallback_models"] = fallback_models
+
+    return metadata
+
+
 def track_openrouter(
     openrouter_client: OpenRouterClient,
     project_name: Optional[str] = None,
@@ -109,6 +162,7 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
+        metadata.update(_extract_openrouter_request_metadata(kwargs))
         metadata.update(
             {
                 "created_from": "openrouter",
@@ -141,6 +195,7 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         output_data, metadata = dict_utils.split_dict_by_keys(
             result_dict, keys=RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
+        metadata.update(_extract_openrouter_response_metadata(result_dict))
 
         usage = result_dict.get("usage")
         opik_usage = None
@@ -183,6 +238,10 @@ def _convert_response_to_dict(response: Any) -> Dict[str, Any]:
         return response.model_dump(mode="json")
 
     if hasattr(response, "dict"):
-        return response.dict()
+        try:
+            return response.dict()
+        except Exception:
+            LOGGER.error("Failed to convert OpenRouter response to dict")
+            raise
 
     return {"response": str(response)}

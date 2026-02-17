@@ -86,13 +86,14 @@ describe("OpenRouter metadata mapping", () => {
     );
 
     await traced({
-      model: "openai/gpt-4o-mini",
+      model: "openai/gpt-4o-mini:extended",
       messages: [{ role: "user", content: "Hello" }],
       provider: {
         order: ["deepinfra/turbo"],
         allow_fallbacks: false,
         require_parameters: true,
       },
+      models: ["openai/gpt-4o-mini", "openrouter/anthropic/claude-3.5"]
     });
 
     expect(mockClient.trace).toHaveBeenCalledTimes(1);
@@ -100,6 +101,12 @@ describe("OpenRouter metadata mapping", () => {
 
     const tracePayload = rootSpan.span.mock.calls[0]?.[0];
     expect(tracePayload.metadata).toMatchObject({
+      openrouter_fallback_models: [
+        "openai/gpt-4o-mini",
+        "openrouter/anthropic/claude-3.5",
+      ],
+      openrouter_model_base: "openai/gpt-4o-mini",
+      openrouter_model_variants: ["extended"],
       openrouter_routing: {
         order: ["deepinfra/turbo"],
         allow_fallbacks: false,
@@ -114,12 +121,14 @@ describe("OpenRouter metadata mapping", () => {
 
     const traced = withTracing(
       vi.fn().mockResolvedValue({
-        model: "openai/gpt-4o-mini",
+        model: "openai/gpt-4o-mini:thinking:online",
         choices: [{ message: { role: "assistant", content: "Hello" } }],
         provider: "openai/gpt-4o-mini",
         provider_name: "openrouter-openai",
         provider_id: "openrouter/openai/gpt-4o-mini",
         model_provider: "openrouter",
+        web_search: true,
+        models: ["openai/gpt-4o-mini", "openrouter/openai/gpt-4o-mini"],
         routing: {
           order: ["anthropic/claude-3", "openai/gpt-4o-mini"],
           allow_fallbacks: true,
@@ -151,6 +160,10 @@ describe("OpenRouter metadata mapping", () => {
       openrouter_provider_name: "openrouter-openai",
       openrouter_provider_id: "openrouter/openai/gpt-4o-mini",
       openrouter_model_provider: "openrouter",
+      openrouter_model_base: "openai/gpt-4o-mini",
+      openrouter_model_variants: ["thinking", "online"],
+      openrouter_web_search: true,
+      openrouter_fallback_models: ["openai/gpt-4o-mini", "openrouter/openai/gpt-4o-mini"],
       openrouter_routing: {
         order: ["anthropic/claude-3", "openai/gpt-4o-mini"],
         allow_fallbacks: true,

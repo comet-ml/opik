@@ -51,14 +51,67 @@ interface ModelMetadataResult {
 export const parseInputArgs = (
   args: Record<string, unknown>
 ): ParsedOpenAIArguments => {
+  const model = args.model as string | undefined;
+
   return {
-    model: args.model as string | undefined,
+    model,
     input: parseInputFormat(args),
     modelParameters: {
       ...extractModelParameters(args),
       ...extractOpenRouterRoutingParams(args),
+      ...extractOpenRouterInputMetadata(model, args),
     },
   };
+};
+
+const extractOpenRouterInputMetadata = (
+  model: string | undefined,
+  args: Record<string, unknown>
+): Record<string, unknown> => {
+  const fromModel = parseOpenRouterModelName(model);
+  const fallbackModels = extractFallbackModelsFromArgs(args);
+
+  return {
+    ...(fromModel.modelBase !== undefined
+      ? { openrouter_model_base: fromModel.modelBase }
+      : {}),
+    ...(fromModel.modelVariants.length > 0
+      ? { openrouter_model_variants: fromModel.modelVariants }
+      : {}),
+    ...(fallbackModels.length > 0
+      ? { openrouter_fallback_models: fallbackModels }
+      : {}),
+  };
+};
+
+const parseOpenRouterModelName = (model: string | undefined): {
+  modelBase: string | undefined;
+  modelVariants: string[];
+} => {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    return { modelBase: undefined, modelVariants: [] };
+  }
+
+  const [base, ...variants] = model.split(":");
+
+  return {
+    modelBase: base && base.length > 0 ? base : undefined,
+    modelVariants: variants.filter((variant) => variant.length > 0),
+  };
+};
+
+const extractFallbackModelsFromArgs = (
+  args: Record<string, unknown>
+): unknown[] => {
+  if (!Array.isArray(args.models)) {
+    return [];
+  }
+
+  const models = args.models
+    .map((model) => (typeof model === "string" ? model.trim() : model))
+    .filter((model) => model !== "");
+
+  return models;
 };
 
 const extractModelParameters = (
@@ -605,14 +658,20 @@ const extractOpenRouterMetadataFromResponse = (
   res: object
 ): Record<string, unknown> => {
   const openRouterMetadataKeys = [
+    "model",
     "provider_name",
     "provider_id",
     "model_provider",
     "routing",
     "provider",
+    "web_search",
+    "models",
   ] as const;
 
   const extracted = extractFieldsFromResponse(res, openRouterMetadataKeys);
+  const parsedModel = parseOpenRouterModelName(
+    extracted.model as string | undefined
+  );
   const metadata: Record<string, unknown> = {};
 
   if (extracted.provider !== undefined) {
@@ -633,6 +692,22 @@ const extractOpenRouterMetadataFromResponse = (
 
   if (extracted.model_provider !== undefined) {
     metadata.openrouter_model_provider = extracted.model_provider;
+  }
+
+  if (parsedModel.modelBase !== undefined) {
+    metadata.openrouter_model_base = parsedModel.modelBase;
+  }
+
+  if (parsedModel.modelVariants.length > 0) {
+    metadata.openrouter_model_variants = parsedModel.modelVariants;
+  }
+
+  if (extracted.web_search !== undefined) {
+    metadata.openrouter_web_search = extracted.web_search;
+  }
+
+  if (Array.isArray(extracted.models)) {
+    metadata.openrouter_fallback_models = extracted.models;
   }
 
   return metadata;
