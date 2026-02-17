@@ -97,7 +97,8 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
             )
 
     if _metric_requires_task_span(metric):
-        class MetricClass(base_metric.BaseMetric):
+
+        class SpanAwareMetricClass(base_metric.BaseMetric):
             def __init__(self) -> None:
                 self.name = metric.__name__
 
@@ -114,7 +115,7 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
                     task_span=task_span,
                 )
 
-        return MetricClass()
+        return SpanAwareMetricClass()
 
     class MetricClass(base_metric.BaseMetric):
         def __init__(self) -> None:

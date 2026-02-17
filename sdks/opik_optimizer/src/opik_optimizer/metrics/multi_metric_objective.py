@@ -19,6 +19,10 @@ class MultiMetricObjective:
     Metrics are ideally normalized to a common bounded scale (typically [0, 1]).
     This keeps weighted aggregation stable and makes weight tuning interpretable.
     If a metric returns values outside [0, 1], a runtime warning is emitted.
+
+    For span-based efficiency metrics (for example cost/duration), prefer using
+    target-based normalized metrics and explicit direction controls such as
+    `invert=True` so the composite can always maximize "higher is better" scores.
     """
 
     def __init__(

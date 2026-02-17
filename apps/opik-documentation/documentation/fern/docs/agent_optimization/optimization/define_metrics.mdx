@@ -48,7 +48,7 @@ objective = MultiMetricObjective(
 ```
 
 <Tip>
-  Weights do not need to sum to 1; choose numbers that highlight the most critical metric to your use case. Use negative weights to minimize a metric instead of maximizing it.
+  Weights do not need to sum to 1; choose numbers that highlight the most critical metric to your use case.
 </Tip>
 
 ### Include cost and duration metrics
@@ -69,9 +69,10 @@ def answer_relevance(dataset_item, llm_output):
         input=dataset_item["question"]
     )
 
-# Built-in span metrics can be normalized with target= for clean multi-metric weighting
-cost = TotalSpanCost(target=0.01, name="cost")
-duration = SpanDuration(target=6.0, name="duration")
+# Built-in span metrics can be normalized with target= for clean multi-metric weighting.
+# invert=True (default) means lower raw value -> higher score.
+cost = TotalSpanCost(target=0.01, invert=True, name="cost_score")
+duration = SpanDuration(target=6.0, invert=True, name="duration_score")
 
 # Combine quality, cost, and speed metrics on a common [0, 1] scale
 objective = MultiMetricObjective(
@@ -85,11 +86,14 @@ For a working end-to-end example in the repository, see:
 [multi_metric_cost_duration_example.py](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/scripts/multi_metric_cost_duration_example.py)
 
 <Note>
-  Span-based metrics like `TotalSpanCost` and `SpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run. Use negative weights to minimize metrics (cost, duration) rather than maximize them.
+  Span-based metrics like `TotalSpanCost` and `SpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run.
 </Note>
 
 <Note>
-  LLM task total cost and duration are not normalized values, we recommend adjusting their weights based on your baseline metrics and the importance you want them to have.
+  Direction control is explicit:
+  - `invert=True` (default) for efficiency metrics where lower raw values should score higher.
+  - `invert=False` if your objective should reward higher raw values.
+  When `target` is omitted, these metrics return raw values (not normalized scores).
 </Note>
 
 ## Recommended presets
@@ -110,8 +114,8 @@ Opik Optimizer also ships built-in metric helpers for common optimization setups
 | Metric | Import | When to use |
 | --- | --- | --- |
 | `LevenshteinAccuracyMetric` | `from opik_optimizer.metrics import LevenshteinAccuracyMetric` | Quick string-similarity accuracy using dataset keys like `answer` or `highlights`. |
-| `TotalSpanCost` | `from opik_optimizer.metrics import TotalSpanCost` | Minimize token/call cost from the task span. |
-| `SpanDuration` | `from opik_optimizer.metrics import SpanDuration` | Minimize total task runtime from the task span. |
+| `TotalSpanCost` | `from opik_optimizer.metrics import TotalSpanCost` | Cost metric with `target=` normalization and `invert=` direction control. |
+| `SpanDuration` | `from opik_optimizer.metrics import SpanDuration` | Duration metric with `target=` normalization and `invert=` direction control. |
 
 Example with built-ins:
 
@@ -120,8 +124,8 @@ from opik_optimizer import MultiMetricObjective
 from opik_optimizer.metrics import LevenshteinAccuracyMetric, TotalSpanCost, SpanDuration
 
 accuracy = LevenshteinAccuracyMetric(reference_key="answer")
-cost = TotalSpanCost(target=0.01, name="cost")
-duration = SpanDuration(target=6.0, name="duration")
+cost = TotalSpanCost(target=0.01, invert=True, name="cost_score")
+duration = SpanDuration(target=6.0, invert=True, name="duration_score")
 
 objective = MultiMetricObjective(
     metrics=[accuracy, cost, duration],

@@ -15,6 +15,9 @@ class SpanDuration(base_metric.BaseMetric):
             a score in (0, 1], where higher is better. This is the recommended mode
             for `MultiMetricObjective`, where duration should be on a bounded scale.
             When None, returns raw seconds.
+        invert: Controls optimization direction when `target` is provided.
+            - True (default): lower duration -> higher score.
+            - False: higher duration -> higher score.
         target_duration_seconds: Backward-compatible alias for `target`.
         track: Whether to track the metric. Defaults to True.
         project_name: The name of the project to track the metric in. Defaults to None.
@@ -24,6 +27,7 @@ class SpanDuration(base_metric.BaseMetric):
         self,
         name: str = "total_span_duration",
         target: float | None = None,
+        invert: bool = True,
         target_duration_seconds: float | None = None,
         track: bool = True,
         project_name: str | None = None,
@@ -41,6 +45,7 @@ class SpanDuration(base_metric.BaseMetric):
         self.target_duration_seconds = (
             None if resolved_target is None else float(resolved_target)
         )
+        self.invert = bool(invert)
 
     def score(
         self, task_span: emulation_models.SpanModel | None = None, **_: Any
@@ -72,16 +77,23 @@ class SpanDuration(base_metric.BaseMetric):
         if self.target_duration_seconds is None:
             return score_result.ScoreResult(value=duration, name=self.name)
 
-        value = 1.0 / (1.0 + duration / self.target_duration_seconds)
+        normalized = duration / self.target_duration_seconds
+        if self.invert:
+            value = 1.0 / (1.0 + normalized)
+        else:
+            value = normalized / (1.0 + normalized)
+
+        direction = "lower-is-better" if self.invert else "higher-is-better"
         return score_result.ScoreResult(
             name=self.name,
             value=value,
             reason=(
                 f"Total span duration={duration:.2f}s -> score={value:.3f} "
-                f"(target={self.target_duration_seconds:.2f}s)"
+                f"(target={self.target_duration_seconds:.2f}s, direction={direction})"
             ),
             metadata={
                 "raw_total_span_duration_seconds": duration,
                 "target_duration_seconds": self.target_duration_seconds,
+                "invert": self.invert,
             },
         )

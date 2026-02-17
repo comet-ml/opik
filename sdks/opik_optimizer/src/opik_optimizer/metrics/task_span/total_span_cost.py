@@ -147,6 +147,9 @@ class TotalSpanCost(base_metric.BaseMetric):
             a score in (0, 1], where higher is better. This is the recommended mode
             for `MultiMetricObjective`, where cost should be on a bounded scale.
             When None, returns raw USD cost.
+        invert: Controls optimization direction when `target` is provided.
+            - True (default): lower cost -> higher score.
+            - False: higher cost -> higher score.
         target_cost_usd: Backward-compatible alias for `target`.
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
@@ -170,6 +173,7 @@ class TotalSpanCost(base_metric.BaseMetric):
         self,
         name: str = "total_span_cost",
         target: float | None = None,
+        invert: bool = True,
         target_cost_usd: float | None = None,
         track: bool = True,
         project_name: str | None = None,
@@ -186,6 +190,7 @@ class TotalSpanCost(base_metric.BaseMetric):
         self.target_cost_usd = (
             None if resolved_target is None else float(resolved_target)
         )
+        self.invert = bool(invert)
 
     def score(
         self, task_span: models.SpanModel | None = None, **_: Any
@@ -235,16 +240,23 @@ class TotalSpanCost(base_metric.BaseMetric):
             )
 
         raw_cost = float(accumulator.total_cost)
-        value = 1.0 / (1.0 + raw_cost / self.target_cost_usd)
+        normalized = raw_cost / self.target_cost_usd
+        if self.invert:
+            value = 1.0 / (1.0 + normalized)
+        else:
+            value = normalized / (1.0 + normalized)
+
+        direction = "lower-is-better" if self.invert else "higher-is-better"
         return score_result.ScoreResult(
             name=self.name,
             value=value,
             reason=(
                 f"Total span cost={raw_cost:.6f} USD -> score={value:.3f} "
-                f"(target={self.target_cost_usd:.6f})"
+                f"(target={self.target_cost_usd:.6f}, direction={direction})"
             ),
             metadata={
                 "raw_total_span_cost_usd": raw_cost,
                 "target_cost_usd": self.target_cost_usd,
+                "invert": self.invert,
             },
         )

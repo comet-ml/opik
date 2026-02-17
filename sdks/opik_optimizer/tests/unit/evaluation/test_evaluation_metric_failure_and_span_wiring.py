@@ -50,4 +50,3 @@ def test_validate_objective_scores_raises_on_failed_scores() -> None:
 def test_validate_objective_scores_raises_when_no_scores_present() -> None:
     with pytest.raises(ValueError, match="produced no scores"):
         evaluation._validate_objective_scores([], objective_metric_name="objective")
-

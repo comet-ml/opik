@@ -1,11 +1,18 @@
 """Small multi-objective optimization example for Opik Optimizer.
 
-This example runs a tiny CNN/DailyMail slice and optimizes a single objective that
-combines:
-- accuracy: Levenshtein similarity on summary text
-- latency proxy: lower duration is better
-- cost proxy: lower optimizer-reported LLM cost is better
+This script demonstrates a clean, explicit setup for balancing three goals:
+1. Accuracy quality: `LevenshteinAccuracyMetric` from reference highlights.
+2. Duration efficiency: `SpanDuration` configured as a normalized score.
+3. Cost efficiency: `TotalSpanCost` configured as a normalized score.
 
+Important behavior:
+- `target=` enables bounded normalization for span metrics into (0, 1].
+- `invert=True` means lower raw values are better (default for cost/duration).
+- The metric names are `duration_score` and `cost_score` to avoid confusion with
+  raw seconds/USD values.
+
+The optimizer maximizes the composite metric value, so all components are modeled
+as "higher is better" scores before aggregation.
 """
 
 from opik_optimizer import ChatPrompt, HRPO
@@ -23,16 +30,30 @@ N_SAMPLES = 2
 MAX_TRIALS = 4
 TARGET_DURATION_SECONDS = 6.0
 TARGET_COST_USD = 0.01
+
+
 def make_multi_metric_objective() -> MultiMetricObjective:
+    """Build a normalized multi-metric objective for HRPO.
+
+    Weights are applied over normalized scores:
+    - `accuracy`: Levenshtein similarity ratio.
+    - `cost_score`: inverse-normalized cost score (`invert=True`).
+    - `duration_score`: inverse-normalized duration score (`invert=True`).
+    """
     accuracy_metric = LevenshteinAccuracyMetric(
         reference_key="highlights",
         output_key="output",
         name="accuracy",
     )
-    cost_metric = TotalSpanCost(target=TARGET_COST_USD, name="cost")
+    cost_metric = TotalSpanCost(
+        target=TARGET_COST_USD,
+        invert=True,
+        name="cost_score",
+    )
     duration_metric = SpanDuration(
         target=TARGET_DURATION_SECONDS,
-        name="duration",
+        invert=True,
+        name="duration_score",
     )
 
     return MultiMetricObjective(
@@ -68,6 +89,7 @@ optimizer = HRPO(
 )
 
 multi_metric_objective = make_multi_metric_objective()
+
 
 def run_example() -> None:
     result = optimizer.optimize_prompt(
