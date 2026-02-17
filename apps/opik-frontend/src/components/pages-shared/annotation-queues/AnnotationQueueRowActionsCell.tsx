@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
@@ -91,11 +92,13 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
               setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            variant="destructive"
           >
             <Trash className="mr-2 size-4" />
             Delete

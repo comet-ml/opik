@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -69,11 +70,13 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
               setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            variant="destructive"
           >
             <Trash className="mr-2 size-4" />
             Delete

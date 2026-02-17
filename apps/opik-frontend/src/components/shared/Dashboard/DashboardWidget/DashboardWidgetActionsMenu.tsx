@@ -1,11 +1,5 @@
 import React, { useState, useCallback } from "react";
-import {
-  MoreHorizontal,
-  Pencil,
-  Copy,
-  ArrowUpDown,
-  Trash2,
-} from "lucide-react";
+import { MoreHorizontal, Pencil, Copy, ArrowUpDown, Trash } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
@@ -165,11 +159,8 @@ const DashboardWidgetActionsMenu: React.FunctionComponent<
           )}
           {showSeparator && <DropdownMenuSeparator />}
           {!hideDelete && (
-            <DropdownMenuItem
-              onClick={handleDeleteClick}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="mr-2 size-4" />
+            <DropdownMenuItem onClick={handleDeleteClick} variant="destructive">
+              <Trash className="mr-2 size-4" />
               Delete widget
             </DropdownMenuItem>
           )}
