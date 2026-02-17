@@ -157,10 +157,10 @@ class SpanCost(base_metric.BaseMetric):
 
     Example:
         >>> from opik.evaluation.metrics.task_span import SpanCost
-        >>> cost_metric = SpanCost()
+        >>> cost_metric = SpanCost(target=1.0)
         >>> result = cost_metric.score(task_span)
         >>> print(result.value)  # Total cost calculated from usage across span tree
-        >>> print(result.reason)  # Detailed breakdown
+        >>> print(result.reason)  # Detailed breakdown (set when target is provided)
 
     Note:
         - Prioritizes existing `total_cost` from spans over calculated costs
