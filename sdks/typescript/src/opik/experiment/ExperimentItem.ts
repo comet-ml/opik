@@ -10,8 +10,13 @@ import {
 export class ExperimentItemReferences {
   public readonly datasetItemId: string;
   public readonly traceId: string;
+  public readonly projectName?: string;
 
-  constructor(params: { datasetItemId: string; traceId: string }) {
+  constructor(params: {
+    datasetItemId: string;
+    traceId: string;
+    projectName?: string;
+  }) {
     if (!params.datasetItemId) {
       throw new Error("datasetItemId is required");
     }
@@ -20,6 +25,7 @@ export class ExperimentItemReferences {
     }
     this.datasetItemId = params.datasetItemId;
     this.traceId = params.traceId;
+    this.projectName = params.projectName;
   }
 }
 

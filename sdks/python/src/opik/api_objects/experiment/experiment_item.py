@@ -9,6 +9,7 @@ from opik.rest_api.types import experiment_item_compare
 class ExperimentItemReferences:
     dataset_item_id: str
     trace_id: str
+    project_name: Optional[str] = None
 
 
 @dataclasses.dataclass

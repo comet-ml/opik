@@ -41,6 +41,7 @@ def evaluate_llm_task_context(
             experiment_item_ = experiment_item.ExperimentItemReferences(
                 dataset_item_id=dataset_item_id,
                 trace_id=trace_data.id,
+                project_name=trace_data.project_name,
             )
             experiment.insert(experiment_items_references=[experiment_item_])
 
