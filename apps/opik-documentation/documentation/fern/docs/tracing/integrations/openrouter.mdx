@@ -7,20 +7,22 @@ og:title: Integrate OpenRouter SDK with Opik Easily
 title: Observability for OpenRouter SDK with Opik
 ---
 
-This guide explains how to integrate Opik with the OpenRouter SDK.
+This guide explains how to integrate Opik with the official OpenRouter SDK.
 
-If your application uses the official OpenRouter SDK, you can use Opik's dedicated wrappers for typed tracing without relying on the OpenAI-compatible layer.
+Use this path when your code already uses a native OpenRouter client object.
 
-<Tip>
-If you use OpenRouter as an OpenAI-compatible endpoint (without the official OpenRouter SDK),
-use [OpenRouter Gateway](/docs/opik/integrations/openrouter-gateway/) for transport-level tracing, then [OpenAI-compatible integration docs](/docs/opik/integrations/openai-typescript/) / [OpenAI Python docs](/docs/opik/integrations/openai/) for wrapper details.
-</Tip>
+If you use OpenRouter as an OpenAI-compatible endpoint without the official SDK:
+
+- [OpenRouter Gateway](/docs/opik/integrations/openrouter-gateway/) for transport-level tracing
+- [OpenAI-compatible integration docs](/docs/opik/integrations/openai-typescript/) / [OpenAI Python docs](/docs/opik/integrations/openai/) for wrapper-level fallback
+
+## Option 1: Official OpenRouter SDK (recommended)
+
+Use this path when your app uses the official OpenRouter SDK and you want typed spans with explicit OpenRouter source attribution.
 
 <Tip>
 OpenRouter routing metadata in spans is best-effort inferred from request/response model and provider fields where available. There is currently no guaranteed explicit `routing_provider`/`routing_model` field in the OpenRouter SDK integrations, so downstream route labels should be treated as inference rather than absolute ground truth.
 </Tip>
-
-Use `track_openrouter` / `trackOpenRouter` when your app uses the official OpenRouter SDK and you want typed, provider-stamped spans.
 
 <Tabs>
 <Tab value="Python" title="Python">
@@ -65,7 +67,7 @@ response = tracked_client.chat.send(
 ```
 
 :::note
-When using `track_openrouter`, Opik provider is stamped as `openrouter`.
+When using `track_openrouter`, Opik records the `provider` field as `openrouter`.
 :::
 
 </Tab>
@@ -115,6 +117,15 @@ const response = await trackedOpenRouter.chat.send({
 
 </Tab>
 </Tabs>
+
+## Option 2: OpenAI-compatible path via OpenRouter
+
+Use this path when you do not use the official OpenRouter SDK directly:
+
+- Python: `track_openai` for OpenAI-style calls (OpenRouter base URL)
+- TypeScript: `trackOpenAI` for OpenAI-style calls (OpenRouter base URL)
+
+Then follow [OpenAI-compatible integration docs](/docs/opik/integrations/openai-typescript/) / [OpenAI Python docs](/docs/opik/integrations/openai/) for wrapper details.
 
 ## Canonical references
 

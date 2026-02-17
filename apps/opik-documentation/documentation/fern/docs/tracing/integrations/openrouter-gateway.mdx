@@ -9,19 +9,32 @@ title: Observability for OpenRouter Gateway with Opik
 
 OpenRouter can be used through:
 
-- OpenRouter Broadcast destination (`opik`) for direct forwarding from OpenRouter to Opik
-- The Official OpenRouter SDK
-- The OpenAI-compatible path (`track_openai` / `trackOpenAI`) with OpenRouter base URL on OpenAI SDK
-
-<Tip>
-If you use the official OpenRouter SDK, use the [OpenRouter SDK guide](/docs/opik/integrations/openrouter/) for dedicated SDK provider intergration guide.
-</Tip>
+- OpenRouter Broadcast destination (`opik`) for direct forwarding
+- The official OpenRouter SDK (SDK-native tracing with OpenRouter tags)
+- The OpenAI-compatible path (`track_openai` / `trackOpenAI`) with OpenRouter base URL
 
 <Tip>
 OpenRouter route/proxy resolution in OpenAI-compatible tracing is best-effort and inferred from model/response data. It does not currently expose a guaranteed explicit upstream routing label on every request.
 </Tip>
 
-## Option 1: OpenAI-compatible path
+## Option 1: OpenRouter Broadcast destination (recommended)
+
+Use this path when you want OpenRouter to manage routing and send traces to Opik directly from OpenRouter.
+
+If you prefer centralized routing, audit, and no OpenAI-wrapper wiring in your application code, use the OpenRouter Broadcast destination first.
+
+- Open the OpenRouter dashboard
+- Go to **Broadcast** destinations
+- Add `opik` as a destination
+- Configure your Opik endpoint and credentials as described in OpenRouter docs
+
+Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
+
+<Tip>
+If you want typed SDK-native tracing (instead of broadcast), use the OpenAI-compatible path or the dedicated [OpenRouter SDK guide](/docs/opik/integrations/openrouter/).
+</Tip>
+
+## Option 2: OpenAI-compatible path
 
 Use this path when your app already uses OpenAI-style calls (`chat.completions.create`) and you want to keep the OpenAI-compatible integration while sending requests to OpenRouter.
 
@@ -126,25 +139,18 @@ For full payload matrix and generated walkthroughs, use:
 - TypeScript OpenAI-compatible integration guide: https://www.comet.com/docs/opik/integrations/openai-typescript/
 - `trackOpenAI` package options: https://github.com/comet-ml/opik/blob/main/sdks/typescript/src/opik/integrations/opik-openai/README.md
 
-## Option 2: OpenRouter Broadcast destination to Opik
-
-Use this path when you want OpenRouter to own request routing and centrally forward matching traffic to Opik.
-
-If you prefer centralized routing from OpenRouter, enable Opik in OpenRouter Broadcast.
-
-- Open the OpenRouter dashboard
-- Go to **Broadcast** destinations
-- Add `opik` as a destination
-- Configure your Opik endpoint and credentials as described in OpenRouter docs
-
-Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
-
 ## Available Methods
 
 When using the OpenAI-compatible path:
 
 - `client.chat.completions.create()`
 - `client.beta.chat.completions.parse()` (OpenAI-compatible models)
+
+## Option 3: Official OpenRouter SDK
+
+Use the dedicated guide if your codebase uses `@openrouter/sdk` in TypeScript or native OpenRouter Python client usage:
+
+- [OpenRouter SDK with Opik](/docs/opik/integrations/openrouter/)
 
 For non-OpenAI models and structured output details, see [OpenRouter Structured Outputs](https://openrouter.ai/docs/features/structured-outputs).
 
