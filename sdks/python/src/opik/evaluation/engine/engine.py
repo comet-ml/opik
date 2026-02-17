@@ -248,6 +248,9 @@ class EvaluationEngine:
                     pass_threshold=item_policy.get("pass_threshold", 1),
                 )
 
+                # Declare group size before submitting to avoid race with callbacks
+                executor.set_group_size(item.id, item_runs)
+
                 # Submit all runs for this item
                 for run_id in range(item_runs):
                     executor.submit(
