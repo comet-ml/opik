@@ -27,6 +27,7 @@ import { test, expect } from '../fixtures/base.fixture';
 test.describe('Seed Test for Planner', () => {
   test('seed - initialize app and verify all sections are accessible', async ({ page, envConfig }) => {
     const frontendUrl = envConfig.getWebUrl();
+    const workspace = envConfig.getConfig().workspace;
 
     // Navigate to the Opik frontend
     await page.goto(frontendUrl);
@@ -34,35 +35,35 @@ test.describe('Seed Test for Planner', () => {
 
     // Verify the app has loaded
     await expect(page).toHaveTitle(/Opik/);
-    console.log(`Opik application ready at ${frontendUrl}`);
+    console.log(`Opik application ready at ${frontendUrl} (workspace: ${workspace})`);
 
     // Navigate to Projects section
-    await page.goto(`${frontendUrl}/default/projects`);
+    await page.goto(`${frontendUrl}/${workspace}/projects`);
     await expect(page.getByText('Projects').first()).toBeVisible({ timeout: 10000 });
     console.log('Projects section accessible');
 
     // Navigate to Datasets section
-    await page.goto(`${frontendUrl}/default/datasets`);
+    await page.goto(`${frontendUrl}/${workspace}/datasets`);
     await expect(page.getByText('Datasets').first()).toBeVisible({ timeout: 10000 });
     console.log('Datasets section accessible');
 
     // Navigate to Experiments section
-    await page.goto(`${frontendUrl}/default/experiments`);
+    await page.goto(`${frontendUrl}/${workspace}/experiments`);
     await expect(page.getByText('Experiments').first()).toBeVisible({ timeout: 10000 });
     console.log('Experiments section accessible');
 
     // Navigate to Prompts section
-    await page.goto(`${frontendUrl}/default/prompts`);
+    await page.goto(`${frontendUrl}/${workspace}/prompts`);
     await expect(page.getByText('Prompts').first()).toBeVisible({ timeout: 10000 });
     console.log('Prompts section accessible');
 
     // Navigate to Playground section
-    await page.goto(`${frontendUrl}/default/playground`);
+    await page.goto(`${frontendUrl}/${workspace}/playground`);
     await expect(page.getByText('Playground').first()).toBeVisible({ timeout: 10000 });
     console.log('Playground section accessible');
 
     // Navigate to Configuration section (Feedback Definitions)
-    await page.goto(`${frontendUrl}/default/configuration?tab=feedback-definitions`);
+    await page.goto(`${frontendUrl}/${workspace}/configuration?tab=feedback-definitions`);
     await expect(page.getByText('Feedback definitions').first()).toBeVisible({ timeout: 10000 });
     console.log('Configuration section accessible');
 
