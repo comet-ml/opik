@@ -371,6 +371,9 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 self._replay_manager.message_sent_failed(
                     message_id, failure_reason=str(error)
                 )
+            else:
+                # it is an unrecoverable error-unregister the message
+                self._replay_manager.unregister_message(message_id)
 
         return _callback
 
