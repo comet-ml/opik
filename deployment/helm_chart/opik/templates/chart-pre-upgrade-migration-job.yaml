@@ -125,7 +125,7 @@ spec:
               echo "Checking MySQL StatefulSet: $MYSQL_STS"
               if kubectl get statefulset $MYSQL_STS -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"; then
                 echo "MySQL StatefulSet $MYSQL_STS is using Bitnami image, deleting..."
-                kubectl delete statefulset $MYSQL_STS -n $NAMESPACE --wait=true
+                kubectl delete statefulset $MYSQL_STS -n $NAMESPACE --cascade=orphan --wait=true
                 echo "MySQL StatefulSet $MYSQL_STS deleted (PVCs are preserved)"
                 COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
               else
@@ -158,7 +158,7 @@ spec:
               # Delete if needed
               if [ $SHOULD_DELETE -eq 1 ]; then
                 echo "Deleting Zookeeper StatefulSet $ZOOKEEPER_STS..."
-                kubectl delete statefulset $ZOOKEEPER_STS -n $NAMESPACE --wait=true
+                kubectl delete statefulset $ZOOKEEPER_STS -n $NAMESPACE --cascade=orphan --wait=true
                 echo "Zookeeper StatefulSet $ZOOKEEPER_STS deleted (PVCs are preserved)"
                 COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
               else
@@ -168,16 +168,33 @@ spec:
               {{- end }}
               
               {{- if .Values.redis.enabled }}
-              # Delete Redis StatefulSet (if exists and uses Bitnami image)
+              # Delete Redis StatefulSet if it needs recreation
               REDIS_STS="{{ .Values.redis.fullnameOverride | default "opik-redis-master" }}"
               echo "Checking Redis StatefulSet: $REDIS_STS"
+              REDIS_SHOULD_DELETE=0
+
+              # Check if uses Bitnami image
               if kubectl get statefulset $REDIS_STS -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"; then
-                echo "Redis StatefulSet $REDIS_STS is using Bitnami image, deleting..."
-                kubectl delete statefulset $REDIS_STS -n $NAMESPACE --wait=true
-                echo "Redis StatefulSet $REDIS_STS deleted (PVCs are preserved)"
+                echo "Redis StatefulSet $REDIS_STS is using Bitnami image"
+                REDIS_SHOULD_DELETE=1
+              fi
+
+              # Check if VolumeClaimTemplate is missing labels (needs recreation for cloudpirates chart update)
+              if [ $REDIS_SHOULD_DELETE -eq 0 ]; then
+                VCT_LABELS=$(kubectl get statefulset $REDIS_STS -n $NAMESPACE -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.labels}' 2>/dev/null || echo "")
+                if kubectl get statefulset $REDIS_STS -n $NAMESPACE 2>/dev/null && [ -z "$VCT_LABELS" ]; then
+                  echo "Redis StatefulSet $REDIS_STS has VolumeClaimTemplate without labels, needs recreation"
+                  REDIS_SHOULD_DELETE=1
+                fi
+              fi
+
+              if [ $REDIS_SHOULD_DELETE -eq 1 ]; then
+                echo "Deleting Redis StatefulSet $REDIS_STS..."
+                kubectl delete statefulset $REDIS_STS -n $NAMESPACE --cascade=orphan --wait=true
+                echo "Redis StatefulSet $REDIS_STS deleted (pods and PVCs are preserved)"
                 COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
               else
-                echo "Redis StatefulSet $REDIS_STS not found or not using Bitnami image, skipping"
+                echo "Redis StatefulSet $REDIS_STS does not meet deletion criteria, skipping"
               fi
               echo ""
               {{- end }}

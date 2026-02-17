@@ -34,15 +34,15 @@ dependencies:
   repository: "https://comet-ml.github.io/comet-mysql-helm/"
   condition: mysql.enabled
 - name: zookeeper
-  version: 0.5.4
+  version: 0.6.0
   repository: oci://registry-1.docker.io/cloudpirates
   condition: zookeeper.enabled
 - name: redis
-  version: 0.16.0
+  version: 0.23.0
   repository: oci://registry-1.docker.io/cloudpirates
   condition: redis.enabled
 - name: minio
-  version: 0.6.1
+  version: 0.10.0
   repository: oci://registry-1.docker.io/cloudpirates
   condition: minio.enabled
 - name: altinity-clickhouse-operator
