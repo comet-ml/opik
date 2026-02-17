@@ -4,7 +4,7 @@
 
 ## Overview
 
-Generate a formatted, copiable Slack command for the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
+Generate a formatted, copiable Slack command for the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python, TypeScript). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
 
 - **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and outputs a copiable Slack command (does NOT send automatically).
 
@@ -13,7 +13,7 @@ This workflow will:
 - Find the GitHub PR for the current branch
 - Extract Jira ticket from PR title
 - Extract test environment link from PR description
-- Extract component summaries (FE, BE, Python) from PR description
+- Extract component summaries (FE, BE, Python, TypeScript) from PR description
 - Prompt only for missing information
 - Allow user to customize the message slightly
 - Format the message according to the code review template
@@ -33,6 +33,7 @@ This workflow will:
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
+- **TypeScript summary**: Extracted from PR description (looks for TypeScript/TypeScript SDK/TS mentions) or prompted if not found
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
@@ -105,10 +106,15 @@ This workflow will:
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
   
-  - **Python summary**: 
+  - **Python summary**:
     - Look for mentions of "Python", "Python SDK", "SDK", or Python-related changes in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip):"
+
+  - **TypeScript summary**:
+    - Look for mentions of "TypeScript", "TypeScript SDK", "TS", "TS SDK", or `[TS]` tag in PR description
+    - Extract relevant one-line summary from "## Details" section or component-specific mentions
+    - If not found, prompt: "TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip):"
 
 - **Store extracted information**: Keep all extracted and prompted values for message formatting
 
@@ -143,6 +149,7 @@ This workflow will:
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
+  :typescript: typescript summary (optional): {{description_in_one_line}}
   ```
 
 - **Message structure**:
@@ -165,6 +172,7 @@ This workflow will:
   :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
+  :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
   ```
 
 ---
@@ -268,6 +276,7 @@ cursor generate-code-review-slack-command
 #    - FE: Added new metrics dashboard UI (from Details section)
 #    - BE: Implemented metrics aggregation endpoint (from Details section)
 #    - Python: (not found, prompts user)
+#    - TypeScript: (not found, prompts user)
 # 5. Prompt for message customization (optional)
 # 6. Format message according to template (with greeting and Jira link)
 # 7. Generate and display copiable Slack command
@@ -293,6 +302,7 @@ cursor generate-code-review-slack-command
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
+# :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
 # ```
 # 
 # **To send in Slack:**
@@ -314,6 +324,7 @@ cursor generate-code-review-slack-command
 # Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip): Implemented metrics endpoint
 # Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
+# TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): [Enter pressed - using default]
 ```
 
