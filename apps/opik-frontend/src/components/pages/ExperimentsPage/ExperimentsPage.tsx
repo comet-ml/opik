@@ -167,12 +167,6 @@ const ExperimentsPage: React.FC = () => {
         size: 200,
       },
       {
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-      },
-      {
         id: COLUMN_DATASET_ID,
         label: "Dataset",
         type: COLUMN_TYPE.string,
@@ -197,6 +191,64 @@ const ExperimentsPage: React.FC = () => {
           ]
         : []),
       {
+        id: "trace_count",
+        label: "Trace count",
+        type: COLUMN_TYPE.number,
+        cell: TraceCountCell as never,
+        aggregatedCell: TextCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "trace_count",
+          tooltip: "View experiment traces",
+        },
+      },
+      {
+        id: "duration.p50",
+        label: "Avg duration",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p50,
+        cell: DurationCell as never,
+        aggregatedCell: DurationCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "duration.p50",
+        },
+      },
+      {
+        id: "total_estimated_cost_avg",
+        label: "Avg cost",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell as never,
+        aggregatedCell: CostCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "total_estimated_cost_avg",
+        },
+      },
+      {
+        id: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback Scores",
+        type: COLUMN_TYPE.numberDictionary,
+        accessorFn: transformExperimentScores,
+        cell: FeedbackScoreListCell as never,
+        aggregatedCell: FeedbackScoreListCell.Aggregation as never,
+        customMeta: {
+          getHoverCardName: (row: GroupedExperiment) => row.name,
+          areAggregatedScores: true,
+          aggregationKey: "feedback_scores",
+        },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
+      },
+      {
+        id: "created_at",
+        label: "Created",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+      },
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+      },
+      {
         id: COLUMN_PROJECT_ID,
         label: "Project",
         type: COLUMN_TYPE.string,
@@ -209,26 +261,9 @@ const ExperimentsPage: React.FC = () => {
         },
       },
       {
-        id: "created_at",
-        label: "Created",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
-      },
-      {
         id: "created_by",
         label: "Created by",
         type: COLUMN_TYPE.string,
-      },
-      {
-        id: "duration.p50",
-        label: "Avg duration",
-        type: COLUMN_TYPE.duration,
-        accessorFn: (row) => row.duration?.p50,
-        cell: DurationCell as never,
-        aggregatedCell: DurationCell.Aggregation as never,
-        customMeta: {
-          aggregationKey: "duration.p50",
-        },
       },
       {
         id: "duration.p90",
@@ -269,17 +304,6 @@ const ExperimentsPage: React.FC = () => {
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
-        id: "trace_count",
-        label: "Trace count",
-        type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
-        aggregatedCell: TextCell.Aggregation as never,
-        customMeta: {
-          aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
-        },
-      },
-      {
         id: "total_estimated_cost",
         label: "Total estimated cost",
         type: COLUMN_TYPE.cost,
@@ -288,30 +312,6 @@ const ExperimentsPage: React.FC = () => {
         customMeta: {
           aggregationKey: "total_estimated_cost",
         },
-      },
-      {
-        id: "total_estimated_cost_avg",
-        label: "Avg cost",
-        type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
-        aggregatedCell: CostCell.Aggregation as never,
-        customMeta: {
-          aggregationKey: "total_estimated_cost_avg",
-        },
-      },
-      {
-        id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback Scores",
-        type: COLUMN_TYPE.numberDictionary,
-        accessorFn: transformExperimentScores,
-        cell: FeedbackScoreListCell as never,
-        aggregatedCell: FeedbackScoreListCell.Aggregation as never,
-        customMeta: {
-          getHoverCardName: (row: GroupedExperiment) => row.name,
-          areAggregatedScores: true,
-          aggregationKey: "feedback_scores",
-        },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
       {
         id: COLUMN_COMMENTS_ID,
