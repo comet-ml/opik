@@ -47,16 +47,24 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
         return new FreeModelLlmProvider(
                 clientGenerator.newOpenAiClient(config),
-                freeModelConfig.getActualModel());
+                freeModelConfig.getActualModel(),
+                freeModelConfig.isReasoningModel());
     }
 
     @Override
     public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
-        // Transform the model name for LLM as Judge
+        Double temperature = modelParameters.temperature();
+
+        if (freeModelConfig.isReasoningModel() && temperature != null && temperature < 1.0) {
+            log.debug("Clamping temperature from '{}' to 1.0 for reasoning model '{}'",
+                    temperature, freeModelConfig.getActualModel());
+            temperature = 1.0;
+        }
+
         var transformedParameters = LlmAsJudgeModelParameters.builder()
                 .name(freeModelConfig.getActualModel())
-                .temperature(modelParameters.temperature())
+                .temperature(temperature)
                 .seed(modelParameters.seed())
                 .build();
 

@@ -22,6 +22,7 @@ import java.util.function.Consumer;
 public class FreeModelLlmProvider implements LlmProviderService {
     private final @NonNull OpenAiClient openAiClient;
     private final @NonNull String actualModel;
+    private final boolean isReasoningModel;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -62,12 +63,21 @@ public class FreeModelLlmProvider implements LlmProviderService {
 
     /**
      * Transforms the request to use the actual model name instead of "opik-free-model".
+     * For reasoning models (GPT-5, O-series), clamps temperature to >= 1.0 since existing
+     * automation rules may have temperature=0.0 saved from when the free model was gpt-4o-mini.
      */
     private ChatCompletionRequest transformRequest(ChatCompletionRequest request) {
+        Double temperature = request.temperature();
+
+        if (isReasoningModel && temperature != null && temperature < 1.0) {
+            log.debug("Clamping temperature from '{}' to 1.0 for reasoning model '{}'", temperature, actualModel);
+            temperature = 1.0;
+        }
+
         return ChatCompletionRequest.builder()
                 .model(actualModel)
                 .messages(request.messages())
-                .temperature(request.temperature())
+                .temperature(temperature)
                 .topP(request.topP())
                 .n(request.n())
                 .stream(request.stream())

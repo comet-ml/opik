@@ -77,4 +77,25 @@ public class FreeModelConfig {
     public String getModel() {
         return FREE_MODEL;
     }
+
+    /**
+     * Checks if the actual model is a reasoning model that requires temperature >= 1.0.
+     * Reasoning models include GPT-5 family (gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.1, gpt-5.2, etc.)
+     * and O-series models (o1, o3, o4-mini, etc.).
+     * <p>
+     * This is needed because existing automation rules created when the free model was gpt-4o-mini
+     * have temperature=0.0 saved in the database, which was valid for gpt-4o-mini but causes API
+     * errors with reasoning models that reject temperature < 1.0.
+     *
+     * @return true if the actual model is a reasoning model, false otherwise
+     */
+    public boolean isReasoningModel() {
+        if (actualModel == null || actualModel.isBlank()) {
+            return false;
+        }
+
+        String modelLower = actualModel.toLowerCase();
+        return modelLower.startsWith("gpt-5") || modelLower.startsWith("o1")
+                || modelLower.startsWith("o3") || modelLower.startsWith("o4");
+    }
 }
