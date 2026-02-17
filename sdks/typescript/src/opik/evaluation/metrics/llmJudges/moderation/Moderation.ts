@@ -48,7 +48,7 @@ const responseSchema = z.object({
  * ```typescript
  * import { Moderation } from 'opik/evaluation/metrics';
  *
- * // Using default model (gpt-4o)
+ * // Using default model (gpt-5-nano)
  * const metric = new Moderation();
  * const result = await metric.score({ output: "Hello, how can I help you?" });
  * console.log(result.value);  // 0.0 (safe content)
@@ -56,14 +56,14 @@ const responseSchema = z.object({
  *
  * // Using custom model with temperature and seed
  * const customMetric = new Moderation({
- *   model: 'gpt-4-turbo',
+ *   model: 'gpt-5',
  *   temperature: 0.3,
  *   seed: 42
  * });
  *
  * // Using custom model instance
  * import { openai } from '@ai-sdk/openai';
- * const customModel = openai('gpt-4o');
+ * const customModel = openai('gpt-5-nano');
  * const instanceMetric = new Moderation({ model: customModel });
  *
  * // With advanced settings
@@ -84,7 +84,7 @@ export class Moderation extends BaseLLMJudgeMetric {
    * Creates a new Moderation metric.
    *
    * @param options - Configuration options
-   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-4o'.
+   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5-nano'.
    * @param options.name - The name of the metric. Defaults to "moderation_metric".
    * @param options.fewShotExamples - Optional few-shot examples to guide the model
    * @param options.trackMetric - Whether to track the metric. Defaults to true.

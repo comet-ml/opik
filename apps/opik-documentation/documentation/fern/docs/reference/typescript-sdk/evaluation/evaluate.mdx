@@ -70,7 +70,7 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
   const { input } = datasetItem;
 
   const response = await openai.responses.create({
-    model: "gpt-4o",
+    model: "gpt-5-nano",
     instructions: "You are a coding assistant",
     input,
   });

@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.10](https://img.shields.io/badge/Version-1.10.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.10](https://img.shields.io/badge/AppVersion-1.10.10-informational?style=flat-square)
+![Version: 1.10.13](https://img.shields.io/badge/Version-1.10.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.13](https://img.shields.io/badge/AppVersion-1.10.13-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -82,10 +82,10 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
-| oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
-| oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.10.0 |
+| oci://registry-1.docker.io/cloudpirates | redis | 0.23.0 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.6.0 |
 
 ## Values
 
@@ -153,7 +153,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -202,6 +202,48 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
+| component.ai-backend.autoscaling.enabled | bool | `false` |  |
+| component.ai-backend.backendConfigMap.enabled | bool | `true` |  |
+| component.ai-backend.enabled | bool | `false` |  |
+| component.ai-backend.env.AGENT_OPIK_URL | string | `"http://opik-backend:8080"` |  |
+| component.ai-backend.env.OPIK_URL_OVERRIDE | string | `"http://opik-backend:8080"` |  |
+| component.ai-backend.env.PORT | string | `"8081"` |  |
+| component.ai-backend.env.SESSION_SERVICE_URI | string | `"mysql://opik:opik@opik-mysql:3306/opik"` |  |
+| component.ai-backend.env.URL_PREFIX | string | `"/opik-ai"` |  |
+| component.ai-backend.envFrom[0].configMapRef.name | string | `"opik-ai-backend"` |  |
+| component.ai-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
+| component.ai-backend.image.repository | string | `"opik-ai-backend"` |  |
+| component.ai-backend.ingress.annotations | object | `{}` |  |
+| component.ai-backend.ingress.enabled | bool | `false` |  |
+| component.ai-backend.ingress.hosts | list | `[]` |  |
+| component.ai-backend.ingress.ingressClassName | string | `""` |  |
+| component.ai-backend.ingress.tls.enabled | bool | `false` |  |
+| component.ai-backend.ingress.tls.hosts | list | `[]` |  |
+| component.ai-backend.ingress.tls.secretName | string | `""` |  |
+| component.ai-backend.livenessProbe.httpGet.path | string | `"/opik-ai/healthz"` |  |
+| component.ai-backend.livenessProbe.httpGet.port | int | `8081` |  |
+| component.ai-backend.metrics.enabled | bool | `false` |  |
+| component.ai-backend.podDisruptionBudget.enabled | bool | `false` |  |
+| component.ai-backend.ports[0].containerPort | int | `8081` |  |
+| component.ai-backend.ports[0].name | string | `"http"` |  |
+| component.ai-backend.ports[0].protocol | string | `"TCP"` |  |
+| component.ai-backend.readinessProbe.httpGet.path | string | `"/opik-ai/healthz"` |  |
+| component.ai-backend.readinessProbe.httpGet.port | int | `8081` |  |
+| component.ai-backend.readinessProbe.initialDelaySeconds | int | `10` |  |
+| component.ai-backend.replicaCount | int | `1` |  |
+| component.ai-backend.secretRefs | list | `[]` |  |
+| component.ai-backend.securityContext | object | `{}` |  |
+| component.ai-backend.service.ports[0].name | string | `"http"` |  |
+| component.ai-backend.service.ports[0].port | int | `8081` |  |
+| component.ai-backend.service.ports[0].protocol | string | `"TCP"` |  |
+| component.ai-backend.service.ports[0].targetPort | int | `8081` |  |
+| component.ai-backend.service.type | string | `"ClusterIP"` |  |
+| component.ai-backend.serviceAccount.create | bool | `true` |  |
+| component.ai-backend.serviceAccount.name | string | `"opik-ai-backend"` |  |
+| component.ai-backend.startupProbe.failureThreshold | int | `30` |  |
+| component.ai-backend.startupProbe.httpGet.path | string | `"/opik-ai/healthz"` |  |
+| component.ai-backend.startupProbe.httpGet.port | int | `8081` |  |
+| component.ai-backend.startupProbe.periodSeconds | int | `10` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -276,6 +318,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
+| component.frontend.aiBackendUpstreamConfig.gzip | string | `"off"` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_buffering | string | `"off"` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_connect_timeout | int | `90` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_read_timeout | int | `300` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_send_timeout | int | `300` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -377,10 +424,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
+| component.python-backend.networkPolicy.additionalRules | list | `[]` |  |
 | component.python-backend.networkPolicy.annotations | object | `{}` |  |
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
-| component.python-backend.networkPolicy.engineEgress.except | list | `[]` |  |
-| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
@@ -407,8 +453,8 @@ Call opik api on http://localhost:5173/api
 | minio.fullnameOverride | string | `"opik-minio"` |  |
 | minio.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | minio.image.registry | string | `"docker.io"` |  |
-| minio.image.repository | string | `"minio/minio"` |  |
-| minio.image.tag | string | `"RELEASE.2025-03-12T18-04-18Z"` |  |
+| minio.image.repository | string | `"cloudpirates/image-minio"` |  |
+| minio.image.tag | string | `"RELEASE.2025-10-15T17-29-55Z-hardened"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
 | minio.replicaCount | int | `1` |  |
@@ -443,6 +489,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
+| zookeeper.commonLabels."app.kubernetes.io/name" | string | `"zookeeper-opik"` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
 | zookeeper.extraEnvVars[0].value | string | `"512M"` |  |
@@ -460,8 +507,6 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
-| zookeeper.selectorLabels.instance | string | `"opik"` |  |
-| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------

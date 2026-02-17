@@ -4,6 +4,9 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemEdit;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
@@ -15,6 +18,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -27,11 +31,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -134,7 +140,10 @@ public interface DatasetItemVersionDAO {
      */
     Mono<Long> applyDelta(UUID datasetId, UUID baseVersionId, UUID newVersionId,
             List<DatasetItem> addedItems, List<DatasetItem> editedItems, Set<UUID> deletedIds,
-            List<UUID> unchangedUuids);
+            List<UUID> unchangedUuids, Set<UUID> additionalExcludeIds);
+
+    Mono<Long> editItemsViaSelectInsert(UUID datasetId, UUID baseVersionId, UUID newVersionId,
+            List<DatasetItemEdit> editedItems, Map<UUID, UUID> rowIdToDatasetItemId, List<UUID> newRowIds);
 
     /**
      * Applies batch updates to items from a base version, creating updated copies in a new version.
@@ -328,7 +337,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             SELECT
                 dataset_item_id,
                 data_hash,
-                tags
+                tags,
+                evaluators_hash,
+                execution_policy_hash
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -347,6 +358,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 span_id,
                 source,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -735,6 +748,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
+                    div_dedup.evaluators AS evaluators,
+                    div_dedup.execution_policy AS execution_policy,
                     div_dedup.created_at AS item_created_at,
                     div_dedup.last_updated_at AS item_last_updated_at,
                     div_dedup.created_by AS item_created_by,
@@ -950,6 +965,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.span_id AS span_id,
                 di.source AS source,
                 di.tags AS tags,
+                di.evaluators AS evaluators,
+                di.execution_policy AS execution_policy,
                 di.item_created_at AS created_at,
                 di.item_last_updated_at AS last_updated_at,
                 di.item_created_by AS created_by,
@@ -1048,6 +1065,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.span_id,
                 di.source,
                 di.tags,
+                di.evaluators,
+                di.execution_policy,
                 di.item_created_at,
                 di.item_last_updated_at,
                 di.item_created_by,
@@ -1080,6 +1099,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1102,6 +1123,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         :trace_id<item.index>,
                         :span_id<item.index>,
                         :tags<item.index>,
+                        :evaluators<item.index>,
+                        :execution_policy<item.index>,
                         :item_created_at<item.index>,
                         :item_last_updated_at<item.index>,
                         :item_created_by<item.index>,
@@ -1130,6 +1153,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1151,6 +1176,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.trace_id,
                 src.span_id,
                 <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
+                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -1177,6 +1204,64 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ) AS src
             """;
 
+    private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
+            INSERT INTO dataset_item_versions (
+                id,
+                dataset_item_id,
+                dataset_id,
+                dataset_version_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                evaluators,
+                execution_policy,
+                item_created_at,
+                item_last_updated_at,
+                item_created_by,
+                item_last_updated_by,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            )
+            SELECT
+                :newId as id,
+                src.dataset_item_id,
+                src.dataset_id,
+                :newVersionId as dataset_version_id,
+                <if(data)> mapFromArrays(:data_keys, :data_values) <else> src.data <endif> as data,
+                src.metadata,
+                src.source,
+                src.trace_id,
+                src.span_id,
+                <if(tags)> :tags <else> src.tags <endif> as tags,
+                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
+                src.item_created_at,
+                now64(9) as item_last_updated_at,
+                src.item_created_by,
+                :userName as item_last_updated_by,
+                now64(9) as created_at,
+                now64(9) as last_updated_at,
+                :userName as created_by,
+                :userName as last_updated_by,
+                src.workspace_id
+            FROM (
+                SELECT *
+                FROM dataset_item_versions
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                AND dataset_version_id = :baseVersionId
+                AND dataset_item_id = :datasetItemId
+                ORDER by (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1
+            ) AS src
+            """;
+
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
     // Optionally excludes specific item IDs (when exclude_ids is set)
@@ -1192,6 +1277,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1213,6 +1300,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.trace_id,
                 src.span_id,
                 src.tags,
+                src.evaluators,
+                src.execution_policy,
                 src.item_created_at,
                 src.item_last_updated_at,
                 src.item_created_by,
@@ -1307,6 +1396,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -1338,6 +1429,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -1731,12 +1824,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
                                 .map(arr -> new HashSet<>(Arrays.asList(arr)))
                                 .orElseGet(HashSet::new);
+                        var evaluatorsHash = row.get("evaluators_hash", Long.class);
+                        var executionPolicyHash = row.get("execution_policy_hash", Long.class);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
                                 .itemId(datasetItemId)
                                 .dataHash(hash)
                                 .tags(tags)
+                                .evaluatorsHash(evaluatorsHash)
+                                .executionPolicyHash(executionPolicyHash)
                                 .build();
                     }))
                     .collectList()
@@ -2209,21 +2306,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     public Mono<Long> applyDelta(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
             @NonNull UUID newVersionId, @NonNull List<DatasetItem> addedItems,
             @NonNull List<DatasetItem> editedItems, @NonNull Set<UUID> deletedIds,
-            @NonNull List<UUID> unchangedUuids) {
+            @NonNull List<UUID> unchangedUuids, @NonNull Set<UUID> additionalExcludeIds) {
 
         log.info("Applying delta for dataset '{}': baseVersion='{}', newVersion='{}', " +
-                "added='{}', edited='{}', deleted='{}'",
+                "added='{}', edited='{}', deleted='{}', additionalExclude='{}'",
                 datasetId, baseVersionId, newVersionId, addedItems.size(), editedItems.size(),
-                deletedIds.size());
+                deletedIds.size(), additionalExcludeIds.size());
 
         // Collect all stable item IDs that are being edited (so we don't copy them from base)
         Set<UUID> editedItemIds = editedItems.stream()
                 .map(DatasetItem::datasetItemId)
                 .collect(Collectors.toSet());
 
-        // Combine deleted and edited IDs for exclusion when copying
+        // Combine deleted, edited, and additional IDs for exclusion when copying
         Set<UUID> excludedIds = new HashSet<>(deletedIds);
         excludedIds.addAll(editedItemIds);
+        excludedIds.addAll(additionalExcludeIds);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2245,6 +2343,85 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .zipWith(copyUnchanged, Long::sum)
                     .doOnSuccess(total -> log.info("Applied delta for dataset '{}': total items in new version '{}'",
                             datasetId, total));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> editItemsViaSelectInsert(@NonNull UUID datasetId, @NonNull UUID baseVersionId,
+            @NonNull UUID newVersionId, @NonNull List<DatasetItemEdit> editedItems,
+            @NonNull Map<UUID, UUID> rowIdToDatasetItemId, @NonNull List<UUID> newRowIds) {
+
+        if (editedItems.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        long itemCount = editedItems.size();
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return asyncTemplate.nonTransaction(connection -> {
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "edit_items_via_select_insert");
+
+                List<Publisher<? extends Result>> publishers = new ArrayList<>();
+
+                for (int i = 0; i < editedItems.size(); i++) {
+                    DatasetItemEdit edit = editedItems.get(i);
+                    UUID datasetItemId = rowIdToDatasetItemId.get(edit.id());
+                    UUID newRowId = newRowIds.get(i);
+
+                    ST template = new ST(EDIT_ITEM_VIA_SELECT_INSERT);
+                    if (edit.data() != null) {
+                        template.add("data", true);
+                    }
+                    if (edit.tags() != null) {
+                        template.add("tags", true);
+                    }
+                    if (edit.evaluators() != null) {
+                        template.add("evaluators", true);
+                    }
+                    if (edit.executionPolicy() != null) {
+                        template.add("execution_policy", true);
+                    }
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId)
+                            .bind("datasetId", datasetId.toString())
+                            .bind("baseVersionId", baseVersionId.toString())
+                            .bind("newVersionId", newVersionId.toString())
+                            .bind("datasetItemId", datasetItemId.toString())
+                            .bind("newId", newRowId.toString())
+                            .bind("userName", userName);
+
+                    if (edit.data() != null) {
+                        Map<String, String> dataAsStrings = DatasetItemResultMapper.getOrDefault(edit.data());
+                        statement.bind("data_keys", dataAsStrings.keySet().toArray(new String[0]));
+                        statement.bind("data_values", dataAsStrings.values().toArray(new String[0]));
+                    }
+                    if (edit.tags() != null) {
+                        statement.bind("tags", edit.tags().toArray(new String[0]));
+                    }
+                    if (edit.evaluators() != null) {
+                        statement.bind("evaluators", serializeEvaluators(edit.evaluators()));
+                    }
+                    if (edit.executionPolicy() != null) {
+                        statement.bind("execution_policy",
+                                serializeExecutionPolicy(edit.executionPolicy()));
+                    }
+
+                    publishers.add(statement.execute());
+                }
+
+                return Flux.concat(publishers)
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .map(results -> itemCount)
+                        .doOnSuccess(count -> log.info("Edited '{}' items via SELECT INSERT for dataset '{}'",
+                                count, datasetId))
+                        .doFinally(signalType -> endSegment(segment));
+            });
         });
     }
 
@@ -2332,6 +2509,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         template.add("merge_tags", true);
                     }
                 }
+                if (batchUpdate.update().evaluators() != null) {
+                    template.add("evaluators", true);
+                }
+                if (batchUpdate.update().executionPolicy() != null) {
+                    template.add("execution_policy", true);
+                }
 
                 // Add either item IDs or filters based on what's provided
                 if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
@@ -2377,6 +2560,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 }
                 if (batchUpdate.update().tags() != null) {
                     statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
+                }
+                if (batchUpdate.update().evaluators() != null) {
+                    statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
+                }
+                if (batchUpdate.update().executionPolicy() != null) {
+                    statement.bind("execution_policy",
+                            serializeExecutionPolicy(batchUpdate.update().executionPolicy()));
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");
@@ -2433,6 +2623,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .bind("trace_id" + i, DatasetItemResultMapper.getOrDefault(item.traceId()))
                         .bind("span_id" + i, DatasetItemResultMapper.getOrDefault(item.spanId()))
                         .bind("tags" + i, item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
+                        .bind("evaluators" + i, serializeEvaluators(item.evaluators()))
+                        .bind("execution_policy" + i, serializeExecutionPolicy(item.executionPolicy()))
                         .bind("item_created_at" + i, formatTimestamp(item.createdAt()))
                         .bind("item_last_updated_at" + i, formatTimestamp(item.lastUpdatedAt()))
                         .bind("item_created_by" + i, item.createdBy() != null ? item.createdBy() : userName)
@@ -2630,6 +2822,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Instant.now().toString().replace("Z", "");
         }
         return timestamp.toString().replace("Z", "");
+    }
+
+    private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
+        if (evaluators == null || evaluators.isEmpty()) {
+            return EvaluatorItem.EMPTY_LIST_JSON;
+        }
+        return JsonUtils.writeValueAsString(evaluators);
+    }
+
+    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
+        if (executionPolicy == null) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override

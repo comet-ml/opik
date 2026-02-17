@@ -19,6 +19,8 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.evaluator_item_write import EvaluatorItemWrite
+from ..types.execution_policy_write import ExecutionPolicyWrite
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -909,6 +911,8 @@ class DatasetsClient:
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -929,6 +933,10 @@ class DatasetsClient:
         span_id : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -952,6 +960,8 @@ class DatasetsClient:
             trace_id=trace_id,
             span_id=span_id,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data
@@ -2323,6 +2333,8 @@ class AsyncDatasetsClient:
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2343,6 +2355,10 @@ class AsyncDatasetsClient:
         span_id : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2369,6 +2385,8 @@ class AsyncDatasetsClient:
             trace_id=trace_id,
             span_id=span_id,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data

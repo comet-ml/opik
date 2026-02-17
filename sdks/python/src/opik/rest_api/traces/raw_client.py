@@ -577,6 +577,7 @@ class RawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -607,6 +608,9 @@ class RawTracesClient:
         error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
+
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
 
         thread_id : typing.Optional[str]
 
@@ -640,6 +644,7 @@ class RawTracesClient:
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
+                "ttft": ttft,
                 "thread_id": thread_id,
             },
             headers={
@@ -747,6 +752,7 @@ class RawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -778,6 +784,8 @@ class RawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -807,6 +815,7 @@ class RawTracesClient:
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
                 "thread_id": thread_id,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -2628,6 +2637,7 @@ class AsyncRawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -2658,6 +2668,9 @@ class AsyncRawTracesClient:
         error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
+
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
 
         thread_id : typing.Optional[str]
 
@@ -2691,6 +2704,7 @@ class AsyncRawTracesClient:
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
+                "ttft": ttft,
                 "thread_id": thread_id,
             },
             headers={
@@ -2798,6 +2812,7 @@ class AsyncRawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2829,6 +2844,8 @@ class AsyncRawTracesClient:
 
         thread_id : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2858,6 +2875,7 @@ class AsyncRawTracesClient:
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
                 "thread_id": thread_id,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",

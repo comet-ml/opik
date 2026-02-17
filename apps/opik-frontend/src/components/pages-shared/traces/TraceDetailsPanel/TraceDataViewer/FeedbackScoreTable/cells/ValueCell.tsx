@@ -1,7 +1,10 @@
 import React, { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { categoryOptionLabelRenderer } from "@/lib/feedback-scores";
+import {
+  categoryOptionLabelRenderer,
+  formatScoreDisplay,
+} from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import {
   getCategoricFeedbackScoreValuesMap,
@@ -89,6 +92,13 @@ const formatParentRowWithCounts = (
   return formattedParts;
 };
 
+const formatNumericString = (val: string): string => {
+  const num = parseFloat(val);
+  if (isNaN(num)) return val;
+  const formatted = formatScoreDisplay(num);
+  return formatted === val ? val : formatted;
+};
+
 const renderParentValue = (displayText: string): React.ReactElement => (
   <div className="truncate text-light-slate">{displayText}</div>
 );
@@ -124,7 +134,9 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
       rowData.value_by_author
     ) {
       const countFormat = formatParentRowWithCounts(rowData.value_by_author);
-      return renderParentValue(`avg ${value}: ${countFormat}`);
+      return renderParentValue(
+        `avg ${formatNumericString(value)}: ${countFormat}`,
+      );
     }
 
     // Categorical scores always use the categorical format
@@ -136,7 +148,7 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
     }
 
     if (isParentRow) {
-      return renderParentValue(value);
+      return renderParentValue(formatNumericString(value));
     }
 
     // For child rows, display only the individual value
@@ -151,7 +163,7 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
         const numericValue = getNumericValue(singleScore);
 
         // Show display value with its numeric value in parentheses
-        return `${displayValue} (${numericValue})`;
+        return `${displayValue} (${formatScoreDisplay(numericValue)})`;
       }
 
       // Fallback to rowData.value if value_by_author is empty
@@ -175,10 +187,13 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
     }
 
     if (rowData.category_name) {
-      return categoryOptionLabelRenderer(rowData.category_name, value);
+      return categoryOptionLabelRenderer(
+        rowData.category_name,
+        formatNumericString(value),
+      );
     }
 
-    return value;
+    return formatNumericString(value);
   }, [
     isParentRow,
     isCategoricScore,
@@ -198,7 +213,7 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <TooltipWrapper content={cellContent} stopClickPropagation>
+      <TooltipWrapper content={value} stopClickPropagation>
         <span className="truncate direction-alternate">{cellContent}</span>
       </TooltipWrapper>
     </CellWrapper>

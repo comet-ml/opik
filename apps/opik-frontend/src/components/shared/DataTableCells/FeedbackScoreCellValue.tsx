@@ -2,7 +2,11 @@ import MultiValueFeedbackScoreHoverCard from "../FeedbackScoreTag/MultiValueFeed
 import { TraceFeedbackScore } from "@/types/traces";
 import { useState } from "react";
 import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
-import CellTooltipWrapper from "./CellTooltipWrapper";
+import {
+  formatScoreDisplay,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const FeedbackScoreCellValue = ({
@@ -46,7 +50,12 @@ const FeedbackScoreCellValue = ({
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;
 
-  const displayText = category ? `${category} (${value})` : String(value);
+  const formattedValue = formatScoreDisplay(value);
+  const displayText = category
+    ? `${category} (${formattedValue})`
+    : String(formattedValue);
+  const fullPrecisionText = category ? `${category} (${value})` : String(value);
+  const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
 
   return (
     <div className="flex min-w-0 items-center gap-1 overflow-hidden">
@@ -65,9 +74,13 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        <CellTooltipWrapper content={displayText}>
+        {showTooltip ? (
+          <TooltipWrapper content={fullPrecisionText}>
+            <div className="truncate">{displayText}</div>
+          </TooltipWrapper>
+        ) : (
           <div className="truncate">{displayText}</div>
-        </CellTooltipWrapper>
+        )}
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );

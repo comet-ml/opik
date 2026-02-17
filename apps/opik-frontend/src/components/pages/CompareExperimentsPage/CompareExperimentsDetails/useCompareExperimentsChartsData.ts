@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
 import uniq from "lodash/uniq";
 import { BarDataPoint, RadarDataPoint } from "@/types/chart";
-import { AggregatedFeedbackScore } from "@/types/shared";
+import { getScoreDisplayName } from "@/lib/feedback-scores";
+import { SCORE_TYPE_FEEDBACK } from "@/types/shared";
 
 export type ExperimentLabelsMap = Record<string, string>;
 type UseCompareExperimentsChartsDataArgs = {
@@ -34,23 +35,20 @@ const useCompareExperimentsChartsData = ({
 
     const labelsMap: Record<string, string> = {};
 
-    const createScoresMap = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      addAvgSuffix: boolean,
-    ): Record<string, number> =>
-      (scores || []).reduce<Record<string, number>>((acc, score) => {
-        acc[score.name] = score.value;
-        if (addAvgSuffix) {
-          labelsMap[score.name] = `${score.name} (avg)`;
-        }
-        return acc;
-      }, {});
-
     const map = experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
-        const feedbackScoresMap = createScoresMap(e.feedback_scores, true);
-        const experimentScoresMap = createScoresMap(e.experiment_scores, false);
-        acc[e.id] = { ...feedbackScoresMap, ...experimentScoresMap };
+        const scores: Record<string, number> = {};
+        (e.feedback_scores ?? []).forEach((score) => {
+          scores[score.name] = score.value;
+          labelsMap[score.name] = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_FEEDBACK,
+          );
+        });
+        (e.experiment_scores ?? []).forEach((score) => {
+          scores[score.name] = score.value;
+        });
+        acc[e.id] = scores;
         return acc;
       },
       {},

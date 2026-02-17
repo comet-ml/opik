@@ -7,6 +7,7 @@ export interface ExperimentItemCompare {
     experimentId: string;
     datasetItemId: string;
     traceId: string;
+    projectId?: string;
     input?: OpikApi.JsonListStringCompare;
     output?: OpikApi.JsonListStringCompare;
     feedbackScores?: OpikApi.FeedbackScoreCompare[];

@@ -6,12 +6,18 @@ import {
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import React from "react";
+import isNumber from "lodash/isNumber";
 import { Separator } from "@/components/ui/separator";
+
 import {
   getCategoricFeedbackScoreValuesMap,
   getIsCategoricFeedbackScore,
 } from "./utils";
-import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
+import {
+  formatScoreDisplay,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
@@ -45,9 +51,13 @@ const NumericScoreContent = ({
             <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
               {author}
             </span>
-            <span className="comet-body-xs-accented text-foreground">
-              {value}
-            </span>
+            <TooltipWrapper
+              content={isNumber(value) ? String(value) : undefined}
+            >
+              <span className="comet-body-xs-accented text-foreground">
+                {formatScoreDisplay(value)}
+              </span>
+            </TooltipWrapper>
           </div>
         ))}
       </div>
@@ -56,7 +66,11 @@ const NumericScoreContent = ({
         <span className="comet-body-xs min-w-0 flex-1 truncate text-muted-slate">
           Average
         </span>
-        <span className="comet-body-xs-accented text-foreground">{value}</span>
+        <TooltipWrapper content={isNumber(value) ? String(value) : undefined}>
+          <span className="comet-body-xs-accented text-foreground">
+            {formatScoreDisplay(value)}
+          </span>
+        </TooltipWrapper>
       </div>
     </div>
   );

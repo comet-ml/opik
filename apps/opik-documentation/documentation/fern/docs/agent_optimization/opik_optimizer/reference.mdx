@@ -78,7 +78,7 @@ optimizer = FewShotBayesianOptimizer(
 
 ```python
 FewShotBayesianOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     min_examples: int = 2,
     max_examples: int = 8,
@@ -99,7 +99,7 @@ FewShotBayesianOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
 <ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>
@@ -672,7 +672,7 @@ with_dataset_split(
 
 ```python
 GepaOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     n_threads: int = 12,
     verbose: int = 1,
@@ -687,7 +687,7 @@ GepaOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for the optimization algorithm</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for the optimization algorithm</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
@@ -1254,7 +1254,7 @@ with_dataset_split(
 
 ```python
 MetaPromptOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     prompts_per_round: int = 4,
     enable_context: bool = True,
@@ -1274,7 +1274,7 @@ MetaPromptOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="prompts_per_round" type="int" optional={true} default="4">Number of candidate prompts to generate per optimization round</ParamField>
 <ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context learning when reasoning</ParamField>
@@ -1846,7 +1846,7 @@ with_dataset_split(
 
 ```python
 EvolutionaryOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     population_size: int = 30,
     num_generations: int = 15,
@@ -1873,7 +1873,7 @@ EvolutionaryOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal operations (mutations, crossover, etc.)</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal operations (mutations, crossover, etc.)</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="population_size" type="int" optional={true} default="30">Number of prompts in the population</ParamField>
 <ParamField path="num_generations" type="int" optional={true} default="15">Number of generations to run</ParamField>
@@ -2452,7 +2452,7 @@ with_dataset_split(
 
 ```python
 HierarchicalReflectiveOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     reasoning_model: str | None = None,
     reasoning_model_parameters: dict[str, typing.Any] | None = None,
@@ -2472,7 +2472,7 @@ HierarchicalReflectiveOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for the optimization algorithm (reasoning and analysis)</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for the optimization algorithm (reasoning and analysis)</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="reasoning_model" type="str | None" optional={true} />
 <ParamField path="reasoning_model_parameters" type="dict[str, typing.Any] | None" optional={true} />
@@ -3044,7 +3044,7 @@ with_dataset_split(
 
 ```python
 ParameterOptimizer(
-    model: str = 'gpt-4o',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     default_n_trials: int = 20,
     local_search_ratio: float = 0.3,
@@ -3061,7 +3061,7 @@ ParameterOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name (used for metadata, not for optimization calls)</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name (used for metadata, not for optimization calls)</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="default_n_trials" type="int" optional={true} default="20">Default number of optimization trials to run</ParamField>
 <ParamField path="local_search_ratio" type="float" optional={true} default="0.3">Ratio of trials to dedicate to local search refinement (0.0-1.0)</ParamField>
@@ -4265,7 +4265,7 @@ ChatPrompt(
     messages: list[dict[str, typing.Any]] | None = None,
     tools: list[dict[str, typing.Any]] | None = None,
     function_map: dict[str, collections.abc.Callable] | None = None,
-    model: str = 'gpt-4o-mini',
+    model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     model_kwargs: dict[str, typing.Any] | None = None,
     kwargs: Any
@@ -4281,7 +4281,7 @@ ChatPrompt(
 <ParamField path="messages" type="list[dict[str, typing.Any]] | None" optional={true}>a list of dictionaries with role/content, with a content containing &#123;input-dataset-field&#125;</ParamField>
 <ParamField path="tools" type="list[dict[str, typing.Any]] | None" optional={true} />
 <ParamField path="function_map" type="dict[str, collections.abc.Callable] | None" optional={true} />
-<ParamField path="model" type="str" optional={true} default="gpt-4o-mini" />
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="model_kwargs" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="kwargs" type="Any" />

@@ -41,6 +41,12 @@ data:
       server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
       keepalive 16;
     }
+    {{- if (index .Values.component "ai-backend").enabled }}
+    upstream ai-backend {
+      server {{ include "opik.name" $ }}-ai-backend:{{- range (index .Values.component "ai-backend").service.ports }}{{- if eq .name "http" }}{{ .port }}{{- end }}{{- end }};
+      keepalive 16;
+    }
+    {{- end }}
     {{- if .Values.localFE }}
     upstream local-fe {
       server {{ .Values.localFEAddress }};
@@ -140,7 +146,7 @@ data:
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
-            {{ $k }} {{ $v }};
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
 
             proxy_http_version 1.1;
@@ -168,6 +174,26 @@ data:
         location = {{ $rootPath }}/swagger {
             rewrite ^(.*)$ $1/ permanent;
         }
+
+        {{- if (index .Values.component "ai-backend").enabled }}
+        location @ai-backend {
+            rewrite ^{{ $rootPath }}(/opik-ai/.*)$ $1 break;
+            proxy_pass http://ai-backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.aiBackendUpstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+        }
+        location ^~ {{ $rootPath }}/opik-ai/ {
+          try_files /dev/null @ai-backend;
+        }
+        {{- end }}
 
         {{- if not .Values.standalone }}
         location = {{ $rootPath }} {

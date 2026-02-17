@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.13.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /uvx /bin/
 
@@ -38,5 +38,5 @@ USER myuser
 
 ENV PATH="/home/myuser/.local/bin:$PATH"
 
-ENTRYPOINT ["uv", "run", "--python", ".venv/bin/python", "uvicorn", "--workers", "4", "--host", "0.0.0.0", "--port", "8081"]
+ENTRYPOINT [".venv/bin/uvicorn", "--workers", "4", "--host", "0.0.0.0", "--port", "8081"]
 CMD ["opik_ai_backend.main:app"]

@@ -302,8 +302,6 @@ services:
       # Opik backend connection
       AGENT_OPIK_URL: http://backend:8080
       OPIK_URL_OVERRIDE: http://backend:8080
-      # LLM Configuration (OpenAI only)
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     healthcheck:
       test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/opik-ai/healthz" ]
       interval: 2s

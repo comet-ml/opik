@@ -8,13 +8,11 @@ subtitle: Step-by-step guide to evaluate multi-turn agents
 title: Evaluate multi-turn agents
 ---
 
-When working on chatbots or multi-turn agents, it can become a challenge to evaluate the agent's
-behavior over multiple turns as you don't know what the user would have asked as a follow-up
-question based on the previous turns.
+When working on chatbots or multi-turn agents, it can be challenging to evaluate the agent's
+behavior over multiple turns because you don't know what the user would ask as a follow-up question.
 
-To achieve multi-turn evaluation, we can turn to simulation techniques to simulate the user's
-response based on the previous turns. The core idea is that we can use an LLM to simulate what the
-user would have responded based on the previous turns and run this for a number of turns.
+To solve this, we can use an LLM to simulate the user — generating realistic follow-up messages
+based on the conversation so far and running this for a configurable number of turns.
 
 Once we have this conversation, we can use Opik evaluation features to score the agent's behavior.
 
@@ -35,17 +33,20 @@ user_simulator = SimulatedUser(
     model="openai/gpt-4.1",
 )
 
-# Generate a user message that will start the conversation
-print(user_simulator.generate_response([
+conversation_history = [
     {"role": "assistant", "content": "Hello, how can I help you today?"}
-]))
+]
 
-# Generate a user message based on a couple of back and forth turns
-print(user_simulator.generate_response([
-    {"role": "assistant", "content": "Hello, how can I help you today?"},
-    {"role": "user", "content": "My product just broke 2 days after I bought it, I want a refund."},
-    {"role": "assistant", "content": "I'm sorry to hear that. What happened?"}
-]))
+for turn in range(3):
+    # Generate a user message based on the conversation so far
+    user_message = user_simulator.generate_response(conversation_history)
+    conversation_history.append({"role": "user", "content": user_message})
+    print(f"User: {user_message}")
+
+    # In practice, this would be your agent's response
+    agent_response = f"Placeholder agent response for turn {turn + 1}"
+    conversation_history.append({"role": "assistant", "content": agent_response})
+    print(f"Assistant: {agent_response}\n")
 ```
 
 Now that we have a way to simulate the user, we can create multiple simulations that we will in
@@ -53,14 +54,12 @@ turn evaluate.
 
 ## Running simulations
 
-Now that we have a way to simulate the user, we can create multiple simulations:
-
 <Steps>
     <Step title="1. Create a list of scenarios">
         In order to more easily keep track of the scenarios we will be running, let's create a
         dataset with the user personas we will be using:
 
-        ```python title="Running simulations" maxLines=1000
+        ```python title="Create dataset with user personas" maxLines=1000
         import opik
 
         opik_client = opik.Opik()
@@ -73,10 +72,14 @@ Now that we have a way to simulate the user, we can create multiple simulations:
         ```
     </Step>
     <Step title="2. Create our agent app">
-        In order to run the simulations, we need to create our agent app based on our existing
-        agent. The `run_agent` function we will be creating will have the following signature:
+        The `run_simulation` function expects an `app` callable with the following contract: it
+        receives a `user_message` string and a `thread_id` keyword argument, and returns a message
+        dict `{"role": "assistant", "content": "..."}`. The app is responsible for managing its own
+        conversation history using the `thread_id`.
 
-        ```python title="Run agent function signature" maxLines=1000
+        Here is an example using LangChain:
+
+        ```python title="Example agent app (LangChain)" maxLines=1000
         from langchain.agents import create_agent
         from opik.integrations.langchain import OpikTracer
 
@@ -93,22 +96,22 @@ Now that we have a way to simulate the user, we can create multiple simulations:
         def run_agent(user_message: str, *, thread_id: str, **kwargs) -> str:
             if thread_id not in agent_history:
                 agent_history[thread_id] = []
-            
+
             agent_history[thread_id].append({"role": "user", "content": user_message})
             messages = agent_history[thread_id]
 
             response = agent.invoke({"messages": messages}, config={"callbacks": [opik_tracer]})
             agent_history[thread_id] = response["messages"]
 
-            return response["messages"][-1].content
+            return {"role": "assistant", "content": response["messages"][-1].content}
         ```
     </Step>
     <Step title="3. Run the simulations">
         Now that we have a dataset with the user personas, we can run the simulations:
 
-        ```python title="Running simulations" maxLines=1000
+        ```python title="Run simulations" maxLines=1000
         import opik
-        from opik.simulation import run_simulation
+        from opik.simulation import SimulatedUser, run_simulation
 
         # Fetch the user personas
         opik_client = opik.Opik()
@@ -130,6 +133,10 @@ Now that we have a way to simulate the user, we can create multiple simulations:
 
             all_simulations.append(simulation)
         ```
+
+        Each simulation result is a dictionary with:
+        - `thread_id`: Unique identifier for the conversation thread
+        - `conversation_history`: List of message dicts (`{"role": "user"|"assistant", "content": "..."}`)
 
         <Tip>
         The `run_simulation` function keeps track of the internal conversation state by constructing
@@ -289,6 +296,7 @@ that you can pass directly to the metrics, otherwise you can use the `evaluate_t
     ```
 
     ```python title="Using evaluate_threads"
+    import opik
     from opik.evaluation import evaluate_threads
     from opik.evaluation.metrics import ConversationalCoherenceMetric, UserFrustrationMetric
 

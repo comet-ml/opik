@@ -2,7 +2,6 @@ import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
 
-import { formatNumericData } from "@/lib/utils";
 import { TraceFeedbackScore } from "@/types/traces";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
@@ -19,7 +18,7 @@ const FeedbackScoreTagCell = (context: CellContext<unknown, unknown>) => {
       {isObject(feedbackScore) ? (
         <FeedbackScoreTag
           label={feedbackScore.name}
-          value={formatNumericData(feedbackScore.value)}
+          value={feedbackScore.value}
           reason={feedbackScore.reason}
           className="overflow-hidden"
         />

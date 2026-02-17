@@ -5,26 +5,18 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { STATUS_TO_VARIANT_MAP } from "@/constants/experiments";
-import {
-  IN_PROGRESS_OPTIMIZATION_STATUSES,
-  convertOptimizationVariableFormat,
-} from "@/lib/optimizations";
+import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import useOptimizationStopMutation from "@/api/optimizations/useOptimizationStopMutation";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
-import { extractPromptData, OpenAIMessage } from "@/lib/prompt";
+import { extractPromptData } from "@/lib/prompt";
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import get from "lodash/get";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-
-const convertMessages = (messages: OpenAIMessage[]) =>
-  messages.map((msg) => ({
-    ...msg,
-    content: convertOptimizationVariableFormat(msg.content),
-  }));
+import { convertMessages } from "@/components/pages-shared/shared/useSaveToPromptLibrary";
 
 type CompareOptimizationsHeaderProps = {
   title: string;
@@ -142,7 +134,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
                   disabled={isPendingProviderKeys}
                 >
                   <Play className="mr-2 size-4" />
-                  Deploy to Playground
+                  Run in Playground
                 </Button>
               </TooltipWrapper>
             )}
@@ -171,9 +163,9 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
         open={confirmDeployOpen}
         setOpen={setConfirmDeployOpen}
         onConfirm={handleDeployToPlayground}
-        title="Deploy to Playground"
+        title="Run in Playground"
         description="Loading the best prompt into the Playground will replace any unsaved changes. This action cannot be undone."
-        confirmText="Deploy to Playground"
+        confirmText="Run in Playground"
       />
     </>
   );

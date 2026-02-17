@@ -21,14 +21,14 @@ import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { getJSONPaths } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
-import { parseScoreColumnId } from "@/components/pages-shared/experiments/scoresUtils";
+import { parseScoreColumnId } from "@/lib/feedback-scores";
 import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
 export {
   parseScoreColumnId,
   getExperimentScore,
   buildScoreLabel,
-} from "@/components/pages-shared/experiments/scoresUtils";
+} from "@/lib/feedback-scores";
 
 export const isSelectExperimentsMode = (dataSource: EXPERIMENT_DATA_SOURCE) =>
   dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;

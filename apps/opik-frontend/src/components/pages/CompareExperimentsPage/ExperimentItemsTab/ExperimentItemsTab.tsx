@@ -78,6 +78,7 @@ import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsCo
 import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
   calculateHeightStyle,
@@ -85,6 +86,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
 import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -459,6 +461,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         cell: DurationCell.Compare as never,
         statisticKey: "duration",
         statisticDataFormater: formatDuration,
+        statisticTooltipFormater: formatDuration,
         customMeta: {
           experimentsIds,
         },
@@ -482,6 +485,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
         statisticKey: "total_estimated_cost",
+        statisticDataFormater: formatCost,
+        statisticTooltipFormater: (value: number) =>
+          formatCost(value, { modifier: "full" }),
         supportsPercentiles: true,
         customMeta: {
           experimentsIds,
@@ -529,6 +535,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
           supportsPercentiles: true,
           customMeta: {
             experimentsIds,

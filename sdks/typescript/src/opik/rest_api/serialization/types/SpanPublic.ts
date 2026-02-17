@@ -43,6 +43,7 @@ export const SpanPublic: core.serialization.ObjectSchema<serializers.SpanPublic.
             core.serialization.string().optional(),
         ),
         duration: core.serialization.number().optional(),
+        ttft: core.serialization.number().optional(),
     });
 
 export declare namespace SpanPublic {
@@ -73,5 +74,6 @@ export declare namespace SpanPublic {
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         duration?: number | null;
+        ttft?: number | null;
     }
 }

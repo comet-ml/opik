@@ -628,7 +628,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Compare tags as sets (order-independent)
             boolean tagsChanged = !toTagSet(fromItem.tags()).equals(toTagSet(toItem.tags()));
 
-            if (dataChanged || tagsChanged) {
+            boolean evaluatorsChanged = fromItem.evaluatorsHash() != toItem.evaluatorsHash();
+            boolean executionPolicyChanged = fromItem.executionPolicyHash() != toItem.executionPolicyHash();
+
+            if (dataChanged || tagsChanged || evaluatorsChanged || executionPolicyChanged) {
                 modified++;
             } else {
                 unchanged++;
