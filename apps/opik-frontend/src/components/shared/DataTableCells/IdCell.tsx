@@ -30,7 +30,7 @@ const IdCell = (context: CellContext<unknown, string>) => {
       className="group"
     >
       <TooltipWrapper content={value} stopClickPropagation>
-        <div className="flex max-w-full items-center">
+        <div className="flex min-h-7 max-w-full items-center">
           <div className="truncate">{value}</div>
           <Button
             size="icon-xs"
