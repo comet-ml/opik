@@ -503,7 +503,7 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             expected=EXCPECTED_TRACE_TREE, actual=trace_trees[0]
         )
 
-    def test_trace_trees_skips_orphan_span_trace_links(self, capture_log):
+    def test_trace_trees__orphan_span_trace_link__is_skipped(self, capture_log):
         trace_message = messages.CreateTraceMessage(
             trace_id="trace_1",
             project_name="test_project",

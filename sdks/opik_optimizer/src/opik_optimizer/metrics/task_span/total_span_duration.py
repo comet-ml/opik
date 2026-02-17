@@ -5,7 +5,7 @@ from opik.message_processing.emulation import models as emulation_models
 import opik.exceptions
 
 
-class SpanDuration(base_metric.BaseMetric):
+class TotalSpanDuration(base_metric.BaseMetric):
     """
     A metric that calculates the total duration of a span in seconds.
 
@@ -18,7 +18,6 @@ class SpanDuration(base_metric.BaseMetric):
         invert: Controls optimization direction when `target` is provided.
             - True (default): lower duration -> higher score.
             - False: higher duration -> higher score.
-        target_duration_seconds: Backward-compatible alias for `target`.
         track: Whether to track the metric. Defaults to True.
         project_name: The name of the project to track the metric in. Defaults to None.
     """
@@ -31,20 +30,13 @@ class SpanDuration(base_metric.BaseMetric):
         *,
         target: float | None = None,
         invert: bool = True,
-        target_duration_seconds: float | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
-        if target is not None and target_duration_seconds is not None:
-            raise ValueError(
-                "Received both `target` and `target_duration_seconds`; use only `target`."
-            )
-
-        resolved_target = target if target is not None else target_duration_seconds
-        if resolved_target is not None and float(resolved_target) <= 0:
-            raise ValueError("SpanDuration `target` must be > 0 when provided.")
+        if target is not None and float(target) <= 0:
+            raise ValueError("TotalSpanDuration `target` must be > 0 when provided.")
 
         self.target_duration_seconds = (
-            None if resolved_target is None else float(resolved_target)
+            None if target is None else float(target)
         )
         self.invert = bool(invert)
 
@@ -56,7 +48,7 @@ class SpanDuration(base_metric.BaseMetric):
                 name=self.name,
                 value=0.0,
                 reason=(
-                    "SpanDuration could not compute because `task_span` was not provided "
+                    "TotalSpanDuration could not compute because `task_span` was not provided "
                     "by the evaluation runtime."
                 ),
                 scoring_failed=True,
@@ -69,7 +61,7 @@ class SpanDuration(base_metric.BaseMetric):
             if task_span.end_time is None:
                 missing_fields.append("end_time")
             raise opik.exceptions.MetricComputationError(
-                "SpanDuration cannot compute duration because "
+                "TotalSpanDuration cannot compute duration because "
                 f"{', '.join(missing_fields)} is missing "
                 f"(span_id={task_span.id}, span_name={task_span.name})."
             )

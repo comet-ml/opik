@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from opik.message_processing.emulation.models import SpanModel
-from opik_optimizer.metrics import TotalSpanCost, SpanDuration
+from opik_optimizer.metrics import TotalSpanCost, TotalSpanDuration
 
 
 def _make_span(
@@ -69,7 +69,7 @@ def test_normalized_span_cost_directionality_changes_with_invert() -> None:
 
 def test_normalized_span_duration_returns_1_for_zero_duration() -> None:
     now = datetime(2024, 1, 1, 12, 0, 0)
-    metric = SpanDuration(target=6.0, name="duration")
+    metric = TotalSpanDuration(target=6.0, name="duration")
     result = metric.score(task_span=_make_span(start_time=now, end_time=now))
 
     assert result.name == "duration"
@@ -79,7 +79,7 @@ def test_normalized_span_duration_returns_1_for_zero_duration() -> None:
 
 def test_normalized_span_duration_scales_against_target() -> None:
     now = datetime(2024, 1, 1, 12, 0, 0)
-    metric = SpanDuration(target=6.0, name="duration")
+    metric = TotalSpanDuration(target=6.0, name="duration")
     result = metric.score(
         task_span=_make_span(start_time=now, end_time=now + timedelta(seconds=6))
     )
@@ -91,7 +91,7 @@ def test_normalized_span_duration_scales_against_target() -> None:
 
 def test_normalized_span_duration_respects_invert_false() -> None:
     now = datetime(2024, 1, 1, 12, 0, 0)
-    metric = SpanDuration(target=6.0, invert=False, name="duration")
+    metric = TotalSpanDuration(target=6.0, invert=False, name="duration")
     result = metric.score(
         task_span=_make_span(start_time=now, end_time=now + timedelta(seconds=6))
     )
@@ -105,8 +105,8 @@ def test_normalized_span_duration_directionality_changes_with_invert() -> None:
     short_span = _make_span(start_time=now, end_time=now + timedelta(seconds=2))
     long_span = _make_span(start_time=now, end_time=now + timedelta(seconds=20))
 
-    invert_metric = SpanDuration(target=6.0, invert=True, name="duration")
-    non_invert_metric = SpanDuration(target=6.0, invert=False, name="duration")
+    invert_metric = TotalSpanDuration(target=6.0, invert=True, name="duration")
+    non_invert_metric = TotalSpanDuration(target=6.0, invert=False, name="duration")
 
     invert_short = invert_metric.score(task_span=short_span).value
     invert_long = invert_metric.score(task_span=long_span).value
@@ -124,7 +124,7 @@ def test_total_span_cost_rejects_non_positive_target() -> None:
 
 def test_span_duration_rejects_non_positive_target() -> None:
     with pytest.raises(ValueError, match="target"):
-        SpanDuration(target=-1.0)
+        TotalSpanDuration(target=-1.0)
 
 
 def test_total_span_cost_rejects_ambiguous_target_inputs() -> None:
@@ -132,13 +132,8 @@ def test_total_span_cost_rejects_ambiguous_target_inputs() -> None:
         TotalSpanCost(target=0.01, target_cost_usd=0.01)
 
 
-def test_span_duration_rejects_ambiguous_target_inputs() -> None:
-    with pytest.raises(ValueError, match="both `target` and `target_duration_seconds`"):
-        SpanDuration(target=6.0, target_duration_seconds=6.0)
-
-
 def test_span_duration_preserves_legacy_positional_track_parameter() -> None:
-    metric = SpanDuration("duration", False)
+    metric = TotalSpanDuration("duration", False)
     assert metric.track is False
 
 
@@ -157,7 +152,7 @@ def test_normalized_span_cost_missing_task_span_returns_neutral_failed() -> None
 
 
 def test_normalized_span_duration_missing_task_span_returns_neutral_failed() -> None:
-    metric = SpanDuration(target=6.0, name="duration")
+    metric = TotalSpanDuration(target=6.0, name="duration")
     result = metric.score(task_span=None)
 
     assert result.value == pytest.approx(0.0)
