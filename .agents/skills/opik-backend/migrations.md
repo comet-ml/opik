@@ -59,6 +59,26 @@ ORDER BY (workspace_id, event_type, id);
 
 ```
 
+## Rollback Dependency Order
+
+Rollback statements run in the order they appear. When columns have dependencies (e.g. a `MATERIALIZED` column that references another column), **drop dependent columns first** — the reverse of creation order.
+
+```sql
+-- Forward: create base column, then materialized column
+ALTER TABLE t ADD COLUMN IF NOT EXISTS description String DEFAULT '';
+ALTER TABLE t ADD COLUMN IF NOT EXISTS description_hash UInt64 MATERIALIZED xxHash64(description);
+
+-- ❌ BAD - drops base column before its dependent materialized column
+--rollback ALTER TABLE t DROP COLUMN IF EXISTS description;
+--rollback ALTER TABLE t DROP COLUMN IF EXISTS description_hash;
+
+-- ✅ GOOD - drops materialized (dependent) column first, then base column
+--rollback ALTER TABLE t DROP COLUMN IF EXISTS description_hash;
+--rollback ALTER TABLE t DROP COLUMN IF EXISTS description;
+```
+
+This applies to any dependency chain: `MATERIALIZED`, `ALIAS`, indexes referencing columns, etc.
+
 ## ClickHouse Gotchas
 
 - **Always use** `ON CLUSTER '{cluster}'` for distributed operations
