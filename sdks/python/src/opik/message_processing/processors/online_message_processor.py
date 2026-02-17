@@ -81,7 +81,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
-                self._replay_manager.unregister_message(message.message_id)
+                self._replay_manager.unregister_message(message.message_id)  # type: ignore
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -128,7 +128,8 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             )
             # mark a message as failed with replay manager due to a connection error
             self._replay_manager.message_sent_failed(
-                message.message_id, failure_reason=str(ex)
+                message.message_id,  # type: ignore
+                failure_reason=str(ex),
             )
         except Exception as exception:
             error_tracking_extra = _generate_error_tracking_extra(exception, message)
@@ -143,7 +144,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
 
         # unregister a message from the reply manager because it is delivered or other error occurred
         if should_unregister_message:
-            self._replay_manager.unregister_message(message.message_id)
+            self._replay_manager.unregister_message(message.message_id)  # type: ignore
 
     def _process_create_span_message(
         self,
