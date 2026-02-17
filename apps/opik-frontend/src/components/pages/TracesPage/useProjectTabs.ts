@@ -1,24 +1,27 @@
 import { useMemo, useCallback } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { LOGS_TYPE } from "@/constants/traces";
-
-export enum PROJECT_TAB {
-  logs = "logs",
-  metrics = "metrics",
-  evaluators = "rules",
-  annotationQueues = "annotation-queues",
-}
+import useLocalStorageState from "use-local-storage-state";
+import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
+import { useMetricDateRangeWithQueryAndStorage } from "@/components/pages-shared/traces/MetricDateRangeSelect";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const DEFAULT_TAB = PROJECT_TAB.logs;
-const DEFAULT_LOGS_TYPE = LOGS_TYPE.traces;
 
-const isProjectTab = (value: string | null | undefined): value is PROJECT_TAB =>
+export const isProjectTab = (
+  value: string | null | undefined,
+): value is PROJECT_TAB =>
   Object.values(PROJECT_TAB).includes(value as PROJECT_TAB);
 
-const isLogsType = (value: string | null | undefined): value is LOGS_TYPE =>
-  Object.values(LOGS_TYPE).includes(value as LOGS_TYPE);
+export const isLogsType = (
+  value: string | null | undefined,
+): value is LOGS_TYPE => Object.values(LOGS_TYPE).includes(value as LOGS_TYPE);
 
 const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
+
+type UseProjectTabsOptions = {
+  projectId: string;
+};
 
 /**
  * Manages TracesPage URL params with backward compatibility.
@@ -29,8 +32,46 @@ const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
  * If new params are present, they take precedence.
  * If only the legacy `type` param is present, it is used to compute
  * activeTab and logsType for backward compatibility.
+ *
+ * logsType priority: URL params > localStorage > smart default (threadCount) > fallback (traces)
+ * threadCount=undefined means stats are still loading.
  */
-const useProjectTabs = () => {
+const useProjectTabs = (options: UseProjectTabsOptions) => {
+  const { projectId } = options;
+
+  const { intervalStart, intervalEnd } =
+    useMetricDateRangeWithQueryAndStorage();
+
+  const { data: threadsStats } = useThreadsStatistic(
+    {
+      projectId,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
+    },
+    {
+      enabled: !!projectId,
+      refetchOnMount: false,
+    },
+  );
+
+  const threadCount = useMemo(() => {
+    if (!threadsStats) return undefined;
+
+    const threadCountStat = threadsStats.stats?.find(
+      (stat) =>
+        stat.name === "thread_count" &&
+        stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
+    );
+
+    return threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
+      ? threadCountStat.value
+      : 0;
+  }, [threadsStats]);
+
+  const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
+    `project-logsType-${projectId}`,
+  );
+
   // New query params
   const [tabParam, setTabParam] = useQueryParam(
     "tab",
@@ -52,11 +93,22 @@ const useProjectTabs = () => {
 
   // Compute effective values: new params take precedence, fall back to legacy
   const { activeTab, logsType } = useMemo(() => {
+    const defaultLogsType =
+      threadCount !== undefined && threadCount > 0
+        ? LOGS_TYPE.threads
+        : LOGS_TYPE.traces;
+
+    const resolvedDefaultLogsType = isLogsType(storedLogsType)
+      ? storedLogsType
+      : defaultLogsType;
+
     // If new params exist, use them
     if (tabParam || logsTypeParam) {
       return {
         activeTab: isProjectTab(tabParam) ? tabParam : DEFAULT_TAB,
-        logsType: isLogsType(logsTypeParam) ? logsTypeParam : DEFAULT_LOGS_TYPE,
+        logsType: isLogsType(logsTypeParam)
+          ? logsTypeParam
+          : resolvedDefaultLogsType,
       };
     }
 
@@ -68,12 +120,12 @@ const useProjectTabs = () => {
 
     if (isProjectTab(legacyType)) {
       // ?type=metrics → Metrics tab, default logsType
-      return { activeTab: legacyType, logsType: DEFAULT_LOGS_TYPE };
+      return { activeTab: legacyType, logsType: resolvedDefaultLogsType };
     }
 
     // No params at all → defaults
-    return { activeTab: DEFAULT_TAB, logsType: DEFAULT_LOGS_TYPE };
-  }, [tabParam, logsTypeParam, legacyType]);
+    return { activeTab: DEFAULT_TAB, logsType: resolvedDefaultLogsType };
+  }, [tabParam, logsTypeParam, legacyType, storedLogsType, threadCount]);
 
   // Clear legacy param when writing new params
   const clearLegacy = useCallback(() => {
@@ -93,13 +145,13 @@ const useProjectTabs = () => {
   const setLogsType = useCallback(
     (newLogsType: LOGS_TYPE) => {
       setLogsTypeParam(newLogsType);
-      // Ensure tab is set to logs when changing logs type
       if (tabParam !== PROJECT_TAB.logs) {
         setTabParam(PROJECT_TAB.logs);
       }
       clearLegacy();
+      setStoredLogsType(newLogsType);
     },
-    [setLogsTypeParam, setTabParam, tabParam, clearLegacy],
+    [setLogsTypeParam, setTabParam, tabParam, clearLegacy, setStoredLogsType],
   );
 
   // Combined handler for main tab change
@@ -113,9 +165,17 @@ const useProjectTabs = () => {
     [setTabParam, clearLegacy],
   );
 
+  const needsDefaultResolution =
+    !tabParam &&
+    !logsTypeParam &&
+    !legacyType &&
+    !isLogsType(storedLogsType) &&
+    threadCount === undefined;
+
   return {
     activeTab,
     logsType,
+    needsDefaultResolution,
     setActiveTab,
     setLogsType,
     handleTabChange,
