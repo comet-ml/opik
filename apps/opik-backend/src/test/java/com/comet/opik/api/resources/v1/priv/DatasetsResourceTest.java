@@ -1398,8 +1398,7 @@ class DatasetsResourceTest {
                     .build();
 
             var id = createAndAssert(dataset);
-            var fetched = getAndAssertEquals(id, dataset, TEST_WORKSPACE, API_KEY);
-            assertThat(fetched.type()).isEqualTo(DatasetType.EVALUATION_SUITE);
+            getAndAssertEquals(id, dataset, TEST_WORKSPACE, API_KEY);
         }
 
         @Test
@@ -1411,8 +1410,8 @@ class DatasetsResourceTest {
                     .build();
 
             var id = createAndAssert(dataset);
-            var fetched = datasetResourceClient.getDatasetById(id, API_KEY, TEST_WORKSPACE);
-            assertThat(fetched.type()).isEqualTo(DatasetType.DATASET);
+            var expectedDataset = dataset.toBuilder().type(DatasetType.DATASET).build();
+            getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
         }
 
         private Stream<Arguments> invalidDataset() {
