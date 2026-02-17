@@ -3,14 +3,14 @@ from datetime import datetime
 
 import opik.exceptions
 from opik.message_processing.emulation.models import SpanModel
-from opik_optimizer.metrics import TotalSpanDuration
+from opik_optimizer.metrics import SpanDuration
 
 
-class TestTotalSpanDuration:
+class TestSpanDuration:
     def test_calculates_duration__happyflow(self) -> None:
         """Test that duration is calculated correctly from start and end times"""
         # Arrange
-        metric = TotalSpanDuration()
+        metric = SpanDuration()
         start_time = datetime(2024, 1, 1, 12, 0, 0)
         end_time = datetime(2024, 1, 1, 12, 0, 2, 500000)  # 2.5 seconds later
         span = SpanModel(
@@ -28,12 +28,12 @@ class TestTotalSpanDuration:
 
         # Assert
         assert result.value == pytest.approx(2.5, abs=0.001)
-        assert result.name == "total_span_duration"
+        assert result.name == "span_duration"
 
     def test_raises_error_when_end_time_is_none(self) -> None:
         """Test that MetricComputationError is raised when end_time is None"""
         # Arrange
-        metric = TotalSpanDuration()
+        metric = SpanDuration()
         span = SpanModel(
             id="span-test",
             type="llm",
@@ -48,13 +48,13 @@ class TestTotalSpanDuration:
         with pytest.raises(opik.exceptions.MetricComputationError) as exc_info:
             metric.score(task_span=span)
 
-        assert "TotalSpanDuration cannot compute duration" in str(exc_info.value)
+        assert "SpanDuration cannot compute duration" in str(exc_info.value)
         assert "end_time" in str(exc_info.value)
 
     def test_raises_error_when_start_time_is_none(self) -> None:
         """Test that MetricComputationError is raised when start_time is None"""
         # Arrange
-        metric = TotalSpanDuration()
+        metric = SpanDuration()
         span = SpanModel(
             id="span-test",
             type="llm",
@@ -69,5 +69,5 @@ class TestTotalSpanDuration:
         with pytest.raises(opik.exceptions.MetricComputationError) as exc_info:
             metric.score(task_span=span)
 
-        assert "TotalSpanDuration cannot compute duration" in str(exc_info.value)
+        assert "SpanDuration cannot compute duration" in str(exc_info.value)
         assert "start_time" in str(exc_info.value)

@@ -2,8 +2,8 @@
 
 This script demonstrates a clean, explicit setup for balancing three goals:
 1. Accuracy quality: `LevenshteinAccuracyMetric` from reference highlights.
-2. Duration efficiency: `TotalSpanDuration` configured as a normalized score.
-3. Cost efficiency: `TotalSpanCost` configured as a normalized score.
+2. Duration efficiency: `SpanDuration` configured as a normalized score.
+3. Cost efficiency: `SpanCost` configured as a normalized score.
 
 Important behavior:
 - `target=` enables bounded normalization for span metrics into (0, 1].
@@ -21,8 +21,8 @@ from opik_optimizer import MultiMetricObjective
 from opik_optimizer.datasets import cnn_dailymail
 from opik_optimizer.metrics import (
     LevenshteinAccuracyMetric,
-    TotalSpanCost,
-    TotalSpanDuration,
+    SpanCost,
+    SpanDuration,
 )
 
 
@@ -46,12 +46,12 @@ def make_multi_metric_objective() -> MultiMetricObjective:
         output_key="output",
         name="accuracy",
     )
-    cost_metric = TotalSpanCost(
+    cost_metric = SpanCost(
         target=TARGET_COST_USD,
         invert=True,
         name="cost_score",
     )
-    duration_metric = TotalSpanDuration(
+    duration_metric = SpanDuration(
         target=TARGET_DURATION_SECONDS,
         invert=True,
         name="duration_score",

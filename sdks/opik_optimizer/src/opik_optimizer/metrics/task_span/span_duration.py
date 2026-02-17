@@ -5,7 +5,7 @@ from opik.message_processing.emulation import models as emulation_models
 import opik.exceptions
 
 
-class TotalSpanDuration(base_metric.BaseMetric):
+class SpanDuration(base_metric.BaseMetric):
     """
     A metric that calculates the total duration of a span in seconds.
 
@@ -14,7 +14,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
     `opik.exceptions.MetricComputationError`.
 
     Args:
-        name: The name of the metric. Defaults to "total_span_duration".
+        name: The name of the metric. Defaults to "span_duration".
         target: Optional target duration (seconds) used to normalize output into
             a score in (0, 1], where higher is better. This is the recommended mode
             for `MultiMetricObjective`, where duration should be on a bounded scale.
@@ -28,7 +28,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
 
     def __init__(
         self,
-        name: str = "total_span_duration",
+        name: str = "span_duration",
         track: bool = True,
         project_name: str | None = None,
         *,
@@ -37,7 +37,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         if target is not None and float(target) <= 0:
-            raise ValueError("TotalSpanDuration `target` must be > 0 when provided.")
+            raise ValueError("SpanDuration `target` must be > 0 when provided.")
 
         self.target_duration_seconds = (
             None if target is None else float(target)
@@ -52,7 +52,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
                 name=self.name,
                 value=0.0,
                 reason=(
-                    "TotalSpanDuration could not compute because `task_span` was not provided "
+                    "SpanDuration could not compute because `task_span` was not provided "
                     "by the evaluation runtime."
                 ),
                 scoring_failed=True,
@@ -65,7 +65,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
             if task_span.end_time is None:
                 missing_fields.append("end_time")
             raise opik.exceptions.MetricComputationError(
-                "TotalSpanDuration cannot compute duration because "
+                "SpanDuration cannot compute duration because "
                 f"{', '.join(missing_fields)} is missing "
                 f"(span_id={task_span.id}, span_name={task_span.name})."
             )
@@ -89,7 +89,7 @@ class TotalSpanDuration(base_metric.BaseMetric):
                 f"(target={self.target_duration_seconds:.2f}s, direction={direction})"
             ),
             metadata={
-                "_raw_total_span_duration_seconds": duration,
+                "_raw_span_duration_seconds": duration,
                 "_target_duration_seconds": self.target_duration_seconds,
                 "_invert": self.invert,
             },

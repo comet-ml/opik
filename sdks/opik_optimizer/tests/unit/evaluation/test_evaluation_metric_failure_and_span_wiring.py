@@ -7,12 +7,12 @@ import pytest
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer.core import evaluation
-from opik_optimizer.metrics import MultiMetricObjective, TotalSpanDuration
+from opik_optimizer.metrics import MultiMetricObjective, SpanDuration
 
 
 def test_create_metric_class_exposes_task_span_for_span_metrics() -> None:
     objective = MultiMetricObjective(
-        metrics=[TotalSpanDuration(target=6.0, name="duration")],
+        metrics=[SpanDuration(target=6.0, name="duration")],
         weights=[1.0],
         name="objective",
     )

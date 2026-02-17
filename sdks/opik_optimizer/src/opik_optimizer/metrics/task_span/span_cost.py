@@ -132,7 +132,7 @@ def _build_result_metadata(accumulator: _CostAccumulator) -> dict:
     }
 
 
-class TotalSpanCost(base_metric.BaseMetric):
+class SpanCost(base_metric.BaseMetric):
     """
     A metric that calculates the total cost of a span tree based on token usage.
 
@@ -142,7 +142,7 @@ class TotalSpanCost(base_metric.BaseMetric):
     span's model, prompt_tokens, and completion_tokens.
 
     Args:
-        name: The name of the metric. Defaults to "total_span_cost".
+        name: The name of the metric. Defaults to "span_cost".
         target: Optional target cost (USD) used to normalize output into
             a score in (0, 1], where higher is better. This is the recommended mode
             for `MultiMetricObjective`, where cost should be on a bounded scale.
@@ -156,8 +156,8 @@ class TotalSpanCost(base_metric.BaseMetric):
             there is no parent span/trace to inherit project name from.
 
     Example:
-        >>> from opik.evaluation.metrics.task_span import TotalSpanCost
-        >>> cost_metric = TotalSpanCost()
+        >>> from opik.evaluation.metrics.task_span import SpanCost
+        >>> cost_metric = SpanCost()
         >>> result = cost_metric.score(task_span)
         >>> print(result.value)  # Total cost calculated from usage across span tree
         >>> print(result.reason)  # Detailed breakdown
@@ -171,7 +171,7 @@ class TotalSpanCost(base_metric.BaseMetric):
 
     def __init__(
         self,
-        name: str = "total_span_cost",
+        name: str = "span_cost",
         track: bool = True,
         project_name: str | None = None,
         *,
@@ -186,7 +186,7 @@ class TotalSpanCost(base_metric.BaseMetric):
             )
         resolved_target = target if target is not None else target_cost_usd
         if resolved_target is not None and float(resolved_target) <= 0:
-            raise ValueError("TotalSpanCost `target` must be > 0 when provided.")
+            raise ValueError("SpanCost `target` must be > 0 when provided.")
 
         self.target_cost_usd = (
             None if resolved_target is None else float(resolved_target)
@@ -215,7 +215,7 @@ class TotalSpanCost(base_metric.BaseMetric):
                 name=self.name,
                 value=0.0,
                 reason=(
-                    "TotalSpanCost could not compute because `task_span` was not provided "
+                    "SpanCost could not compute because `task_span` was not provided "
                     "by the evaluation runtime."
                 ),
                 scoring_failed=True,
@@ -256,7 +256,7 @@ class TotalSpanCost(base_metric.BaseMetric):
                 f"(target={self.target_cost_usd:.6f}, direction={direction})"
             ),
             metadata={
-                "_raw_total_span_cost_usd": raw_cost,
+                "_raw_span_cost_usd": raw_cost,
                 "_target_cost_usd": self.target_cost_usd,
                 "_invert": self.invert,
             },
