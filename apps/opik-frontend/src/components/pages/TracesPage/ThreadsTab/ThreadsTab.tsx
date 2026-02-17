@@ -246,16 +246,15 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
-  "created_at",
-  "last_updated_at",
   "duration",
-  "status",
-  USER_FEEDBACK_COLUMN_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_COMMENTS_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
