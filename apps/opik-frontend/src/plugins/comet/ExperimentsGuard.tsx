@@ -1,10 +1,10 @@
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import ExperimentsGuardCore from "@/components/layout/ExperimentsGuard/ExperimentsGuard";
+import PageGuard from "@/components/layout/PageGuard/PageGuard";
 
 const ExperimentsGuard = () => {
   const { canViewExperiments } = useUserPermission();
 
-  return <ExperimentsGuardCore canViewExperiments={canViewExperiments} />;
+  return <PageGuard canViewPage={canViewExperiments} />;
 };
 
 export default ExperimentsGuard;

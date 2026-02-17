@@ -2,16 +2,14 @@ import { Navigate, Outlet } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import Loader from "@/components/shared/Loader/Loader";
 
-const ExperimentsGuard: React.FC<{ canViewExperiments?: boolean }> = ({
-  canViewExperiments,
-}) => {
+const PageGuard: React.FC<{ canViewPage?: boolean }> = ({ canViewPage }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  if (canViewExperiments === undefined) {
+  if (canViewPage === undefined) {
     return <Loader />;
   }
 
-  if (!canViewExperiments) {
+  if (!canViewPage) {
     return (
       <Navigate to="/$workspaceName/home" params={{ workspaceName }} replace />
     );
@@ -20,4 +18,4 @@ const ExperimentsGuard: React.FC<{ canViewExperiments?: boolean }> = ({
   return <Outlet />;
 };
 
-export default ExperimentsGuard;
+export default PageGuard;
