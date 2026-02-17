@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from enum import unique, IntEnum
-from typing import List, NamedTuple, Optional, Dict, Iterator
+from typing import List, NamedTuple, Optional, Iterator
 
 from opik.message_processing import messages
 from opik.message_processing.replay import message_serialization
@@ -87,6 +87,13 @@ class DBMessage(NamedTuple):
     status: MessageStatus
 
 
+def _preprocess_registered_message(message: messages.BaseMessage) -> str:
+    if message.message_id is None:
+        raise ValueError("Message ID expected")
+
+    return message_serialization.serialize_message(message)
+
+
 class DBManager:
     """
     Manages message storage, batch processing, and database operations within a replay
@@ -137,8 +144,6 @@ class DBManager:
         else:
             self.__lock__ = sync_lock
         self._create_db_schema()
-
-        self.message_files: Dict[int, str] = {}
 
     def _create_db_schema(self) -> None:
         try:
@@ -221,7 +226,7 @@ class DBManager:
                 LOGGER.warning("Already closed - register message ignored")
                 return
 
-            message_json = self._preprocess_registered_message(message)
+            message_json = _preprocess_registered_message(message)
             # insert into DB
             values = (
                 message.message_id,
@@ -264,7 +269,7 @@ class DBManager:
 
             values = []
             for message in messages_batch:
-                message_json = self._preprocess_registered_message(message)
+                message_json = _preprocess_registered_message(message)
                 values.append(
                     (
                         message.message_id,
@@ -284,34 +289,6 @@ class DBManager:
                     f"register_messages: failed to insert messages into DB, reason: {ex}"
                 )
                 raise
-
-    def _clean_message_leftovers(self, message_id: int) -> None:
-        # Cleanup message file
-        file = self.message_files.pop(message_id, None)
-        if file is not None:
-            try:
-                if os.path.isfile(file):
-                    os.unlink(file)
-            except Exception as e:
-                LOGGER.debug(
-                    "Failed to remove temporary file: %r of the message: %d, reason: %s",
-                    file,
-                    message_id,
-                    e,
-                    exc_info=True,
-                )
-
-    def _preprocess_registered_message(self, message: messages.BaseMessage) -> str:
-        if message.message_id is None:
-            raise ValueError("Message ID expected")
-
-        if (
-            isinstance(message, messages.CreateAttachmentMessage)
-            and message.delete_after_upload
-        ):
-            self.message_files[message.message_id] = message.file_path
-
-        return message_serialization.serialize_message(message)
 
     def update_messages_batch(
         self, message_ids: List[int], status: MessageStatus
@@ -357,9 +334,6 @@ class DBManager:
                             c.rowcount,
                             len(message_ids),
                         )
-                        # delete saved message callbacks and leftovers
-                        for message_id in message_ids:
-                            self._clean_message_leftovers(message_id)
                     else:
                         db_status_ids = [
                             (status, message_id) for message_id in message_ids
@@ -416,8 +390,6 @@ class DBManager:
                         self.conn.execute(
                             "DELETE FROM messages WHERE message_id = ?", (message_id,)
                         )
-                        # delete saved message callbacks and leftovers
-                        self._clean_message_leftovers(message_id)
                     else:
                         self.conn.execute(
                             "UPDATE messages SET status = ? WHERE message_id = ?",

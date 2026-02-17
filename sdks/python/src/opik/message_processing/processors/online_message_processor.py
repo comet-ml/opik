@@ -6,7 +6,8 @@ import pydantic
 import tenacity
 
 from opik import dict_utils, exceptions, logging_messages
-from opik.file_upload import base_upload_manager
+from opik.file_upload import base_upload_manager, types as upload_types
+from opik.file_upload.s3_multipart_upload import s3_upload_error
 from opik.rate_limit import rate_limit
 from opik.rest_api import client as rest_api_client, core as rest_api_core
 from opik.rest_api.types import (
@@ -19,6 +20,7 @@ from opik.rest_api.types import (
 from . import message_processors
 from .. import encoder_helpers, messages
 from ..replay import replay_manager, db_manager
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -80,7 +82,11 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             )
             return
 
-        should_unregister_message = True
+        if isinstance(message, messages.CreateAttachmentMessage):
+            # it would be unregistered by callback when the upload is finished
+            should_unregister_message = False
+        else:
+            should_unregister_message = True
         try:
             handler(message)
 
@@ -343,8 +349,38 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateAttachmentMessage
     ) -> None:
         LOGGER.debug("Processing create attachment message")
-        self._file_uploader.upload(message)
+        self._file_uploader.upload(
+            message,
+            on_upload_failed=self._on_upload_failed_callback(message.message_id),
+            on_upload_success=self._on_upload_success_callback(message.message_id),
+        )
         LOGGER.debug("Uploaded attachment with %s", message.file_name)
+
+    def _on_upload_failed_callback(
+        self, message_id: int
+    ) -> upload_types.OnUploadFailureCallback:
+        def _callback(error: Exception) -> None:
+            if (
+                isinstance(error, httpx.ConnectError)
+                or isinstance(error, httpx.TimeoutException)
+                or (
+                    isinstance(error, s3_upload_error.S3UploadError)
+                    and error.connection_error
+                )
+            ):
+                self._replay_manager.message_sent_failed(
+                    message_id, failure_reason=str(error)
+                )
+
+        return _callback
+
+    def _on_upload_success_callback(
+        self, message_id: int
+    ) -> upload_types.OnUploadSuccessCallback:
+        def _callback() -> None:
+            self._replay_manager.unregister_message(message_id)
+
+        return _callback
 
     def _noop_handler(self, message: messages.BaseMessage) -> None:
         # just ignore the message
