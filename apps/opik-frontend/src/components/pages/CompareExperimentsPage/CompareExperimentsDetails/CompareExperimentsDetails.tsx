@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import { BooleanParam, useQueryParam } from "use-query-params";
-import { Maximize2, Minimize2, PenLine } from "lucide-react";
+import { Maximize2, Minimize2 } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Experiment } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
 import DateTag from "@/components/shared/DateTag/DateTag";
@@ -12,10 +11,14 @@ import useCompareExperimentsChartsData from "@/components/pages/CompareExperimen
 import ExperimentsRadarChart from "@/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart";
 import ExperimentsBarChart from "@/components/pages-shared/experiments/ExperimentsBarChart/ExperimentsBarChart";
 import NavigationTag from "@/components/shared/NavigationTag";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import FeedbackScoresList from "@/components/pages-shared/FeedbackScoresList/FeedbackScoresList";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { SCORE_TYPE_FEEDBACK, SCORE_TYPE_EXPERIMENT } from "@/types/shared";
+import {
+  FeedbackScoreDisplay,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
+} from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
 import ViewSelector, {
@@ -23,43 +26,6 @@ import ViewSelector, {
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
-
-type ExperimentScoreTagsProps = {
-  experiment: Experiment;
-};
-
-const ExperimentScoreTags: React.FunctionComponent<
-  ExperimentScoreTagsProps
-> = ({ experiment }) => {
-  const allScores = sortBy(
-    [
-      ...(experiment?.feedback_scores ?? []).map((score) => ({
-        ...score,
-        colorKey: score.name,
-        name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
-      })),
-      ...(experiment?.experiment_scores ?? []).map((score) => ({
-        ...score,
-        colorKey: score.name,
-        name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
-      })),
-    ],
-    "name",
-  );
-
-  return (
-    <>
-      {allScores.map((score) => (
-        <FeedbackScoreTag
-          key={score.name + score.value}
-          label={score.name}
-          colorKey={score.colorKey}
-          value={score.value}
-        />
-      ))}
-    </>
-  );
-};
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -134,6 +100,25 @@ const CompareExperimentsDetails: React.FunctionComponent<
     );
   };
 
+  const experimentScores: FeedbackScoreDisplay[] = useMemo(() => {
+    if (isCompare || !experiment) return [];
+    return sortBy(
+      [
+        ...(experiment.feedback_scores ?? []).map((score) => ({
+          ...score,
+          colorKey: score.name,
+          name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
+        })),
+        ...(experiment.experiment_scores ?? []).map((score) => ({
+          ...score,
+          colorKey: score.name,
+          name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
+        })),
+      ],
+      "name",
+    );
+  }, [isCompare, experiment]);
+
   const renderSubSection = () => {
     if (isCompare) {
       const tag =
@@ -151,18 +136,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
           {tag}
         </div>
       );
-    } else {
-      return (
-        <div className="flex h-11 items-center gap-2">
-          <TooltipWrapper content="Feedback scores">
-            <PenLine className="size-4 shrink-0" />
-          </TooltipWrapper>
-          <div className="flex gap-1 overflow-x-auto">
-            <ExperimentScoreTags experiment={experiment} />
-          </div>
-        </div>
-      );
     }
+
+    return <FeedbackScoresList scores={experimentScores} />;
   };
 
   const renderCharts = () => {
