@@ -6,22 +6,21 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
-import useUserPermission from "@/plugins/comet/useUserPermission";
 
 export enum VIEW_TYPE {
   DETAILS = "details",
   DASHBOARDS = "dashboards",
 }
 
-interface ViewSelectorProps {
+export interface ViewSelectorProps {
   value: VIEW_TYPE;
   onChange: (value: VIEW_TYPE) => void;
 }
 
-const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
+const ViewSelector: React.FC<
+  ViewSelectorProps & { canViewDashboards: boolean }
+> = ({ value, onChange, canViewDashboards }) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
-
-  const { canViewDashboards } = useUserPermission();
 
   const disabled =
     (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) || !canViewDashboards;

@@ -15,9 +15,8 @@ import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import ViewSelector, {
-  VIEW_TYPE,
-} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector";
+import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import useProjectTabs, {
   PROJECT_TAB,
 } from "@/components/pages/TracesPage/useProjectTabs";

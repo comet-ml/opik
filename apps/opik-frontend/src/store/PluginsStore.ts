@@ -12,6 +12,7 @@ import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuIt
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
 import { DashboardsViewGuardProps } from "@/plugins/comet/DashboardsViewGuard";
+import { ViewSelectorProps } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -38,6 +39,7 @@ type PluginStore = {
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
+  ViewSelector: React.ComponentType<ViewSelectorProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -66,6 +68,7 @@ const PLUGIN_NAMES = [
   "StartPreferenceExperimentsLink",
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
+  "ViewSelector",
   "init",
 ];
 
@@ -92,6 +95,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   StartPreferenceExperimentsLink: null,
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,
+  ViewSelector: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
