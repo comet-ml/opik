@@ -184,12 +184,11 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "progress",
-  "last_updated_at",
-  "scope",
   "items_count",
-  COLUMN_PROJECT_ID,
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
