@@ -1333,6 +1333,7 @@ class SpanDAO {
                 sum(metadata_count) as metadata,
                 avg(tags_count) as tags,
                 avgMap(usage) as usage,
+                sumMap(usage) as usage_sum,
                 avgMap(feedback_scores) AS feedback_scores,
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
