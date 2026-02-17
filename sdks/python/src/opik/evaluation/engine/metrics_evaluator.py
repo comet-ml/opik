@@ -104,7 +104,7 @@ def _extract_item_evaluators(
 def build_metrics_evaluator(
     item: Optional[dataset_item.DatasetItem],
     regular_metrics: List[base_metric.BaseMetric],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    scoring_key_mapping: ScoringKeyMappingType,
     evaluator_model: Optional[str],
 ) -> "MetricsEvaluator":
     """Build a MetricsEvaluator with suite-level + item-level metrics."""
@@ -124,7 +124,7 @@ def build_metrics_evaluator(
 def _compute_metric_scores(
     scoring_metrics: List[base_metric.BaseMetric],
     mapped_scoring_inputs: Dict[str, Any],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    scoring_key_mapping: ScoringKeyMappingType,
     dataset_item_content: Dict[str, Any],
     task_output: Dict[str, Any],
 ) -> List[score_result.ScoreResult]:
@@ -134,7 +134,7 @@ def _compute_metric_scores(
     Args:
         scoring_metrics: List of metrics to compute
         mapped_scoring_inputs: Scoring inputs after key mapping (will be used for regular metrics)
-        scoring_key_mapping: Optional mapping for renaming score arguments
+        scoring_key_mapping: Mapping for renaming score arguments (empty dict if no mapping)
         dataset_item_content: Dataset item content (will be used for ScorerWrapperMetric)
         task_output: Task output (will be used for ScorerWrapperMetric)
 
@@ -217,7 +217,7 @@ class MetricsEvaluator:
     def __init__(
         self,
         scoring_metrics: List[base_metric.BaseMetric],
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
+        scoring_key_mapping: ScoringKeyMappingType,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
@@ -241,7 +241,7 @@ class MetricsEvaluator:
         return self._regular_metrics
 
     @property
-    def scoring_key_mapping(self) -> Optional[ScoringKeyMappingType]:
+    def scoring_key_mapping(self) -> ScoringKeyMappingType:
         """Get the scoring key mapping."""
         return self._scoring_key_mapping
 

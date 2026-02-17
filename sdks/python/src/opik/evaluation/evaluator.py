@@ -1,11 +1,13 @@
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
+from ..api_objects.dataset import dataset_item
 from ..api_objects.experiment import helpers as experiment_helpers
+from ..api_objects.evaluation_suite.types import ExecutionPolicy
 from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
 from . import (
@@ -27,6 +29,67 @@ LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
+
+EVALUATION_STREAM_DATASET_BATCH_SIZE = 200
+
+
+def _calculate_total_items(
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+) -> Optional[int]:
+    """Calculate the total number of items that will be evaluated."""
+    if dataset_item_ids is not None:
+        return len(dataset_item_ids)
+
+    if nb_samples is not None:
+        if dataset_.dataset_items_count is not None:
+            return min(nb_samples, dataset_.dataset_items_count)
+        return nb_samples
+
+    return dataset_.dataset_items_count
+
+
+def _resolve_dataset_items(
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+    dataset_filter_string: Optional[str],
+) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int]]:
+    """
+    Resolve dataset items for evaluation.
+
+    Handles streaming vs sampling, and calculates total item count.
+
+    Returns:
+        Tuple of (items iterator, total item count or None).
+    """
+    if dataset_sampler is None:
+        items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=dataset_filter_string,
+        )
+        total = _calculate_total_items(
+            dataset_=dataset_,
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+        )
+        return items_iter, total
+
+    LOGGER.info("Dataset streaming disabled due to sampler")
+    items_list = list(
+        dataset_.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=dataset_filter_string,
+        )
+    )
+    items_list = dataset_sampler.sample(items_list)
+    return iter(items_list), len(items_list)
 
 
 def _try_notifying_about_experiment_completion(
@@ -331,23 +394,33 @@ def _evaluate_task(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
+        items_iter, total = _resolve_dataset_items(
+            dataset_=dataset,
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            dataset_sampler=dataset_sampler,
+            dataset_filter_string=dataset_filter_string,
+        )
+        policy = ExecutionPolicy(
+            runs_per_item=trial_count,
+            pass_threshold=trial_count,
+        )
+
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
             workers=task_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
-            dataset_=dataset,
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
             task=task,
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            dataset_sampler=dataset_sampler,
-            trial_count=trial_count,
+            evaluator_model=None,
             experiment_=experiment,
-            dataset_filter_string=dataset_filter_string,
+            default_execution_policy=policy,
+            total_items=total,
         )
 
     total_time = time.time() - start_time
@@ -412,17 +485,31 @@ def _evaluate_suite_task(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
+        scoring_metrics = dataset.get_evaluators()
+        execution_policy = dataset.get_execution_policy()
+        items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=None,
+            dataset_item_ids=None,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=None,
+        )
+        total = dataset.dataset_items_count
+
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
             workers=task_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_llm_task_on_evaluation_suite(
-            dataset_=dataset,
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
             task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=None,
             evaluator_model=evaluator_model,
             experiment_=experiment,
+            default_execution_policy=execution_policy,
+            total_items=total,
         )
 
     total_time = time.time() - start_time
@@ -548,7 +635,7 @@ def evaluate_experiment(
             workers=scoring_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_test_cases(
+        test_results = evaluation_engine.score_test_cases(
             test_cases=test_cases,
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
@@ -796,23 +883,33 @@ def evaluate_prompt(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
+        items_iter, total = _resolve_dataset_items(
+            dataset_=dataset,
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            dataset_sampler=dataset_sampler,
+            dataset_filter_string=dataset_filter_string,
+        )
+        policy = ExecutionPolicy(
+            runs_per_item=trial_count,
+            pass_threshold=trial_count,
+        )
+
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
             workers=task_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
-            dataset_=dataset,
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
             task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=None,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            dataset_sampler=dataset_sampler,
-            trial_count=trial_count,
+            evaluator_model=None,
             experiment_=experiment,
-            dataset_filter_string=dataset_filter_string,
+            default_execution_policy=policy,
+            total_items=total,
         )
 
     total_time = time.time() - start_time
@@ -1119,17 +1216,27 @@ def evaluate_on_dict_items(
     client = opik_client.get_client_cached()
 
     with asyncio_support.async_http_connections_expire_immediately():
+        dataset_items = [
+            dataset_item.DatasetItem(id=f"temp_item_{i}", **item)
+            for i, item in enumerate(items)
+        ]
+        policy = ExecutionPolicy(runs_per_item=1, pass_threshold=1)
+
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
             workers=scoring_threads,
             verbose=verbose,
         )
-        test_results = evaluation_engine.evaluate_llm_task_on_dict_items(
-            items=items,
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=iter(dataset_items),
             task=task,
             scoring_metrics=scoring_metrics,
             scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=None,
+            experiment_=None,
+            default_execution_policy=policy,
+            total_items=len(dataset_items),
         )
 
     return evaluation_result.EvaluationResultOnDictItems(
