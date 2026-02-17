@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Opik Onboarding Documentation
-    url: www.comet.com/docs/opik
+    url: https://www.comet.com/docs/opik
     about: New to Opik? read our documentation to get setup.
   - name: Opik Community Support
     url: https://chat.comet.com
