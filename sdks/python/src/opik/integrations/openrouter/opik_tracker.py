@@ -12,7 +12,6 @@ import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik.types import LLMProvider
 from typing_extensions import override
 
 import logging
@@ -145,7 +144,7 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         opik_usage = None
         if usage is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                provider=LLMProvider.OPENAI,
+                provider="openrouter",
                 usage=usage,
                 logger=LOGGER,
                 error_message="Failed to log token usage from OpenRouter chat call",
@@ -182,9 +181,6 @@ def _convert_response_to_dict(response: Any) -> Dict[str, Any]:
         return response.model_dump(mode="json")
 
     if hasattr(response, "dict"):
-        try:
-            return response.dict()
-        except Exception:
-            return {"response": str(response)}
+        return response.dict()
 
     return {"response": str(response)}
