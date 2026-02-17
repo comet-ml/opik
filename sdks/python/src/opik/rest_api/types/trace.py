@@ -50,6 +50,11 @@ class Trace(UniversalBaseModel):
     Duration in milliseconds as a decimal number to support sub-millisecond precision
     """
 
+    ttft: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Time to first token in milliseconds
+    """
+
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TraceVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None

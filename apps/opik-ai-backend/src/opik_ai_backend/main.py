@@ -18,6 +18,7 @@ if settings.new_relic_license_key:
     newrelic.agent.initialize()
 
 import aiohttp
+import openai
 import sentry_sdk
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -612,7 +613,9 @@ def get_fast_api_app(
     ):
         """Set or update feedback for an OpikAssist conversation session."""
         if settings.opik_internal_url is None:
-            logger.debug("Internal monitoring not configured, skipping feedback submission")
+            logger.debug(
+                "Internal monitoring not configured, skipping feedback submission"
+            )
             return {"status": "ok"}
 
         # Validate feedback value
@@ -686,7 +689,9 @@ def get_fast_api_app(
     ):
         """Remove feedback for an OpikAssist conversation session."""
         if settings.opik_internal_url is None:
-            logger.debug("Internal monitoring not configured, skipping feedback deletion")
+            logger.debug(
+                "Internal monitoring not configured, skipping feedback deletion"
+            )
             return
 
         session_id = get_session_id_from_trace_id(trace_id)
@@ -791,21 +796,29 @@ def get_fast_api_app(
                 runner = await _get_runner_for_agent(
                     opik_client=opik_client,
                     trace_id=trace_id,
+                    current_user=current_user,
                 )
 
                 message = types.Content(
                     role="user", parts=[types.Part(text=req.message)]
                 )
+                logger.debug(f"Starting runner.run_async for trace {trace_id}")
+                event_count = 0
                 async for event in runner.run_async(
                     user_id=current_user.user_id,
                     session_id=session_id,
                     new_message=message,
                     run_config=RunConfig(streaming_mode=stream_mode),
                 ):
+                    event_count += 1
                     # Process the event for SSE streaming
                     sse_event_str = process_event_for_sse(event)
                     if sse_event_str:
                         yield sse_event_str
+            except openai.OpenAIError as e:
+                logger.exception("LLM provider error in event_generator: %s", e)
+                error_msg = json.dumps({"error": str(e)})
+                yield f"data: {error_msg}\n\n"
             except Exception as e:
                 logger.exception("Error in event_generator: %s", e)
                 error_msg = json.dumps(
@@ -814,6 +827,10 @@ def get_fast_api_app(
                     }
                 )
                 yield f"data: {error_msg}\n\n"
+
+            logger.debug(
+                "Runner completed for trace %s, %d events", trace_id, event_count
+            )
 
         # Returns a streaming response with the proper media type for SSE
         return StreamingResponse(
@@ -828,11 +845,13 @@ def get_fast_api_app(
     async def _get_runner_for_agent(
         opik_client: OpikBackendClient,
         trace_id: str,
+        current_user: UserContext,
     ) -> Runner:
         """Returns the runner for the given app."""
         root_agent = await get_agent(
             opik_client=opik_client,
             trace_id=trace_id,
+            current_user=current_user,
             opik_metadata=None,
         )
         runner = get_runner(agent=root_agent, session_service=session_service)

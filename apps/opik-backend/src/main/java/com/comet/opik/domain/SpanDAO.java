@@ -99,7 +99,8 @@ class SpanDAO {
                 last_updated_by,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -129,7 +130,8 @@ class SpanDAO {
                         :last_updated_by<item.index>,
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
-                        :output_slim<item.index>
+                        :output_slim<item.index>,
+                        :ttft<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -167,7 +169,8 @@ class SpanDAO {
                 last_updated_by,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 new_span.id as id,
@@ -260,7 +263,11 @@ class SpanDAO {
                 multiIf(
                     notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
                     new_span.output_slim
-                ) as output_slim
+                ) as output_slim,
+                multiIf(
+                    isNotNull(old_span.ttft), old_span.ttft,
+                    new_span.ttft
+                ) as ttft
             FROM (
                 SELECT
                     :id as id,
@@ -287,7 +294,8 @@ class SpanDAO {
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
                     :input_slim as input_slim,
-                    :output_slim as output_slim
+                    :output_slim as output_slim,
+                    :ttft as ttft
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -333,7 +341,8 @@ class SpanDAO {
             	last_updated_by,
             	truncation_threshold,
             	input_slim,
-            	output_slim
+            	output_slim,
+            	ttft
             )
             SELECT
             	id,
@@ -360,7 +369,8 @@ class SpanDAO {
                 :user_name as last_updated_by,
                 :truncation_threshold,
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> ttft <endif> as ttft
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -384,7 +394,7 @@ class SpanDAO {
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
-                created_by, last_updated_by, truncation_threshold, input_slim, output_slim
+                created_by, last_updated_by, truncation_threshold, input_slim, output_slim, ttft
             )
             SELECT
                 new_span.id as id,
@@ -492,7 +502,12 @@ class SpanDAO {
                     notEmpty(new_span.output_slim), new_span.output_slim,
                     notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
                     new_span.output_slim
-                ) as output_slim
+                ) as output_slim,
+                multiIf(
+                    isNotNull(new_span.ttft), new_span.ttft,
+                    isNotNull(old_span.ttft), old_span.ttft,
+                    new_span.ttft
+                ) as ttft
             FROM (
                 SELECT
                     :id as id,
@@ -519,7 +534,8 @@ class SpanDAO {
                     :user_name as last_updated_by,
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
-                    <if(output)> :output_slim <else> '' <endif> as output_slim
+                    <if(output)> :output_slim <else> '' <endif> as output_slim,
+                    <if(ttft)> :ttft <else> null <endif> as ttft
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -1470,6 +1486,12 @@ class SpanDAO {
 
                 bindCost(span, statement, String.valueOf(i));
 
+                if (span.ttft() != null) {
+                    statement.bind("ttft" + i, span.ttft());
+                } else {
+                    statement.bindNull("ttft" + i, Double.class);
+                }
+
                 i++;
             }
 
@@ -1544,6 +1566,12 @@ class SpanDAO {
 
             bindCost(span, statement, "");
 
+            if (span.ttft() != null) {
+                statement.bind("ttft", span.ttft());
+            } else {
+                statement.bindNull("ttft", Double.class);
+            }
+
             bindUserNameAndWorkspace(statement, userName, workspaceId);
 
             Segment segment = startSegment("spans", "Clickhouse", "insert");
@@ -1557,6 +1585,8 @@ class SpanDAO {
         var template = getSTWithLogComment(INSERT, "insert_span", workspaceId, "");
         Optional.ofNullable(span.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+        Optional.ofNullable(span.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
 
         return template;
     }
@@ -1687,6 +1717,9 @@ class SpanDAO {
         }
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
+
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
@@ -1724,6 +1757,8 @@ class SpanDAO {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
         return template;
     }
 
@@ -1976,6 +2011,7 @@ class SpanDAO {
                 .lastUpdatedBy(
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
+                .ttft(getValue(exclude, SpanField.TTFT, row, "ttft", Double.class))
                 .build();
     }
 
@@ -2409,7 +2445,8 @@ class SpanDAO {
                 last_updated_by,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 s.id,
@@ -2436,7 +2473,8 @@ class SpanDAO {
                 :user_name as last_updated_by,
                 :truncation_threshold,
                 <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> s.ttft <endif> as ttft
             FROM spans s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
@@ -2507,6 +2545,8 @@ class SpanDAO {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
         return template;
     }
 
@@ -2558,6 +2598,8 @@ class SpanDAO {
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
         }
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {

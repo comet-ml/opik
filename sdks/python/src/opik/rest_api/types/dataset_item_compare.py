@@ -6,6 +6,8 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .dataset_item_compare_source import DatasetItemCompareSource
+from .evaluator_item_compare import EvaluatorItemCompare
+from .execution_policy_compare import ExecutionPolicyCompare
 from .experiment_item_compare import ExperimentItemCompare
 from .json_node import JsonNode
 
@@ -18,6 +20,8 @@ class DatasetItemCompare(UniversalBaseModel):
     source: DatasetItemCompareSource
     data: JsonNode
     tags: typing.Optional[typing.List[str]] = None
+    evaluators: typing.Optional[typing.List[EvaluatorItemCompare]] = None
+    execution_policy: typing.Optional[ExecutionPolicyCompare] = None
     experiment_items: typing.Optional[typing.List[ExperimentItemCompare]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
