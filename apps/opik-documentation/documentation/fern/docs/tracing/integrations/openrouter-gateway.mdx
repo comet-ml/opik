@@ -34,6 +34,30 @@ Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
 If you want typed SDK-native tracing (instead of broadcast), use the OpenAI-compatible path or the dedicated [OpenRouter SDK guide](/docs/opik/integrations/openrouter/).
 </Tip>
 
+### Broadcast metadata mapping (OpenRouter → Opik)
+
+OpenRouter Broadcast sends standard OpenAI-compatible request/response observability fields, plus additional metadata in the OpenRouter `trace` block.
+
+The following fields are explicitly handled by Opik in the OpenRouter destination:
+
+- `trace.trace_id` → `openrouter_trace_id` (stored in trace metadata)
+- `trace.trace_name` → trace display name
+- `trace.span_name` → span display name
+- `trace.generation_name` → generation span display name
+- `user` → Opik trace user identifier
+
+OpenRouter also forwards the optional keys inside `trace` to both trace and span metadata, which lets you add workflow context (for example: `session_id`, `eval_suite`, `environment`, `feature`).
+
+OpenRouter payloads include additional fields that Opik also records when available:
+- model metadata and finish reasons
+- cost totals (input/output/total, when provided)
+- model parameters and finish reasons in span metadata
+- `openrouter_observation_id` in metadata for the OpenRouter span ID
+
+Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
+
+For full schema details, including example payload and privacy-mode behavior, see OpenRouter’s destination guide for Opik.
+
 ## Option 2: OpenAI-compatible path
 
 Use this path when your app already uses OpenAI-style calls (`chat.completions.create`) and you want to keep the OpenAI-compatible integration while sending requests to OpenRouter.

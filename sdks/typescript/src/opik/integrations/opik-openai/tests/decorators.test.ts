@@ -1,10 +1,15 @@
 import { withTracing, resolveProvider } from "../src/decorators";
+import type { Opik } from "opik";
 
 const createMockSpan = () => ({
   span: vi.fn(),
   update: vi.fn(),
   end: vi.fn(),
 });
+
+const createMockOpikClient = (
+  rootSpan: ReturnType<typeof createMockSpan>
+): Opik => ({ trace: vi.fn().mockReturnValue(rootSpan) } as unknown as Opik);
 
 describe("resolveProvider", () => {
   it("uses explicit trace metadata provider when provided", () => {
@@ -61,9 +66,7 @@ describe("resolveProvider", () => {
 describe("OpenRouter metadata mapping", () => {
   it("captures request routing metadata in initial span metadata", async () => {
     const rootSpan = createMockSpan();
-    const mockClient = {
-      trace: vi.fn().mockReturnValue(rootSpan),
-    };
+    const mockClient = createMockOpikClient(rootSpan);
 
     const traced = withTracing(
       vi.fn().mockResolvedValue({
@@ -78,7 +81,7 @@ describe("OpenRouter metadata mapping", () => {
       {
         generationName: "openrouter-routing-request",
         provider: "openrouter",
-        client: mockClient as unknown,
+        client: mockClient,
       }
     );
 
@@ -107,9 +110,7 @@ describe("OpenRouter metadata mapping", () => {
 
   it("captures provider fields from response metadata", async () => {
     const rootSpan = createMockSpan();
-    const mockClient = {
-      trace: vi.fn().mockReturnValue(rootSpan),
-    };
+    const mockClient = createMockOpikClient(rootSpan);
 
     const traced = withTracing(
       vi.fn().mockResolvedValue({
@@ -132,7 +133,7 @@ describe("OpenRouter metadata mapping", () => {
       {
         generationName: "openrouter-routing-response",
         provider: "openrouter",
-        client: mockClient as unknown,
+        client: mockClient,
       }
     );
 
