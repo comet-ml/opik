@@ -124,6 +124,7 @@
     "use-local-storage-state": "^19.3.1",
     "use-query-params": "^2.2.1",
     "uuid": "^10.0.0",
+    "yaml": "^2.4.5",
     "zod": "^3.24.1",
     "zustand": "^4.5.2"
   },
