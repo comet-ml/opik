@@ -13,6 +13,14 @@ import openai.lib.streaming.chat
 LOGGER = logging.getLogger(__name__)
 
 
+def _calculate_ttft_ms(
+    first_token_time_ns: int,
+    start_time_ns: int,
+) -> float:
+    """Calculate TTFT in milliseconds from nanosecond timestamps."""
+    return (first_token_time_ns - start_time_ns) / 1_000_000
+
+
 def _chunk_has_content(chunk: Any) -> bool:
     """
     Check if a stream chunk contains actual content (first token).
@@ -42,6 +50,7 @@ def _chunk_has_content(chunk: Any) -> bool:
         return False
     except Exception:
         return False
+
 
 # Raw low-level stream methods
 original_stream_iter_method = openai.Stream.__iter__
@@ -75,7 +84,6 @@ def patch_sync_stream(
     ```
 
     """
-    request_start_time_ns = time.perf_counter_ns()
 
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
@@ -104,10 +112,16 @@ def patch_sync_stream(
                     delattr(self, "opik_tracked_instance")
 
                     if first_token_time_ns is not None:
-                        ttft_ms = (
-                            first_token_time_ns - self.request_start_time_ns
-                        ) / 1_000_000
-                        self.span_to_end.ttft = ttft_ms
+                        self.span_to_end.ttft = _calculate_ttft_ms(
+                            first_token_time_ns,
+                            self.span_to_end._created_at_perf_counter_ns,
+                        )
+
+                        if self.trace_to_end is not None:
+                            self.trace_to_end.ttft = _calculate_ttft_ms(
+                                first_token_time_ns,
+                                self.trace_to_end._created_at_perf_counter_ns,
+                            )
 
                     output = (
                         generations_aggregator(accumulated_items)
@@ -129,7 +143,6 @@ def patch_sync_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
-    stream.request_start_time_ns = request_start_time_ns
 
     return stream
 
@@ -149,7 +162,6 @@ def patch_async_stream(
         print(event)
     ```
     """
-    request_start_time_ns = time.perf_counter_ns()
 
     def AsyncStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
         @functools.wraps(dunder_aiter_func)
@@ -179,10 +191,16 @@ def patch_async_stream(
                     delattr(self, "opik_tracked_instance")
 
                     if first_token_time_ns is not None:
-                        ttft_ms = (
-                            first_token_time_ns - self.request_start_time_ns
-                        ) / 1_000_000
-                        self.span_to_end.ttft = ttft_ms
+                        self.span_to_end.ttft = _calculate_ttft_ms(
+                            first_token_time_ns,
+                            self.span_to_end._created_at_perf_counter_ns,
+                        )
+
+                        if self.trace_to_end is not None:
+                            self.trace_to_end.ttft = _calculate_ttft_ms(
+                                first_token_time_ns,
+                                self.trace_to_end._created_at_perf_counter_ns,
+                            )
 
                     output = (
                         generations_aggregator(accumulated_items)
@@ -206,7 +224,6 @@ def patch_async_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
-    stream.request_start_time_ns = request_start_time_ns
 
     return stream
 

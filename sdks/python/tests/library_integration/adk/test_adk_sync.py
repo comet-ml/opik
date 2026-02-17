@@ -1875,7 +1875,9 @@ def test_adk__llm_call__time_to_first_token_tracked_in_span_ttft_field(fake_back
     assert isinstance(trace_tree.ttft, (int, float)), (
         f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
     )
-    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
     assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
         f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
     )
@@ -1950,7 +1952,9 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
     assert isinstance(trace_tree.ttft, (int, float)), (
         f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
     )
-    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
     assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
         f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
     )
@@ -2027,7 +2031,9 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
     assert isinstance(trace_tree.ttft, (int, float)), (
         f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
     )
-    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
     assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
         f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
     )
@@ -2173,7 +2179,9 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
     assert isinstance(trace_tree.ttft, (int, float)), (
         f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
     )
-    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
     assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
         f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
     )

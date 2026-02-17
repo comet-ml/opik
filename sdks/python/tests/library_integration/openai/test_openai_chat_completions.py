@@ -1225,10 +1225,10 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
 MAX_REASONABLE_TTFT_MS = 60000
 
 
-def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_span(
+def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_span_and_trace(
     fake_backend,
 ):
-    """Test that time-to-first-token is tracked and stored in LLM span's ttft field for streaming."""
+    """Test that time-to-first-token is tracked in both span and trace for streaming."""
     client = openai.OpenAI()
     wrapped_client = track_openai(client)
     messages = [
@@ -1256,7 +1256,9 @@ def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_spa
     assert len(llm_spans) == 1, "Expected exactly one LLM span"
 
     llm_span = llm_spans[0]
-    assert llm_span.ttft is not None, "LLM span should have ttft field set for streaming"
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for streaming"
+    )
     assert isinstance(llm_span.ttft, (int, float)), (
         f"ttft should be a number, got {type(llm_span.ttft)}"
     )
@@ -1265,8 +1267,19 @@ def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_spa
         f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
     )
 
+    assert trace_tree.ttft is not None, "Trace should have ttft field set for streaming"
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
 
-def test_openai_client_chat_completions_create__async_stream_mode__ttft_tracked_in_span(
+
+def test_openai_client_chat_completions_create__async_stream_mode__ttft_tracked_in_span_and_trace(
     fake_backend,
 ):
     """Test that time-to-first-token is tracked for async streaming."""
@@ -1309,9 +1322,22 @@ def test_openai_client_chat_completions_create__async_stream_mode__ttft_tracked_
         f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
     )
 
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for async streaming"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
 
 @pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__context_manager__ttft_tracked_in_span(
+def test_openai_chat_completion_stream__context_manager__ttft_tracked_in_span_and_trace(
     fake_backend,
 ):
     """Test that time-to-first-token is tracked for stream context manager."""
@@ -1352,9 +1378,22 @@ def test_openai_chat_completion_stream__context_manager__ttft_tracked_in_span(
         f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
     )
 
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for stream context manager"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
 
 @pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
-def test_openai_chat_completion_stream__async_context_manager__ttft_tracked_in_span(
+def test_openai_chat_completion_stream__async_context_manager__ttft_tracked_in_span_and_trace(
     fake_backend,
 ):
     """Test that time-to-first-token is tracked for async stream context manager."""
@@ -1395,4 +1434,17 @@ def test_openai_chat_completion_stream__async_context_manager__ttft_tracked_in_s
     assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
     assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
         f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for async stream context manager"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
     )

@@ -137,7 +137,10 @@ class OpikTracer:
             current_span = context_storage.top_span_data()
 
             # Track trace start time for trace-level TTFT (time from trace start to first LLM token)
-            if current_trace is not None and current_trace.id not in self._trace_ttft_tracking:
+            if (
+                current_trace is not None
+                and current_trace.id not in self._trace_ttft_tracking
+            ):
                 self._trace_ttft_tracking[current_trace.id] = time.perf_counter_ns()
 
             thread_id, session_metadata = (
@@ -317,9 +320,13 @@ class OpikTracer:
                     # This is only set once per trace (on the first LLM call's first token)
                     current_trace = context_storage.get_trace_data()
                     if current_trace is not None:
-                        trace_start_time_ns = self._trace_ttft_tracking.pop(current_trace.id, None)
+                        trace_start_time_ns = self._trace_ttft_tracking.pop(
+                            current_trace.id, None
+                        )
                         if trace_start_time_ns is not None:
-                            trace_ttft_ms = (first_token_time_ns - trace_start_time_ns) / 1_000_000
+                            trace_ttft_ms = (
+                                first_token_time_ns - trace_start_time_ns
+                            ) / 1_000_000
                             current_trace.ttft = trace_ttft_ms
 
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
