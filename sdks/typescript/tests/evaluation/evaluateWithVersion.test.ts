@@ -29,10 +29,10 @@ const MOCK_VERSION_INFO: DatasetVersionPublic = {
 };
 
 function createStreamItem(
-  id: string,
+  datasetItemId: string,
   data: Record<string, unknown>
 ): string {
-  return JSON.stringify({ id, data, source: "sdk" }) + "\n";
+  return JSON.stringify({ dataset_item_id: datasetItemId, data, source: "sdk" }) + "\n";
 }
 
 describe("evaluate with DatasetVersion", () => {
@@ -83,7 +83,7 @@ describe("evaluate with DatasetVersion", () => {
       .spyOn(opikClient.api.datasets, "streamDatasetItems")
       .mockImplementation(() =>
         mockAPIFunctionWithStream(
-          createStreamItem("item-1", { input: "test input 1", expected: "test output 1" })
+          createStreamItem("019c6c79-9e02-760b-aca7-2d8013169302", { input: "test input 1", expected: "test output 1" })
         )
       );
 
@@ -135,9 +135,10 @@ describe("evaluate with DatasetVersion", () => {
   });
 
   test("should work with scoring metrics using DatasetVersion", async () => {
+    const mockDatasetItemId = "019c6c79-9e03-760b-aca7-2d8013169303";
     streamDatasetItemsSpy.mockImplementation(() =>
       mockAPIFunctionWithStream(
-        createStreamItem("item-1", { input: "test input", expected: "exact match" })
+        createStreamItem(mockDatasetItemId, { input: "test input", expected: "exact match" })
       )
     );
 
@@ -163,10 +164,15 @@ describe("evaluate with DatasetVersion", () => {
   });
 
   test("should process multiple items from DatasetVersion", async () => {
+    const mockItemIds = [
+      "019c6c79-9e04-760b-aca7-2d8013169304",
+      "019c6c79-9e05-760b-aca7-2d8013169305",
+      "019c6c79-9e06-760b-aca7-2d8013169306",
+    ];
     const streamData = [
-      createStreamItem("item-1", { input: "input 1", expected: "output 1" }),
-      createStreamItem("item-2", { input: "input 2", expected: "output 2" }),
-      createStreamItem("item-3", { input: "input 3", expected: "output 3" }),
+      createStreamItem(mockItemIds[0], { input: "input 1", expected: "output 1" }),
+      createStreamItem(mockItemIds[1], { input: "input 2", expected: "output 2" }),
+      createStreamItem(mockItemIds[2], { input: "input 3", expected: "output 3" }),
     ].join("");
 
     streamDatasetItemsSpy.mockImplementation(() =>
@@ -185,9 +191,9 @@ describe("evaluate with DatasetVersion", () => {
     });
 
     expect(result.testResults).toHaveLength(3);
-    expect(result.testResults[0].testCase.datasetItemId).toBe("item-1");
-    expect(result.testResults[1].testCase.datasetItemId).toBe("item-2");
-    expect(result.testResults[2].testCase.datasetItemId).toBe("item-3");
+    expect(result.testResults[0].testCase.datasetItemId).toBe(mockItemIds[0]);
+    expect(result.testResults[1].testCase.datasetItemId).toBe(mockItemIds[1]);
+    expect(result.testResults[2].testCase.datasetItemId).toBe(mockItemIds[2]);
   });
 
   test("should respect nbSamples parameter with DatasetVersion", async () => {
