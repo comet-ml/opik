@@ -224,8 +224,6 @@ def evaluate(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
-        evaluator_model=None,
-        is_evaluation_suite=False,
     )
 
 
@@ -300,24 +298,15 @@ def evaluate_suite(
         dataset_version_id=None,
     )
 
-    return _evaluate_task(
+    return _evaluate_suite_task(
         client=client,
         experiment=experiment_,
         dataset=dataset,
         task=task,
-        scoring_metrics=[],
         project_name=project_name,
         verbose=verbose,
-        nb_samples=None,
         task_threads=task_threads,
-        scoring_key_mapping=None,
-        dataset_item_ids=None,
-        dataset_sampler=None,
-        trial_count=1,
-        experiment_scoring_functions=[],
-        dataset_filter_string=None,
         evaluator_model=evaluator_model,
-        is_evaluation_suite=True,
     )
 
 
@@ -338,8 +327,6 @@ def _evaluate_task(
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
     dataset_filter_string: Optional[str],
-    evaluator_model: Optional[str],
-    is_evaluation_suite: bool,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -347,22 +334,20 @@ def _evaluate_task(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
-            evaluator_model=evaluator_model,
         )
         test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
             experiment_=experiment,
             dataset_filter_string=dataset_filter_string,
-            is_evaluation_suite=is_evaluation_suite,
         )
 
     total_time = time.time() - start_time
@@ -402,6 +387,71 @@ def _evaluate_task(
         experiment_url=experiment_url,
         trial_count=trial_count,
         experiment_scores=computed_experiment_scores,
+    )
+
+    if verbose >= 2:
+        report.display_evaluation_scores_statistics(
+            dataset_name=dataset.name,
+            evaluation_results=evaluation_result_,
+        )
+
+    return evaluation_result_
+
+
+def _evaluate_suite_task(
+    *,
+    client: opik_client.Opik,
+    experiment: experiment.Experiment,
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    project_name: Optional[str],
+    verbose: int,
+    task_threads: int,
+    evaluator_model: Optional[str],
+) -> evaluation_result.EvaluationResult:
+    start_time = time.time()
+
+    with asyncio_support.async_http_connections_expire_immediately():
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            workers=task_threads,
+            verbose=verbose,
+        )
+        test_results = evaluation_engine.evaluate_llm_task_on_evaluation_suite(
+            dataset_=dataset,
+            task=task,
+            evaluator_model=evaluator_model,
+            experiment_=experiment,
+        )
+
+    total_time = time.time() - start_time
+
+    if verbose >= 1:
+        report.display_experiment_results(
+            dataset.name, total_time, test_results, []
+        )
+
+    experiment_url = url_helpers.get_experiment_url_by_id(
+        experiment_id=experiment.id,
+        dataset_id=dataset.id,
+        url_override=client.config.url_override,
+    )
+
+    report.display_experiment_link(experiment_url=experiment_url)
+
+    client.flush()
+
+    _try_notifying_about_experiment_completion(experiment)
+
+    evaluation_result_ = evaluation_result.EvaluationResult(
+        dataset_id=dataset.id,
+        experiment_id=experiment.id,
+        experiment_name=experiment.name,
+        test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=1,
+        experiment_scores=[],
     )
 
     if verbose >= 2:
@@ -497,14 +547,13 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
-            evaluator_model=None,
         )
         test_results = evaluation_engine.evaluate_test_cases(
             test_cases=test_cases,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
         )
 
     total_time = time.time() - start_time
@@ -752,15 +801,14 @@ def evaluate_prompt(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
-            scoring_key_mapping=None,
-            evaluator_model=None,
         )
         test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=None,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
@@ -977,8 +1025,6 @@ def evaluate_optimization_trial(
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
-        evaluator_model=None,
-        is_evaluation_suite=False,
     )
 
 
@@ -1074,22 +1120,18 @@ def evaluate_on_dict_items(
 
     client = opik_client.get_client_cached()
 
-    # Create evaluation engine
     with asyncio_support.async_http_connections_expire_immediately():
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
-            evaluator_model=None,
         )
-
-        # Use the new evaluate_items method
         test_results = evaluation_engine.evaluate_llm_task_on_dict_items(
             items=items,
             task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
         )
 
     return evaluation_result.EvaluationResultOnDictItems(

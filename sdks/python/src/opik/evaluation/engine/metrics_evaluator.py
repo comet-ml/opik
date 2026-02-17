@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
+from opik.api_objects.dataset import dataset_item
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -11,6 +12,8 @@ from opik.evaluation.metrics import (
     arguments_validator,
 )
 from opik.evaluation.scorers import scorer_wrapper_metric
+from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.evaluation.types import ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
@@ -53,6 +56,69 @@ def split_into_regular_and_task_span_metrics(
             regular_metrics.append(metric)
 
     return regular_metrics, task_span_metrics
+
+
+def _extract_item_evaluators(
+    item: dataset_item.DatasetItem,
+    evaluator_model: Optional[str],
+) -> List[base_metric.BaseMetric]:
+    """
+    Extract evaluators from dataset item.
+
+    If the item has evaluator configs, instantiate LLMJudge evaluators from them.
+
+    Args:
+        item: The dataset item.
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+    Returns:
+        List of evaluator instances extracted from the item.
+    """
+    if not item.evaluators:
+        return []
+
+    evaluators: List[base_metric.BaseMetric] = []
+    for evaluator_item in item.evaluators:
+        try:
+            if evaluator_item.type == "llm_judge":
+                config = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                evaluator = llm_judge.LLMJudge.from_config(
+                    config, init_kwargs={"model": evaluator_model}
+                )
+                evaluators.append(evaluator)
+            else:
+                LOGGER.warning(
+                    "Unsupported evaluator type: %s. Only 'llm_judge' is supported.",
+                    evaluator_item.type,
+                )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to instantiate evaluator from config: %s. Error: %s",
+                evaluator_item.config,
+                e,
+            )
+
+    return evaluators
+
+
+def build_metrics_evaluator(
+    item: Optional[dataset_item.DatasetItem],
+    regular_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    evaluator_model: Optional[str],
+) -> "MetricsEvaluator":
+    """Build a MetricsEvaluator with suite-level + item-level metrics."""
+    all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
+    if item is not None:
+        item_evaluators = _extract_item_evaluators(
+            item, evaluator_model=evaluator_model
+        )
+        all_metrics.extend(item_evaluators)
+
+    return MetricsEvaluator(
+        scoring_metrics=all_metrics,
+        scoring_key_mapping=scoring_key_mapping,
+    )
 
 
 def _compute_metric_scores(
