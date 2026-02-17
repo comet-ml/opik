@@ -12,6 +12,7 @@ from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
 from ..metrics.multi_metric_objective import MultiMetricObjective
+from ..metrics.helpers import has_task_span_parameter
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,93 @@ _EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG = (
 
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
+    def _normalize_metric_value(
+        metric_val: Any, metric_name: str
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+        # Handle list[ScoreResult] return type first
+        if isinstance(metric_val, list):
+            return metric_val
+
+        # Handle MultiMetricObjective - always returns list (preserves original)
+        if isinstance(metric, MultiMetricObjective):
+            # MultiMetricObjective.__call__ always returns ScoreResult
+            if isinstance(metric_val, score_result.ScoreResult):
+                if (
+                    metric_val.metadata is not None
+                    and isinstance(metric_val.metadata, dict)
+                    and "raw_score_results" in metric_val.metadata
+                ):
+                    raw_results = metric_val.metadata["raw_score_results"]
+                    if isinstance(raw_results, list):
+                        return [metric_val, *raw_results]
+                # No raw_score_results - still return as list
+                return [metric_val]
+            # Type-safe fallback (shouldn't happen at runtime)
+            return [
+                score_result.ScoreResult(
+                    name=metric_name,
+                    value=float(metric_val),
+                    scoring_failed=False,
+                )
+            ]
+
+        # Handle ScoreResult return type (non-MultiMetricObjective)
+        if isinstance(metric_val, score_result.ScoreResult):
+            return score_result.ScoreResult(
+                name=metric_name,
+                value=metric_val.value,
+                scoring_failed=metric_val.scoring_failed,
+                metadata=metric_val.metadata,
+                reason=metric_val.reason,
+            )
+
+        # Handle float/int return type
+        return score_result.ScoreResult(
+            name=metric_name, value=float(metric_val), scoring_failed=False
+        )
+
+    def _score_metric(
+        *,
+        metric_name: str,
+        llm_output: str,
+        kwargs: dict[str, Any],
+        task_span: Any | None = None,
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+        dataset_item = dict(kwargs)
+        if task_span is not None or _metric_requires_task_span(metric):
+            dataset_item["task_span"] = task_span
+
+        try:
+            metric_val = metric(dataset_item=dataset_item, llm_output=llm_output)
+            return _normalize_metric_value(metric_val, metric_name)
+        except Exception as exc:
+            return score_result.ScoreResult(
+                name=metric_name,
+                value=0,
+                scoring_failed=True,
+                reason=f"Metric evaluation failed with {type(exc).__name__}: {exc}",
+            )
+
+    if _metric_requires_task_span(metric):
+        class MetricClass(base_metric.BaseMetric):
+            def __init__(self) -> None:
+                self.name = metric.__name__
+
+            def score(
+                self,
+                llm_output: str,
+                task_span: Any | None = None,
+                **kwargs: Any,
+            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+                return _score_metric(
+                    metric_name=self.name,
+                    llm_output=llm_output,
+                    kwargs=kwargs,
+                    task_span=task_span,
+                )
+
+        return MetricClass()
+
     class MetricClass(base_metric.BaseMetric):
         def __init__(self) -> None:
             self.name = metric.__name__
@@ -35,56 +123,29 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
         def score(
             self, llm_output: str, **kwargs: Any
         ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-            try:
-                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
-
-                # Handle list[ScoreResult] return type first
-                if isinstance(metric_val, list):
-                    return metric_val
-
-                # Handle MultiMetricObjective - always returns list (preserves original)
-                if isinstance(metric, MultiMetricObjective):
-                    # MultiMetricObjective.__call__ always returns ScoreResult
-                    if isinstance(metric_val, score_result.ScoreResult):
-                        if (
-                            metric_val.metadata is not None
-                            and isinstance(metric_val.metadata, dict)
-                            and "raw_score_results" in metric_val.metadata
-                        ):
-                            raw_results = metric_val.metadata["raw_score_results"]
-                            if isinstance(raw_results, list):
-                                return [metric_val, *raw_results]
-                        # No raw_score_results - still return as list
-                        return [metric_val]
-                    # Type-safe fallback (shouldn't happen at runtime)
-                    return [
-                        score_result.ScoreResult(
-                            name=self.name,
-                            value=float(metric_val),
-                            scoring_failed=False,
-                        )
-                    ]
-
-                # Handle ScoreResult return type (non-MultiMetricObjective)
-                if isinstance(metric_val, score_result.ScoreResult):
-                    return score_result.ScoreResult(
-                        name=self.name,
-                        value=metric_val.value,
-                        scoring_failed=metric_val.scoring_failed,
-                        metadata=metric_val.metadata,
-                        reason=metric_val.reason,
-                    )
-
-                # Handle float/int return type
-                return score_result.ScoreResult(
-                    name=self.name, value=float(metric_val), scoring_failed=False
-                )
-            except Exception:
-                return score_result.ScoreResult(
-                    name=self.name, value=0, scoring_failed=True
-                )
+            return _score_metric(
+                metric_name=self.name,
+                llm_output=llm_output,
+                kwargs=kwargs,
+            )
 
     return MetricClass()
+
+
+def _metric_requires_task_span(metric: MetricFunction) -> bool:
+    if isinstance(metric, MultiMetricObjective):
+        for sub_metric in metric.metrics:
+            if isinstance(sub_metric, base_metric.BaseMetric):
+                if has_task_span_parameter(sub_metric.score):
+                    return True
+            elif callable(sub_metric) and has_task_span_parameter(sub_metric):
+                return True
+        return False
+
+    if callable(metric) and has_task_span_parameter(metric):
+        return True
+
+    return False
 
 
 @overload
@@ -375,6 +436,34 @@ def _average_finite_scores(
     return sum(finite_values) / len(finite_values)
 
 
+def _validate_objective_scores(
+    scores: list[score_result.ScoreResult], *, objective_metric_name: str
+) -> None:
+    if not scores:
+        raise ValueError(
+            f"Objective metric '{objective_metric_name}' produced no scores."
+        )
+
+    failed_scores = [score for score in scores if score.scoring_failed]
+    if not failed_scores:
+        return
+
+    unique_reasons = [
+        score.reason.strip()
+        for score in failed_scores
+        if isinstance(score.reason, str) and score.reason.strip()
+    ]
+    summarized_reasons = "; ".join(unique_reasons[:3]) or "No reason provided."
+    if len(unique_reasons) > 3:
+        summarized_reasons += f"; +{len(unique_reasons) - 3} more"
+
+    raise ValueError(
+        f"Objective metric '{objective_metric_name}' failed on "
+        f"{len(failed_scores)}/{len(scores)} evaluation item(s). "
+        f"First reasons: {summarized_reasons}"
+    )
+
+
 @suppress_experiment_reporting
 def _evaluate_internal(
     *,
@@ -448,8 +537,9 @@ def _evaluate_internal(
         evaluation_result, objective_metric_name
     )
 
-    if not objective_score_results:
-        return 0.0, evaluation_result
+    _validate_objective_scores(
+        objective_score_results, objective_metric_name=objective_metric_name
+    )
 
     avg_score = _average_finite_scores(
         objective_score_results, objective_metric_name=objective_metric_name
