@@ -44,7 +44,11 @@ import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateColumnsOrder,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import {
   generateActionsColumDef,
@@ -192,18 +196,20 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_NAME_ID,
   "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "last_updated_at",
-  "scope",
   "items_count",
-  COLUMN_PROJECT_ID,
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
+const COLUMNS_ORDER_V2_KEY = `${COLUMNS_ORDER_KEY}-v2`;
 const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-annotation-queues-pagination-size";
 const ROW_HEIGHT_KEY = "workspace-annotation-queues-row-height";
@@ -272,9 +278,12 @@ export const AnnotationQueuesPage: React.FC = () => {
     },
   );
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    COLUMNS_ORDER_V2_KEY,
     {
-      defaultValue: DEFAULT_COLUMNS_ORDER,
+      defaultValue: migrateColumnsOrder(
+        COLUMNS_ORDER_KEY,
+        DEFAULT_COLUMNS_ORDER,
+      ),
     },
   );
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<

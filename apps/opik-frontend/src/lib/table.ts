@@ -48,6 +48,20 @@ export const migrateSelectedColumns = (
   return defaultColumns;
 };
 
+export const migrateColumnsOrder = (
+  oldStorageKey: string,
+  defaultOrder: string[],
+): string[] => {
+  const oldData = localStorage.getItem(oldStorageKey);
+  if (oldData !== null) {
+    const parsed = JSON.parse(oldData);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+  }
+  return defaultOrder;
+};
+
 /**
  * Determines if a column can be sorted based on the backend's sortable_by response.
  * Handles multiple matching patterns:
