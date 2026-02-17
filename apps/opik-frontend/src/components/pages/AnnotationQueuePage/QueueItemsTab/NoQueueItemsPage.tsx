@@ -9,6 +9,7 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 type NoDataWrapperProps = {
   title: string;
@@ -70,7 +71,8 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
                   projectId: annotationQueue.project_id,
                 }}
                 search={{
-                  type: isTraceQueue ? "traces" : "threads",
+                  tab: PROJECT_TAB.logs,
+                  logsType: isTraceQueue ? LOGS_TYPE.traces : LOGS_TYPE.threads,
                 }}
               >
                 <ExternalLink className="mr-2 size-4" />
