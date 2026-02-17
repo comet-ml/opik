@@ -16,6 +16,14 @@ title: Observability for OpenAI (Python) with Opik
 
 This guide explains how to integrate Opik with the OpenAI Python SDK. By using the `track_openai` method provided by opik, you can easily track and evaluate your OpenAI API calls within your Opik projects as Opik will automatically log the input prompt, model used, token usage, and response generated.
 
+<Tip>
+`track_openai` can also be used with OpenAI-compatible providers (including OpenRouter) by pointing your OpenAI client at the provider endpoint. For direct OpenRouter SDK tracking, use the [OpenRouter SDK integration](/docs/opik/integrations/openrouter/).
+</Tip>
+
+<Tip>
+OpenRouter routing metadata is inferred from the request model and response when available, so it is best-effort and may not expose an explicit upstream selected-route label for every call.
+</Tip>
+
 ## Account Setup
 
 [Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=openai&utm_campaign=opik) and grab your API Key.

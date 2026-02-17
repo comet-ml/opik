@@ -12,14 +12,37 @@ OpenRouter can be used through:
 - The OpenAI-compatible path (`track_openai` / `trackOpenAI`) with OpenRouter base URL
 - OpenRouter Broadcast destination (`opik`) for direct forwarding
 
+<Tip>
+If you use the official OpenRouter SDK, use the [OpenRouter SDK guide](/docs/opik/integrations/openrouter/) for dedicated provider-stamped spans.
+</Tip>
+
+<Tip>
+OpenRouter route/proxy resolution in OpenAI-compatible tracing is best-effort and inferred from model/response data. It does not currently expose a guaranteed explicit upstream routing label on every request.
+</Tip>
+
 ## Option 1: OpenAI-compatible path
+
+Use this path when your app already uses OpenAI-style calls (`chat.completions.create`) and you want to keep the OpenAI-compatible integration while sending requests to OpenRouter.
 
 <Tabs>
 <Tab value="Python" title="Python">
 
+:::note
+Intent: use `track_openai` when the OpenAI client is the wrapper surface and OpenRouter is only the transport.
+:::
+
 ```bash
 pip install opik openai
 ```
+
+### Required fields for OpenAI-compatible payload
+
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
+
+### Optional fields
+
+- `temperature`, `top_p`, `max_tokens`, `stream`, `tools`, `response_format`, `tool_choice`
 
 ```python
 from opik.integrations.openai import track_openai
@@ -32,6 +55,15 @@ client = OpenAI(
 tracked_client = track_openai(client)
 
 response = tracked_client.chat.completions.create(
+    model="openai/gpt-4",
+    messages=[{"role": "user", "content": "Hello, world!"}],
+)
+```
+
+### Minimal valid payload
+
+```python
+response = tracked_client.chat.completions.create(
   model="openai/gpt-4",
   messages=[{"role": "user", "content": "Hello, world!"}],
 )
@@ -40,9 +72,22 @@ response = tracked_client.chat.completions.create(
 </Tab>
 <Tab value="TypeScript" title="TypeScript">
 
+:::note
+Intent: use `trackOpenAI` when your TypeScript code already calls OpenAI-compatible methods.
+:::
+
 ```bash
 npm install opik-openai openai
 ```
+
+### Required fields for OpenAI-compatible payload
+
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
+
+### Optional fields
+
+- `temperature`, `top_p`, `max_tokens`, `stream`, `tools`, `response_format`, `tool_choice`
 
 ```typescript
 import OpenAI from "openai";
@@ -61,10 +106,28 @@ const response = await trackedOpenAI.chat.completions.create({
 });
 ```
 
+### Minimal valid payload
+
+```typescript
+const response = await trackedOpenAI.chat.completions.create({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
 </Tab>
 </Tabs>
 
+### Canonical reference
+
+For full payload matrix and generated walkthroughs, use:
+- Python OpenAI-compatible integration guide: https://www.comet.com/docs/opik/integrations/openai/
+- TypeScript OpenAI-compatible integration guide: https://www.comet.com/docs/opik/integrations/openai-typescript/
+- `trackOpenAI` package options: https://github.com/comet-ml/opik/blob/main/sdks/typescript/src/opik/integrations/opik-openai/README.md
+
 ## Option 2: OpenRouter Broadcast destination to Opik
+
+Use this path when you want OpenRouter to own request routing and centrally forward matching traffic to Opik.
 
 If you prefer centralized routing from OpenRouter, enable Opik in OpenRouter Broadcast.
 

@@ -11,6 +11,14 @@ title: Observability for OpenAI (TypeScript) with Opik
 
 Opik provides seamless integration with the official [OpenAI Node.js SDK](https://github.com/openai/openai-node) through the `opik-openai` package, allowing you to trace, monitor, and debug your OpenAI API calls.
 
+<Tip>
+`trackOpenAI` also supports OpenAI-compatible providers (including OpenRouter) when your client is configured with their endpoint. For dedicated OpenRouter SDK tracing, use the [OpenRouter SDK integration](/docs/opik/integrations/openrouter/).
+</Tip>
+
+<Tip>
+OpenRouter routing metadata is inferred from request/response model fields and is best-effort; a separate explicit `routing_provider` field is not guaranteed to be populated today.
+</Tip>
+
 ## Features
 
 - **Comprehensive Tracing**: Automatically trace OpenAI API calls, including chat completions, embeddings, images, and more
