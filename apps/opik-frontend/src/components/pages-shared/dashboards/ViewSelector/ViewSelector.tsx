@@ -6,6 +6,7 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 export enum VIEW_TYPE {
   DETAILS = "details",
@@ -19,7 +20,21 @@ interface ViewSelectorProps {
 
 const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
-  const disabled = value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges;
+
+  const { canViewDashboards } = useUserPermission();
+
+  const disabled =
+    (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) || !canViewDashboards;
+
+  const getTooltipContent = () => {
+    if (!canViewDashboards) {
+      return "You do not have permission to view dashboards";
+    }
+    if (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) {
+      return "Save or discard your changes before switching";
+    }
+    return null;
+  };
 
   const content = (
     <ToggleGroup
@@ -52,7 +67,7 @@ const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
 
   if (disabled) {
     return (
-      <TooltipWrapper content="Save or discard your changes before switching">
+      <TooltipWrapper content={getTooltipContent()}>
         <div>{content}</div>
       </TooltipWrapper>
     );

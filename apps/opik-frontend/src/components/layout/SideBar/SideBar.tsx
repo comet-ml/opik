@@ -58,7 +58,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const sideBarMenuItems = SideBarMenuItemsComponent ? (
     <SideBarMenuItemsComponent expanded={expanded} />
   ) : (
-    <SideBarMenuItems expanded={expanded} canViewExperiments />
+    <SideBarMenuItems
+      expanded={expanded}
+      canViewExperiments
+      canViewDashboards
+    />
   );
 
   const renderBottomItems = () => {

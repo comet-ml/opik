@@ -5,12 +5,13 @@ import SideBarMenuItemsContent, {
 import useUserPermission from "./useUserPermission";
 
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = (props) => {
-  const { canViewExperiments } = useUserPermission();
+  const { canViewExperiments, canViewDashboards } = useUserPermission();
 
   return (
     <SideBarMenuItemsContent
       {...props}
       canViewExperiments={canViewExperiments}
+      canViewDashboards={canViewDashboards}
     />
   );
 };

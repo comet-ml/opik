@@ -32,6 +32,7 @@ type PluginStore = {
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   EvaluationSection: React.ComponentType | null;
   ExperimentsGuard: React.ComponentType | null;
+  DashboardsGuard: React.ComponentType | null;
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
@@ -58,6 +59,7 @@ const PLUGIN_NAMES = [
   "DashboardWidgetGrid",
   "EvaluationSection",
   "ExperimentsGuard",
+  "DashboardsGuard",
   "StartPreferenceExperimentsLink",
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
@@ -82,6 +84,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   DashboardWidgetGrid: null,
   EvaluationSection: null,
   ExperimentsGuard: null,
+  DashboardsGuard: null,
   StartPreferenceExperimentsLink: null,
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,

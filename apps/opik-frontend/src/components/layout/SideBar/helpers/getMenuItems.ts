@@ -19,8 +19,10 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   canViewExperiments,
+  canViewDashboards,
 }: {
   canViewExperiments: boolean;
+  canViewDashboards: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -33,14 +35,16 @@ const getMenuItems = ({
           icon: LucideHome,
           label: "Home",
         },
-        {
-          id: "dashboards",
-          path: "/$workspaceName/dashboards",
-          type: MENU_ITEM_TYPE.router,
-          icon: ChartLine,
-          label: "Dashboards",
-          count: "dashboards",
-        },
+        canViewDashboards
+          ? {
+              id: "dashboards",
+              path: "/$workspaceName/dashboards",
+              type: MENU_ITEM_TYPE.router,
+              icon: ChartLine,
+              label: "Dashboards",
+              count: "dashboards",
+            }
+          : null,
       ],
     },
     {
