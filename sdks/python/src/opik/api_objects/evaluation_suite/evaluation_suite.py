@@ -151,7 +151,7 @@ class EvaluationSuite:
                 dataset_item.EvaluatorItem(
                     name=e.name,
                     type="llm_judge",
-                    config=e.to_config().model_dump(),
+                    config=e.to_config().model_dump(by_alias=True),
                 )
                 for e in evaluators
             ]

@@ -143,7 +143,7 @@ class TestParseModelOutput:
 
         assert len(results) == 1
         assert results[0].name == "Response is accurate"
-        assert results[0].value is False
+        assert results[0].value == 0.0
         assert results[0].scoring_failed is True
         assert "Failed to parse model output" in results[0].reason
         assert results[0].metadata["raw_output"] == content
@@ -164,7 +164,7 @@ class TestParseModelOutput:
 
         assert len(results) == 2
         assert all(r.scoring_failed is True for r in results)
-        assert all(r.value is False for r in results)
+        assert all(r.value == 0.0 for r in results)
 
     def test_parse_model_output__missing_required_field__returns_failed_results(self):
         assertions = ["Response is accurate"]
@@ -181,7 +181,7 @@ class TestParseModelOutput:
 
         assert len(results) == 1
         assert results[0].scoring_failed is True
-        assert results[0].value is False
+        assert results[0].value == 0.0
 
     def test_parse_model_output__empty_assertions__returns_empty_list(self):
         assertions: list[str] = []

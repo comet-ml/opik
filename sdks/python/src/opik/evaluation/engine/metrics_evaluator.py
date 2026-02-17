@@ -91,12 +91,13 @@ def _extract_item_evaluators(
                     "Unsupported evaluator type: %s. Only 'llm_judge' is supported.",
                     evaluator_item.type,
                 )
-        except Exception as e:
-            LOGGER.warning(
-                "Failed to instantiate evaluator from config: %s. Error: %s",
+        except Exception:
+            LOGGER.error(
+                "Failed to instantiate evaluator from config: %s",
                 evaluator_item.config,
-                e,
+                exc_info=True,
             )
+            raise
 
     return evaluators
 

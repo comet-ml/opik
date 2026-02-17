@@ -6,11 +6,14 @@ LLM outputs into ScoreResult objects for the LLMJudge evaluator.
 """
 
 import json
+import logging
 from typing import Any, List, Type
 
 import pydantic
 
 from opik.evaluation.metrics import score_result
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AssertionResultItem(pydantic.BaseModel):
@@ -100,11 +103,16 @@ def parse_model_output(
             )
 
     except (json.JSONDecodeError, pydantic.ValidationError) as e:
+        LOGGER.error(
+            "Failed to parse LLMJudge model output: %s. Raw output: %s",
+            e,
+            content,
+        )
         for assertion in assertions:
             results.append(
                 score_result.ScoreResult(
                     name=assertion,
-                    value=False,
+                    value=0.0,
                     reason=f"Failed to parse model output: {e}",
                     scoring_failed=True,
                     metadata={
