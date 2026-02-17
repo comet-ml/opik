@@ -107,12 +107,10 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "last_updated_at",
-  "created_by",
-  "created_at",
+  "enabled",
   "sampling_rate",
   "scope",
-  "enabled",
+  "last_updated_at",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";

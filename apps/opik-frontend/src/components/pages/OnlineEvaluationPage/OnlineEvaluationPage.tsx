@@ -121,13 +121,11 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "last_updated_at",
-  "created_by",
-  "created_at",
-  "sampling_rate",
-  "enabled",
   "projects",
+  "enabled",
+  "sampling_rate",
   "type",
+  "last_updated_at",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
