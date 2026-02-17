@@ -77,7 +77,7 @@ duration = SpanDuration(target=6.0, invert=True, name="duration_score")
 # Combine quality, cost, and speed metrics on a common [0, 1] scale
 objective = MultiMetricObjective(
     metrics=[answer_relevance, cost, duration],
-    weights=[0.33, 0.33, 0.33],  # equaly optimize for accuracy, cost and duration/latency
+    weights=[0.33, 0.33, 0.33],  # equally optimize for accuracy, cost and duration/latency
     name="quality_cost_speed",
 )
 ```
