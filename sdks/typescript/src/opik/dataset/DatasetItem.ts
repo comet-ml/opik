@@ -1,4 +1,4 @@
-import { DatasetItemWriteSource } from "@/rest_api/api";
+import { DatasetItemPublic, DatasetItemWriteSource } from "@/rest_api/api";
 import { JsonNode } from "@/rest_api/api/types/JsonNode";
 import { DatasetItemWrite } from "@/rest_api/api/types/DatasetItemWrite";
 import { generateId } from "@/utils/generateId";
@@ -93,10 +93,10 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
    * @returns A new DatasetItem instance
    */
   public static fromApiModel<T extends DatasetItemData = DatasetItemData>(
-    model: DatasetItemWrite
+    model: DatasetItemPublic
   ): DatasetItem<T> {
     return new DatasetItem<T>({
-      id: model.id,
+      id: model.datasetItemId,
       traceId: model.traceId,
       spanId: model.spanId,
       source: model.source,
