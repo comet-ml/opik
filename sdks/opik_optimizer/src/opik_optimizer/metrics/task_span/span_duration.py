@@ -9,8 +9,8 @@ class SpanDuration(base_metric.BaseMetric):
     """
     A metric that calculates the total duration of a span in seconds.
 
-    Requires a complete span with both `start_time` and `end_time` set.
-    If either timestamp is missing, scoring raises
+    Requires `task_span` input and a complete span with both `start_time`
+    and `end_time` set. If `task_span` is missing or either timestamp is missing, scoring raises
     `opik.exceptions.MetricComputationError`.
 
     Args:
@@ -39,23 +39,16 @@ class SpanDuration(base_metric.BaseMetric):
         if target is not None and float(target) <= 0:
             raise ValueError("SpanDuration `target` must be > 0 when provided.")
 
-        self.target_duration_seconds = (
-            None if target is None else float(target)
-        )
+        self.target_duration_seconds = None if target is None else float(target)
         self.invert = bool(invert)
 
     def score(
         self, task_span: emulation_models.SpanModel | None = None, **_: Any
     ) -> score_result.ScoreResult:
         if task_span is None:
-            return score_result.ScoreResult(
-                name=self.name,
-                value=0.0,
-                reason=(
-                    "SpanDuration could not compute because `task_span` was not provided "
-                    "by the evaluation runtime."
-                ),
-                scoring_failed=True,
+            raise opik.exceptions.MetricComputationError(
+                "SpanDuration could not compute because `task_span` was not provided "
+                "by the evaluation runtime."
             )
 
         if task_span.end_time is None or task_span.start_time is None:
