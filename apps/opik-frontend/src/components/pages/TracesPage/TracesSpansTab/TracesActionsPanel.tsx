@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash, Brain } from "lucide-react";
+import { Tag, Trash, Brain, PenLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
@@ -10,6 +10,7 @@ import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutati
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import BatchAnnotateDialog from "@/components/pages-shared/traces/BatchAnnotateDialog/BatchAnnotateDialog";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -81,6 +82,13 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         projectId={projectId}
         type={type}
       />
+      <BatchAnnotateDialog
+        key={`annotate-${resetKeyRef.current}`}
+        rows={selectedRows}
+        open={open === 5}
+        setOpen={setOpen}
+        type={type}
+      />
       {type === TRACE_DATA_TYPE.traces && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -118,6 +126,19 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           disabled={disabled}
         >
           <Tag />
+        </Button>
+      </TooltipWrapper>
+      <TooltipWrapper content="Annotate">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <PenLine />
         </Button>
       </TooltipWrapper>
       {(type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans) && (
