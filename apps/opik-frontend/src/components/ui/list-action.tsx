@@ -13,6 +13,7 @@ const ListAction = React.forwardRef<HTMLButtonElement, ListActionProps>(
     return (
       <Comp
         ref={ref}
+        type={asChild ? undefined : "button"}
         className={cn(
           "comet-body-s-accented flex h-10 w-full cursor-pointer items-center gap-2 rounded px-4 text-primary hover:bg-primary-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
           className,
