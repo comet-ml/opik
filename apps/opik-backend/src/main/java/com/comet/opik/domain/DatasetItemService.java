@@ -461,7 +461,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     baseVersionId,
                                                     null, // No tags
                                                     "Updated 1 item",
-                                                    null, null, false,
+                                                    null, // Inherit evaluators from base version
+                                                    null, // Inherit execution policy from base version
+                                                    false, // Don't clear execution policy
                                                     null, // No batch group ID
                                                     workspaceId,
                                                     userName);
@@ -764,7 +766,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 baseVersionId,
                 null, // No tags
                 changeDescription,
-                null, null, false,
+                null, // Inherit evaluators from base version
+                null, // Inherit execution policy from base version
+                false, // Don't clear execution policy
                 null, // No batch group ID
                 workspaceId,
                 userName);
@@ -1109,7 +1113,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
-                                        null, null, false,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId, // Pass batch group ID
                                         workspaceId,
                                         userName);
@@ -1248,7 +1254,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             null, // No change description (auto-generated)
-                            null, null, false,
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -1528,9 +1536,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             baseVersionId,
                                             changes.tags(),
                                             changes.changeDescription(),
-                                            changes.evaluators(), changes.executionPolicy(),
+                                            changes.evaluators(),
+                                            changes.executionPolicy(),
                                             Boolean.TRUE.equals(changes.clearExecutionPolicy()),
-                                            null,
+                                            null, // No batch group ID
                                             workspaceId,
                                             userName);
 
@@ -1904,7 +1913,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No base version for first version
                             null, // No tags
                             changeDescription,
-                            null, null, false,
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -1991,7 +2002,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
-                                        null, null, false,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId, // Include batch group ID if provided
                                         workspaceId,
                                         userName);
