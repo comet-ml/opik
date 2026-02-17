@@ -324,6 +324,7 @@ class EvaluationEngine:
 
         # Get tqdm for progress bar
         from opik.environment import get_tqdm_for_current_environment
+
         _tqdm = get_tqdm_for_current_environment()
 
         # Progress bar based on ITEMS (not runs)
@@ -473,14 +474,15 @@ class EvaluationEngine:
         is_evaluation_suite: bool = False,
     ) -> List[test_result.TestResult]:
         # NEW: Unified execution - convert trial_count to execution_policy
+        default_execution_policy: ExecutionPolicy
         if is_evaluation_suite:
             default_execution_policy = dataset_.get_execution_policy()
         else:
             # Convert trial_count → execution_policy
-            default_execution_policy = {
-                "runs_per_item": trial_count,
-                "pass_threshold": trial_count,
-            }
+            default_execution_policy = ExecutionPolicy(
+                runs_per_item=trial_count,
+                pass_threshold=trial_count,
+            )
 
         # Extract suite evaluators and add to regular metrics
         suite_evaluators = dataset_.get_evaluators()
@@ -515,6 +517,7 @@ class EvaluationEngine:
                     filter_string=dataset_filter_string,
                 )
             )
+            assert dataset_sampler is not None
             dataset_items_list = dataset_sampler.sample(dataset_items_list)
             dataset_items_iter = iter(dataset_items_list)
             total_items = len(dataset_items_list)
@@ -581,10 +584,10 @@ class EvaluationEngine:
         ]
 
         # Use unified execution with runs_per_item=1
-        default_execution_policy = {
-            "runs_per_item": 1,
-            "pass_threshold": 1,
-        }
+        default_execution_policy: ExecutionPolicy = ExecutionPolicy(
+            runs_per_item=1,
+            pass_threshold=1,
+        )
 
         if not self._has_task_span_metrics:
             return self._compute_test_results_with_execution_policy(
