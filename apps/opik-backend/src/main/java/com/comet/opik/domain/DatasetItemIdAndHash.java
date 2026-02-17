@@ -22,5 +22,6 @@ public record DatasetItemIdAndHash(
         long dataHash,
         Set<String> tags,
         long evaluatorsHash,
-        long executionPolicyHash) {
+        long executionPolicyHash,
+        long descriptionHash) {
 }

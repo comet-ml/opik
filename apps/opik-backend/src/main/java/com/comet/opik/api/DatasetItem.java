@@ -31,6 +31,7 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotEmpty Map<String, JsonNode> data,
+        @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) String description,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) Set<String> tags,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) List<@Valid EvaluatorItem> evaluators,
