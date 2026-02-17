@@ -39,6 +39,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
         core.serialization.string().optional(),
     ),
     duration: core.serialization.number().optional(),
+    ttft: core.serialization.number().optional(),
 });
 
 export declare namespace Span {
@@ -69,5 +70,6 @@ export declare namespace Span {
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         duration?: number | null;
+        ttft?: number | null;
     }
 }

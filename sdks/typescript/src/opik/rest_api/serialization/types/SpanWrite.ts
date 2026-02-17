@@ -31,6 +31,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
             "total_estimated_cost_version",
             core.serialization.string().optional(),
         ),
+        ttft: core.serialization.number().optional(),
     });
 
 export declare namespace SpanWrite {
@@ -54,5 +55,6 @@ export declare namespace SpanWrite {
         last_updated_at?: string | null;
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
+        ttft?: number | null;
     }
 }

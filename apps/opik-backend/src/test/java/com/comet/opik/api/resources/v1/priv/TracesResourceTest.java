@@ -3158,6 +3158,7 @@ class TracesResourceTest {
                     .createdAt(Instant.now())
                     .errorInfo(traceUpdate.errorInfo())
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
@@ -3195,6 +3196,7 @@ class TracesResourceTest {
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                             newTrace.startTime(), traceUpdate.endTime()))
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3266,6 +3268,7 @@ class TracesResourceTest {
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                             trace.startTime(), traceUpdate.endTime()))
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3468,6 +3471,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
                             traceUpdate.endTime()))
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
@@ -3682,6 +3686,71 @@ class TracesResourceTest {
                 var updatedTrace3 = traceResourceClient.getById(id3, TEST_WORKSPACE, API_KEY);
                 assertThat(updatedTrace3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
             }
+        }
+
+        @Test
+        @DisplayName("Success: batch update all fields simultaneously")
+        void batchUpdate__updateAllFields__success() {
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            var id1 = traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+            var id2 = traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+
+            Instant newEndTime = Instant.now();
+            JsonNode newInput = JsonUtils.readTree(Map.of("prompt", "updated prompt"));
+            JsonNode newOutput = JsonUtils.readTree(Map.of("response", "updated response"));
+            JsonNode newMetadata = JsonUtils.readTree(Map.of("environment", "production", "key1", "value1"));
+            var newErrorInfo = ErrorInfo.builder()
+                    .exceptionType("ValidationError")
+                    .message("Invalid input")
+                    .traceback("Stack trace here")
+                    .build();
+            Double newTtft = 123.45;
+
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(Set.of(id1, id2))
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .name("updated-name")
+                            .endTime(newEndTime)
+                            .input(newInput)
+                            .output(newOutput)
+                            .metadata(newMetadata)
+                            .tags(Set.of("new-tag"))
+                            .errorInfo(newErrorInfo)
+                            .ttft(newTtft)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+
+            traceResourceClient.batchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            var updatedTrace1 = traceResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
+            assertTraceFieldsUpdated(updatedTrace1, newEndTime);
+
+            var updatedTrace2 = traceResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
+            assertTraceFieldsUpdated(updatedTrace2, newEndTime);
+        }
+
+        private void assertTraceFieldsUpdated(Trace trace, Instant expectedEndTime) {
+            assertThat(trace.name()).isEqualTo("updated-name");
+            assertThat(trace.endTime().toEpochMilli()).isEqualTo(expectedEndTime.toEpochMilli());
+            assertThat(trace.input().get("prompt").asText()).isEqualTo("updated prompt");
+            assertThat(trace.output().get("response").asText()).isEqualTo("updated response");
+            assertThat(trace.metadata().get("environment").asText()).isEqualTo("production");
+            assertThat(trace.metadata().get("key1").asText()).isEqualTo("value1");
+            assertThat(trace.tags()).containsExactly("new-tag");
+            assertThat(trace.errorInfo()).isNotNull();
+            assertThat(trace.errorInfo().exceptionType()).isEqualTo("ValidationError");
+            assertThat(trace.errorInfo().message()).isEqualTo("Invalid input");
+            assertThat(trace.ttft()).isEqualTo(123.45);
         }
 
         @Test

@@ -42,7 +42,7 @@ async function basicExample() {
   const result = await evaluatePrompt({
     dataset,
     messages: [{ role: "user", content: prompt.prompt }],
-    model: "gpt-4o", // or omit to use default
+    model: "gpt-5-nano", // or omit to use default
     scoringMetrics: [usefulnessMetric, moderationMetric],
     experimentName: "qa-evaluation",
     prompts: [prompt], // Link prompt to experiment
