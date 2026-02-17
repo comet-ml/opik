@@ -90,10 +90,24 @@ export const GROUPING_CONFIG = {
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   {
-    id: COLUMN_ID_ID,
-    label: "ID",
+    id: "status",
+    label: "Status",
     type: COLUMN_TYPE.string,
-    cell: IdCell as never,
+    cell: OptimizationStatusCell as never,
+  },
+  {
+    id: "num_trials",
+    label: "Trial count",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "objective_name",
+    label: "Best score",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: (row) =>
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+    cell: FeedbackScoreTagCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
   },
   {
     id: "created_at",
@@ -102,14 +116,15 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     accessorFn: (row) => formatDate(row.created_at),
   },
   {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
     id: "created_by",
     label: "Created by",
     type: COLUMN_TYPE.string,
-  },
-  {
-    id: "num_trials",
-    label: "Trial count",
-    type: COLUMN_TYPE.number,
   },
   {
     id: "optimizer",
@@ -129,21 +144,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
   },
-  {
-    id: "objective_name",
-    label: "Best score",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
-    cell: FeedbackScoreTagCell as never,
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.string,
-    cell: OptimizationStatusCell as never,
-  },
 ];
 
 export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
@@ -161,11 +161,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "num_trials",
-  "optimizer",
-  "objective_name",
   "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
 ];
 
 const OptimizationsPage: React.FunctionComponent = () => {
