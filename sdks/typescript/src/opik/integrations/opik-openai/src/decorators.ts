@@ -35,6 +35,51 @@ const handleError = (
   rootTracer.end();
 };
 
+const normalizeProvider = (provider: unknown): string | undefined => {
+  if (typeof provider !== "string") {
+    return undefined;
+  }
+
+  const normalizedProvider = provider.trim().toLowerCase();
+  return normalizedProvider.length > 0 ? normalizedProvider : undefined;
+};
+
+export const resolveProvider = ({
+  model,
+  traceMetadata,
+  providerHint,
+}: {
+  model?: string;
+  traceMetadata?: Record<string, unknown>;
+  providerHint?: string;
+}): string => {
+  const configuredProvider = normalizeProvider(traceMetadata?.provider);
+  if (configuredProvider) {
+    return configuredProvider;
+  }
+
+  if (model && model.includes("/")) {
+    const parts = model.split("/").filter(Boolean);
+
+    if (parts.length >= 2) {
+      const normalizedFirstPart = normalizeProvider(parts[0]);
+      const normalizedSecondPart = normalizeProvider(parts[1]);
+
+      if (normalizedFirstPart === "openrouter") {
+        return normalizedSecondPart ?? "openrouter";
+      }
+
+      return normalizedFirstPart ?? "openai";
+    }
+  }
+
+  if (providerHint) {
+    return normalizeProvider(providerHint) ?? "openai";
+  }
+
+  return "openai";
+};
+
 type TracingConfig = TrackOpikConfig &
   Required<{ generationName: string; client: Opik }>;
 
@@ -64,10 +109,16 @@ const wrapMethod = <T extends GenericMethod>(
     model,
   };
 
+  const provider = resolveProvider({
+    model,
+    traceMetadata: configMetadata,
+    providerHint: config.provider,
+  });
+
   const observationData = {
     model,
     input,
-    provider: "openai",
+    provider,
     name: config.generationName,
     tags,
     startTime: new Date(),
@@ -92,7 +143,9 @@ const wrapMethod = <T extends GenericMethod>(
         res,
         rootTracer,
         hasUserProvidedParent,
-        observationData
+        observationData,
+        configMetadata,
+        config.provider
       );
     }
 
@@ -104,7 +157,9 @@ const wrapMethod = <T extends GenericMethod>(
               result,
               rootTracer,
               hasUserProvidedParent,
-              observationData
+              observationData,
+              configMetadata,
+              config.provider
             );
           }
 
@@ -112,6 +167,11 @@ const wrapMethod = <T extends GenericMethod>(
           const usage = parseUsage(result);
           const { model: modelFromResponse, metadata: metadataFromResponse } =
             parseModelDataFromResponse(result);
+          const resolvedProvider = resolveProvider({
+            model: modelFromResponse || observationData.model,
+            traceMetadata: configMetadata,
+            providerHint: config.provider,
+          });
 
           const latestMetadata = {
             ...observationData.metadata,
@@ -122,6 +182,7 @@ const wrapMethod = <T extends GenericMethod>(
 
           rootTracer.span({
             ...observationData,
+            provider: resolvedProvider,
             output,
             endTime: new Date(),
             usage,
@@ -159,7 +220,9 @@ type ChunkUsage =
 
 const processResponseChunk = (
   rawChunk: unknown,
-  observationData: ObservationData
+  observationData: ObservationData,
+  traceMetadata?: Record<string, unknown>,
+  providerHint?: string
 ): {
   output?: Record<string, unknown>;
   usage: ChunkUsage;
@@ -186,6 +249,11 @@ const processResponseChunk = (
     } = parseModelDataFromResponse(result);
 
     updatedObservationData.model = modelFromResponse ?? observationData.model;
+    updatedObservationData.provider = resolveProvider({
+      model: updatedObservationData.model,
+      traceMetadata,
+      providerHint,
+    });
     updatedObservationData.metadata = {
       ...observationData.metadata,
       ...modelParametersFromResponse,
@@ -215,7 +283,9 @@ function wrapAsyncIterable<T>(
   iterable: AsyncIterable<unknown>,
   rootTracer: OpikParent,
   hasUserProvidedParent: boolean | undefined,
-  initialObservationData: ObservationData
+  initialObservationData: ObservationData,
+  traceMetadata?: Record<string, unknown>,
+  providerHint?: string
 ): AsyncIterable<T> {
   async function* tracedOutputGenerator(): AsyncGenerator<
     unknown,
@@ -238,7 +308,12 @@ function wrapAsyncIterable<T>(
         usage: chunkUsage,
         chunkData,
         updatedObservationData,
-      } = processResponseChunk(rawChunk, observationData);
+      } = processResponseChunk(
+        rawChunk,
+        observationData,
+        traceMetadata,
+        providerHint
+      );
 
       if (output) outputFromChunks = output;
       if (chunkUsage) usage = chunkUsage;
