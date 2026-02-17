@@ -59,10 +59,11 @@ export const trackOpenAI = <SDKType extends object>(
       const generationName =
         opikConfig?.generationName ??
         `${sdk.constructor?.name || "OpenAI"}.${propKey.toString()}`;
+      const resolvedProvider = opikConfig?.provider ?? provider;
 
       const config = {
         ...opikConfig,
-        provider,
+        provider: resolvedProvider,
         generationName,
         client: opikConfig?.client ?? OpikSingleton.getInstance(),
       };
