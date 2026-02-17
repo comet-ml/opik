@@ -49,6 +49,7 @@ public class SpanAssertions {
         EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
                 it -> it.toBuilder().totalEstimatedCostVersion(null).build());
         EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.TTFT, it -> it.toBuilder().ttft(null).build());
     }
 
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
@@ -125,6 +126,7 @@ public class SpanAssertions {
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
                 .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
                 .ignoringFields(IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(preparedExpectedSpans);
@@ -135,6 +137,7 @@ public class SpanAssertions {
             var preparedUnexpectedSpans = prepareSpansForAssertion(unexpectedSpans);
             assertThat(actualSpans)
                     .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
                     .ignoringFields(IGNORED_FIELDS)
                     .ignoringCollectionOrderInFields("tags")
                     .isNotEqualTo(preparedUnexpectedSpans);

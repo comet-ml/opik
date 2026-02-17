@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import sortBy from "lodash/sortBy";
-import { PenLine } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useAnnotationQueueById from "@/api/annotation-queues/useAnnotationQueueById";
@@ -10,7 +9,7 @@ import { useAnnotationQueueIdFromURL } from "@/hooks/useAnnotationQueueIdFromURL
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import NavigationTag from "@/components/shared/NavigationTag";
-import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import FeedbackScoresList from "@/components/pages-shared/FeedbackScoresList/FeedbackScoresList";
 import ConfigurationTab from "@/components/pages/AnnotationQueuePage/ConfigurationTab/ConfigurationTab";
 import QueueItemsTab from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemsTab";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -20,8 +19,9 @@ import OpenSMELinkButton from "@/components/pages/AnnotationQueuePage/OpenSMELin
 import EditAnnotationQueueButton from "@/components/pages/AnnotationQueuePage/EditAnnotationQueueButton";
 import ExportAnnotatedDataButton from "@/components/pages/AnnotationQueuePage/ExportAnnotatedDataButton";
 import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/AnnotationQueueProgressTag";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
+import { SCORE_TYPE_FEEDBACK } from "@/types/shared";
+import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
@@ -51,9 +51,15 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
       return [];
     }
 
-    const filtered = annotationQueue.feedback_scores.filter((score) =>
-      annotationQueue.feedback_definition_names.includes(score.name),
-    );
+    const filtered = annotationQueue.feedback_scores
+      .filter((score) =>
+        annotationQueue.feedback_definition_names.includes(score.name),
+      )
+      .map((score) => ({
+        ...score,
+        colorKey: score.name,
+        name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
+      }));
 
     return sortBy(filtered, "name");
   }, [
@@ -61,15 +67,13 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     annotationQueue?.feedback_definition_names,
   ]);
 
-  const annotationQueueSearch = useMemo(
-    () => ({
-      type: `${annotationQueue?.scope}s`,
+  const annotationQueueSearch = useMemo(() => {
+    return {
       [`${annotationQueue?.scope}s_filters`]: generateAnnotationQueueIdFilter(
         annotationQueue?.id,
       ),
-    }),
-    [annotationQueue?.scope, annotationQueue?.id],
-  );
+    };
+  }, [annotationQueue?.scope, annotationQueue?.id]);
 
   return (
     <PageBodyScrollContainer>
@@ -137,20 +141,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
             <AnnotationQueueProgressTag annotationQueue={annotationQueue} />
           )}
         </div>
-        <div className="flex h-11 items-center gap-2">
-          <TooltipWrapper content="Feedback scores">
-            <PenLine className="size-4 shrink-0" />
-          </TooltipWrapper>
-          <div className="flex gap-2 overflow-x-auto">
-            {allocatedFeedbackScores.map((feedbackScore) => (
-              <FeedbackScoreTag
-                key={feedbackScore.name + feedbackScore.value}
-                label={feedbackScore.name}
-                value={feedbackScore.value}
-              />
-            ))}
-          </div>
-        </div>
+        <FeedbackScoresList scores={allocatedFeedbackScores} />
       </PageBodyStickyContainer>
       <Tabs
         defaultValue="items"
