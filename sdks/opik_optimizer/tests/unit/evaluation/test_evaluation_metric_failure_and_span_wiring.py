@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 
 import pytest
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -31,8 +32,10 @@ def test_create_metric_class_keeps_regular_signature_for_non_span_metrics() -> N
     assert "task_span" not in inspect.signature(metric_wrapper.score).parameters
 
 
-def test_validate_objective_scores_raises_on_failed_scores() -> None:
-    with pytest.raises(ValueError, match="failed on 1/2"):
+def test_validate_objective_scores_logs_warning_on_failed_scores(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
         evaluation._validate_objective_scores(
             [
                 ScoreResult(name="objective", value=1.0, scoring_failed=False),
@@ -46,7 +49,13 @@ def test_validate_objective_scores_raises_on_failed_scores() -> None:
             objective_metric_name="objective",
         )
 
+    assert "failed on 1/2" in caplog.text
 
-def test_validate_objective_scores_raises_when_no_scores_present() -> None:
-    with pytest.raises(ValueError, match="produced no scores"):
+
+def test_validate_objective_scores_logs_warning_when_no_scores_present(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
         evaluation._validate_objective_scores([], objective_metric_name="objective")
+
+    assert "produced no scores" in caplog.text

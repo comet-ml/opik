@@ -30,7 +30,7 @@ def test_normalized_span_cost_returns_1_for_zero_cost() -> None:
 
     assert result.name == "cost"
     assert result.value == pytest.approx(1.0)
-    assert result.metadata["raw_total_span_cost_usd"] == pytest.approx(0.0)
+    assert result.metadata["_raw_total_span_cost_usd"] == pytest.approx(0.0)
 
 
 def test_normalized_span_cost_scales_against_target() -> None:
@@ -39,7 +39,7 @@ def test_normalized_span_cost_scales_against_target() -> None:
 
     # 1 / (1 + 1.0) = 0.5
     assert result.value == pytest.approx(0.5)
-    assert result.metadata["target_cost_usd"] == pytest.approx(0.01)
+    assert result.metadata["_target_cost_usd"] == pytest.approx(0.01)
 
 
 def test_normalized_span_cost_respects_invert_false() -> None:
@@ -48,7 +48,7 @@ def test_normalized_span_cost_respects_invert_false() -> None:
 
     # normalized=1.0 -> 1 / (1 + 1.0) = 0.5 for both directions at midpoint
     assert result.value == pytest.approx(0.5)
-    assert result.metadata["invert"] is False
+    assert result.metadata["_invert"] is False
 
 
 def test_normalized_span_cost_directionality_changes_with_invert() -> None:
@@ -74,7 +74,7 @@ def test_normalized_span_duration_returns_1_for_zero_duration() -> None:
 
     assert result.name == "duration"
     assert result.value == pytest.approx(1.0)
-    assert result.metadata["raw_total_span_duration_seconds"] == pytest.approx(0.0)
+    assert result.metadata["_raw_total_span_duration_seconds"] == pytest.approx(0.0)
 
 
 def test_normalized_span_duration_scales_against_target() -> None:
@@ -86,7 +86,7 @@ def test_normalized_span_duration_scales_against_target() -> None:
 
     # 1 / (1 + 1.0) = 0.5
     assert result.value == pytest.approx(0.5)
-    assert result.metadata["target_duration_seconds"] == pytest.approx(6.0)
+    assert result.metadata["_target_duration_seconds"] == pytest.approx(6.0)
 
 
 def test_normalized_span_duration_respects_invert_false() -> None:
@@ -97,7 +97,7 @@ def test_normalized_span_duration_respects_invert_false() -> None:
     )
 
     assert result.value == pytest.approx(0.5)
-    assert result.metadata["invert"] is False
+    assert result.metadata["_invert"] is False
 
 
 def test_normalized_span_duration_directionality_changes_with_invert() -> None:

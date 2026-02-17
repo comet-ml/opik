@@ -441,9 +441,11 @@ def _validate_objective_scores(
     scores: list[score_result.ScoreResult], *, objective_metric_name: str
 ) -> None:
     if not scores:
-        raise ValueError(
-            f"Objective metric '{objective_metric_name}' produced no scores."
+        logger.warning(
+            "Objective metric '%s' produced no scores; falling back to 0.0.",
+            objective_metric_name,
         )
+        return
 
     failed_scores = [score for score in scores if score.scoring_failed]
     if not failed_scores:
@@ -458,10 +460,13 @@ def _validate_objective_scores(
     if len(unique_reasons) > 3:
         summarized_reasons += f"; +{len(unique_reasons) - 3} more"
 
-    raise ValueError(
-        f"Objective metric '{objective_metric_name}' failed on "
-        f"{len(failed_scores)}/{len(scores)} evaluation item(s). "
-        f"First reasons: {summarized_reasons}"
+    logger.warning(
+        "Objective metric '%s' failed on %s/%s evaluation item(s). "
+        "Continuing with available finite values. First reasons: %s",
+        objective_metric_name,
+        len(failed_scores),
+        len(scores),
+        summarized_reasons,
     )
 
 
@@ -537,6 +542,9 @@ def _evaluate_internal(
     objective_score_results = _extract_objective_scores(
         evaluation_result, objective_metric_name
     )
+
+    if not objective_score_results:
+        return 0.0, evaluation_result
 
     _validate_objective_scores(
         objective_score_results, objective_metric_name=objective_metric_name

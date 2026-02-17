@@ -86,7 +86,7 @@ For a working end-to-end example in the repository, see:
 [multi_metric_cost_duration_example.py](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/scripts/multi_metric_cost_duration_example.py)
 
 <Note>
-  Span-based metrics like `TotalSpanCost` and `SpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run.
+  Span-based metrics like `TotalSpanCost` and `SpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run. When using raw (non-normalized) cost or duration values, use negative weights in `MultiMetricObjective` to minimize them. When using target-normalized metrics (`target=`), use positive weights because those scores are mapped to a "higher is better" scale.
 </Note>
 
 <Note>

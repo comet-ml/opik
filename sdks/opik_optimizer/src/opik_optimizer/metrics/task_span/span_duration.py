@@ -92,8 +92,8 @@ class SpanDuration(base_metric.BaseMetric):
                 f"(target={self.target_duration_seconds:.2f}s, direction={direction})"
             ),
             metadata={
-                "raw_total_span_duration_seconds": duration,
-                "target_duration_seconds": self.target_duration_seconds,
-                "invert": self.invert,
+                "_raw_total_span_duration_seconds": duration,
+                "_target_duration_seconds": self.target_duration_seconds,
+                "_invert": self.invert,
             },
         )

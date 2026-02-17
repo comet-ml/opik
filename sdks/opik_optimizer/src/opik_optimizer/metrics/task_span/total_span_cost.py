@@ -255,8 +255,8 @@ class TotalSpanCost(base_metric.BaseMetric):
                 f"(target={self.target_cost_usd:.6f}, direction={direction})"
             ),
             metadata={
-                "raw_total_span_cost_usd": raw_cost,
-                "target_cost_usd": self.target_cost_usd,
-                "invert": self.invert,
+                "_raw_total_span_cost_usd": raw_cost,
+                "_target_cost_usd": self.target_cost_usd,
+                "_invert": self.invert,
             },
         )
