@@ -67,7 +67,7 @@ const SideBarMenuItems: React.FC<
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewExperiments,
     },
   );
 
@@ -141,7 +141,7 @@ const SideBarMenuItems: React.FC<
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewDashboards,
     },
   );
 
