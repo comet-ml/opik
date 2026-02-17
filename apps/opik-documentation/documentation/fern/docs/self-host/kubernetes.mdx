@@ -147,6 +147,28 @@ component:
         eks.amazonaws.com/role-arn: <your IAM Role arn>
 ```
 
+## Enable Opik Assist (AI Trace Analyzer)
+
+Opik Assist is an optional AI-powered trace analysis feature that helps you debug and optimize your traces conversationally.
+
+To enable Opik Assist, add the following to your Helm values file:
+
+```yaml
+component:
+  ai-backend:
+    enabled: true
+```
+
+Then upgrade your deployment:
+
+```bash
+helm upgrade opik opik/opik -f values.yaml
+```
+
+<Note>
+**Prerequisites**: Before using Opik Assist, you must configure an OpenAI provider in Workspace Settings → AI Providers after deployment. See the [AI Providers documentation](/administration/workspace-settings/ai_providers) for setup instructions.
+</Note>
+
 ## Use external Clickhouse installation
 
 Supported from Opik chart version 1.4.2
