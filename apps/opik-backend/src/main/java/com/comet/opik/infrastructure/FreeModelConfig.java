@@ -24,6 +24,12 @@ public class FreeModelConfig {
     public static final String FREE_MODEL = "opik-free-model";
 
     /**
+     * Minimum temperature required by OpenAI reasoning models (GPT-5, O-series).
+     * These models reject temperature < 1.0, so we clamp to this value when needed.
+     */
+    public static final double OPENAI_REASONING_MODEL_MIN_TEMPERATURE = 1.0;
+
+    /**
      * Whether the free model provider is enabled in configuration.
      * Note: Use {@link #isEnabled()} to check if the provider is actually usable,
      * as it also validates that required fields are configured.

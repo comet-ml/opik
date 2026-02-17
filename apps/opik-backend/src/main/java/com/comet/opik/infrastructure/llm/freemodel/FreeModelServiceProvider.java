@@ -56,10 +56,12 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         Double temperature = modelParameters.temperature();
 
-        if (freeModelConfig.isReasoningModel() && temperature != null && temperature < 1.0) {
-            log.debug("Clamping temperature from '{}' to 1.0 for reasoning model '{}'",
-                    temperature, freeModelConfig.getActualModel());
-            temperature = 1.0;
+        if (freeModelConfig.isReasoningModel() && temperature != null
+                && temperature < FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE) {
+            log.debug("Clamping temperature from '{}' to '{}' for reasoning model '{}'",
+                    temperature, FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE,
+                    freeModelConfig.getActualModel());
+            temperature = FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE;
         }
 
         var transformedParameters = LlmAsJudgeModelParameters.builder()

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.freemodel;
 
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
@@ -69,9 +70,11 @@ public class FreeModelLlmProvider implements LlmProviderService {
     private ChatCompletionRequest transformRequest(ChatCompletionRequest request) {
         Double temperature = request.temperature();
 
-        if (isReasoningModel && temperature != null && temperature < 1.0) {
-            log.debug("Clamping temperature from '{}' to 1.0 for reasoning model '{}'", temperature, actualModel);
-            temperature = 1.0;
+        if (isReasoningModel && temperature != null
+                && temperature < FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE) {
+            log.debug("Clamping temperature from '{}' to '{}' for reasoning model '{}'",
+                    temperature, FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE, actualModel);
+            temperature = FreeModelConfig.OPENAI_REASONING_MODEL_MIN_TEMPERATURE;
         }
 
         return ChatCompletionRequest.builder()
