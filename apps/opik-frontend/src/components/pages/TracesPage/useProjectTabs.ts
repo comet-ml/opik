@@ -1,7 +1,10 @@
 import { useMemo, useCallback } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
+import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
+import { useMetricDateRangeWithQueryAndStorage } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const DEFAULT_TAB = PROJECT_TAB.logs;
 
@@ -18,7 +21,6 @@ const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
 
 type UseProjectTabsOptions = {
   projectId: string;
-  threadCount?: number;
 };
 
 /**
@@ -35,7 +37,36 @@ type UseProjectTabsOptions = {
  * threadCount=undefined means stats are still loading.
  */
 const useProjectTabs = (options: UseProjectTabsOptions) => {
-  const { projectId, threadCount } = options;
+  const { projectId } = options;
+
+  const { intervalStart, intervalEnd } =
+    useMetricDateRangeWithQueryAndStorage();
+
+  const { data: threadsStats } = useThreadsStatistic(
+    {
+      projectId,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
+    },
+    {
+      enabled: !!projectId,
+      refetchOnMount: false,
+    },
+  );
+
+  const threadCount = useMemo(() => {
+    if (!threadsStats) return undefined;
+
+    const threadCountStat = threadsStats.stats?.find(
+      (stat) =>
+        stat.name === "thread_count" &&
+        stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
+    );
+
+    return threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
+      ? threadCountStat.value
+      : 0;
+  }, [threadsStats]);
 
   const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
     `project-logsType-${projectId}`,
