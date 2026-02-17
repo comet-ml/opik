@@ -67,7 +67,7 @@ class AuthCredentialsCacheService implements CacheService {
      * Fetches access entries per permission in parallel, verifies all are present and returns the username
      */
     private Optional<String> getUserNameFromAccessCache(String apiKey, String workspaceName,
-                                                        List<String> requiredPermissions) {
+            List<String> requiredPermissions) {
         List<String> permissionKeys = getKeysForPermissions(apiKey, workspaceName, requiredPermissions);
         var values = Flux.fromIterable(permissionKeys)
                 .flatMap(key -> redissonClient.getBucket(key).get())
