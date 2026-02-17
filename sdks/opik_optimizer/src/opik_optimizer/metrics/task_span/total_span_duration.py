@@ -9,6 +9,10 @@ class TotalSpanDuration(base_metric.BaseMetric):
     """
     A metric that calculates the total duration of a span in seconds.
 
+    Requires a complete span with both `start_time` and `end_time` set.
+    If either timestamp is missing, scoring raises
+    `opik.exceptions.MetricComputationError`.
+
     Args:
         name: The name of the metric. Defaults to "total_span_duration".
         target: Optional target duration (seconds) used to normalize output into
