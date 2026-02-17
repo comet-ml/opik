@@ -152,7 +152,9 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
             )
 
             if opik_usage is None:
-                opik_usage = llm_usage.build_opik_usage_from_unknown_provider(usage=usage)
+                opik_usage = llm_usage.build_opik_usage_from_unknown_provider(
+                    usage=usage
+                )
 
         return arguments_helpers.EndSpanParameters(
             output=output_data,
@@ -170,7 +172,6 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Optional[Any]:
         return None
-
 
 
 def _convert_response_to_dict(response: Any) -> Dict[str, Any]:

@@ -4,8 +4,12 @@ export const trackOpenRouter = <SDKType extends object>(
   sdk: SDKType,
   opikConfig?: Parameters<typeof trackOpenAI>[1]
 ): SDKType & { flush: () => Promise<void> } => {
-  return trackOpenAI(sdk, {
+  const resolvedConfig = {
     ...opikConfig,
     provider: "openrouter",
-  }) as SDKType & { flush: () => Promise<void> };
+  } as Parameters<typeof trackOpenAI>[1] & { provider?: string };
+
+  return trackOpenAI(sdk, resolvedConfig) as SDKType & {
+    flush: () => Promise<void>;
+  };
 };
