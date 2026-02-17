@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const withTracingMock = vi.fn();
+const withTracingMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/decorators", () => ({
   withTracing: withTracingMock,
