@@ -1,14 +1,16 @@
 import usePluginsStore from "@/store/PluginsStore";
-import ExperimentsGuardCore from "./ExperimentsGuard";
+import PageGuard from "@/components/layout/PageGuard/PageGuard";
 
-const ExperimentsGuardEntry = () => {
-  const ExperimentsGuard = usePluginsStore((state) => state.ExperimentsGuard);
+const ExperimentsGuard = () => {
+  const ExperimentsGuardPlugin = usePluginsStore(
+    (state) => state.ExperimentsGuard,
+  );
 
-  if (ExperimentsGuard) {
-    return <ExperimentsGuard />;
+  if (ExperimentsGuardPlugin) {
+    return <ExperimentsGuardPlugin />;
   }
 
-  return <ExperimentsGuardCore canViewExperiments />;
+  return <PageGuard canViewPage />;
 };
 
-export default ExperimentsGuardEntry;
+export default ExperimentsGuard;

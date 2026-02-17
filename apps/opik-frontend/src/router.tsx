@@ -10,6 +10,7 @@ import {
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsGuard from "@/components/layout/ExperimentsGuard";
+import DashboardsGuard from "@/components/layout/DashboardsGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
@@ -162,6 +163,7 @@ const homeRouteNew = createRoute({
 const dashboardsRoute = createRoute({
   path: "/dashboards",
   getParentRoute: () => workspaceRoute,
+  component: DashboardsGuard,
   staticData: {
     title: "Dashboards",
   },
