@@ -458,6 +458,51 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             expected=EXCPECTED_TRACE_TREE, actual=trace_trees[0]
         )
 
+    def test_trace_trees_skips_orphan_span_trace_links(self, capture_log):
+        trace_message = messages.CreateTraceMessage(
+            trace_id="trace_1",
+            project_name="test_project",
+            name="test_trace",
+            start_time=self.test_datetime,
+            end_time=self.later_datetime,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.later_datetime,
+        )
+        orphan_span_message = messages.CreateSpanMessage(
+            span_id="span_orphan",
+            trace_id="missing_trace_id",
+            project_name="test_project",
+            parent_span_id=None,
+            name="orphan_span",
+            start_time=self.test_datetime,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+        )
+
+        self.processor.process(trace_message)
+        self.processor.process(orphan_span_message)
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].id == "trace_1"
+        assert "orphan span-to-trace link" in capture_log.text
+
     def test_trace_trees_with_nested_span_hierarchy(self):
         trace_message = messages.CreateTraceMessage(
             trace_id="trace_1",
