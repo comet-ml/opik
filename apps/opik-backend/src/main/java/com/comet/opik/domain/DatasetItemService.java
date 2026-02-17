@@ -461,6 +461,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     baseVersionId,
                                                     null, // No tags
                                                     "Updated 1 item",
+                                                    null, null, false,
                                                     null, // No batch group ID
                                                     workspaceId,
                                                     userName);
@@ -763,6 +764,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 baseVersionId,
                 null, // No tags
                 changeDescription,
+                null, null, false,
                 null, // No batch group ID
                 workspaceId,
                 userName);
@@ -1107,6 +1109,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, null, false,
                                         batchGroupId, // Pass batch group ID
                                         workspaceId,
                                         userName);
@@ -1245,6 +1248,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             null, // No change description (auto-generated)
+                            null, null, false,
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -1524,6 +1528,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             baseVersionId,
                                             changes.tags(),
                                             changes.changeDescription(),
+                                            changes.evaluators(), changes.executionPolicy(),
+                                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
                                             null,
                                             workspaceId,
                                             userName);
@@ -1898,6 +1904,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No base version for first version
                             null, // No tags
                             changeDescription,
+                            null, null, false,
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -1984,6 +1991,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, null, false,
                                         batchGroupId, // Include batch group ID if provided
                                         workspaceId,
                                         userName);

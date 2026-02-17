@@ -14,6 +14,7 @@ import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
@@ -1386,6 +1387,32 @@ class DatasetsResourceTest {
                     .build();
 
             createAndAssert(dataset);
+        }
+
+        @Test
+        @DisplayName("when type is evaluation_suite, then create and return type in response")
+        void create__whenTypeIsEvaluationSuite__thenReturnTypeInResponse() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            var fetched = getAndAssertEquals(id, dataset, TEST_WORKSPACE, API_KEY);
+            assertThat(fetched.type()).isEqualTo(DatasetType.EVALUATION_SUITE);
+        }
+
+        @Test
+        @DisplayName("when type is null, then default to dataset")
+        void create__whenTypeIsNull__thenDefaultToDataset() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(null)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            var fetched = datasetResourceClient.getDatasetById(id, API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.type()).isEqualTo(DatasetType.DATASET);
         }
 
         private Stream<Arguments> invalidDataset() {
