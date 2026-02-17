@@ -1149,50 +1149,52 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  // Handler to update combined order for Feedback scores and Metadata main column
-  const handleCombinedOrderChange = useCallback(
+  const handleMetadataOrderChange = useCallback(
     (newOrder: string[]) => {
-      // Split the combined order back into scores and metadata orders
-      const scoresIds = scoresColumnsData.map((col) => col.id);
-      const metadataIds = metadataMainColumnData.map((col) => col.id);
+      const mainIds = metadataMainColumnData.map((col) => col.id);
+      const fieldIds = metadataColumnsData.map((col) => col.id);
 
-      const newScoresOrder = newOrder.filter((id) => scoresIds.includes(id));
-      const newMetadataOrder = newOrder.filter((id) =>
-        metadataIds.includes(id),
-      );
-
-      setScoresColumnsOrder(newScoresOrder);
-      setMetadataMainColumnOrder(newMetadataOrder);
+      setMetadataMainColumnOrder(newOrder.filter((id) => mainIds.includes(id)));
+      setMetadataColumnsOrder(newOrder.filter((id) => fieldIds.includes(id)));
     },
     [
-      scoresColumnsData,
       metadataMainColumnData,
-      setScoresColumnsOrder,
+      metadataColumnsData,
       setMetadataMainColumnOrder,
+      setMetadataColumnsOrder,
     ],
   );
 
   const columnSections = useMemo(() => {
-    // Combine Feedback scores and Metadata main column into one section
-    const combinedColumns = [...scoresColumnsData, ...metadataMainColumnData];
-    const combinedOrder = [...scoresColumnsOrder, ...metadataMainColumnOrder];
-
-    const sections = [
+    const sections: {
+      title: string;
+      columns: typeof scoresColumnsData;
+      order: string[];
+      onOrderChange: (order: string[]) => void;
+    }[] = [
       {
         title: "Feedback scores",
-        columns: combinedColumns,
-        order: combinedOrder,
-        onOrderChange: handleCombinedOrderChange,
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
       },
     ];
 
-    // Add Metadata fields section if there are metadata columns
-    if (metadataColumnsData.length > 0) {
+    const allMetadataColumns = [
+      ...metadataMainColumnData,
+      ...metadataColumnsData,
+    ];
+    const allMetadataOrder = [
+      ...metadataMainColumnOrder,
+      ...metadataColumnsOrder,
+    ];
+
+    if (allMetadataColumns.length > 0) {
       sections.push({
-        title: "Metadata fields",
-        columns: metadataColumnsData,
-        order: metadataColumnsOrder,
-        onOrderChange: setMetadataColumnsOrder,
+        title: "Metadata",
+        columns: allMetadataColumns,
+        order: allMetadataOrder,
+        onOrderChange: handleMetadataOrderChange,
       });
     }
 
@@ -1200,12 +1202,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [
     scoresColumnsData,
     scoresColumnsOrder,
+    setScoresColumnsOrder,
     metadataMainColumnData,
     metadataMainColumnOrder,
-    handleCombinedOrderChange,
     metadataColumnsData,
     metadataColumnsOrder,
-    setMetadataColumnsOrder,
+    handleMetadataOrderChange,
   ]);
 
   return (
