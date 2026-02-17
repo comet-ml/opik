@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import logging
 import os
+import warnings
 from typing import Any
 import json
 
@@ -25,6 +26,30 @@ VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 # Store configured state to prevent reconfiguration
 _logging_configured = False
 _configured_level: int | None = None
+
+
+def _configure_warning_filters() -> None:
+    """Configure warning filters for noisy third-party libraries."""
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"You are sending unauthenticated requests.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Some weights of the model checkpoint.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Some weights of the model checkpoint were not used when initializing.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Unused arguments passed to model\.forward.*",
+    )
 
 
 def _coerce_level(level: int | str) -> int:
@@ -111,6 +136,16 @@ def setup_logging(
         "asyncio",
     ):
         logging.getLogger(name).setLevel(logging.WARNING)
+    for name in (
+        "transformers",
+        "huggingface_hub",
+        "datasets",
+        "bert_score",
+        "tensorflow",
+        "torch",
+        "torchvision",
+    ):
+        logging.getLogger(name).setLevel(logging.ERROR)
 
     # Align Hugging Face/datasets logging style
     for name in ("datasets", "huggingface_hub"):
@@ -120,6 +155,13 @@ def setup_logging(
         hf_logger.addHandler(console_handler)
         hf_logger.setLevel(target_level)
         hf_logger.propagate = False
+    try:
+        from transformers import logging as hf_logging  # type: ignore[import-not-found]
+
+        hf_logging.set_verbosity_error()
+    except Exception:
+        pass
+    _configure_warning_filters()
 
     _logging_configured = True
     _configured_level = target_level
