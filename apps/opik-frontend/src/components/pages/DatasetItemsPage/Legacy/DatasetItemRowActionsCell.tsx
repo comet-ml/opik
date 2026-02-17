@@ -66,6 +66,7 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
               setOpen(1);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
+            variant="destructive"
           >
             <Trash className="mr-2 size-4" />
             Delete

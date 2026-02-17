@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, useEffect } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -25,7 +25,7 @@ import RestoreVersionDialog from "./RestoreVersionDialog";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
-import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
+import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -43,21 +43,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
-  const promptUpdateMutation = usePromptUpdateMutation();
-
-  const [localTags, setLocalTags] = useState<string[]>(prompt?.tags || []);
-
-  useEffect(() => {
-    setLocalTags(prompt?.tags || []);
-  }, [prompt?.tags]);
-
-  const updateTags = (tags: string[]) => {
-    if (!prompt) return;
-    setLocalTags(tags);
-    promptUpdateMutation.mutate({
-      prompt: { ...prompt, id: prompt.id, tags },
-    });
-  };
+  const updateVersionsMutation = usePromptVersionsUpdateMutation();
 
   const { data } = usePromptVersionsById(
     {
@@ -101,6 +87,20 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   const displayText = activeVersion?.template || "";
 
+  const versionTags = activeVersion?.tags || [];
+
+  const updateVersionTags = useCallback(
+    (tags: string[]) => {
+      if (!activeVersion?.id) return;
+      updateVersionsMutation.mutate({
+        versionIds: [activeVersion.id],
+        tags,
+        mergeTags: false,
+      });
+    },
+    [activeVersion?.id, updateVersionsMutation],
+  );
+
   const isChatPrompt = useMemo(() => {
     return prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   }, [prompt?.template_structure]);
@@ -140,7 +140,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
           {isChatPrompt ? (
-            <ChatPromptView template={activeVersion?.template || ""} />
+            <ChatPromptView template={displayText} />
           ) : (
             <TextPromptView template={displayText} />
           )}
@@ -168,14 +168,16 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           )}
 
           <TagListRenderer
-            tags={localTags}
-            onAddTag={(newTag) => {
-              updateTags([...localTags, newTag]);
-            }}
-            onDeleteTag={(tagToDelete) => {
-              updateTags(localTags.filter((t) => t !== tagToDelete));
-            }}
+            tags={versionTags}
+            onAddTag={(newTag) => updateVersionTags([...versionTags, newTag])}
+            onDeleteTag={(tag) =>
+              updateVersionTags(versionTags.filter((t) => t !== tag))
+            }
             align="start"
+            tooltipText="Version tags list"
+            placeholderText="New version tag"
+            addButtonText="Add version tag"
+            tagType="version tag"
           />
         </div>
         <div className="w-[380px] shrink-0">
