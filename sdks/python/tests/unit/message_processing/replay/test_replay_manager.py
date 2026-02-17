@@ -1,7 +1,7 @@
 import datetime
 import threading
 import time
-from typing import Generator, List, Tuple
+from typing import Generator, List, Tuple, Optional
 from unittest import mock
 
 import pytest
@@ -12,7 +12,7 @@ from opik.message_processing.replay import db_manager, replay_manager
 
 
 def _create_trace_message(
-    message_id: int, trace_id: str = "trace-1"
+    message_id: Optional[int], trace_id: str = "trace-1"
 ) -> messages.CreateTraceMessage:
     msg = messages.CreateTraceMessage(
         trace_id=trace_id,
@@ -178,6 +178,21 @@ class TestRegisterMessage:
         db_msg = manager.db_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.id == 1
+        assert db_msg.status == db_manager.MessageStatus.registered
+
+    def test_register_message__automatically_set_message_id(
+        self, manager: replay_manager.ReplayManager
+    ):
+        msg = _create_trace_message(message_id=None)
+        manager.register_message(
+            msg
+        )  # this will set msg.message_id to a particular value
+
+        assert msg.message_id is not None
+
+        db_msg = manager.db_manager.get_db_message(msg.message_id)
+        assert db_msg is not None
+        assert db_msg.id == msg.message_id
         assert db_msg.status == db_manager.MessageStatus.registered
 
 

@@ -63,6 +63,7 @@ class ReplayManager(threading.Thread):
         self._replay_callback: Optional[types.ReplayCallback] = None
         self._tick_interval_seconds = tick_interval_seconds
         self._next_tick_time = time.time() + self._tick_interval_seconds
+        self._next_message_id = 0
 
     def start(self) -> None:
         self._check_replay_callback()
@@ -87,7 +88,12 @@ class ReplayManager(threading.Thread):
 
     def register_message(self, message: messages.BaseMessage) -> None:
         """Registers a message to be replayed if the connection is lost."""
-        _check_message_id(message.message_id)
+        with self._replay_lock:
+            # set message ID if not set yet
+            if message.message_id is None:
+                message.message_id = self._next_message_id
+                self._next_message_id += 1
+
         try:
             self._db_manager.register_message(message)
         except Exception as ex:
