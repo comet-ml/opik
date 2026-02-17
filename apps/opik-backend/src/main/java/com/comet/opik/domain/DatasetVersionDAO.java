@@ -57,13 +57,14 @@ public interface DatasetVersionDAO {
                 :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
                 :version.changeDescription, :version.metadata,
                 COALESCE(:version.evaluators, base.evaluators),
-                COALESCE(:version.executionPolicy, base.execution_policy),
+                IF(:clear_execution_policy, NULL, COALESCE(:version.executionPolicy, base.execution_policy)),
                 :version.createdBy, :version.lastUpdatedBy, :workspace_id
             FROM (SELECT 1) AS dummy
             LEFT JOIN dataset_versions base ON base.id = :base_version_id AND base.workspace_id = :workspace_id
             """)
     void insertWithBaseVersion(@BindMethods("version") DatasetVersion version,
             @Bind("base_version_id") UUID baseVersionId,
+            @Bind("clear_execution_policy") boolean clearExecutionPolicy,
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""

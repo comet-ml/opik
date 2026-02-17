@@ -49,7 +49,7 @@ public class EvaluatorItemListColumnMapper extends AbstractArgumentFactory<List<
     }
 
     private List<EvaluatorItem> performMapping(String json) {
-        if (StringUtils.isBlank(json)) {
+        if (StringUtils.isBlank(json) || EvaluatorItem.EMPTY_LIST_JSON.equals(json)) {
             return null;
         }
         return Optional.of(json)

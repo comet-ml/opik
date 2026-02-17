@@ -41,7 +41,9 @@ public record DatasetItemChanges(
 
         @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional default evaluators for items in this version") List<@Valid EvaluatorItem> evaluators,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional default execution policy for items in this version") ExecutionPolicy executionPolicy) {
+        @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional default execution policy for items in this version") ExecutionPolicy executionPolicy,
+
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "When true, clears the version-level execution policy (removes inherited policy from base version)") Boolean clearExecutionPolicy) {
 
     public static class View {
         public static class Write {

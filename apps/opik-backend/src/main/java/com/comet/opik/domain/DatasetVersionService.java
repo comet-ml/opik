@@ -201,6 +201,7 @@ public interface DatasetVersionService {
     DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
             UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
+            boolean clearExecutionPolicy,
             UUID batchGroupId, String workspaceId, String userName);
 
     /**
@@ -331,6 +332,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
             List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
+            boolean clearExecutionPolicy,
             UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
@@ -373,7 +375,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             EntityConstraintHandler.handle(() -> {
                 if (baseVersionId != null) {
-                    datasetVersionDAO.insertWithBaseVersion(version, baseVersionId, workspaceId);
+                    datasetVersionDAO.insertWithBaseVersion(version, baseVersionId, clearExecutionPolicy, workspaceId);
                 } else {
                     datasetVersionDAO.insert(version, workspaceId);
                 }
