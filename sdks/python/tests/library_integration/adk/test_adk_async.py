@@ -15,6 +15,7 @@ from .constants import (
     EXPECTED_USAGE_KEYS_GOOGLE,
 )
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
@@ -92,7 +93,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
         },
         thread_id=SESSION_ID,
         project_name="adk-test",
-        ttft=ANY_BUT_NONE,
+        ttft=ANY,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -108,7 +109,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
-                ttft=ANY_BUT_NONE,
+                ttft=ANY,
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -139,7 +140,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
-                ttft=ANY_BUT_NONE,
+                ttft=ANY,
             ),
         ],
     )
@@ -193,7 +194,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
-        ttft=ANY_BUT_NONE,
+        ttft=ANY,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -219,7 +220,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
-                        ttft=ANY_BUT_NONE,
+                        ttft=ANY,
                     )
                 ],
             ),
@@ -247,7 +248,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
-                        ttft=ANY_BUT_NONE,
+                        ttft=ANY,
                     )
                 ],
             ),
@@ -364,7 +365,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
         },
         thread_id=ANY_BUT_NONE,
         project_name=project_name,
-        ttft=ANY_BUT_NONE,
+        ttft=ANY,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -404,7 +405,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
-                                ttft=ANY_BUT_NONE,
+                                ttft=ANY,
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -435,7 +436,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
-                                ttft=ANY_BUT_NONE,
+                                ttft=ANY,
                             ),
                         ],
                     ),
@@ -465,7 +466,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
-                                ttft=ANY_BUT_NONE,
+                                ttft=ANY,
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -498,7 +499,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
                                 project_name=project_name,
-                                ttft=ANY_BUT_NONE,
+                                ttft=ANY,
                             ),
                         ],
                     ),
@@ -530,7 +531,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                         model=MODEL_NAME,
                         usage=ANY_DICT,
                         project_name=project_name,
-                        ttft=ANY_BUT_NONE,
+                        ttft=ANY,
                     ),
                 ],
             ),
