@@ -1204,6 +1204,9 @@ redirects:
   - source: "/docs/opik/tracing/integrations/openai_agents"
     destination: "/docs/opik/integrations/openai_agents"
     permanent: true
+  - source: "/docs/opik/integrations/openrouter-gateway"
+    destination: "/docs/opik/integrations/openrouter"
+    permanent: true
   - source: "/docs/opik/tracing/integrations/openrouter"
     destination: "/docs/opik/integrations/openrouter"
     permanent: true
