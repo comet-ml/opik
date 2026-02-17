@@ -95,12 +95,11 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  COLUMN_PROJECT_ID,
-  "created_at",
-  "duration.p50",
   "trace_count",
+  "duration.p50",
+  "total_estimated_cost_avg",
   COLUMN_FEEDBACK_SCORES_ID,
-  COLUMN_COMMENTS_ID,
+  "created_at",
 ];
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
@@ -222,7 +221,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -292,7 +291,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "total_estimated_cost_avg",
-        label: "Cost per trace (avg.)",
+        label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
         aggregatedCell: CostCell.Aggregation as never,
