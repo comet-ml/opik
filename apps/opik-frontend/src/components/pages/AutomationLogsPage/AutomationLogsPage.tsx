@@ -22,7 +22,7 @@ import {
 } from "@/types/automations";
 import { convertColumnDataToColumn } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 
 const generateEvaluatorRuleLogItemKey = (
   item: EvaluatorRuleLogItem,
@@ -35,8 +35,8 @@ const BASE_COLUMNS: ColumnData<EvaluatorRuleLogItemWithId>[] = [
   {
     id: "timestamp",
     label: "Timestamp",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => formatDate(row.timestamp),
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
     size: 180,
   },
   {
