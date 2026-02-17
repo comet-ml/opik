@@ -14,7 +14,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
-import java.util.Optional;
 
 public class EvaluatorItemListColumnMapper extends AbstractArgumentFactory<List<EvaluatorItem>>
         implements
@@ -52,8 +51,6 @@ public class EvaluatorItemListColumnMapper extends AbstractArgumentFactory<List<
         if (StringUtils.isBlank(json) || EvaluatorItem.EMPTY_LIST_JSON.equals(json)) {
             return null;
         }
-        return Optional.of(json)
-                .map(value -> JsonUtils.readValue(value, TYPE_REFERENCE))
-                .orElse(null);
+        return JsonUtils.readValue(json, TYPE_REFERENCE);
     }
 }

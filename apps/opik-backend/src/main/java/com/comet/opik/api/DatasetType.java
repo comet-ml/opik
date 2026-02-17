@@ -2,12 +2,10 @@ package com.comet.opik.api;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 
-@Getter
 @RequiredArgsConstructor
 public enum DatasetType {
     DATASET("dataset"),
@@ -19,8 +17,9 @@ public enum DatasetType {
     @JsonCreator
     public static DatasetType fromString(String value) {
         return Arrays.stream(values())
-                .filter(type -> type.value.equalsIgnoreCase(value))
+                .filter(type -> type.value.equals(value))
                 .findFirst()
-                .orElse(DATASET);
+                .orElseThrow(
+                        () -> new IllegalArgumentException("Unknown dataset type '%s'".formatted(value)));
     }
 }
