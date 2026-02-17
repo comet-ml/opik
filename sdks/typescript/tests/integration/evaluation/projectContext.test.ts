@@ -64,7 +64,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
       // Run evaluation WITH explicit client and projectName
       const result = await evaluate({
         dataset,
-        task: async (item) => ({ answer: "4" }),
+        task: async (_item) => ({ answer: "4" }),
         scoringMetrics: [],
         prompts: [prompt],
         experimentName: `test-experiment-explicit-${Date.now()}`,
@@ -104,7 +104,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
         // Should automatically use the client from dataset
         const result = await evaluate({
           dataset,
-          task: async (item) => ({ answer: "Yes" }),
+          task: async (_item) => ({ answer: "Yes" }),
           scoringMetrics: [],
           experimentName: `test-experiment-implicit-${Date.now()}`,
           // NOT passing client or projectName - should use dataset's client
@@ -139,7 +139,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
         // Should use client from prompts parameter
         const result = await evaluate({
           dataset,
-          task: async (item) => ({ answer: "Yes" }),
+          task: async (_item) => ({ answer: "Yes" }),
           scoringMetrics: [],
           prompts: [prompt],
           experimentName: `test-experiment-prompt-fallback-${Date.now()}`,
@@ -164,7 +164,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
 
       const result = await evaluate({
         dataset,
-        task: async (item) => ({ answer: "Yes" }),
+        task: async (_item) => ({ answer: "Yes" }),
         scoringMetrics: [],
         experimentName: `test-experiment-trace-${Date.now()}`,
         client,
