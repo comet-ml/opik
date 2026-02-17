@@ -60,9 +60,13 @@ export const migrateColumnsOrder = (
   const oldData = localStorage.getItem(oldStorageKey);
 
   if (oldData !== null) {
-    const parsed = JSON.parse(oldData);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    try {
+      const parsed = JSON.parse(oldData);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // Ignore malformed JSON and fall back to defaultOrder
     }
   }
 
