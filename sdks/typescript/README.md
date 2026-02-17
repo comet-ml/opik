@@ -111,6 +111,7 @@ Opik provides seamless integrations with popular AI frameworks and tools. Check 
 - **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
 - **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
 - **Google Gemini** - [`opik-gemini`](https://www.npmjs.com/package/opik-gemini)
+- **OpenRouter** - [`opik-openrouter`](https://www.npmjs.com/package/opik-openrouter)
 
 ## Contributing
 

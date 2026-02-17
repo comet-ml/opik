@@ -9,19 +9,90 @@ og:title: Integrate OpenRouter with Opik Easily
 title: Observability for OpenRouter with Opik
 ---
 
-This guide explains how to integrate Opik with OpenRouter using the OpenAI SDK. OpenRouter provides a unified API for accessing hundreds of AI models through a single OpenAI-compatible interface.
+This guide explains how to integrate Opik with OpenRouter, including a dedicated OpenRouter integration and the existing OpenAI-compatible approach.
 
-## Getting started
+OpenRouter is now supported via both:
 
-First, ensure you have both `opik` and `openai` packages installed:
+- The dedicated Opik wrapper for OpenRouter SDK clients (`track_openrouter` / `trackOpenRouter`)
+- The OpenAI-compatible wrapper (`track_openai`) when using an OpenAI client pointed at OpenRouter
+
+## Option 1: OpenRouter SDK integration (recommended)
+
+If your application already uses the OpenRouter SDK, you can use Opik's dedicated integration wrappers.
+
+<Tabs>
+<Tab value="Python" title="Python">
+
+Install the dependencies:
+
+```bash
+pip install opik
+```
+
+You'll need an OpenRouter API key from [OpenRouter](https://openrouter.ai/).
+
+Tracking your calls:
+
+```python
+from opik.integrations.openrouter import track_openrouter
+
+# Replace with your initialized OpenRouter SDK client instance.
+openrouter_client = get_openrouter_client(api_key="YOUR_OPENROUTER_API_KEY")
+client = track_openrouter(openrouter_client)
+
+# Call OpenRouter chat endpoint through the tracked client
+response = client.chat.send(
+    model="openai/gpt-4",
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+)
+
+print(response)
+```
+
+:::note
+When using `track_openrouter`, Opik provider is stamped as `openrouter`.
+:::
+
+</Tab>
+<Tab value="TypeScript" title="TypeScript">
+
+Install the dependencies:
+
+```bash
+npm install opik-openrouter opik @openrouter/sdk
+```
+
+Use `trackOpenRouter` when working with the OpenRouter SDK client:
+
+```ts
+import { OpenRouter } from "@openrouter/sdk";
+import { trackOpenRouter } from "opik-openrouter";
+
+const openrouterClient = new OpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const tracked = trackOpenRouter(openrouterClient);
+const response = await tracked.chat.send({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+</Tab>
+</Tabs>
+
+## Option 2: OpenAI-compatible path
+
+You can still use the existing OpenAI-compatible flow when needed.
+
+<Tabs>
+<Tab value="Python" title="Python">
 
 ```bash
 pip install opik openai
 ```
-
-You'll also need an OpenRouter API key which you can get from [OpenRouter](https://openrouter.ai/).
-
-## Tracking OpenRouter API calls
 
 ```python
 from opik.integrations.openai import track_openai
@@ -34,24 +105,39 @@ client = OpenAI(
 )
 client = track_openai(client)
 
-# Optional headers for OpenRouter leaderboard
-headers = {
-    "HTTP-Referer": "YOUR_SITE_URL",  # Optional. Site URL for rankings
-    "X-Title": "YOUR_SITE_NAME"  # Optional. Site title for rankings
-}
-
 response = client.chat.completions.create(
-    model="openai/gpt-4",  # You can use any model available on OpenRouter
-    extra_headers=headers,
-    messages=[
-        {"role": "user", "content": "Hello, world!"}
-    ],
-    temperature=0.7,
-    max_tokens=100
+    model="openai/gpt-4",
+    messages=[{"role": "user", "content": "Hello, world!"}],
 )
 
 print(response.choices[0].message.content)
 ```
+
+</Tab>
+<Tab value="TypeScript" title="TypeScript">
+
+```bash
+npm install opik-openai openai
+```
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
+});
+const trackedOpenAI = trackOpenAI(openai);
+
+const response = await trackedOpenAI.chat.completions.create({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+</Tab>
+</Tabs>
 
 ## Available Models
 
@@ -66,7 +152,16 @@ You can find the complete list of available models in the [OpenRouter documentat
 
 ## Supported Methods
 
-OpenRouter supports the following methods:
+### OpenRouter SDK (`track_openrouter` / `trackOpenRouter`)
+
+The dedicated OpenRouter integrations track:
+
+- `chat.send`
+- `chat.send_async`
+
+### OpenAI-compatible path
+
+When using the OpenAI-compatible path, OpenRouter requests are tracked through `track_openai` / `trackOpenAI`.
 
 ### Chat Completions
 
