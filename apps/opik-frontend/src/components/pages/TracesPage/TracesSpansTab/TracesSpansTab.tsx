@@ -52,11 +52,7 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import {
-  convertColumnDataToColumn,
-  migrateColumnsOrder,
-  migrateSelectedColumns,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateColumnsOrder } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
@@ -278,7 +274,7 @@ const DEFAULT_SPANS_ORDER: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
-const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
+const SELECTED_COLUMNS_KEY_V3_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v3`;
 const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
 const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_ORDER_V2_KEY_SUFFIX = `${COLUMNS_ORDER_KEY_SUFFIX}-v2`;
@@ -507,15 +503,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${type}-${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
+    `${type}-${SELECTED_COLUMNS_KEY_V3_SUFFIX}`,
     {
-      defaultValue: migrateSelectedColumns(
-        `${type}-${SELECTED_COLUMNS_KEY_SUFFIX}`,
+      defaultValue:
         type === TRACE_DATA_TYPE.traces
           ? DEFAULT_TRACES_COLUMNS
           : DEFAULT_SPANS_COLUMNS,
-        [COLUMN_ID_ID, "start_time"],
-      ),
     },
   );
 
