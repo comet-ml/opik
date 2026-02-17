@@ -361,6 +361,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.contentSecurityPolicy.script-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[1] | string | `"'unsafe-inline'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[2] | string | `"'unsafe-eval'"` |  |
+| component.frontend.contentSecurityPolicy.script-src[3] | string | `"https://www.googletagmanager.com"` |  |
 | component.frontend.contentSecurityPolicy.style-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.style-src[1] | string | `"'unsafe-inline'"` |  |
 | component.frontend.contentSecurityPolicy.style-src[2] | string | `"https://fonts.googleapis.com"` |  |
