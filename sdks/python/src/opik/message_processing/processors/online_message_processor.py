@@ -70,7 +70,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
-        # register a message with the reply manager
+        # register a message with the replay manager
         self._replay_manager.register_message(message)
 
         should_unregister_message = True
