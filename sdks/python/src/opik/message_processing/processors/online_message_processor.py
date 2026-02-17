@@ -72,23 +72,22 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
-        # register a message with the replay manager
-        if self._replay_manager.has_server_connection:
-            self._replay_manager.register_message(message)
-        else:
-            # register a message as failed and skip sending it to the backend
-            self._replay_manager.register_message(
-                message, status=db_manager.MessageStatus.failed
-            )
-            return
-
+        should_unregister_message = self._replay_manager.has_server_connection
         if isinstance(message, messages.CreateAttachmentMessage):
             # it would be unregistered by callback when the upload is finished
             should_unregister_message = False
-        else:
-            should_unregister_message = True
+
         try:
-            handler(message)
+            if self._replay_manager.has_server_connection:
+                # register a message with the replay manager and process it
+                self._replay_manager.register_message(message)
+
+                handler(message)
+            else:
+                # register a message as failed and skip sending it to the backend
+                self._replay_manager.register_message(
+                    message, status=db_manager.MessageStatus.failed
+                )
 
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
@@ -351,8 +350,8 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         LOGGER.debug("Processing create attachment message")
         self._file_uploader.upload(
             message,
-            on_upload_failed=self._on_upload_failed_callback(message.message_id),
-            on_upload_success=self._on_upload_success_callback(message.message_id),
+            on_upload_failed=self._on_upload_failed_callback(message.message_id),  # type: ignore
+            on_upload_success=self._on_upload_success_callback(message.message_id),  # type: ignore
         )
         LOGGER.debug("Uploaded attachment with %s", message.file_name)
 
