@@ -63,18 +63,6 @@ def make_multi_metric_objective() -> MultiMetricObjective:
     )
 
 
-# Small dataset samples for a fast optimization run.
-train_dataset = cnn_dailymail(
-    split="train",
-    count=N_SAMPLES,
-    test_mode=True,
-)
-validation_dataset = cnn_dailymail(
-    split="validation",
-    count=N_SAMPLES,
-    test_mode=True,
-)
-
 prompt = ChatPrompt(
     system="Summarize the article clearly in 2-4 concise sentences.",
     user="Article: {article}",
@@ -91,7 +79,35 @@ optimizer = HRPO(
 multi_metric_objective = make_multi_metric_objective()
 
 
-def run_example() -> None:
+def _build_default_train_dataset():
+    """Build the training dataset slice used for prompt updates."""
+    return cnn_dailymail(
+        split="train",
+        count=N_SAMPLES,
+        test_mode=True,
+    )
+
+
+def _build_default_validation_dataset():
+    """Build a validation dataset slice for true out-of-sample scoring."""
+    return cnn_dailymail(
+        split="validation",
+        count=N_SAMPLES,
+        test_mode=True,
+    )
+
+
+def run_example(validation_dataset_override=None) -> None:
+    """Run optimization with explicit validation scoring.
+
+    If `validation_dataset_override` is not provided, this example automatically
+    loads a validation split and uses it for trial scoring.
+    """
+    train_dataset = _build_default_train_dataset()
+    validation_dataset = (
+        validation_dataset_override or _build_default_validation_dataset()
+    )
+
     result = optimizer.optimize_prompt(
         prompt=prompt,
         dataset=train_dataset,
