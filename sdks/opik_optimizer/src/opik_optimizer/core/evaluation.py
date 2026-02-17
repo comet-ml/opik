@@ -134,6 +134,12 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
 
 
 def _metric_requires_task_span(metric: MetricFunction) -> bool:
+    """Return True when the metric (or any sub-metric) needs `task_span`.
+
+    This is used to expose a `task_span` parameter on the wrapper metric's
+    `score(...)` signature so Opik routes span-based metrics through task-span
+    evaluation and injects runtime span data automatically.
+    """
     if isinstance(metric, MultiMetricObjective):
         for sub_metric in metric.metrics:
             if isinstance(sub_metric, base_metric.BaseMetric):
@@ -440,6 +446,11 @@ def _average_finite_scores(
 def _validate_objective_scores(
     scores: list[score_result.ScoreResult], *, objective_metric_name: str
 ) -> None:
+    """Validate objective score availability and log soft-failure warnings.
+
+    The optimizer keeps backward-compatible behavior: missing/failed objective
+    scores are logged and the caller can fall back to default score handling.
+    """
     if not scores:
         logger.warning(
             "Objective metric '%s' produced no scores; falling back to 0.0.",
