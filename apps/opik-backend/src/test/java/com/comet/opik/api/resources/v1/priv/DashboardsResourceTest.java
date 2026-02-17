@@ -252,24 +252,6 @@ class DashboardsResourceTest {
     @DisplayName("Find dashboards")
     class FindDashboards {
 
-        //Lyosha: Will be merged after FE
-        //        @Test
-        //        @DisplayName("Find dashboards passes required permissions to auth endpoint")
-        //        void findDashboardsPassesRequiredPermissionsToAuthEndpoint() {
-        //            String apiKey = UUID.randomUUID().toString();
-        //            String workspaceName = "test-workspace-" + UUID.randomUUID();
-        //            String workspaceId = UUID.randomUUID().toString();
-        //            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-        //
-        //            wireMock.server().resetRequests();
-        //            dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
-        //
-        //            wireMock.server().verify(
-        //                    postRequestedFor(urlPathEqualTo("/opik/auth"))
-        //                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
-        //                                    equalTo(WorkspaceUserPermission.DASHBOARD_VIEW.getValue()))));
-        //        }
-
         @Test
         @DisplayName("Find dashboards with default parameters")
         void findDashboardsWithDefaultParameters() {

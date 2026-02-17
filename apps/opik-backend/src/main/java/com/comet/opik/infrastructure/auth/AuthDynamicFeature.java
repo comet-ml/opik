@@ -6,6 +6,8 @@ import jakarta.ws.rs.container.DynamicFeature;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.FeatureContext;
 import jakarta.ws.rs.ext.Provider;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 
@@ -14,16 +16,12 @@ import java.util.List;
  * Has {@link ResourceInfo} accessible in cases when filter runs outside the JAX-RS container (e.g. filter unit tests)
  */
 @Provider
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthDynamicFeature implements DynamicFeature {
 
     public static final String REQUIRED_PERMISSIONS_PROPERTY = "auth.requiredPermissions";
 
-    private final AuthFilter authFilter;
-
-    @Inject
-    public AuthDynamicFeature(AuthFilter authFilter) {
-        this.authFilter = authFilter;
-    }
+    private final @NonNull AuthFilter authFilter;
 
     @Override
     public void configure(ResourceInfo resourceInfo, FeatureContext context) {

@@ -102,7 +102,6 @@ public class DashboardsResource {
     }
 
     @GET
-    //    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW) //Lyosha: Will be merged after FE
     @Operation(operationId = "findDashboards", summary = "Find dashboards", description = "Find dashboards in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Dashboard page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })

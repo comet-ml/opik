@@ -2,10 +2,13 @@ package com.comet.opik.infrastructure.auth;
 
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RBatchReactive;
+import org.redisson.api.RBucketsReactive;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
@@ -26,8 +29,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 class AuthCredentialsCacheService implements CacheService {
 
-    private static final String USER_ACCESS_KEY_FORMAT = "authV2-%s-%s-%s";
-    private static final String WORKSPACE_METADATA_KEY_FORMAT = "authV2-ws-%s";
+    private static final String USER_ACCESS_KEY_FORMAT = "authV3-%s-%s-%s";
+    private static final String WORKSPACE_METADATA_KEY_FORMAT = "authV3-ws-%s";
 
     private static final String WORKSPACE_ID_KEY = "workspaceId";
     private static final String QUOTAS_KEY = "quotas";
@@ -60,23 +63,28 @@ class AuthCredentialsCacheService implements CacheService {
         return workspaceMetadataParams.getAll(WORKSPACE_MAP_FIELDS)
                 .blockOptional()
                 .filter(m -> !m.isEmpty())
-                .map(params -> new WorkspaceMetadataCache(params.get(WORKSPACE_ID_KEY), getQuotas(params)));
+                .map(params -> WorkspaceMetadataCache.builder()
+                        .workspaceId(params.get(WORKSPACE_ID_KEY))
+                        .quotas(getQuotas(params))
+                        .build());
     }
 
     /**
-     * Fetches access entries per permission in parallel, verifies all are present and returns the username
+     * Fetches access entries for all permissions in a single Redis MGET, verifies all are present and returns the username.
      */
     private Optional<String> getUserNameFromAccessCache(String apiKey, String workspaceName,
             List<String> requiredPermissions) {
         List<String> permissionKeys = getKeysForPermissions(apiKey, workspaceName, requiredPermissions);
-        var values = Flux.fromIterable(permissionKeys)
-                .flatMap(key -> redissonClient.getBucket(key).get())
-                .collectList()
-                .block();
-        if (CollectionUtils.isEmpty(values)) {
+        if (permissionKeys.isEmpty()) {
             return Optional.empty();
         }
-        List<String> userNames = values.stream()
+        RBucketsReactive buckets = redissonClient.getBuckets();
+        Map<String, Object> bucketMap = buckets.get(permissionKeys.toArray(new String[0])).block();
+        if (bucketMap == null || bucketMap.size() != permissionKeys.size()) {
+            return Optional.empty();
+        }
+        List<String> userNames = permissionKeys.stream()
+                .map(bucketMap::get)
                 .filter(Objects::nonNull)
                 .map(String::valueOf)
                 .toList();
@@ -98,17 +106,19 @@ class AuthCredentialsCacheService implements CacheService {
         List<String> permissionKeys = getKeysForPermissions(apiKey, requestWorkspaceName, requiredPermissions);
 
         Duration ttl = Duration.ofSeconds(ttlInSeconds);
-        for (String key : permissionKeys) {
-            redissonClient.getBucket(key).set(userName, ttl).block();
-        }
-
         String workspaceMetadataKey = getWorkspaceMetadataKey(requestWorkspaceName);
         Map<String, String> entry = Map.of(
                 WORKSPACE_ID_KEY, workspaceId,
                 QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(quotas).orElse(List.of())));
-        RMapReactive<String, String> workspaceMap = redissonClient.getMap(workspaceMetadataKey);
-        workspaceMap.putAll(entry).block();
-        workspaceMap.expire(ttl).block();
+
+        RBatchReactive batch = redissonClient.createBatch();
+        RMapReactive<String, String> workspaceMap = batch.getMap(workspaceMetadataKey);
+        Flux.fromIterable(permissionKeys)
+                .flatMap(key -> batch.getBucket(key).set(userName, ttl))
+                .then(workspaceMap.putAll(entry))
+                .then(workspaceMap.expire(ttl))
+                .then(batch.execute())
+                .block();
     }
 
     private List<String> getKeysForPermissions(String apiKey, String workspaceName, List<String> requiredPermissions) {
@@ -133,6 +143,7 @@ class AuthCredentialsCacheService implements CacheService {
         return JsonUtils.readCollectionValue(rawQuotas, List.class, Quota.class);
     }
 
+    @Builder(toBuilder = true)
     private record WorkspaceMetadataCache(String workspaceId, List<Quota> quotas) {
     }
 
