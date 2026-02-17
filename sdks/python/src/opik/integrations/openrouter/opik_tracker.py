@@ -16,6 +16,8 @@ from typing_extensions import override
 
 import logging
 
+from opik.types import LLMProvider
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
     @override
     def __init__(self) -> None:
         super().__init__()
-        self.provider = "openrouter"
+        self.provider = LLMProvider.OPENROUTER.value
 
     @override
     def _start_span_inputs_preprocessor(
@@ -144,7 +146,7 @@ class _OpenrouterChatTrackDecorator(base_track_decorator.BaseTrackDecorator):
         opik_usage = None
         if usage is not None:
             opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-                provider="openrouter",
+                provider=LLMProvider.OPENROUTER,
                 usage=usage,
                 logger=LOGGER,
                 error_message="Failed to log token usage from OpenRouter chat call",
