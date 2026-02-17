@@ -976,11 +976,11 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
     # Create a sampler that will reduce to 3 items
     sampler = samplers.RandomDatasetSampler(max_samples=3)
 
-    # Patch the engine's _compute_test_results_for_llm_task to capture total_items
+    # Patch the engine's _compute_test_results_with_execution_policy to capture total_items
     captured_total_items = []
 
     original_compute = (
-        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+        engine.EvaluationEngine._compute_test_results_with_execution_policy
     )
 
     def patched_compute(self, *args, **kwargs):
@@ -994,8 +994,8 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch.object(
-                evaluation.engine.engine.EvaluationEngine,
-                "_compute_test_results_for_llm_task",
+                engine.EvaluationEngine,
+                "_compute_test_results_with_execution_policy",
                 patched_compute,
             ):
                 evaluation.evaluate(
@@ -1076,7 +1076,7 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
     captured_total_items = []
 
     original_compute = (
-        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+        engine.EvaluationEngine._compute_test_results_with_execution_policy
     )
 
     def patched_compute(self, *args, **kwargs):
@@ -1090,8 +1090,8 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch.object(
-                evaluation.engine.engine.EvaluationEngine,
-                "_compute_test_results_for_llm_task",
+                engine.EvaluationEngine,
+                "_compute_test_results_with_execution_policy",
                 patched_compute,
             ):
                 evaluation.evaluate(
@@ -1165,7 +1165,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
     captured_total_items = []
 
     original_compute = (
-        evaluation.engine.engine.EvaluationEngine._compute_test_results_for_llm_task
+        engine.EvaluationEngine._compute_test_results_with_execution_policy
     )
 
     def patched_compute(self, *args, **kwargs):
@@ -1179,8 +1179,8 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch.object(
-                evaluation.engine.engine.EvaluationEngine,
-                "_compute_test_results_for_llm_task",
+                engine.EvaluationEngine,
+                "_compute_test_results_with_execution_policy",
                 patched_compute,
             ):
                 evaluation.evaluate(
