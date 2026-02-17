@@ -113,4 +113,47 @@ describe.skipIf(!shouldRunApiTests)("Dataset CRUD Integration Test", () => {
       createdDatasetNames.splice(index, 1);
     }
   });
+
+  it("should not duplicate items when updating with all item properties", async () => {
+    const testDatasetName = `test-dataset-update-${Date.now()}`;
+    const description = "temp dataset for testing add and update";
+
+    const dataset = await client.getOrCreateDataset(testDatasetName, description);
+    createdDatasetNames.push(testDatasetName);
+
+    const firstItem = {
+      eval_key: `firstItem.test_${Date.now()}`,
+      input_value: "First",
+    };
+
+    await dataset.insert([firstItem]);
+
+    const newItem = {
+      eval_key: `tempAddThenUpdateItem.test_${Date.now()}`,
+      input_value: "Hello",
+    };
+
+    await dataset.insert([newItem]);
+
+    const items = await dataset.getItems(10);
+    expect(items.length).toBe(2);
+
+    const inserted = items.find(item => item.eval_key === newItem.eval_key);
+    expect(inserted).toBeDefined();
+    const insertedId = inserted!.id;
+
+    const toUpdate = {
+      ...(inserted as object),
+      id: insertedId,
+      input_value: "Goodbye",
+    };
+
+    await dataset.update([toUpdate]);
+
+    const newItems = await dataset.getItems(10);
+    expect(newItems.length).toBe(2);
+    const updatedItem = newItems.find(item => item.id === insertedId);
+    expect(updatedItem).toBeDefined();
+    expect(updatedItem!.input_value).toBe("Goodbye");
+  });
 });
