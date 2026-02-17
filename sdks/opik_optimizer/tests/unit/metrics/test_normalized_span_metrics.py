@@ -137,6 +137,16 @@ def test_span_duration_rejects_ambiguous_target_inputs() -> None:
         SpanDuration(target=6.0, target_duration_seconds=6.0)
 
 
+def test_span_duration_preserves_legacy_positional_track_parameter() -> None:
+    metric = SpanDuration("duration", False)
+    assert metric.track is False
+
+
+def test_total_span_cost_preserves_legacy_positional_track_parameter() -> None:
+    metric = TotalSpanCost("cost", False)
+    assert metric.track is False
+
+
 def test_normalized_span_cost_missing_task_span_returns_neutral_failed() -> None:
     metric = TotalSpanCost(target=0.01, name="cost")
     result = metric.score(task_span=None)

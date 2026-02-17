@@ -26,11 +26,12 @@ class SpanDuration(base_metric.BaseMetric):
     def __init__(
         self,
         name: str = "total_span_duration",
+        track: bool = True,
+        project_name: str | None = None,
+        *,
         target: float | None = None,
         invert: bool = True,
         target_duration_seconds: float | None = None,
-        track: bool = True,
-        project_name: str | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         if target is not None and target_duration_seconds is not None:

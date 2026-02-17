@@ -32,6 +32,25 @@ def test_create_metric_class_keeps_regular_signature_for_non_span_metrics() -> N
     assert "task_span" not in inspect.signature(metric_wrapper.score).parameters
 
 
+def test_create_metric_class_forwards_task_span_to_callable_metric() -> None:
+    def span_callable_metric(
+        dataset_item: dict[str, object],
+        llm_output: str,
+        task_span: object | None = None,
+    ) -> float:
+        _ = llm_output
+        assert "task_span" in dataset_item
+        assert dataset_item["task_span"] == task_span
+        return 1.0 if task_span is not None else 0.0
+
+    metric_wrapper = evaluation._create_metric_class(span_callable_metric)
+
+    result = metric_wrapper.score(llm_output="ok", task_span={"id": "span-1"})
+    assert isinstance(result, ScoreResult)
+    assert result.value == pytest.approx(1.0)
+    assert result.scoring_failed is False
+
+
 def test_validate_objective_scores_logs_warning_on_failed_scores(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

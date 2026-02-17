@@ -172,11 +172,12 @@ class TotalSpanCost(base_metric.BaseMetric):
     def __init__(
         self,
         name: str = "total_span_cost",
+        track: bool = True,
+        project_name: str | None = None,
+        *,
         target: float | None = None,
         invert: bool = True,
         target_cost_usd: float | None = None,
-        track: bool = True,
-        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         if target is not None and target_cost_usd is not None:

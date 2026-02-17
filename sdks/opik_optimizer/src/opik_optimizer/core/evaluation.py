@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any, Literal, overload
+from typing import Any, Literal, overload, cast
 from collections.abc import Callable
 
 import inspect
@@ -86,7 +86,17 @@ def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
             dataset_item["task_span"] = task_span
 
         try:
-            metric_val = metric(dataset_item=dataset_item, llm_output=llm_output)
+            metric_callable = cast(Callable[..., Any], metric)
+            if has_task_span_parameter(metric):
+                metric_val = metric_callable(
+                    dataset_item=dataset_item,
+                    llm_output=llm_output,
+                    task_span=task_span,
+                )
+            else:
+                metric_val = metric_callable(
+                    dataset_item=dataset_item, llm_output=llm_output
+                )
             return _normalize_metric_value(metric_val, metric_name)
         except Exception as exc:
             return score_result.ScoreResult(

@@ -15,6 +15,7 @@ The optimizer maximizes the composite metric value, so all components are modele
 as "higher is better" scores before aggregation.
 """
 
+import opik
 from opik_optimizer import ChatPrompt, HRPO
 from opik_optimizer import MultiMetricObjective
 from opik_optimizer.datasets import cnn_dailymail
@@ -79,7 +80,7 @@ optimizer = HRPO(
 multi_metric_objective = make_multi_metric_objective()
 
 
-def _build_default_train_dataset():
+def _build_default_train_dataset() -> opik.Dataset:
     """Build the training dataset slice used for prompt updates."""
     return cnn_dailymail(
         split="train",
@@ -88,7 +89,7 @@ def _build_default_train_dataset():
     )
 
 
-def _build_default_validation_dataset():
+def _build_default_validation_dataset() -> opik.Dataset:
     """Build a validation dataset slice for true out-of-sample scoring."""
     return cnn_dailymail(
         split="validation",
@@ -97,7 +98,7 @@ def _build_default_validation_dataset():
     )
 
 
-def run_example(validation_dataset_override=None) -> None:
+def run_example(validation_dataset_override: opik.Dataset | None = None) -> None:
     """Run optimization with explicit validation scoring.
 
     If `validation_dataset_override` is not provided, this example automatically
