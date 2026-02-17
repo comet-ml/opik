@@ -16,7 +16,7 @@ import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import useViewQueryParam from "@/hooks/useViewQueryParam";
+import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {

@@ -1,5 +1,5 @@
 import { StringParam, useQueryParam } from "use-query-params";
-import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "../ViewSelector";
 
 const useViewQueryParam = () => {
   const [rawView = VIEW_TYPE.DETAILS, setView] = useQueryParam(

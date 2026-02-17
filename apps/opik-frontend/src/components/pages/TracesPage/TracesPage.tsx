@@ -21,7 +21,7 @@ import useProjectTabs, {
   PROJECT_TAB,
 } from "@/components/pages/TracesPage/useProjectTabs";
 import usePluginsStore from "@/store/PluginsStore";
-import useViewQueryParam from "@/hooks/useViewQueryParam";
+import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
