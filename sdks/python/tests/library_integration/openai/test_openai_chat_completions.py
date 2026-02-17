@@ -1219,3 +1219,180 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
 
     llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+# Maximum reasonable time-to-first-token in milliseconds for test assertions
+MAX_REASONABLE_TTFT_MS = 60000
+
+
+def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_span(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked and stored in LLM span's ttft field for streaming."""
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    stream = wrapped_client.chat.completions.create(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    for _ in stream:
+        pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, "LLM span should have ttft field set for streaming"
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+
+def test_openai_client_chat_completions_create__async_stream_mode__ttft_tracked_in_span(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for async streaming."""
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    async def async_stream():
+        client = openai.AsyncOpenAI()
+        wrapped_client = track_openai(client)
+        stream = await wrapped_client.chat.completions.create(
+            model=MODEL_FOR_TESTS,
+            messages=messages,
+            max_tokens=10,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+        async for _ in stream:
+            pass
+
+    asyncio.run(async_stream())
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for async streaming"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
+def test_openai_chat_completion_stream__context_manager__ttft_tracked_in_span(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for stream context manager."""
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+        stream_options={"include_usage": True},
+    )
+    with chat_completion_stream_manager as stream:
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for stream context manager"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
+def test_openai_chat_completion_stream__async_context_manager__ttft_tracked_in_span(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for async stream context manager."""
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    async def async_stream():
+        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+            model=MODEL_FOR_TESTS,
+            messages=messages,
+            max_tokens=10,
+            stream_options={"include_usage": True},
+        )
+        async with chat_completion_stream_manager as stream:
+            async for _ in stream:
+                pass
+
+    asyncio.run(async_stream())
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for async stream context manager"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )

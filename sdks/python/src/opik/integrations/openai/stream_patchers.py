@@ -1,5 +1,6 @@
 import logging
-from typing import Iterator, AsyncIterator, List, Optional, Callable, TypeVar
+import time
+from typing import Iterator, AsyncIterator, List, Optional, Callable, TypeVar, Any
 
 from opik.types import ErrorInfoDict
 from opik.api_objects import trace, span
@@ -10,6 +11,37 @@ import openai.lib.streaming.chat
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _chunk_has_content(chunk: Any) -> bool:
+    """
+    Check if a stream chunk contains actual content (first token).
+
+    For ChatCompletionChunk, content can be:
+    - Text content in delta.content
+    - Tool/function calls in delta.tool_calls
+
+    Returns True if the chunk contains any meaningful content.
+    """
+    try:
+        if not hasattr(chunk, "choices") or not chunk.choices:
+            return False
+
+        choice = chunk.choices[0]
+        if not hasattr(choice, "delta") or choice.delta is None:
+            return False
+
+        delta = choice.delta
+
+        if hasattr(delta, "content") and delta.content:
+            return True
+
+        if hasattr(delta, "tool_calls") and delta.tool_calls:
+            return True
+
+        return False
+    except Exception:
+        return False
 
 # Raw low-level stream methods
 original_stream_iter_method = openai.Stream.__iter__
@@ -43,16 +75,20 @@ def patch_sync_stream(
     ```
 
     """
+    request_start_time_ns = time.perf_counter_ns()
 
     def Stream__iter__decorator(dunder_iter_func: Callable) -> Callable:
         @functools.wraps(dunder_iter_func)
         def wrapper(
             self: openai.Stream,
         ) -> Iterator[StreamItem]:
+            first_token_time_ns: Optional[int] = None
             try:
                 accumulated_items: List[StreamItem] = []
                 error_info: Optional[ErrorInfoDict] = None
                 for item in dunder_iter_func(self):
+                    if first_token_time_ns is None and _chunk_has_content(item):
+                        first_token_time_ns = time.perf_counter_ns()
                     accumulated_items.append(item)
                     yield item
             except Exception as exception:
@@ -66,6 +102,13 @@ def patch_sync_stream(
             finally:
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
+
+                    if first_token_time_ns is not None:
+                        ttft_ms = (
+                            first_token_time_ns - self.request_start_time_ns
+                        ) / 1_000_000
+                        self.span_to_end.ttft = ttft_ms
+
                     output = (
                         generations_aggregator(accumulated_items)
                         if error_info is None
@@ -86,6 +129,7 @@ def patch_sync_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
+    stream.request_start_time_ns = request_start_time_ns
 
     return stream
 
@@ -105,17 +149,21 @@ def patch_async_stream(
         print(event)
     ```
     """
+    request_start_time_ns = time.perf_counter_ns()
 
     def AsyncStream__aiter__decorator(dunder_aiter_func: Callable) -> Callable:
         @functools.wraps(dunder_aiter_func)
         async def wrapper(
             self: openai.AsyncStream,
         ) -> AsyncIterator[StreamItem]:
+            first_token_time_ns: Optional[int] = None
             try:
                 accumulated_items: List[StreamItem] = []
                 error_info: Optional[ErrorInfoDict] = None
 
                 async for item in dunder_aiter_func(self):
+                    if first_token_time_ns is None and _chunk_has_content(item):
+                        first_token_time_ns = time.perf_counter_ns()
                     accumulated_items.append(item)
                     yield item
             except Exception as exception:
@@ -129,6 +177,13 @@ def patch_async_stream(
             finally:
                 if hasattr(self, "opik_tracked_instance"):
                     delattr(self, "opik_tracked_instance")
+
+                    if first_token_time_ns is not None:
+                        ttft_ms = (
+                            first_token_time_ns - self.request_start_time_ns
+                        ) / 1_000_000
+                        self.span_to_end.ttft = ttft_ms
+
                     output = (
                         generations_aggregator(accumulated_items)
                         if error_info is None
@@ -151,6 +206,7 @@ def patch_async_stream(
     stream.opik_tracked_instance = True
     stream.span_to_end = span_to_end
     stream.trace_to_end = trace_to_end
+    stream.request_start_time_ns = request_start_time_ns
 
     return stream
 
