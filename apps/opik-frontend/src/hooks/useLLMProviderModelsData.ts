@@ -1126,6 +1126,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
+      label: "openrouter/free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
       label: "perplexity/sonar",
     },
