@@ -90,6 +90,7 @@ export class Experiment {
         experimentId: this.id,
         datasetItemId: item.datasetItemId,
         traceId: item.traceId,
+        projectName: item.projectName,
       })
     );
 

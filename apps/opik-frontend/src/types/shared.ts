@@ -183,6 +183,10 @@ export interface AggregatedFeedbackScore {
   value: number;
 }
 
+export type FeedbackScoreDisplay = AggregatedFeedbackScore & {
+  colorKey?: string;
+};
+
 export interface AggregatedDuration {
   p50: number;
   p90: number;
