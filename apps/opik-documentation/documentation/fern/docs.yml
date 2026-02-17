@@ -640,9 +640,12 @@ navigation:
               - page: LiteLLM
                 path: docs/tracing/integrations/litellm.mdx
                 slug: litellm
-              - page: OpenRouter
+              - page: OpenRouter SDK
                 path: docs/tracing/integrations/openrouter.mdx
                 slug: openrouter
+              - page: OpenRouter Gateway
+                path: docs/tracing/integrations/openrouter-gateway.mdx
+                slug: openrouter-gateway
               - page: Portkey
                 path: docs/tracing/integrations/portkey.mdx
                 slug: portkey
@@ -1205,7 +1208,13 @@ redirects:
     destination: "/docs/opik/integrations/openai_agents"
     permanent: true
   - source: "/docs/opik/integrations/openrouter-gateway"
-    destination: "/docs/opik/integrations/openrouter"
+    destination: "/docs/opik/integrations/openrouter-gateway"
+    permanent: true
+  - source: "/docs/opik/integrations/openrouter-gateway/"
+    destination: "/docs/opik/integrations/openrouter-gateway"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openrouter-gateway"
+    destination: "/docs/opik/integrations/openrouter-gateway"
     permanent: true
   - source: "/docs/opik/tracing/integrations/openrouter"
     destination: "/docs/opik/integrations/openrouter"
@@ -1477,6 +1486,12 @@ redirects:
     destination: "/docs/opik/administration/workspace-settings/overview"
     permanent: true
   - source: "/docs/opik/configuration/feedback_definitions"
+    destination: "/docs/opik/administration/workspace-settings/feedback_definitions"
+    permanent: true
+  - source: "/docs/opik/configuration/configuration/feedback_definitions"
+    destination: "/docs/opik/administration/workspace-settings/feedback_definitions"
+    permanent: true
+  - source: "/docs/opik/configuration/configuration/feedback_definitions/"
     destination: "/docs/opik/administration/workspace-settings/feedback_definitions"
     permanent: true
   - source: "/docs/opik/configuration/ai_providers"
