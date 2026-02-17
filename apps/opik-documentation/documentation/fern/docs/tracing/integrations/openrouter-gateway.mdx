@@ -1,0 +1,87 @@
+---
+description: Start here to integrate Opik with OpenRouter using OpenAI-compatible clients and OpenRouter Gateway broadcast.
+headline: OpenRouter Gateway | Opik Documentation
+og:description: Track OpenRouter calls through OpenAI-compatible wrappers and broadcast destinations.
+og:site_name: Opik Documentation
+og:title: Integrate OpenRouter Gateway with Opik
+title: Observability for OpenRouter Gateway with Opik
+---
+
+OpenRouter can be used through:
+
+- The OpenAI-compatible path (`track_openai` / `trackOpenAI`) with OpenRouter base URL
+- OpenRouter Broadcast destination (`opik`) for direct forwarding
+
+## Option 1: OpenAI-compatible path
+
+<Tabs>
+<Tab value="Python" title="Python">
+
+```bash
+pip install opik openai
+```
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="YOUR_OPENROUTER_API_KEY"
+)
+tracked_client = track_openai(client)
+
+response = tracked_client.chat.completions.create(
+  model="openai/gpt-4",
+  messages=[{"role": "user", "content": "Hello, world!"}],
+)
+```
+
+</Tab>
+<Tab value="TypeScript" title="TypeScript">
+
+```bash
+npm install opik-openai openai
+```
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
+});
+
+const trackedOpenAI = trackOpenAI(openai);
+
+const response = await trackedOpenAI.chat.completions.create({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+</Tab>
+</Tabs>
+
+## Option 2: OpenRouter Broadcast destination to Opik
+
+If you prefer centralized routing from OpenRouter, enable Opik in OpenRouter Broadcast.
+
+- Open the OpenRouter dashboard
+- Go to **Broadcast** destinations
+- Add `opik` as a destination
+- Configure your Opik endpoint and credentials as described in OpenRouter docs
+
+Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
+
+## Available Methods
+
+When using the OpenAI-compatible path:
+
+- `client.chat.completions.create()`
+- `client.beta.chat.completions.parse()` (OpenAI-compatible models)
+
+For non-OpenAI models and structured output details, see [OpenRouter Structured Outputs](https://openrouter.ai/docs/features/structured-outputs).
+
+For a full OpenRouter reference, see the [OpenRouter documentation](https://openrouter.ai/docs).
