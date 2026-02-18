@@ -182,6 +182,14 @@ const buildLangChainContentBlocks = (
   return blocks;
 };
 
+const buildContentFingerprint = (message: LangChainMessage): string => {
+  const content =
+    typeof message.content === "string"
+      ? message.content
+      : JSON.stringify(message.content);
+  return `${message.type}:${content}`;
+};
+
 const mapLangChainMessage = (
   message: LangChainMessage,
   index: number,
@@ -196,6 +204,7 @@ const mapLangChainMessage = (
     role,
     label,
     blocks,
+    contentFingerprint: buildContentFingerprint(message),
   };
 
   const finishReason = message.response_metadata?.finish_reason;
@@ -279,23 +288,27 @@ const mapGenerationsOutput = (
   return { messages, usage };
 };
 
-export const combineLangChainMessages: FormatCombiner = (input, output) => {
-  const outputRaw = output.raw as Record<string, unknown> | null;
+const isOutputSupersetOfInput = (
+  inputMsgs: LLMMessageDescriptor[],
+  outputMsgs: LLMMessageDescriptor[],
+): boolean => {
+  if (outputMsgs.length < inputMsgs.length) return false;
 
-  // LangGraph state: output.messages is a flat superset of input → use only output
-  if (
-    outputRaw &&
-    Array.isArray(outputRaw.messages) &&
-    !Array.isArray(outputRaw.messages[0]) &&
-    output.mapped.messages.length >= input.mapped.messages.length
-  ) {
+  return inputMsgs.every(
+    (msg, i) =>
+      msg.contentFingerprint !== undefined &&
+      msg.contentFingerprint === outputMsgs[i].contentFingerprint,
+  );
+};
+
+export const combineLangChainMessages: FormatCombiner = (input, output) => {
+  if (isOutputSupersetOfInput(input.mapped.messages, output.mapped.messages)) {
     return {
       messages: output.mapped.messages,
       usage: output.mapped.usage,
     };
   }
 
-  // Generations or other: concatenate (no overlap)
   return {
     messages: [...input.mapped.messages, ...output.mapped.messages],
     usage: output.mapped.usage,

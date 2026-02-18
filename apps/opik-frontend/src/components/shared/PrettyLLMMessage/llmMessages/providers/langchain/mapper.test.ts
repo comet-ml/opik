@@ -408,6 +408,87 @@ describe("mapLangChainMessages", () => {
       expect(result.messages[3].id).toBe("output-0");
     });
 
+    it("should concatenate when output has same length but different content", () => {
+      const inputData = {
+        messages: [{ type: "human", content: "Hello" }],
+      };
+      const outputData = {
+        messages: [{ type: "ai", content: "Response" }],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].id).toBe("input-0");
+      expect(result.messages[1].id).toBe("output-0");
+    });
+
+    it("should concatenate when output has same type but different content", () => {
+      const inputData = {
+        messages: [{ type: "human", content: "Hello" }],
+      };
+      const outputData = {
+        messages: [{ type: "human", content: "Goodbye" }],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].id).toBe("input-0");
+      expect(result.messages[1].id).toBe("output-0");
+    });
+
+    it("should use only output when nested input is a subset of output (LangGraph state)", () => {
+      const inputData = {
+        input: {
+          messages: [{ type: "human", content: "Hello" }],
+        },
+      };
+      const outputData = {
+        messages: [
+          { type: "human", content: "Hello" },
+          { type: "ai", content: "Hi there!" },
+        ],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[1].role).toBe("ai");
+      expect(result.messages[0].id).toBe("output-0");
+    });
+
     it("should concatenate input + output when output has generations", () => {
       const inputData = {
         messages: [{ type: "human", content: "Hello" }],

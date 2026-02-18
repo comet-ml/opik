@@ -55,6 +55,7 @@ export interface LLMMessageDescriptor {
   label?: string;
   blocks: LLMBlockDescriptor[];
   finishReason?: string;
+  contentFingerprint?: string;
 }
 
 // Mapper result with messages and shared usage
