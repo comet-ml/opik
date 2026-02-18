@@ -77,6 +77,9 @@ class LLMJudgeSchemaItem(pydantic.BaseModel):
     """Optional metadata dict for additional information."""
 
 
+CONFIG_VERSION = "1"
+
+
 class LLMJudgeConfig(pydantic.BaseModel):
     """
     Configuration for LLMJudge evaluator.
@@ -87,6 +90,9 @@ class LLMJudgeConfig(pydantic.BaseModel):
     Note: The evaluator 'name' is stored separately in the automation_rule_evaluators
     table, not inside the code JSON. It's included here for SDK convenience.
     """
+
+    version: str = CONFIG_VERSION
+    """Schema version for forward-compatible deserialization."""
 
     name: str = "llm_judge"
     """The name of the evaluator (SDK convenience, not part of backend code JSON)."""
