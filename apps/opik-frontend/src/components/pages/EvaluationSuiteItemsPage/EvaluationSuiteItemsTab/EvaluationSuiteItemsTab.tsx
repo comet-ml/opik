@@ -36,7 +36,9 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
+import EvaluationSuiteItemPanel from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemPanel/EvaluationSuiteItemPanel";
+import { createBehaviorsCountCell } from "./BehaviorsCountCell";
+import { ExecutionPolicyCell } from "./ExecutionPolicyCell";
 import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
@@ -61,13 +63,13 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
-import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import { useEvaluationSuiteItemsWithDraft } from "./hooks/useMergedEvaluationSuiteItems";
 import {
   useIsDraftMode,
   useIsAllItemsSelected,
   useSetIsAllItemsSelected,
   useDeletedIds,
-} from "@/store/DatasetDraftStore";
+} from "@/store/EvaluationSuiteDraftStore";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -78,25 +80,27 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_ID_ID,
+  "description",
+  "expected_behaviors",
   "created_at",
   "tags",
 ];
 
-const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
-const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
-const COLUMNS_ORDER_KEY = "dataset-items-columns-order";
-const DYNAMIC_COLUMNS_KEY = "dataset-items-dynamic-columns";
-const PAGINATION_SIZE_KEY = "dataset-items-pagination-size";
-const ROW_HEIGHT_KEY = "dataset-items-row-height";
+const SELECTED_COLUMNS_KEY = "evaluation-suite-items-selected-columns";
+const COLUMNS_WIDTH_KEY = "evaluation-suite-items-columns-width";
+const COLUMNS_ORDER_KEY = "evaluation-suite-items-columns-order";
+const DYNAMIC_COLUMNS_KEY = "evaluation-suite-items-dynamic-columns";
+const PAGINATION_SIZE_KEY = "evaluation-suite-items-pagination-size";
+const ROW_HEIGHT_KEY = "evaluation-suite-items-row-height";
 const POLLING_INTERVAL_MS = 3000;
 
-interface DatasetItemsTabProps {
+interface EvaluationSuiteItemsTabProps {
   datasetId: string;
   datasetName?: string;
   datasetStatus?: DATASET_STATUS;
 }
 
-const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
+const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   datasetId,
   datasetName,
   datasetStatus,
@@ -153,7 +157,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [openAddSidebar, setOpenAddSidebar] = useState<boolean>(false);
 
-  // Transform data column filters before passing to API
   const transformedFilters = useMemo(
     () => (filters ? transformDataColumnFilters(filters) : filters),
     [filters],
@@ -163,7 +166,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const deletedIds = useDeletedIds();
 
   const { data, isPending, isPlaceholderData, isFetching } =
-    useDatasetItemsWithDraft(
+    useEvaluationSuiteItemsWithDraft(
       {
         datasetId,
         filters: transformedFilters,
@@ -237,9 +240,9 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
 
   const noDataText = useMemo(() => {
     if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
-      return "All dataset items on this page have been deleted";
+      return "All evaluation suite items on this page have been deleted";
     }
-    return "There are no dataset items yet";
+    return "There are no evaluation suite items yet";
   }, [isDraftMode, deletedIds.size, totalCount]);
 
   const handleSearchChange = useCallback(
@@ -252,9 +255,10 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [setSearch, setPage, page],
   );
 
-  const selectedRows: DatasetItem[] = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
-  }, [rowSelection, rows]);
+  const selectedRows: DatasetItem[] = useMemo(
+    () => rows.filter((row) => rowSelection[row.id]),
+    [rowSelection, rows],
+  );
 
   const handleRowSelectionChange: typeof setRowSelection = useCallback(
     (updaterOrValue) => {
@@ -278,13 +282,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [isAllItemsSelected, setIsAllItemsSelected],
   );
 
-  const effectiveIsAllItemsSelected = useMemo(() => {
-    return (
+  const effectiveIsAllItemsSelected = useMemo(
+    () =>
       isAllItemsSelected &&
       selectedRows.length === rows.length &&
-      rows.length > 0
-    );
-  }, [isAllItemsSelected, selectedRows.length, rows.length]);
+      rows.length > 0,
+    [isAllItemsSelected, selectedRows.length, rows.length],
+  );
 
   const getDataForExport = useCallback(async (): Promise<DatasetItem[]> => {
     const result = effectiveIsAllItemsSelected
@@ -313,13 +317,15 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     effectiveIsAllItemsSelected,
   ]);
 
-  const dynamicDatasetColumns = useMemo(() => {
-    return datasetColumns.map<DynamicColumn>((c) => ({
-      id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
-      label: c.name,
-      columnType: mapDynamicColumnTypesToColumnType(c.types),
-    }));
-  }, [datasetColumns]);
+  const dynamicDatasetColumns = useMemo(
+    () =>
+      datasetColumns.map<DynamicColumn>((c) => ({
+        id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      })),
+    [datasetColumns],
+  );
 
   const dynamicColumnsIds = useMemo(
     () => dynamicDatasetColumns.map((c) => c.id),
@@ -332,8 +338,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     setSelectedColumns,
   });
 
-  const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = [
+  const behaviorsCountCell = useMemo(
+    () => createBehaviorsCountCell(datasetId),
+    [datasetId],
+  );
+
+  const columnsData = useMemo((): ColumnData<DatasetItem>[] => {
+    return [
       {
         id: COLUMN_ID_ID,
         label: "ID",
@@ -350,63 +361,74 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             cell: AutodetectCell as never,
           }) as ColumnData<DatasetItem>,
       ),
+      {
+        id: "description",
+        label: "Description",
+        type: COLUMN_TYPE.string,
+        accessorFn: (row) =>
+          (row.data as Record<string, unknown> | undefined)?.description ?? "",
+      },
+      {
+        id: "expected_behaviors",
+        label: "Expected behaviors",
+        type: COLUMN_TYPE.string,
+        cell: behaviorsCountCell as never,
+      },
+      {
+        id: "execution_policy",
+        label: "Execution policy",
+        type: COLUMN_TYPE.string,
+        cell: ExecutionPolicyCell as never,
+      },
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+        iconType: "tags",
+        accessorFn: (row) => row.tags || [],
+        cell: ListCell as never,
+      },
+      {
+        id: "created_at",
+        label: "Created",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.created_at),
+      },
+      {
+        id: "last_updated_at",
+        label: "Last updated",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) => formatDate(row.last_updated_at),
+      },
+      {
+        id: "created_by",
+        label: "Created by",
+        type: COLUMN_TYPE.string,
+      },
     ];
+  }, [dynamicDatasetColumns, behaviorsCountCell]);
 
-    retVal.push({
-      id: "tags",
-      label: "Tags",
-      type: COLUMN_TYPE.list,
-      iconType: "tags",
-      accessorFn: (row) => row.tags || [],
-      cell: ListCell as never,
-    });
-
-    retVal.push({
-      id: "created_at",
-      label: "Created",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
-    });
-
-    retVal.push({
-      id: "last_updated_at",
-      label: "Last updated",
-      type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.last_updated_at),
-    });
-
-    retVal.push({
-      id: "created_by",
-      label: "Created by",
-      type: COLUMN_TYPE.string,
-    });
-
-    return retVal;
-  }, [dynamicDatasetColumns]);
-
-  const filtersColumnData = useMemo(() => {
-    // Add each data column as a separate filter option with field prefix "data."
-    const dataFilterColumns = datasetColumns.map((c) => ({
-      id: `${COLUMN_DATA_ID}.${c.name}`,
-      label: c.name,
-      type: COLUMN_TYPE.string,
-    }));
-
-    return [
+  const filtersColumnData = useMemo(
+    () => [
       {
         id: "id",
         label: "ID",
         type: COLUMN_TYPE.string,
       },
-      ...dataFilterColumns,
+      ...datasetColumns.map((c) => ({
+        id: `${COLUMN_DATA_ID}.${c.name}`,
+        label: c.name,
+        type: COLUMN_TYPE.string,
+      })),
       {
         id: "tags",
         label: "Tags",
         type: COLUMN_TYPE.list,
         iconType: "tags" as const,
       },
-    ];
-  }, [datasetColumns]);
+    ],
+    [datasetColumns],
+  );
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
@@ -462,16 +484,18 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     handleRowClick,
   ]);
 
-  const columnsToExport = useMemo(() => {
-    return columns
-      .map((c) => get(c, "accessorKey", ""))
-      .filter((c) =>
-        c === COLUMN_SELECT_ID
-          ? false
-          : selectedColumns.includes(c) ||
-            (DEFAULT_COLUMN_PINNING.left || []).includes(c),
-      );
-  }, [columns, selectedColumns]);
+  const columnsToExport = useMemo(
+    () =>
+      columns
+        .map((c) => get(c, "accessorKey", ""))
+        .filter(
+          (c) =>
+            c !== COLUMN_SELECT_ID &&
+            (selectedColumns.includes(c) ||
+              (DEFAULT_COLUMN_PINNING.left || []).includes(c)),
+        ),
+    [columns, selectedColumns],
+  );
 
   const handleNewDatasetItemClick = useCallback(() => {
     if (data?.total && data.total > 0) {
@@ -564,13 +588,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
+          />
           <Button
             variant="default"
             size="sm"
             onClick={handleNewDatasetItemClick}
           >
-            Create dataset item
+            Create evaluation suite item
           </Button>
         </div>
       </div>
@@ -578,15 +602,15 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         <StatusMessage
           icon={Loader2}
           iconClassName="animate-spin"
-          title="Your dataset is still loading"
-          description="Some results or counts may update as more data becomes available. You can continue exploring while the full dataset loads."
+          title="Your evaluation suite is still loading"
+          description="Some results or counts may update as more data becomes available. You can continue exploring while the full evaluation suite loads."
           className="mb-4"
         />
       )}
       {showSuccessMessage && (
         <StatusMessage
           icon={Check}
-          title="Your dataset fully loaded"
+          title="Your evaluation suite fully loaded"
           description="All items are now available."
           className="mb-4"
         />
@@ -647,7 +671,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           </div>
         </TooltipWrapper>
       </div>
-      <DatasetItemEditor
+      <EvaluationSuiteItemPanel
         datasetItemId={activeRowId as string}
         datasetId={datasetId}
         columns={datasetColumns}
@@ -673,4 +697,4 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   );
 };
 
-export default DatasetItemsTab;
+export default EvaluationSuiteItemsTab;

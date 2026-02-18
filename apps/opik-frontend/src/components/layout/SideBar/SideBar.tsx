@@ -7,6 +7,7 @@ import {
   FlaskConical,
   LayoutGrid,
   FileTerminal,
+  ListChecks,
   LucideHome,
   Blocks,
   Bolt,
@@ -22,6 +23,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useAppStore from "@/store/AppStore";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import { DATASET_TYPE } from "@/types/datasets";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
@@ -105,6 +107,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: FlaskConical,
         label: "Experiments",
         count: "experiments",
+      },
+      {
+        id: "evaluation_suites",
+        path: "/$workspaceName/evaluation-suites",
+        type: MENU_ITEM_TYPE.router,
+        icon: ListChecks,
+        label: "Evaluation suites",
+        count: "evaluation_suites",
       },
       {
         id: "datasets",
@@ -218,12 +228,24 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { data: datasetsData } = useDatasetsList(
     {
       workspaceName,
+      type: DATASET_TYPE.DATASET,
       page: 1,
       size: 1,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+    },
+  );
+
+  const { data: evaluationSuitesData } = useDatasetsList(
+    {
+      workspaceName,
+      type: DATASET_TYPE.EVALUATION_SUITE,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
     },
   );
 
@@ -328,6 +350,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
+    evaluation_suites: evaluationSuitesData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
     rules: rulesData?.total,
@@ -338,6 +361,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   };
 
   const hasActiveOptimizations = (runningOptimizationsData?.total ?? 0) > 0;
+  const hasGeneralDatasets = (datasetsData?.total ?? 0) > 0;
+
+  const hiddenItemIds = new Set<string>(
+    hasGeneralDatasets ? [] : ["datasets"],
+  );
 
   const indicatorDataMap: Record<string, boolean> = {
     optimizations_running: hasActiveOptimizations,
@@ -350,15 +378,17 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   );
 
   const renderItems = (items: MenuItem[]) => {
-    return items.map((item) => (
-      <SidebarMenuItem
-        key={item.id}
-        item={item}
-        expanded={expanded}
-        count={countDataMap[item.count!]}
-        hasIndicator={indicatorDataMap[item.showIndicator!]}
-      />
-    ));
+    return items
+      .filter((item) => !hiddenItemIds.has(item.id))
+      .map((item) => (
+        <SidebarMenuItem
+          key={item.id}
+          item={item}
+          expanded={expanded}
+          count={countDataMap[item.count!]}
+          hasIndicator={indicatorDataMap[item.showIndicator!]}
+        />
+      ));
   };
 
   const renderBottomItems = () => {

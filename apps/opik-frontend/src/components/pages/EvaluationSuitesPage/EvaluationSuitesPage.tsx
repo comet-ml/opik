@@ -12,26 +12,17 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import TextCell from "@/components/shared/DataTableCells/TextCell";
-import ListCell from "@/components/shared/DataTableCells/ListCell";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import AddEditEvaluationSuiteDialog from "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog";
 import DatasetActionsPanel from "@/components/shared/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/components/shared/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { formatDate } from "@/lib/date";
-import {
-  COLUMN_NAME_ID,
-  COLUMN_SELECT_ID,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_SELECT_ID } from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -39,140 +30,33 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import {
+  DEFAULT_COLUMNS,
+  DEFAULT_SELECTED_COLUMNS,
+  FILTERS_COLUMNS,
+} from "@/components/pages/EvaluationSuitesPage/columns";
 
-const DatasetRowActionsCell = createDatasetRowActionsCell({
-  entityName: "dataset",
-  EditDialog: AddEditDatasetDialog,
-  showDownload: true,
+const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({
+  entityName: "evaluation suite",
+  EditDialog: AddEditEvaluationSuiteDialog,
 });
 
-export const getRowId = (d: Dataset) => d.id;
+const getRowId = (d: Dataset) => d.id;
 
-const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
+const SELECTED_COLUMNS_KEY = "evaluation-suites-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
-const COLUMNS_WIDTH_KEY = "datasets-columns-width";
-const COLUMNS_ORDER_KEY = "datasets-columns-order";
-const COLUMNS_SORT_KEY = "datasets-columns-sort";
-const PAGINATION_SIZE_KEY = "datasets-pagination-size";
+const COLUMNS_WIDTH_KEY = "evaluation-suites-columns-width";
+const COLUMNS_ORDER_KEY = "evaluation-suites-columns-order";
+const COLUMNS_SORT_KEY = "evaluation-suites-columns-sort";
+const PAGINATION_SIZE_KEY = "evaluation-suites-pagination-size";
 
-export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-    cell: TextCell as never,
-  },
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "dataset_items_count",
-    label: "Item count",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    iconType: "tags",
-    cell: ListCell as never,
-  },
-  {
-    id: "most_recent_experiment_at",
-    label: "Most recent experiment",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_experiment_at),
-  },
-  {
-    id: "most_recent_optimization_at",
-    label: "Most recent optimization",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_optimization_at),
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
-
-export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "description",
-    label: "Description",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    iconType: "tags",
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-];
-
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_NAME_ID,
-  "description",
-  "dataset_items_count",
-  "most_recent_experiment_at",
-  "created_at",
-];
-
-const DatasetsPage: React.FunctionComponent = () => {
+const EvaluationSuitesPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -206,7 +90,7 @@ const DatasetsPage: React.FunctionComponent = () => {
   const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
     {
       workspaceName,
-      type: DATASET_TYPE.DATASET,
+      type: DATASET_TYPE.EVALUATION_SUITE,
       filters,
       sorting: sortedColumns,
       search: search!,
@@ -225,7 +109,9 @@ const DatasetsPage: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no datasets yet" : "No search results";
+  const noDataText = noData
+    ? "There are no evaluation suites yet"
+    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY_V2,
@@ -264,7 +150,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         sortableColumns: sortableBy,
       }),
       generateActionsColumDef({
-        cell: DatasetRowActionsCell,
+        cell: EvaluationSuiteRowActionsCell,
       }),
     ];
   }, [sortableBy, columnsOrder, selectedColumns]);
@@ -287,7 +173,7 @@ const DatasetsPage: React.FunctionComponent = () => {
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleNewDatasetClick = useCallback(() => {
+  const handleNewSuiteClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
@@ -297,9 +183,9 @@ const DatasetsPage: React.FunctionComponent = () => {
       if (!row.id) return;
 
       navigate({
-        to: "/$workspaceName/datasets/$datasetId",
+        to: "/$workspaceName/evaluation-suites/$suiteId",
         params: {
-          datasetId: row.id,
+          suiteId: row.id,
           workspaceName,
         },
       });
@@ -314,12 +200,14 @@ const DatasetsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Datasets</h1>
+        <h1 className="comet-title-l truncate break-words">
+          Evaluation suites
+        </h1>
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
-      />
+      <div className="comet-body-s mb-4 text-muted-slate">
+        Evaluation suites provide regression testing for your LLM applications,
+        letting you define reusable test sets with expected behaviors.
+      </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
           <SearchInput
@@ -337,7 +225,10 @@ const DatasetsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DatasetActionsPanel datasets={selectedRows} entityName="datasets" />
+          <DatasetActionsPanel
+            datasets={selectedRows}
+            entityName="evaluation suites"
+          />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -346,8 +237,8 @@ const DatasetsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
-            Create new dataset
+          <Button variant="default" size="sm" onClick={handleNewSuiteClick}>
+            Create new evaluation suite
           </Button>
         </div>
       </div>
@@ -366,8 +257,8 @@ const DatasetsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewDatasetClick}>
-                Create new dataset
+              <Button variant="link" onClick={handleNewSuiteClick}>
+                Create new evaluation suite
               </Button>
             )}
           </DataTableNoData>
@@ -383,7 +274,7 @@ const DatasetsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <AddEditDatasetDialog
+      <AddEditEvaluationSuiteDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
@@ -393,4 +284,4 @@ const DatasetsPage: React.FunctionComponent = () => {
   );
 };
 
-export default DatasetsPage;
+export default EvaluationSuitesPage;

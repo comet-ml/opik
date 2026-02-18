@@ -44,6 +44,10 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import EvaluationSuitesPage from "@/components/pages/EvaluationSuitesPage/EvaluationSuitesPage";
+import EvaluationSuitePage from "@/components/pages/EvaluationSuitePage/EvaluationSuitePage";
+import EvaluationSuiteItemsPage from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import EvaluationSuiteExperimentPage from "@/components/pages/EvaluationSuiteExperimentPage/EvaluationSuiteExperimentPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -295,6 +299,45 @@ const compareTrialsRoute = createRoute({
   },
 });
 
+// ----------- evaluation suites
+const evaluationSuitesRoute = createRoute({
+  path: "/evaluation-suites",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Evaluation suites",
+  },
+});
+
+const evaluationSuitesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => evaluationSuitesRoute,
+  component: EvaluationSuitesPage,
+});
+
+const evaluationSuiteRoute = createRoute({
+  path: "/$suiteId",
+  getParentRoute: () => evaluationSuitesRoute,
+  component: EvaluationSuitePage,
+  staticData: {
+    param: "suiteId",
+  },
+});
+
+const evaluationSuiteItemsRoute = createRoute({
+  path: "/items",
+  getParentRoute: () => evaluationSuiteRoute,
+  component: EvaluationSuiteItemsPage,
+});
+
+const evaluationSuiteExperimentRoute = createRoute({
+  path: "/$suiteId/experiments/$experimentId",
+  getParentRoute: () => evaluationSuitesRoute,
+  component: EvaluationSuiteExperimentPage,
+  staticData: {
+    param: "experimentId",
+  },
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -494,6 +537,13 @@ const routeTree = rootRoute.addChildren([
       experimentsRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
+      ]),
+      evaluationSuitesRoute.addChildren([
+        evaluationSuitesListRoute,
+        evaluationSuiteRoute.addChildren([
+          evaluationSuiteItemsRoute,
+        ]),
+        evaluationSuiteExperimentRoute,
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,

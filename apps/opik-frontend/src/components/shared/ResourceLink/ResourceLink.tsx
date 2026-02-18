@@ -17,9 +17,8 @@ import isUndefined from "lodash/isUndefined";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useAppStore from "@/store/AppStore";
-import { Tag } from "@/components/ui/tag";
+import { Tag, TagProps } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import { TagProps } from "@/components/ui/tag";
 import { Filter } from "@/types/filters";
 
 export enum RESOURCE_TYPE {
@@ -31,6 +30,7 @@ export enum RESOURCE_TYPE {
   experimentItem,
   optimization,
   trial,
+  evaluationSuite,
   annotationQueue,
   dashboard,
   traces,
@@ -52,6 +52,14 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
+    color: "var(--color-yellow)",
+  },
+  [RESOURCE_TYPE.evaluationSuite]: {
+    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    icon: Database,
+    param: "suiteId",
+    deleted: "Deleted evaluation suite",
+    label: "evaluation suite",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {

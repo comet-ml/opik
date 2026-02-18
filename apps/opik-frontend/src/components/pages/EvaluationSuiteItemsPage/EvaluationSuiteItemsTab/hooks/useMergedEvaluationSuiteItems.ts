@@ -4,7 +4,7 @@ import {
   useDeletedIds,
   useEditedItems,
   useIsDraftMode,
-} from "@/store/DatasetDraftStore";
+} from "@/store/EvaluationSuiteDraftStore";
 import useDatasetItemsList, {
   UseDatasetItemsListParams,
   UseDatasetItemsListResponse,
@@ -12,15 +12,7 @@ import useDatasetItemsList, {
 import { QueryConfig } from "@/api/api";
 import { mergeItemsWithDraftChanges } from "@/lib/dataset-items";
 
-/**
- * Hook that fetches dataset items and merges them with local draft changes.
- * Returns the full query object with content replaced by merged items.
- *
- * @param params - Dataset items query parameters
- * @param options - React Query options (placeholderData, refetchInterval, etc.)
- * @returns Full query object with merged dataset items in data.content
- */
-export const useDatasetItemsWithDraft = (
+export const useEvaluationSuiteItemsWithDraft = (
   params: UseDatasetItemsListParams,
   options?: QueryConfig<UseDatasetItemsListResponse>,
 ) => {

@@ -10,46 +10,42 @@ import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ExperimentsCompare } from "@/types/datasets";
-import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
+import { OnChangeFn, COLUMN_TYPE } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
-import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
+import ExperimentItemContent from "./ExperimentItemContent";
 
-type CompareExperimentsPanelProps = {
+type EvaluationSuiteExperimentPanelProps = {
   experimentsCompareId?: string | null;
   experimentsCompare?: ExperimentsCompare;
   experimentsIds: string[];
+  datasetId: string;
   openTrace: OnChangeFn<string>;
   hasPreviousRow?: boolean;
   hasNextRow?: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
   isTraceDetailsOpened: boolean;
-  datasetId?: string;
 };
 
-const CompareExperimentsPanel: React.FunctionComponent<
-  CompareExperimentsPanelProps
+const EvaluationSuiteExperimentPanel: React.FunctionComponent<
+  EvaluationSuiteExperimentPanelProps
 > = ({
   experimentsCompareId,
   experimentsCompare,
   experimentsIds,
+  datasetId,
   openTrace,
   hasPreviousRow,
   hasNextRow,
   onClose,
   onRowChange,
   isTraceDetailsOpened,
-  datasetId: datasetIdProp,
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const datasetIdFromURL = useDatasetIdFromCompareExperimentsURL();
-  const datasetId = datasetIdProp ?? datasetIdFromURL;
 
-  // Fetch non-truncated data for the sidebar
   const { data: nonTruncatedData } = useCompareExperimentsList(
     {
       workspaceName,
@@ -74,7 +70,6 @@ const CompareExperimentsPanel: React.FunctionComponent<
     },
   );
 
-  // Use non-truncated data when available, fall back to truncated data while loading
   const nonTruncatedExperimentsCompare = nonTruncatedData?.content?.[0];
   const activeExperimentsCompare =
     nonTruncatedExperimentsCompare ?? experimentsCompare;
@@ -134,11 +129,10 @@ const CompareExperimentsPanel: React.FunctionComponent<
         }
       >
         <div className="mt-0 h-[var(--experiment-sidebar-tab-content-height)] overflow-auto">
-          <DataTab
+          <ExperimentItemContent
             data={data}
             experimentItems={experimentItems}
             openTrace={openTrace}
-            datasetItemId={datasetItemId}
           />
         </div>
       </div>
@@ -159,7 +153,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   return (
     <ResizableSidePanel
-      panelId="compare-experiments"
+      panelId="eval-suite-experiment"
       entity="item"
       open={Boolean(experimentsCompareId)}
       headerContent={renderHeaderContent()}
@@ -173,4 +167,4 @@ const CompareExperimentsPanel: React.FunctionComponent<
   );
 };
 
-export default CompareExperimentsPanel;
+export default EvaluationSuiteExperimentPanel;

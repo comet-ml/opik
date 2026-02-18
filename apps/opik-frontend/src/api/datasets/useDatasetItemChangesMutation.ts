@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, Evaluator } from "@/types/datasets";
+import { ExecutionPolicy } from "@/types/evaluation-suites";
 import { useToast } from "@/components/ui/use-toast";
 
 interface DatasetItemChangesPayload {
@@ -12,6 +13,8 @@ interface DatasetItemChangesPayload {
   base_version: string;
   tags?: string[];
   change_description?: string;
+  evaluators?: Evaluator[];
+  execution_policy?: ExecutionPolicy;
 }
 
 interface UseDatasetItemChangesMutationParams {

@@ -7,13 +7,14 @@ import useDatasetBatchDeleteMutation from "@/api/datasets/useDatasetBatchDeleteM
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-type DatasetsActionsPanelsProps = {
+type DatasetActionsPanelProps = {
   datasets: Dataset[];
+  entityName: string;
 };
 
-const DatasetsActionsPanel: React.FunctionComponent<
-  DatasetsActionsPanelsProps
-> = ({ datasets }) => {
+const DatasetActionsPanel: React.FunctionComponent<
+  DatasetActionsPanelProps
+> = ({ datasets, entityName }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !datasets?.length;
@@ -33,9 +34,9 @@ const DatasetsActionsPanel: React.FunctionComponent<
         open={open}
         setOpen={setOpen}
         onConfirm={deleteDatasetsHandler}
-        title="Delete datasets"
-        description="Deleting these datasets will also remove all their items. Any experiments linked to them will be moved to a ‘Deleted datasets’ group. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete datasets"
+        title={`Delete ${entityName}`}
+        description={`Deleting these ${entityName} will also remove all their items. Any experiments linked to them will be moved to a 'Deleted datasets' group. This action cannot be undone. Are you sure you want to continue?`}
+        confirmText={`Delete ${entityName}`}
         confirmButtonVariant="destructive"
       />
       <TooltipWrapper content="Delete">
@@ -55,4 +56,4 @@ const DatasetsActionsPanel: React.FunctionComponent<
   );
 };
 
-export default DatasetsActionsPanel;
+export default DatasetActionsPanel;
