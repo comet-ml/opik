@@ -27,7 +27,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check GitHub MCP**: If unavailable, respond with:
-  > "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > "This command needs GitHub MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check development environment**: Verify project dependencies, build tools, and project structure are ready.
 - **Check local git branch** in the Opik repository:
@@ -242,7 +242,7 @@ The command is successful when:
 
 ### **Common Issues**
 
-- **GitHub MCP not available**: Run `npm run install-mcp`
+- **GitHub MCP not available**: Configure MCP and run `make cursor` (Cursor) or `make claude` (Claude CLI)
 - **Git branch conflicts**: Resolve conflicts before proceeding
 - **Permission errors**: Check user access and repository settings
 - **Network issues**: Verify connectivity to GitHub services
