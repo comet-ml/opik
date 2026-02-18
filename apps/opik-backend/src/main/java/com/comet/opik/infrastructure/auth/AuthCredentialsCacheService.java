@@ -11,7 +11,6 @@ import org.redisson.api.RBatchReactive;
 import org.redisson.api.RBucketsReactive;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
-import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.util.List;
@@ -94,6 +93,10 @@ class AuthCredentialsCacheService implements CacheService {
         return Optional.of(userNames.getFirst());
     }
 
+    /**
+     * Queues batch operations by invoking batch methods only without subscribing to their Monos
+     * before {@code batch.execute()}, otherwise the call would deadlock (operation Monos complete on execute).
+     */
     @Override
     public void cache(
             @NonNull String apiKey,
@@ -113,12 +116,12 @@ class AuthCredentialsCacheService implements CacheService {
 
         RBatchReactive batch = redissonClient.createBatch();
         RMapReactive<String, String> workspaceMap = batch.getMap(workspaceMetadataKey);
-        Flux.fromIterable(permissionKeys)
-                .flatMap(key -> batch.getBucket(key).set(userName, ttl))
-                .then(workspaceMap.putAll(entry))
-                .then(workspaceMap.expire(ttl))
-                .then(batch.execute())
-                .block();
+        for (String key : permissionKeys) {
+            batch.getBucket(key).set(userName, ttl);
+        }
+        workspaceMap.putAll(entry);
+        workspaceMap.expire(ttl);
+        batch.execute().block();
     }
 
     private List<String> getKeysForPermissions(String apiKey, String workspaceName, List<String> requiredPermissions) {
