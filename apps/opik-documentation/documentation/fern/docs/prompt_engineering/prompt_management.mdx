@@ -1329,7 +1329,7 @@ Jinja2 templates support advanced features like conditionals, loops, and filters
 
 ### Chat prompt versioning
 
-Chat prompts are automatically versioned when the messages change. Each version has a unique commit hash.
+Chat prompts are automatically versioned when the messages change. Each version has a unique commit ID.
 
 <Tabs>
     <Tab value="Python" title="Python">
@@ -1375,7 +1375,7 @@ Chat prompts are automatically versioned when the messages change. Each version 
         print(f"Total versions: {len(history)}")
         ```
 
-        You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit hash, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
+        You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit ID, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
@@ -1557,13 +1557,441 @@ You can use this information to:
     </Tab>
 </Tabs>
 
-The `commit` parameter accepts the commit ID (also called commit hash) of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` or `get_chat_prompt_history` methods (see above).
+The `commit` parameter accepts the commit ID of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` or `get_chat_prompt_history` methods (see above).
 
 This is particularly useful when you want to:
 - **Pin to a specific version** in production to ensure consistent behavior
 - **Test different versions** side by side in experiments
 - **Roll back** to a previous version if issues are discovered
 - **Compare results** across different prompt versions
+
+## Prompt version tags
+
+Opik supports tags at two levels, which serve different purposes:
+
+- **Prompt container tags** — Applied to the prompt as a whole (shared across all versions). Set via the `tags` parameter when creating or updating a prompt. These are used for searching and organizing prompts and are covered in the [Searching prompts](#searching-prompts) section.
+- **Prompt version tags** — Applied to a specific individual version. Set via the `batch_update_prompt_version_tags` / `updatePromptVersionTags` API after creating the version. These allow you to label individual milestones (e.g., "production", "stable", "deprecated") and filter version history.
+
+This section covers **prompt version tags** (the per-version ones).
+
+### Managing tags from the UI
+
+#### Prompt page and commit history
+
+When you open a prompt from the library, the prompt page shows its full commit history — each version listed as a row with its commit ID, creation date, and any tags assigned to it:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_commits_history.png" />
+</Frame>
+
+#### Commits table
+
+The commits table gives you a detailed view of all versions for a prompt. Each row shows the commit ID, template preview, change description, author, creation date, and the tags attached to that version. You can add or remove tags directly from this table by clicking on the tag editor for any row:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_version_tags.png" />
+</Frame>
+
+#### Filtering the commits table
+
+The commits table supports filtering so you can quickly find versions by tag, template content, author, or other fields. Use the filter controls above the table to apply one or more filters:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_commits_table_filter.png" />
+</Frame>
+
+#### Comparison view
+
+When selecting a version to compare, the dropdown lists all versions with their tags displayed inline, making it easy to identify the right candidate without opening each version individually:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_version_compare_dropdown.png" />
+</Frame>
+
+Once two versions are selected, their tags are shown alongside the commit ID and change description in the comparison dialog:
+
+<Frame>
+  <img src="/img/prompt_engineering/prompt_version_comparison_tags.png" />
+</Frame>
+
+### Batch updating tags
+
+Use the batch update API to efficiently update tags on one or more prompt versions at once. This is especially useful when you want to promote a version to production or clean up tags after a release.
+
+There are two update modes:
+
+- **Replace mode** (default): replaces all existing tags with the new set
+- **Merge mode**: adds the new tags to the existing ones (union)
+
+<Tabs>
+    <Tab value="Python" title="Python">
+        Access the `PromptClient` from the Opik client via `get_prompts_client()`, then call [`batch_update_prompt_version_tags`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompts_client):
+
+        ```python
+        import opik
+
+        client = opik.Opik()
+
+        # Get version IDs from the prompt history
+        history = client.get_prompt_history(name="summarizer")
+        version_id = history[0].version_id  # latest version
+
+        prompts_client = client.get_prompts_client()
+
+        # Replace all tags (default behavior)
+        prompts_client.batch_update_prompt_version_tags(
+            version_ids=[version_id],
+            tags=["production", "v2"]
+        )
+
+        # Merge new tags with existing tags
+        prompts_client.batch_update_prompt_version_tags(
+            version_ids=[version_id],
+            tags=["hotfix"],
+            merge=True
+        )
+
+        # Clear all tags by passing an empty list
+        prompts_client.batch_update_prompt_version_tags(
+            version_ids=[version_id],
+            tags=[]
+        )
+
+        # Update multiple versions at once
+        version_ids = [v.version_id for v in history[:3]]
+        prompts_client.batch_update_prompt_version_tags(
+            version_ids=version_ids,
+            tags=["archived"]
+        )
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        Use `client.updatePromptVersionTags()`:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Get version IDs from the prompt history
+        const prompt = await client.getPrompt({ name: "summarizer" });
+        const versions = await prompt.getVersions();
+        const versionId = versions[0].id; // latest version
+
+        // Replace all tags (default behavior)
+        await client.updatePromptVersionTags([versionId], {
+          tags: ["production", "v2"],
+        });
+
+        // Merge new tags with existing tags
+        await client.updatePromptVersionTags([versionId], {
+          tags: ["hotfix"],
+          mergeTags: true,
+        });
+
+        // Clear all tags by passing an empty array
+        await client.updatePromptVersionTags([versionId], {
+          tags: [],
+        });
+
+        // Update multiple versions at once
+        const versionIds = versions.slice(0, 3).map((v) => v.id);
+        await client.updatePromptVersionTags(versionIds, {
+          tags: ["archived"],
+        });
+        ```
+    </Tab>
+</Tabs>
+
+### Searching, filtering, and sorting version history
+
+You can search, filter, and sort prompt version history to find specific versions.
+
+#### Search
+
+`search` performs a free-text match against template content and change description fields:
+
+<Tabs>
+    <Tab value="Python" title="Python">
+        ```python
+        import opik
+
+        client = opik.Opik()
+
+        # Find versions whose template or change description contains "customer"
+        results = client.get_prompt_history(name="summarizer", search="customer")
+
+        # Works the same for chat prompts
+        chat_results = client.get_chat_prompt_history(name="assistant", search="helpful")
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+        const prompt = await client.getPrompt({ name: "summarizer" });
+
+        // Find versions whose template or change description contains "customer"
+        const results = await prompt.getVersions({ search: "customer" });
+        ```
+    </Tab>
+</Tabs>
+
+#### Filter
+
+Use `filter_string` (Python OQL) or `filters` (TypeScript JSON array) to narrow results by any version field.
+
+<Tabs>
+    <Tab value="Python" title="Python">
+        ```python
+        import opik
+
+        client = opik.Opik()
+
+        # Filter by tag
+        production_versions = client.get_prompt_history(
+            name="summarizer",
+            filter_string='tags contains "production"'
+        )
+
+        # Filter by multiple tags (AND logic)
+        stable_production = client.get_prompt_history(
+            name="summarizer",
+            filter_string='tags contains "production" AND tags contains "stable"'
+        )
+
+        # Filter by template content
+        customer_versions = client.get_prompt_history(
+            name="summarizer",
+            filter_string='template contains "customer"'
+        )
+
+        # Filter by creator
+        my_versions = client.get_prompt_history(
+            name="summarizer",
+            filter_string='created_by = "alice@example.com"'
+        )
+
+        # Filter by date
+        recent_versions = client.get_prompt_history(
+            name="summarizer",
+            filter_string='created_at >= "2024-01-01T00:00:00Z"'
+        )
+
+        # Filter by metadata field (dot notation)
+        prod_env = client.get_prompt_history(
+            name="summarizer",
+            filter_string='metadata.environment = "prod"'
+        )
+
+        # Combine search and filter
+        results = client.get_prompt_history(
+            name="summarizer",
+            search="customer",
+            filter_string='tags contains "production"'
+        )
+
+        # Same API for chat prompts
+        chat_production = client.get_chat_prompt_history(
+            name="assistant",
+            filter_string='tags contains "production"'
+        )
+
+        for version in production_versions:
+            print(f"Commit: {version.commit}, Tags: {version.tags}")
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+        const prompt = await client.getPrompt({ name: "summarizer" });
+
+        // Filter by tag
+        const productionVersions = await prompt.getVersions({
+          filters: JSON.stringify([
+            { field: "tags", operator: "contains", value: "production" },
+          ]),
+        });
+
+        // Filter by multiple tags (AND logic)
+        const stableProduction = await prompt.getVersions({
+          filters: JSON.stringify([
+            { field: "tags", operator: "contains", value: "production" },
+            { field: "tags", operator: "contains", value: "stable" },
+          ]),
+        });
+
+        // Filter by template content
+        const customerVersions = await prompt.getVersions({
+          filters: JSON.stringify([
+            { field: "template", operator: "contains", value: "customer" },
+          ]),
+        });
+
+        // Filter by creator
+        const myVersions = await prompt.getVersions({
+          filters: JSON.stringify([
+            { field: "created_by", operator: "=", value: "alice@example.com" },
+          ]),
+        });
+
+        // Filter by date
+        const recentVersions = await prompt.getVersions({
+          filters: JSON.stringify([
+            { field: "created_at", operator: ">=", value: "2024-01-01T00:00:00Z" },
+          ]),
+        });
+
+        // Combine search and filter
+        const results = await prompt.getVersions({
+          search: "customer",
+          filters: JSON.stringify([
+            { field: "tags", operator: "contains", value: "production" },
+          ]),
+        });
+
+        for (const version of productionVersions) {
+          console.log(`Commit: ${version.commit}, Tags: ${version.tags}`);
+        }
+        ```
+    </Tab>
+</Tabs>
+
+**Supported fields for version filtering:**
+
+| Column | Type | Supported operators | Notes |
+|--------|------|---------------------|-------|
+| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` | |
+| `type` | Enum | `=`, `!=` | Values: `"mustache"`, `"jinja2"` |
+| `tags` | List | `contains` | Multiple entries require all tags (AND logic) |
+| `created_at` | DateTime | `>=`, `<=`, `>`, `<` | ISO 8601 format: `"2024-01-01T00:00:00Z"` |
+| `metadata` | Dict | `=`, `!=` | Python only. Use dot notation: `metadata.environment = "prod"` |
+
+For Python, conditions are combined with `AND` in the OQL string. For TypeScript, add multiple objects to the filter array.
+
+#### Sort (TypeScript only)
+
+<Note>
+Sorting is currently only supported in the TypeScript SDK. Python's `get_prompt_history` and `get_chat_prompt_history` always return versions newest-first.
+</Note>
+
+Use the `sorting` option with a JSON-encoded sort array. Each entry specifies a `field` and `direction` (`"ASC"` or `"DESC"`):
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+const prompt = await client.getPrompt({ name: "summarizer" });
+
+// Sort by template content alphabetically
+const alphabetical = await prompt.getVersions({
+  sorting: JSON.stringify([{ field: "template", direction: "ASC" }]),
+});
+
+// Sort by creation date (oldest first)
+const oldest = await prompt.getVersions({
+  sorting: JSON.stringify([{ field: "created_at", direction: "ASC" }]),
+});
+
+// Combine sort with filter
+const sorted = await prompt.getVersions({
+  filters: JSON.stringify([
+    { field: "tags", operator: "contains", value: "production" },
+  ]),
+  sorting: JSON.stringify([{ field: "created_at", direction: "DESC" }]),
+});
+```
+
+Sortable fields include: `id`, `commit`, `template`, `change_description`, `created_by`, `type`, `created_at`.
+
+### Example: promoting a version to production
+
+The following end-to-end example shows a common workflow: create a new prompt version, and then promote the best-performing version by tagging it as `production`.
+
+<Tabs>
+    <Tab value="Python" title="Python">
+        ```python
+        import opik
+
+        client = opik.Opik()
+        prompts_client = client.get_prompts_client()
+
+        # Create a new version
+        candidate = opik.Prompt(
+            name="summarizer",
+            prompt="Provide a concise summary of: {{text}}"
+        )
+
+        # ... run your evaluation logic here ...
+        # Assume the evaluation passed and we want to promote this version
+
+        # Promote to production (use version_id to target the specific version)
+        prompts_client.batch_update_prompt_version_tags(
+            version_ids=[candidate.version_id],
+            tags=["production", "v3"]
+        )
+
+        # Archive previous production versions
+        old_production = client.get_prompt_history(
+            name="summarizer",
+            filter_string='tags contains "production"'
+        )
+        older_version_ids = [
+            v.version_id for v in old_production
+            if v.version_id != candidate.version_id
+        ]
+        if older_version_ids:
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=older_version_ids,
+                tags=["archived"]
+            )
+        ```
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Create a new version
+        const candidate = await client.createPrompt({
+          name: "summarizer",
+          prompt: "Provide a concise summary of: {{text}}",
+        });
+
+        // ... run your evaluation logic here ...
+        // Assume the evaluation passed and we want to promote this version
+
+        // Promote to production (versionId targets the specific version)
+        await client.updatePromptVersionTags([candidate.versionId], {
+          tags: ["production", "v3"],
+        });
+
+        // Archive previous production versions
+        const allVersions = await candidate.getVersions({
+          filters: JSON.stringify([
+            { field: "tags", operator: "contains", value: "production" },
+          ]),
+        });
+        const olderVersionIds = allVersions
+          .filter((v) => v.id !== candidate.versionId)
+          .map((v) => v.id);
+
+        if (olderVersionIds.length > 0) {
+          await client.updatePromptVersionTags(olderVersionIds, {
+            tags: ["archived"],
+          });
+        }
+        ```
+    </Tab>
+</Tabs>
 
 ## Using prompts in experiments
 
