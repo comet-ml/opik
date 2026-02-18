@@ -52,6 +52,16 @@ describe("resolveProvider", () => {
     ).toBe("openrouter");
   });
 
+  it("uses openrouter provider hint over model namespace inference", () => {
+    expect(
+      resolveProvider({
+        model: "openai/gpt-4o-mini",
+        traceMetadata: {},
+        providerHint: "openrouter",
+      })
+    ).toBe("openrouter");
+  });
+
   it("falls back to openai when nothing else is available", () => {
     expect(
       resolveProvider({
@@ -168,6 +178,55 @@ describe("OpenRouter metadata mapping", () => {
         order: ["anthropic/claude-3", "openai/gpt-4o-mini"],
         allow_fallbacks: true,
       },
+    });
+  });
+
+  it("uses LLM span type and OpenRouter metadata for openrouter provider", async () => {
+    const rootSpan = createMockSpan();
+    const mockClient = createMockOpikClient(rootSpan);
+
+    const traced = withTracing(
+      vi.fn().mockResolvedValue({
+        model: "openai/gpt-4o-mini:free",
+        choices: [{ message: { role: "assistant", content: "Hello" } }],
+        provider: "openrouter/openai/gpt-4o-mini",
+        provider_name: "openrouter-openai",
+        provider_id: "openrouter/openai/gpt-4o-mini",
+        model_provider: "openrouter",
+        web_search: true,
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 2,
+          total_tokens: 3,
+        },
+      }),
+      {
+        generationName: "openrouter-direct-call",
+        provider: "openrouter",
+        client: mockClient,
+      }
+    );
+
+    await traced({
+      model: "openrouter/auto",
+      messages: [{ role: "user", content: "Test" }],
+    });
+
+    expect(rootSpan.span).toHaveBeenCalledTimes(1);
+
+    const payload = rootSpan.span.mock.calls[0]?.[0];
+    expect(payload.type).toBe("llm");
+    expect(payload.metadata).toMatchObject({
+      created_from: "openrouter",
+      type: "openrouter_chat",
+      openrouter_routing_inferred: true,
+      openrouter_provider: "openrouter/openai/gpt-4o-mini",
+      openrouter_provider_name: "openrouter-openai",
+      openrouter_provider_id: "openrouter/openai/gpt-4o-mini",
+      openrouter_model_provider: "openrouter",
+      openrouter_model_base: "openai/gpt-4o-mini",
+      openrouter_model_variants: ["free"],
+      openrouter_web_search: true,
     });
   });
 });

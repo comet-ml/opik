@@ -25,7 +25,7 @@ const handleError = (
   rootTracer.span({
     ...observationData,
     endTime: new Date(),
-    type: OpikSpanType.General,
+    type: OpikSpanType.Llm,
     errorInfo: {
       message: error.message,
       exceptionType: error.name,
@@ -44,6 +44,43 @@ const normalizeProvider = (provider: unknown): string | undefined => {
   return normalizedProvider.length > 0 ? normalizedProvider : undefined;
 };
 
+const isOpenRouterRoutingInferred = (model: string | undefined): boolean => {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    return true;
+  }
+
+  const normalizedModel = model.trim();
+  if (!normalizedModel.startsWith("openrouter/")) {
+    return true;
+  }
+
+  const [, ...modelParts] = normalizedModel.split("/");
+  if (modelParts.length === 1) {
+    return ["auto", "free"].includes(modelParts[0] ?? "");
+  }
+
+  if (modelParts.length >= 2) {
+    return false;
+  }
+
+  return true;
+};
+
+const buildOpenRouterMetadata = (
+  model: string | undefined,
+  provider: string | undefined
+): Record<string, unknown> => {
+  if (provider !== "openrouter") {
+    return {};
+  }
+
+  return {
+    created_from: "openrouter",
+    type: "openrouter_chat",
+    openrouter_routing_inferred: isOpenRouterRoutingInferred(model),
+  };
+};
+
 export const resolveProvider = ({
   model,
   traceMetadata,
@@ -56,6 +93,11 @@ export const resolveProvider = ({
   const configuredProvider = normalizeProvider(traceMetadata?.provider);
   if (configuredProvider) {
     return configuredProvider;
+  }
+
+  const normalizedHintProvider = normalizeProvider(providerHint);
+  if (normalizedHintProvider === "openrouter") {
+    return normalizedHintProvider;
   }
 
   if (model && model.includes("/")) {
@@ -103,17 +145,18 @@ const wrapMethod = <T extends GenericMethod>(
     args[0] as unknown as Record<string, unknown>
   );
 
-  const finalMetadata = {
-    ...configMetadata,
-    ...modelParameters,
-    model,
-  };
-
   const provider = resolveProvider({
     model,
     traceMetadata: configMetadata,
     providerHint: config.provider,
   });
+
+  const finalMetadata = {
+    ...configMetadata,
+    ...modelParameters,
+    ...buildOpenRouterMetadata(model, provider),
+    model,
+  };
 
   const observationData = {
     model,
@@ -187,7 +230,7 @@ const wrapMethod = <T extends GenericMethod>(
             endTime: new Date(),
             usage,
             model: modelFromResponse || observationData.model,
-            type: OpikSpanType.General,
+            type: OpikSpanType.Llm,
             metadata: latestMetadata,
           });
 
@@ -343,7 +386,7 @@ function wrapAsyncIterable<T>(
       ...observationData,
       output: finalOutput,
       endTime: new Date(),
-      type: OpikSpanType.General,
+      type: OpikSpanType.Llm,
       usage: usageData,
     });
 
