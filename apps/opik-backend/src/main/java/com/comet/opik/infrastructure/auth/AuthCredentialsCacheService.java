@@ -22,8 +22,8 @@ import java.util.Set;
 
 /**
  * Uses 2 caches:
- * 1. User access cache. Data type: String. Key pattern: authV2-{apiKey}-{workspaceName}-{singlePermission}, value: userName
- * 2. Workspace metadata cache. Data type: Hash. Key pattern: authV2-ws-{workspaceName},
+ * 1. User access cache. Data type: String. Key pattern: authV3-{apiKey}-{workspaceName}-{singlePermission}, value: userName
+ * 2. Workspace metadata cache. Data type: Hash. Key pattern: authV3-ws-{workspaceName},
  * value: Map with expected keys of 'workspaceId' and 'quotas'
  */
 @RequiredArgsConstructor
