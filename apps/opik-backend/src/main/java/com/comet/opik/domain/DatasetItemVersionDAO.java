@@ -601,7 +601,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             SELECT COUNT(DISTINCT ei.dataset_item_id) AS count
             FROM experiment_items_final AS ei
-            LEFT JOIN dataset_items_resolved AS di ON di.id = ei.dataset_item_id
+            LEFT JOIN dataset_items_resolved AS di ON di.dataset_item_id = ei.dataset_item_id
             <if(search)>
             LEFT JOIN (
                 SELECT
@@ -936,7 +936,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
-                    SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>
+                    SELECT dataset_item_id FROM dataset_items_resolved WHERE <dataset_item_filters>
                 )
                 <endif>
             )
@@ -1000,7 +1000,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     tfs.metadata
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
-            LEFT JOIN dataset_items_resolved AS di ON di.id = ei.dataset_item_id
+            LEFT JOIN dataset_items_resolved AS di ON di.dataset_item_id = ei.dataset_item_id
             LEFT JOIN (
                 SELECT
                     t.id,
