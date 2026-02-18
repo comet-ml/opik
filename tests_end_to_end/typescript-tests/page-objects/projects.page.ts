@@ -45,7 +45,7 @@ export class ProjectsPage extends BasePage {
         if (attempt === maxAttempts) throw new Error(
           `Project "${projectName}" not visible after ${maxAttempts} attempts (${timeout}ms each)`
         );
-        await this.page.reload({ waitUntil: 'networkidle' });
+        await this.page.reload();
       }
     }
   }
