@@ -50,7 +50,7 @@ interface LlmProviderAnthropicMapper {
     @Mapping(expression = "java(request.model())", target = "model")
     @Mapping(expression = "java(request.stream())", target = "stream")
     @Mapping(expression = "java(request.temperature())", target = "temperature")
-    @Mapping(expression = "java(request.topP())", target = "topP")
+    @Mapping(expression = "java(request.temperature() != null ? null : request.topP())", target = "topP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
