@@ -589,11 +589,11 @@ class DBManager:
         Determines if the manager is currently closed.
 
         This property evaluates whether the manager's `status` is equivalent to
-        `ManagerStatus.closed`. If so, it indicates that the manager is not
+        `DBManagerStatus.closed`. If so, it indicates that the manager is not
         active or operational.
 
         Returns:
-            bool: True if the manager's status is `ManagerStatus.closed`, False otherwise.
+            bool: True if the manager's status is `DBManagerStatus.closed`, False otherwise.
         """
         return self.status == DBManagerStatus.closed
 
