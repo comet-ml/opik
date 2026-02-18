@@ -49,7 +49,11 @@ const REQUIRED_FIELDS = [
 
 const validateResult = (
   result: string,
-): { isDefaultRule: boolean; isValidJson: boolean; missingFields: string[] } => {
+): {
+  isDefaultRule: boolean;
+  isValidJson: boolean;
+  missingFields: string[];
+} => {
   const trimmed = result.trim();
   if (!trimmed)
     return { isDefaultRule: false, isValidJson: false, missingFields: [] };
