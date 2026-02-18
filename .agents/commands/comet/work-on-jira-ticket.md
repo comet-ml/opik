@@ -27,7 +27,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check Jira MCP**: If unavailable, respond with:
-  > "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > "This command needs Jira MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check development environment**: Verify project dependencies, build tools, and project structure are ready.
 - **Check local git branch** in the Opik repository:
@@ -121,29 +121,34 @@ This workflow will:
 
 ### 8. Implementation Suggestion
 
-- **Based on Jira context and Opik cursor rules**, suggest implementing the feature/bugfix:
-  - Reference relevant `.agents/rules` for tech stack guidance (Java backend, React frontend, Python/TypeScript SDKs)
+- **Based on Jira context and Opik agent guidance**, suggest implementing the feature/bugfix:
+  - Reference global policy in `.agents/rules/*` and domain guidance in `.agents/skills/*`
   - Provide specific implementation steps based on the task plan
   - Include code examples or file paths where appropriate
   - Suggest testing approaches and quality checks
   - Follow Opik architecture patterns (Resources → Services → DAOs → Models for backend)
-- **Commit Message Format**: Always suggest commits with ticket number prefix following Opik conventions:
+- **Commit Message Format**: Use semantic commits. The first commit on a branch is critical because PR title is derived from it:
 
-  **Initial Task Commits:**
+  **First Commit (PR-title source, required):**
   ```
-  [OPIK-####] [BE/FE/SDK/DOCS] <description>
-  ```
-
-  **Revision Commits:**
-  ```
-  Revision 2: <description>
-  Revision 3: <description>
+  [OPIK-####] [BE/FE/SDK/DOCS] <type>: <description>
   ```
 
-  **Test Commits:**
+  **Allowed ticket-key variants (when applicable):**
   ```
-  Revision 4: Add comprehensive tests for <feature>
-  Revision 5: Fix failing test cases
+  [issue-####] [BE/FE/SDK/DOCS] <type>: <description>
+  [NA] [BE/FE/SDK/DOCS] <type>: <description>
+  ```
+
+  **Follow-up Commits (preferred):**
+  ```
+  <type>(<scope>): <description>
+  ```
+  where `<type>` is one of: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
+
+  **Last-resort fallback (discouraged):**
+  ```
+  Revision N: <description>
   ```
 
   **Component Types:**
@@ -154,12 +159,13 @@ This workflow will:
 
   **Examples:**
   ```
-  [OPIK-1234] [BE] Add create trace endpoint
-  [OPIK-1234] [FE] Add project custom metrics UI dashboard
-  [OPIK-1234] [DOCS] Update API documentation
-  [OPIK-1234] [SDK] Add new Python SDK method
-  Revision 2: Add comprehensive tests for the project metrics endpoint
-  Revision 3: Add get metrics endpoint
+  [OPIK-1234] [BE] feat: add create trace endpoint
+  [OPIK-1234] [FE] feat: add project custom metrics UI dashboard
+  [OPIK-1234] [DOCS] docs: update API documentation
+  [issue-1234] [SDK] feat: add new Python SDK method
+  fix(metrics): handle empty dashboard responses
+  test(api): cover project metrics endpoint pagination
+  Revision 2: small follow-up rename after emergency patch
   ```
 
 ### 9. User Confirmation
@@ -240,7 +246,7 @@ The command is successful when:
 
 ### **Common Issues**
 
-- **Jira MCP not available**: Run `npm run install-mcp`
+- **Jira MCP not available**: Configure MCP and run `make cursor` (Cursor) or `make claude` (Claude CLI)
 - **Git branch conflicts**: Resolve conflicts before proceeding
 - **Permission errors**: Check user access and project settings
 - **Network issues**: Verify connectivity to Atlassian services

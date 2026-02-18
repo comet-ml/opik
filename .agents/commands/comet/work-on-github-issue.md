@@ -80,11 +80,11 @@ This workflow will:
 
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
-- **Always reference `.agents/rules` for tech stack guidance and Opik-specific patterns**:
-  - **Global rules**: General development guidelines, git workflow, project structure
-  - **Backend rules**: API design, architecture, business logic, database migrations, error handling, logging, MySQL transactions, testing
-  - **Frontend rules**: Tech stack, performance, UI components, API data fetching, state management, forms, code quality, accessibility testing, unit testing
-  - **SDK rules**: API design, architecture, code structure, dependency management, design principles, documentation, error handling, logging, testing
+- **Always reference shared and domain guidance in the right place**:
+  - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
+  - **Backend guidance**: `.agents/skills/opik-backend/*`
+  - **Frontend guidance**: `.agents/skills/opik-frontend/*`
+  - **SDK guidance**: `.agents/skills/python-sdk/*` and `.agents/skills/typescript-sdk/*`
 - **Component-specific guidance**: Use the appropriate rule set based on the implementation scope identified in step 4
 
 ---
@@ -122,29 +122,29 @@ This workflow will:
 
 ### 8. Implementation Suggestion
 
-- **Based on GitHub context and Opik cursor rules**, suggest implementing the feature/bugfix:
-  - Reference relevant `.agents/rules` for tech stack guidance (Java backend, React frontend, Python/TypeScript SDKs)
+- **Based on GitHub context and Opik agent guidance**, suggest implementing the feature/bugfix:
+  - Reference global policy in `.agents/rules/*` and domain guidance in `.agents/skills/*`
   - Provide specific implementation steps based on the task plan
   - Include code examples or file paths where appropriate
   - Suggest testing approaches and quality checks
   - Follow Opik architecture patterns (Resources → Services → DAOs → Models for backend)
-- **Commit Message Format**: Always suggest commits with issue number prefix following Opik conventions:
+- **Commit Message Format**: Follow shared conventions from `.agents/rules/git-workflow.mdc`.
 
-  **Initial Task Commits:**
+  **First Commit (PR-title source, required):**
   ```
-  [issue-####] [BE/FE/SDK/DOCS] <description>
+  [<TICKET-KEY>] [BE/FE/SDK/DOCS] <type>: <description>
   ```
+  where `<TICKET-KEY>` is `OPIK-####`, `issue-####`, or `NA`.
 
-  **Revision Commits:**
+  **Follow-up Commits (preferred):**
   ```
-  Revision 2: <description>
-  Revision 3: <description>
+  <type>(<scope>): <description>
   ```
+  where `<type>` is one of: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 
-  **Test Commits:**
+  **Last-resort fallback (discouraged):**
   ```
-  Revision 4: Add comprehensive tests for <feature>
-  Revision 5: Fix failing test cases
+  Revision N: <description>
   ```
 
   **Component Types:**
@@ -155,12 +155,11 @@ This workflow will:
 
   **Examples:**
   ```
-  [issue-1234] [BE] Add create trace endpoint
-  [issue-1234] [FE] Add project custom metrics UI dashboard
-  [issue-1234] [DOCS] Update API documentation
-  [issue-1234] [SDK] Add new Python SDK method
-  Revision 2: Add comprehensive tests for the project metrics endpoint
-  Revision 3: Add get metrics endpoint
+  [OPIK-1234] [BE] feat: add create trace endpoint
+  [issue-1234] [FE] fix: guard project custom metrics empty state
+  [OPIK-1234] [DOCS] docs: update API documentation
+  [NA] [SDK] chore: align SDK lint configuration
+  feat(experiments): add run-level metadata capture
   ```
 
 ### 9. User Confirmation

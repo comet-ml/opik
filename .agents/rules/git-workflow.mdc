@@ -11,17 +11,26 @@ alwaysApply: true
 - `user/NA-hotfix-description`
 
 ## Commit Format
-`[OPIK-####] [COMPONENT] description`
-- `[OPIK-1234] [BE] Add create trace endpoint`
-- `[OPIK-1234] [FE] Add metrics dashboard`
-- `[OPIK-1234] [SDK] Add Python method`
-- `[OPIK-1234] [DOCS] Update API documentation`
+First commit in branch (used as PR title source):
+`[<TICKET-KEY>] [COMPONENT] <type>: description`
+- `[OPIK-1234] [BE] feat: add create trace endpoint`
+- `[issue-123] [FE] fix: guard empty state`
+- `[NA] [DOCS] docs: update API documentation`
+
+Follow-up commits (preferred):
+`<type>(<scope>): description`
+- `feat(metrics): add project chart filters`
+- `fix(api): handle null feedback score`
+- `test(backend): cover trace creation`
+
+`Revision N: ...` is a last-resort fallback only.
 
 ## PR Title
-`[OPIK-####] [COMPONENT] description`
+`[<TICKET-KEY>] [COMPONENT] <type>: description`
 
 ## Never
 - Commit directly to main
 - Include customer names in commits/PRs
 - Commit secrets or .env files
 - Force push to main/master
+- Commit or raise security issues on a public repository

@@ -63,19 +63,20 @@ This workflow will:
   # Stage everything
   git add -A
 
-  # Agent: Generate commit message with ticket prefix format:
-  # [OPIK-####] [COMPONENT] <description> (preferred)
-  # [issue-####] [COMPONENT] <description> (GitHub issue branches)
-  # [NA] [COMPONENT] <description> (no-ticket branches)
+  # Agent: Generate first commit message in PR-title format:
+  # [OPIK-####] [COMPONENT] <type>: <description> (preferred)
+  # [issue-####] [COMPONENT] <type>: <description> (GitHub issue branches)
+  # [NA] [COMPONENT] <type>: <description> (no-ticket branches)
+  # where <type> is semantic: feat|fix|refactor|test|docs|chore
   #
   # <detailed description>
   #
   # Implements <TICKET-KEY>: <ticket summary>
   #
-  # Example: "[OPIK-2180] [DOCS] Add cursor git workflow rule"
+  # Example: "[OPIK-2180] [DOCS] docs: add cursor git workflow rule"
   # Then commit (only if there are staged changes)
   if ! git diff --cached --quiet; then
-    git commit -m "[<TICKET-KEY>] [COMPONENT] <AGENT_GENERATED_DESCRIPTION>"
+    git commit -m "[<TICKET-KEY>] [<COMPONENT>] <TYPE>: <AGENT_GENERATED_DESCRIPTION>"
   fi
   ```
 
@@ -156,8 +157,8 @@ This workflow will:
 
 ### 7. Pre-fill PR Template
 
-- **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TASK-SUMMARY}` extracted from branch description and change analysis
-  - Examples: `[OPIK-2180] [DOCS] Add cursor git workflow rule`, `[OPIK-1234] [BE] Add create trace endpoint`
+- **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TYPE}: {TASK-SUMMARY}` extracted from branch description and change analysis
+  - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat: add create trace endpoint`
 - **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public:
   ```markdown
   ## Details
