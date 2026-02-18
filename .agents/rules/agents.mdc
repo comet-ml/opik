@@ -7,8 +7,9 @@ alwaysApply: true
 ## Domain Routing
 - `apps/opik-backend/**` → Backend skill
 - `apps/opik-frontend/**` → Frontend skill
+- `sdks/opik_optimizer/**` → Python SDK skill
 - `sdks/python/**` → Python SDK skill
-- `sdks/opik-typescript/**` → TypeScript SDK skill
+- `sdks/typescript/**` → TypeScript SDK skill
 - `tests_end_to_end/**` → Playwright E2E skill
 
 ## Task Approach
@@ -18,5 +19,5 @@ alwaysApply: true
 
 ## Execution
 - Independent tasks → Run in parallel
-- Use Opus for: complex planning, security, architecture
-- Use Haiku for: simple test runs, formatting
+- Use thinking model (Opus, GPT 5.3, GPT 5.3 High) for: complex planning, security, architecture
+- Use fast model (Haiku, GPT Nano, GPT Codex Low/Medium) for: simple test runs, formatting
