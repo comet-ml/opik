@@ -17,4 +17,6 @@ export interface DatasetItemUpdate {
     /** Evaluators */
     evaluators?: OpikApi.EvaluatorItem[];
     executionPolicy?: OpikApi.ExecutionPolicy;
+    /** When true, clears the item-level execution policy (falls back to dataset-level) */
+    clearExecutionPolicy?: boolean;
 }

@@ -182,8 +182,10 @@ from .types import (
     DatasetPagePublic,
     DatasetPublic,
     DatasetPublicStatus,
+    DatasetPublicType,
     DatasetPublicVisibility,
     DatasetStatus,
+    DatasetType,
     DatasetVersionDiff,
     DatasetVersionDiffStats,
     DatasetVersionPagePublic,
@@ -585,7 +587,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
+from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
@@ -791,8 +793,10 @@ __all__ = [
     "DatasetPagePublic",
     "DatasetPublic",
     "DatasetPublicStatus",
+    "DatasetPublicType",
     "DatasetPublicVisibility",
     "DatasetStatus",
+    "DatasetType",
     "DatasetUpdateVisibility",
     "DatasetVersionDiff",
     "DatasetVersionDiffStats",
@@ -801,6 +805,7 @@ __all__ = [
     "DatasetVersionSummary",
     "DatasetVersionSummaryPublic",
     "DatasetVisibility",
+    "DatasetWriteType",
     "DatasetWriteVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",

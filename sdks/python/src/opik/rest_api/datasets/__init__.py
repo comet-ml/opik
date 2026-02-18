@@ -2,6 +2,6 @@
 
 # isort: skip_file
 
-from .types import DatasetUpdateVisibility, DatasetWriteVisibility
+from .types import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 
-__all__ = ["DatasetUpdateVisibility", "DatasetWriteVisibility"]
+__all__ = ["DatasetUpdateVisibility", "DatasetWriteType", "DatasetWriteVisibility"]
