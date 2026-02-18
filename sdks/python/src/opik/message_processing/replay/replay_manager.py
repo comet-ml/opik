@@ -49,16 +49,17 @@ class ReplayManager(threading.Thread):
         super().__init__(daemon=True, name="ReplayManager")
         self._stop_running = threading.Event()
         self._monitor = monitor
-        self._replay_lock = threading.RLock()
-        self._db_manager = db_manager.DBManager(
-            sync_lock=self._replay_lock,
-            batch_size=batch_size,
-            batch_replay_delay=batch_replay_delay,
-        )
         self._replay_callback: Optional[types.ReplayCallback] = None
         self._tick_interval_seconds = tick_interval_seconds
         self._next_tick_time = time.time() + self._tick_interval_seconds
+
         self._next_message_id = 0
+        self._message_id_lock = threading.RLock()
+
+        self._db_manager = db_manager.DBManager(
+            batch_size=batch_size,
+            batch_replay_delay=batch_replay_delay,
+        )
 
     def start(self) -> None:
         self._check_replay_callback()
@@ -87,7 +88,7 @@ class ReplayManager(threading.Thread):
         status: db_manager.MessageStatus = db_manager.MessageStatus.registered,
     ) -> None:
         """Registers a message to be replayed if the connection is lost."""
-        with self._replay_lock:
+        with self._message_id_lock:
             # set message ID if not set yet
             if message.message_id is None:
                 message.message_id = self._next_message_id
@@ -174,20 +175,19 @@ class ReplayManager(threading.Thread):
             )
 
     def _replay_failed_messages(self) -> None:
-        with self._replay_lock:
-            self._check_replay_callback()
-            try:
-                # ignore MyPy check because already asserted above
-                replayed = self._db_manager.replay_failed_messages(
-                    self._replay_callback  # type: ignore
-                )
+        self._check_replay_callback()
+        try:
+            # ignore MyPy check because already asserted above
+            replayed = self._db_manager.replay_failed_messages(
+                self._replay_callback  # type: ignore
+            )
 
-                if replayed > 0:
-                    LOGGER.info(
-                        "Replayed %d messages that were not sent due to server connection issues",
-                        replayed,
-                    )
-            except Exception as ex:
-                LOGGER.error(
-                    "Failed to replay failed messages, reason: %s", ex, exc_info=True
+            if replayed > 0:
+                LOGGER.info(
+                    "Replayed %d messages that were not sent due to server connection issues",
+                    replayed,
                 )
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to replay failed messages, reason: %s", ex, exc_info=True
+            )
