@@ -349,10 +349,10 @@ launch_context: scope is ${row.inputType}`,
           <Tabs defaultValue="generator">
             <TabsList variant="underline">
               <TabsTrigger variant="underline" value="generator">
-                Generator
+                Input
               </TabsTrigger>
               <TabsTrigger variant="underline" value="inputs">
-                Inputs
+                Table
               </TabsTrigger>
             </TabsList>
 
