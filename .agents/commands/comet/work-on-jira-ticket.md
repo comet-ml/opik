@@ -79,12 +79,12 @@ This workflow will:
 
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
-- **Always reference `.agents/rules` for tech stack guidance and Opik-specific patterns**:
-  - **Global rules**: General development guidelines, git workflow, project structure
-  - **Backend rules**: API design, architecture, business logic, database migrations, error handling, logging, MySQL transactions, testing
-  - **Frontend rules**: Tech stack, performance, UI components, API data fetching, state management, forms, code quality, accessibility testing, unit testing
-  - **SDK rules**: API design, architecture, code structure, dependency management, design principles, documentation, error handling, logging, testing
-- **Component-specific guidance**: Use the appropriate rule set based on the implementation scope identified in step 4
+- **Always reference shared + domain guidance in the right place**:
+  - **Global policy**: `.agents/rules/*` (git workflow, security, code style, routing)
+  - **Backend guidance**: `.agents/skills/opik-backend/*`
+  - **Frontend guidance**: `.agents/skills/opik-frontend/*`
+  - **SDK guidance**: `.agents/skills/python-sdk/*` and `.agents/skills/typescript-sdk/*`
+- **Component-specific guidance**: Use the appropriate guidance set based on the implementation scope identified in step 4
 
 ---
 
