@@ -91,9 +91,12 @@ class TestLLMJudgeToConfig:
                 "description": "Response is helpful",
             },
         ]
-        # Verify assertions are listed in the prompt (response format is via structured output)
-        assert "- Response is accurate" in config_dict["messages"][0]["content"]
-        assert "- Response is helpful" in config_dict["messages"][0]["content"]
+        # Config has system + user messages; user template keeps placeholders
+        assert config_dict["messages"][0]["role"] == "SYSTEM"
+        assert config_dict["messages"][1]["role"] == "USER"
+        assert "{assertions}" in config_dict["messages"][1]["content"]
+        assert "{input}" in config_dict["messages"][1]["content"]
+        assert "{output}" in config_dict["messages"][1]["content"]
 
     def test_to_config__without_optional_params__uses_defaults(self):
         evaluator = llm_judge.LLMJudge(

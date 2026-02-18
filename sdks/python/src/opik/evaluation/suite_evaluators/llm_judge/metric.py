@@ -16,9 +16,15 @@ from . import config as llm_judge_config
 from . import parsers
 
 
-LLM_JUDGE_TEMPLATE = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
+LLM_JUDGE_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
 
-## Input
+For each assertion, provide:
+- value: true if the assertion passes, false if it fails
+- reason: A brief explanation of your judgment
+- metadata: An object containing "confidence" (a float from 0.0 to 1.0 indicating how confident you are)
+"""
+
+LLM_JUDGE_USER_TEMPLATE = """## Input
 The INPUT section contains all data that the agent received. This may include the actual user query, conversation history, context, metadata, or other structured information. Identify the core user request within this data.
 
 {input}
@@ -32,11 +38,6 @@ The OUTPUT section contains all data produced by the agent. This may include the
 Evaluate each of the following assertions against the agent's output:
 
 {assertions}
-
-For each assertion, provide:
-- value: true if the assertion passes, false if it fails
-- reason: A brief explanation of your judgment
-- confidence: A float from 0.0 to 1.0 indicating how confident you are
 """
 
 
@@ -54,14 +55,19 @@ def _generate_prompt(
     output: Any,
     assertions: List[str],
 ) -> str:
-    """Generate the LLM query for evaluating assertions."""
+    """Generate the LLM query for evaluating assertions.
+
+    Combines the system prompt and user template into a single string
+    because the model's generate_string API accepts only one input string.
+    """
     assertions_str = "\n".join(f"- {assertion}" for assertion in assertions)
 
-    return LLM_JUDGE_TEMPLATE.format(
+    user_content = LLM_JUDGE_USER_TEMPLATE.format(
         input=_format_value(input),
         output=_format_value(output),
         assertions=assertions_str,
     )
+    return LLM_JUDGE_SYSTEM_PROMPT + "\n" + user_content
 
 
 class LLMJudge(base.BaseSuiteEvaluator):
@@ -244,15 +250,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
             seed=self._seed,
         )
 
-        assertions_text = "\n".join(f"- {assertion}" for assertion in self._assertions)
-
-        prompt_content = LLM_JUDGE_TEMPLATE.replace("{assertions}", assertions_text)
-
         messages = [
             llm_judge_config.LLMJudgeMessage(
+                role="SYSTEM",
+                content=LLM_JUDGE_SYSTEM_PROMPT,
+            ),
+            llm_judge_config.LLMJudgeMessage(
                 role="USER",
-                content=prompt_content,
-            )
+                content=LLM_JUDGE_USER_TEMPLATE,
+            ),
         ]
 
         variables = {

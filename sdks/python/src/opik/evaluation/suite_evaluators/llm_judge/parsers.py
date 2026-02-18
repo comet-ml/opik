@@ -16,12 +16,22 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
+class AssertionResultMetadata(pydantic.BaseModel):
+    """Metadata for a single assertion evaluation."""
+
+    confidence: float = pydantic.Field(ge=0.0, le=1.0)
+
+
 class AssertionResultItem(pydantic.BaseModel):
-    """Result for a single assertion evaluation."""
+    """Result for a single assertion evaluation.
+
+    Mirrors ScoreResult shape: value, reason, metadata.
+    The assertion name comes from the parent model's field key.
+    """
 
     value: bool
     reason: str
-    confidence: float = pydantic.Field(ge=0.0, le=1.0)
+    metadata: AssertionResultMetadata
 
 
 def build_response_format_model(
@@ -98,7 +108,7 @@ def parse_model_output(
                     name=assertion,
                     value=item.value,
                     reason=item.reason,
-                    metadata={"confidence": item.confidence},
+                    metadata=item.metadata.model_dump(),
                 )
             )
 

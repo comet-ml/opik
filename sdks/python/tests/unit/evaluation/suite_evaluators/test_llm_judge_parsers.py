@@ -40,7 +40,7 @@ class TestBuildResponseFormatModel:
                 "Response is accurate": {
                     "value": True,
                     "reason": "The response is correct",
-                    "confidence": 0.95,
+                    "metadata": {"confidence": 0.95},
                 }
             }
         )
@@ -48,7 +48,7 @@ class TestBuildResponseFormatModel:
         result = getattr(instance, "Response is accurate")
         assert result.value is True
         assert result.reason == "The response is correct"
-        assert result.confidence == 0.95
+        assert result.metadata.confidence == 0.95
 
     def test_build_response_format_model__rejects_missing_field(self):
         assertions = ["Response is accurate", "Response is helpful"]
@@ -60,7 +60,7 @@ class TestBuildResponseFormatModel:
                     "Response is accurate": {
                         "value": True,
                         "reason": "Correct",
-                        "confidence": 0.9,
+                        "metadata": {"confidence": 0.9},
                     }
                 }
             )
@@ -75,7 +75,7 @@ class TestBuildResponseFormatModel:
                     "Response is accurate": {
                         "value": True,
                         "reason": "Correct",
-                        "confidence": 1.5,
+                        "metadata": {"confidence": 1.5},
                     }
                 }
             )
@@ -89,7 +89,7 @@ class TestParseModelOutput:
                 "Response is accurate": {
                     "value": True,
                     "reason": "The response correctly states Paris",
-                    "confidence": 0.95,
+                    "metadata": {"confidence": 0.95},
                 }
             }
         )
@@ -110,17 +110,17 @@ class TestParseModelOutput:
                 "First assertion": {
                     "value": True,
                     "reason": "First reason",
-                    "confidence": 0.9,
+                    "metadata": {"confidence": 0.9},
                 },
                 "Second assertion": {
                     "value": False,
                     "reason": "Second reason",
-                    "confidence": 0.8,
+                    "metadata": {"confidence": 0.8},
                 },
                 "Third assertion": {
                     "value": True,
                     "reason": "Third reason",
-                    "confidence": 0.7,
+                    "metadata": {"confidence": 0.7},
                 },
             }
         )
@@ -155,7 +155,7 @@ class TestParseModelOutput:
                 "Response is accurate": {
                     "value": True,
                     "reason": "Correct",
-                    "confidence": 0.9,
+                    "metadata": {"confidence": 0.9},
                 }
             }
         )
@@ -172,7 +172,7 @@ class TestParseModelOutput:
             {
                 "Response is accurate": {
                     "value": True,
-                    "confidence": 0.9,
+                    "metadata": {"confidence": 0.9},
                 }
             }
         )
@@ -200,7 +200,7 @@ class TestParseModelOutput:
                 'Response doesn\'t contain "quotes" or special chars: {}/\\': {
                     "value": True,
                     "reason": "No special chars found",
-                    "confidence": 0.85,
+                    "metadata": {"confidence": 0.85},
                 }
             }
         )
