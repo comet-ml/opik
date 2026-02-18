@@ -40,7 +40,11 @@ const REQUIRED_FIELDS = [
 
 const validateResult = (
   result: string,
-): { isDefaultRule: boolean; isValidJson: boolean; missingFields: string[] } => {
+): {
+  isDefaultRule: boolean;
+  isValidJson: boolean;
+  missingFields: string[];
+} => {
   const trimmed = result.trim();
   if (!trimmed)
     return { isDefaultRule: false, isValidJson: false, missingFields: [] };
@@ -51,9 +55,7 @@ const validateResult = (
     if (typeof parsed !== "object" || parsed === null) {
       return { isDefaultRule: false, isValidJson: false, missingFields: [] };
     }
-    const missingFields = REQUIRED_FIELDS.filter(
-      (field) => !(field in parsed),
-    );
+    const missingFields = REQUIRED_FIELDS.filter((field) => !(field in parsed));
     return { isDefaultRule: false, isValidJson: true, missingFields };
   } catch {
     return { isDefaultRule: false, isValidJson: false, missingFields: [] };
@@ -275,42 +277,44 @@ const RuleGeneratorInputsTable: React.FC<RuleGeneratorInputsTableProps> = ({
               </TableCell>
               <TableCell className="align-top">
                 <div data-cell-wrapper="true" className="p-1 pt-3">
-                  {row.result.trim() && (() => {
-                    const { isDefaultRule, isValidJson, missingFields } = validateResult(row.result);
-                    if (isDefaultRule) {
+                  {row.result.trim() &&
+                    (() => {
+                      const { isDefaultRule, isValidJson, missingFields } =
+                        validateResult(row.result);
+                      if (isDefaultRule) {
+                        return (
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Check className="size-3.5 text-green-600" />
+                            <span>Default rule</span>
+                          </div>
+                        );
+                      }
                       return (
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <Check className="size-3.5 text-green-600" />
-                          <span>Default rule</span>
+                        <div className="flex flex-col gap-1.5 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            {isValidJson ? (
+                              <Check className="size-3.5 text-green-600" />
+                            ) : (
+                              <X className="size-3.5 text-red-500" />
+                            )}
+                            <span>Valid JSON</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isValidJson && missingFields.length === 0 ? (
+                              <Check className="size-3.5 text-green-600" />
+                            ) : (
+                              <X className="size-3.5 text-red-500" />
+                            )}
+                            <span>Required fields</span>
+                          </div>
+                          {isValidJson && missingFields.length > 0 && (
+                            <div className="ml-5 text-muted-slate">
+                              Missing: {missingFields.join(", ")}
+                            </div>
+                          )}
                         </div>
                       );
-                    }
-                    return (
-                      <div className="flex flex-col gap-1.5 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          {isValidJson ? (
-                            <Check className="size-3.5 text-green-600" />
-                          ) : (
-                            <X className="size-3.5 text-red-500" />
-                          )}
-                          <span>Valid JSON</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {isValidJson && missingFields.length === 0 ? (
-                            <Check className="size-3.5 text-green-600" />
-                          ) : (
-                            <X className="size-3.5 text-red-500" />
-                          )}
-                          <span>Required fields</span>
-                        </div>
-                        {isValidJson && missingFields.length > 0 && (
-                          <div className="ml-5 text-muted-slate">
-                            Missing: {missingFields.join(", ")}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                    })()}
                 </div>
               </TableCell>
               <TableCell className="align-top">
