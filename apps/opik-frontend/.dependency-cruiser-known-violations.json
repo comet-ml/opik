@@ -368,7 +368,7 @@
   },
   {
     "type": "dependency",
-    "from": "src/components/pages/HomePage/GetStartedSection.tsx",
+    "from": "src/components/pages/HomePage/GetStartedSection/index.tsx",
     "to": "src/components/pages/HomePageShared/SetGuardrailDialog.tsx",
     "rule": {
       "severity": "error",
