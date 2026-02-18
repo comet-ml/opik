@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   UserPen,
   ChartLine,
+  ScrollText,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -171,6 +172,13 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Brain,
         label: "Online evaluation",
         count: "rules",
+      },
+      {
+        id: "rule_generator",
+        path: "/$workspaceName/rule-generator",
+        type: MENU_ITEM_TYPE.router,
+        icon: ScrollText,
+        label: "Rule generator",
       },
       {
         id: "alerts",

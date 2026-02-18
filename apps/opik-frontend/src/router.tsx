@@ -44,6 +44,7 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import RuleGeneratorPage from "@/components/pages/RuleGeneratorPage/RuleGeneratorPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -443,6 +444,15 @@ const onlineEvaluationRoute = createRoute({
   component: OnlineEvaluationPage,
 });
 
+const ruleGeneratorRoute = createRoute({
+  path: "/rule-generator",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Rule generator",
+  },
+  component: RuleGeneratorPage,
+});
+
 const annotationQueuesRoute = createRoute({
   path: "/annotation-queues",
   getParentRoute: () => workspaceRoute,
@@ -518,6 +528,7 @@ const routeTree = rootRoute.addChildren([
       configurationRoute,
       alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,
+      ruleGeneratorRoute,
       annotationQueuesRoute.addChildren([
         annotationQueuesListRoute,
         annotationQueueDetailsRoute,
