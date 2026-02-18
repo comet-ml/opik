@@ -76,7 +76,10 @@ def _create_span_message(
 
 
 def _verify_message_was_inserted(
-    message_id: int, message: messages.BaseMessage, conn: sqlite3.Connection
+    message_id: int,
+    message: messages.BaseMessage,
+    conn: sqlite3.Connection,
+    status: db_manager.MessageStatus = db_manager.MessageStatus.registered,
 ) -> None:
     """Verify a message row matches the provided message."""
     # Verify a message was inserted
@@ -87,7 +90,7 @@ def _verify_message_was_inserted(
     row = cursor.fetchone()
     assert row is not None
     assert row[0] == message.message_id
-    assert row[1] == db_manager.MessageStatus.registered
+    assert row[1] == status
     assert row[2] == message.message_type
     assert row[3] == message_serialization.serialize_message(message)
 
@@ -163,6 +166,27 @@ class TestRegisterMessage:
         # Verify a message was inserted
         _verify_message_was_inserted(1, message, manager.conn)
 
+    def test_register_message__single_message__upsert_into_db(
+        self, manager: db_manager.DBManager
+    ):
+        """Test registering a single message inserts it into the database and upserts if exists."""
+        message = _create_trace_message(message_id=1)
+
+        manager.register_message(message, status=db_manager.MessageStatus.registered)
+
+        # Verify a message was inserted
+        _verify_message_was_inserted(1, message, manager.conn)
+
+        # register the same message again, it should be updated
+        manager.register_message(message, status=db_manager.MessageStatus.failed)
+
+        # Verify a message was upserted
+        cursor = manager.conn.execute(
+            "SELECT status FROM messages WHERE message_id = ?", (1,)
+        )
+        row = cursor.fetchone()
+        assert row[0] == db_manager.MessageStatus.failed
+
     def test_register_message__custom_status__uses_provided_status(
         self, manager: db_manager.DBManager
     ):
@@ -234,6 +258,32 @@ class TestRegisterMessages:
 
         for message in messages_list:
             _verify_message_was_inserted(message.message_id, message, manager.conn)
+
+    def test_register_messages__batch_of_messages__upserts_all(
+        self, manager: db_manager.DBManager
+    ):
+        """Test registering a batch of messages inserts all of them and  upserts if exists."""
+        messages_list = [
+            _create_trace_message(message_id=1, trace_id="trace-1"),
+            _create_trace_message(message_id=2, trace_id="trace-2"),
+            _create_trace_message(message_id=3, trace_id="trace-3"),
+        ]
+
+        manager.register_messages(messages_list)
+
+        # register the same messages again, it should be updated
+        manager.register_messages(messages_list, status=db_manager.MessageStatus.failed)
+
+        cursor = manager.conn.execute("SELECT COUNT(*) FROM messages")
+        assert cursor.fetchone()[0] == 3
+
+        for message in messages_list:
+            _verify_message_was_inserted(
+                message.message_id,
+                message,
+                manager.conn,
+                status=db_manager.MessageStatus.failed,
+            )
 
     def test_register_messages__manager_closed__ignores_messages(
         self, manager: db_manager.DBManager

@@ -236,7 +236,11 @@ class DBManager:
             )
             try:
                 with self.conn:
-                    self.conn.execute("INSERT INTO messages VALUES (?,?,?,?)", values)
+                    self.conn.execute(
+                        "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?,?,?,?)"
+                        " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status, message_type = excluded.message_type, message_json = excluded.message_json",
+                        values,
+                    )
             except Exception as ex:
                 self._mark_as_db_failed(
                     f"register_message: failed to insert message into DB, reason: {ex}"
@@ -282,7 +286,9 @@ class DBManager:
             try:
                 with self.conn:
                     self.conn.executemany(
-                        "INSERT INTO messages VALUES (?,?,?,?)", values
+                        "INSERT INTO messages(message_id, status, message_type, message_json) VALUES (?,?,?,?)"
+                        " ON CONFLICT(message_id) DO UPDATE SET status = excluded.status, message_type = excluded.message_type, message_json = excluded.message_json",
+                        values,
                     )
             except Exception as ex:
                 self._mark_as_db_failed(
