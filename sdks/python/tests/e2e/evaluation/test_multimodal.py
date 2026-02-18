@@ -78,6 +78,12 @@ def _normalize_output(output: Any) -> str:
             elif isinstance(content_value, list):
                 collect_values(content_value)
 
+            output_value = value.get("output")
+            if isinstance(output_value, str):
+                collected_parts.append(output_value)
+            elif isinstance(output_value, list):
+                collect_values(output_value)
+
     collect_values(output)
     return " ".join(part.strip() for part in collected_parts).strip().lower()
 
