@@ -1,4 +1,8 @@
 ## Details
+<!--
+Short 2-3 lines single paragraph explaining whats changed and the motivation (why).
+If you need to have changes explained in detail include single line dot point(s).
+-->
 
 ## Change checklist
 - [ ] User facing
@@ -10,5 +14,30 @@
 - OPIK-
 
 ## Testing
+<!--
+Include:
+- Exact commands run (for example: `mvn test`, `npm run lint && npm run test`, `pytest ...`)
+- Scenarios validated (happy path, edge cases, regressions)
+- Environment/context used (local process mode vs Docker, OS/browser when relevant)
+- Any tests not run, with reason
+- Relevant logs/artifacts links if available
+
+Video evidence:
+- External contributors: include a short recording for all contributions where possible.
+- Internal contributors: include a short recording for complex changes where possible.
+-->
 
 ## Documentation
+
+<!--
+## AI Assistance
+
+- [ ] No AI assistance used
+- [ ] AI assistance used (complete the disclosure below)
+
+- AI-WATERMARK:
+- Tool(s):
+- Model(s):
+- Scope:
+- Human verification:
+-->
