@@ -4295,7 +4295,7 @@ class DatasetVersionResourceTest {
                     .build();
 
             var version1 = datasetResourceClient.applyDatasetItemChanges(
-                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+                    datasetId, changes, true, API_KEY, TEST_WORKSPACE);
 
             assertThat(version1).isNotNull();
             assertThat(version1.itemsTotal()).isZero();

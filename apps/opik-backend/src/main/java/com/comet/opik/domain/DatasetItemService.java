@@ -1462,6 +1462,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             // No base version: create the first version (metadata only, no item delta)
             if (baseVersionId == null) {
+                if (!override) {
+                    return Mono.error(new BadRequestException(
+                            "baseVersion is required. Use override=true to create the first version without a base."));
+                }
                 if (versionService.hasVersions(workspaceId, datasetId)) {
                     return Mono.error(new BadRequestException(
                             "baseVersion is required when the dataset already has versions."));
