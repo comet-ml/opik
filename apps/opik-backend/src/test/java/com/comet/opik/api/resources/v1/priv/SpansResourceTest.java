@@ -2395,6 +2395,50 @@ class SpansResourceTest {
             getAndAssert(expectedSpan, null, API_KEY, TEST_WORKSPACE);
         }
 
+        @Test
+        @DisplayName("when update arrives before create with different parent_span_id, then stats count matches actual spans")
+        void when__updateArrivesBeforeCreate__thenStatsInputCountMatchesActualSpans() {
+            var projectName = UUID.randomUUID().toString();
+            var traceId = generator.generate();
+            var parentSpanId = generator.generate();
+
+            var spanWithInput = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(parentSpanId)
+                    .feedbackScores(null)
+                    .build();
+
+            var earlyUpdate = SpanUpdate.builder()
+                    .output(podamFactory.manufacturePojo(JsonNode.class))
+                    .endTime(Instant.now())
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(null)
+                    .build();
+            spanResourceClient.updateSpan(spanWithInput.id(), earlyUpdate, API_KEY, TEST_WORKSPACE);
+
+            spanResourceClient.createSpan(spanWithInput, API_KEY, TEST_WORKSPACE);
+
+            var spanWithoutInput = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .parentSpanId(parentSpanId)
+                    .input(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(spanWithoutInput, API_KEY, TEST_WORKSPACE);
+
+            var stats = spanResourceClient.getSpansStats(projectName, null, List.of(), API_KEY, TEST_WORKSPACE,
+                    Map.of());
+
+            var inputStat = stats.stats().stream()
+                    .filter(s -> "input".equals(s.getName()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(inputStat.getValue()).isEqualTo(1L);
+        }
+
         Stream<Arguments> updateOnlyName() {
             var name = RandomStringUtils.secure().nextAlphanumeric(32);
             return Stream.of(
