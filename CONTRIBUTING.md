@@ -34,7 +34,7 @@ If you are in a position to submit a PR for the feature, feel free to open a PR!
 
 Use this before opening a PR:
 
-1. Open or confirm an issue/feature request and link it in your PR description.
+1. Open or confirm an issue/feature request and link it in your PR description (`Fixes #...` or `Resolves #...`).
 2. Pick the right component path (`apps/`, `sdks/`, `tests_end_to_end/`) and follow its local setup.
 3. Run format/lint checks in your touched area.
 4. Run relevant tests before pushing.
