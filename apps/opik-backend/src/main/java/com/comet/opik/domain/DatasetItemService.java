@@ -1466,6 +1466,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.error(new BadRequestException(
                             "baseVersion is required when the dataset already has versions."));
                 }
+                boolean hasItems = (changes.addedItems() != null && !changes.addedItems().isEmpty())
+                        || (changes.editedItems() != null && !changes.editedItems().isEmpty())
+                        || (changes.deletedIds() != null && !changes.deletedIds().isEmpty());
+                if (hasItems) {
+                    return Mono.error(new BadRequestException(
+                            "addedItems, editedItems, and deletedIds must be empty when baseVersion is null."));
+                }
                 UUID newVersionId = idGenerator.generateId();
                 return Mono.fromCallable(() -> {
                     DatasetVersion version = versionService.createVersionFromDelta(
