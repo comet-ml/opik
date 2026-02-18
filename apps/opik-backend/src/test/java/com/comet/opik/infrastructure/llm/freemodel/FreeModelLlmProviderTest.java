@@ -5,7 +5,6 @@ import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -112,15 +111,15 @@ class FreeModelLlmProviderTest {
         assertThat(transformedRequest.reasoningEffort()).isEqualTo("minimal");
     }
 
-    @Test
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
     @DisplayName("generate should forward customParameters from the original request")
-    void testGenerate_customParametersForwarded() {
+    void testGenerate_customParametersForwarded(String testName, Map<String, Object> customParams) {
         OpenAiClient mockClient = mock(OpenAiClient.class);
         when(mockClient.chatCompletion(any())).thenAnswer(invocation -> mock(Object.class));
 
         FreeModelLlmProvider provider = new FreeModelLlmProvider(mockClient, "gpt-5-nano", false);
 
-        var customParams = Map.<String, Object>of("custom_key", "custom_value", "another_key", 42);
         ChatCompletionRequest request = ChatCompletionRequest.builder()
                 .model(FreeModelConfig.FREE_MODEL)
                 .messages(List.of(UserMessage.builder().content("test").build()))
@@ -138,28 +137,11 @@ class FreeModelLlmProviderTest {
         assertThat(requestCaptor.getValue().customParameters()).isEqualTo(customParams);
     }
 
-    @Test
-    @DisplayName("generate should forward null customParameters without error")
-    void testGenerate_nullCustomParametersForwarded() {
-        OpenAiClient mockClient = mock(OpenAiClient.class);
-        when(mockClient.chatCompletion(any())).thenAnswer(invocation -> mock(Object.class));
-
-        FreeModelLlmProvider provider = new FreeModelLlmProvider(mockClient, "gpt-5-nano", false);
-
-        ChatCompletionRequest request = ChatCompletionRequest.builder()
-                .model(FreeModelConfig.FREE_MODEL)
-                .messages(List.of(UserMessage.builder().content("test").build()))
-                .build();
-
-        try {
-            provider.generate(request, "test-workspace-id");
-        } catch (Exception e) {
-        }
-
-        ArgumentCaptor<ChatCompletionRequest> requestCaptor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
-        verify(mockClient).chatCompletion(requestCaptor.capture());
-
-        assertThat(requestCaptor.getValue().customParameters()).isNull();
+    private static Stream<Arguments> testGenerate_customParametersForwarded() {
+        return Stream.of(
+                arguments("populated customParameters should be forwarded",
+                        Map.<String, Object>of("custom_key", "custom_value", "another_key", 42)),
+                arguments("null customParameters should be forwarded as null", null));
     }
 
     private static Stream<Arguments> testGenerate_temperatureTransformation() {
