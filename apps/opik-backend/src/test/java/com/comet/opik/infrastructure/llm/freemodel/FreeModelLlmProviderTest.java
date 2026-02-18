@@ -62,7 +62,7 @@ class FreeModelLlmProviderTest {
         assertThat(transformedRequest.model()).isEqualTo(actualModel);
         assertThat(transformedRequest.temperature()).isEqualTo(expectedTemperature);
         assertThat(transformedRequest.messages()).isEqualTo(request.messages());
-        assertThat(transformedRequest.reasoningEffort()).isEqualTo("none");
+        assertThat(transformedRequest.reasoningEffort()).isEqualTo("minimal");
     }
 
     @ParameterizedTest(name = "{0}")
@@ -109,7 +109,7 @@ class FreeModelLlmProviderTest {
         assertThat(transformedRequest.model()).isEqualTo(actualModel);
         assertThat(transformedRequest.temperature()).isEqualTo(expectedTemperature);
         assertThat(transformedRequest.messages()).isEqualTo(request.messages());
-        assertThat(transformedRequest.reasoningEffort()).isEqualTo("none");
+        assertThat(transformedRequest.reasoningEffort()).isEqualTo("minimal");
     }
 
     @Test
