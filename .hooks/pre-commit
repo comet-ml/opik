@@ -1,4 +1,8 @@
 #!/bin/sh
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$REPO_ROOT" || exit 1
 
 # Check if dev-runner.sh exists
 if [ ! -f scripts/dev-runner.sh ]; then
@@ -6,43 +10,68 @@ if [ ! -f scripts/dev-runner.sh ]; then
   exit 1
 fi
 
+staged_files() {
+  git diff --cached --name-only
+}
+
+run_precommit_scope() {
+  scope_label="$1"
+  scope_regex="$2"
+  scope_config="$3"
+
+  changed_files=$(staged_files | grep -E "$scope_regex" || true)
+  if [ -z "$changed_files" ]; then
+    echo "No ${scope_label} files changed. Skipping."
+    return
+  fi
+
+  if ! command -v pre-commit >/dev/null 2>&1; then
+    echo "pre-commit is required for ${scope_label} checks but was not found in PATH."
+    exit 1
+  fi
+
+  echo "${scope_label} files have been changed. Running pre-commit (${scope_config})..."
+  if ! printf '%s\n' "$changed_files" | xargs pre-commit run --config "$scope_config" --files; then
+    echo "${scope_label} pre-commit checks failed. Please fix issues before committing."
+    exit 1
+  fi
+
+  git add -u
+}
+
 # Check for staged Java files
-if git diff --cached --name-only | grep -E '\.java$'; then
+if staged_files | grep -E '\.java$' >/dev/null; then
   echo "Java files have been changed. Running Spotless..."
 
-  cd scripts || exit 1
-
   # Run Backend linting
-  if ! ./dev-runner.sh --lint-be; then
+  if ! ./scripts/dev-runner.sh --lint-be; then
     echo "Spotless found issues and failed to apply fixes. Please fix the issues before committing."
     exit 1
   fi
 
   # Add any potentially modified files by Spotless back to the index
   git add -u
-  
-  cd .. || exit 1
 else
   echo "No Java files changed. Skipping Spotless."
 fi
 
 # Check for staged frontend files
-if git diff --cached --name-only | grep -E '^apps/opik-frontend/'; then
+if staged_files | grep -E '^apps/opik-frontend/' >/dev/null; then
   echo "Frontend files have been changed. Running lint and typecheck..."
 
-  cd scripts || exit 1
-
   # Run lint with auto-fix
-  if ! ./dev-runner.sh --lint-fe; then
+  if ! ./scripts/dev-runner.sh --lint-fe; then
     echo "Lint failed. Please fix the remaining linting issues before committing."
     exit 1
   fi
 
   # Add any potentially modified files by lint back to the index
   git add -u
-
-  cd .. || exit 1
 else
   echo "No frontend files changed. Skipping lint and typecheck."
 fi
 
+# Python module checks (repo-scoped pre-commit configs)
+run_precommit_scope "Python SDK" '^sdks/python/' 'sdks/python/.pre-commit-config.yaml'
+run_precommit_scope "Optimizer SDK" '^sdks/opik_optimizer/' 'sdks/opik_optimizer/.pre-commit-config.yaml'
+run_precommit_scope "Guardrails backend" '^apps/opik-guardrails-backend/' 'apps/opik-guardrails-backend/.pre-commit-config.yaml'
