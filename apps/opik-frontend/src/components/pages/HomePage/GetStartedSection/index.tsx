@@ -12,7 +12,7 @@ import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperi
 import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
+import SetGuardrailDialog from "../../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const GetStartedSection = () => {
