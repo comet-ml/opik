@@ -287,6 +287,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 experiment_id=item.experiment_id,
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
+                project_name=item.project_name,
             )
             for item in message.batch
         ]
