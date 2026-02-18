@@ -88,6 +88,7 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 // Claude Opus 4.6 uses adaptive thinking with effort levels: low, medium (default), high, max
 export const ANTHROPIC_THINKING_MODELS = [
   PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
 ] as const;
 
 // Reasoning models that require temperature = 1.0
