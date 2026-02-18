@@ -1,2 +1,2 @@
 setuptools  # required by guardrails hub
-guardrails-ai<0.9.0  # 0.9.0 broke hub install API, causing PolitenessCheck import to fail
+guardrails-ai<0.9.0

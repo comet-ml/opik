@@ -11,7 +11,7 @@ crewai!=0.114.0 # https://github.com/crewAIInc/crewAI/issues/2575
 crewai-tools
 dspy-ai
 google-adk>=0.1.0
-guardrails-ai
+guardrails-ai<0.9.0
 haystack-ai
 langchain
 langchain_core
