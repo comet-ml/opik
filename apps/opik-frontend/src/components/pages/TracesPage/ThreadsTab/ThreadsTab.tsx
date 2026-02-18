@@ -258,16 +258,9 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
-const DEFAULT_THREADS_ORDER: string[] = [
-  "start_time",
-  "first_message",
-  "last_message",
-  "number_of_messages",
-  "duration",
-  `${COLUMN_USAGE_ID}.total_tokens`,
-  "total_estimated_cost",
-  COLUMN_COMMENTS_ID,
-];
+const DEFAULT_THREADS_ORDER: string[] = DEFAULT_SELECTED_COLUMNS.filter(
+  (c) => c !== COLUMN_FEEDBACK_SCORES_ID,
+);
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
