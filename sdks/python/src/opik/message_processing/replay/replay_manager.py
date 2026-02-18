@@ -184,7 +184,7 @@ class ReplayManager(threading.Thread):
 
             if replayed > 0:
                 LOGGER.info(
-                    "Replayed %d messages that were not sent due to server connection issues",
+                    "Replayed %d message(s) that were not sent due to server connection issues",
                     replayed,
                 )
         except Exception as ex:
