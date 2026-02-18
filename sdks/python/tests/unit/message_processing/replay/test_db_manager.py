@@ -13,7 +13,7 @@ from opik.message_processing.replay import message_serialization, db_manager
 
 @pytest.fixture
 def manager() -> Generator[db_manager.DBManager, None, None]:
-    """Fixture that creates a ReplayManager and ensures cleanup after test."""
+    """Fixture that creates a DBManager and ensures cleanup after test."""
     mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=0.5)
     yield mgr
     mgr.close()
@@ -21,7 +21,7 @@ def manager() -> Generator[db_manager.DBManager, None, None]:
 
 @pytest.fixture
 def small_batch_manager() -> Generator[db_manager.DBManager, None, None]:
-    """Fixture that creates a ReplayManager with a small batch size for testing batching."""
+    """Fixture that creates a DBManager with a small batch size for testing batching."""
     mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1)
     yield mgr
     mgr.close()

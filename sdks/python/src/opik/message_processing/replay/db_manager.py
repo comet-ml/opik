@@ -636,24 +636,28 @@ class DBManager:
         last_seen_id = -1
         while True:
             batch: List[DBMessage] = []
-            try:
-                rows = self.conn.execute(
-                    "SELECT message_id, message_type, message_json FROM messages "
-                    "WHERE status = ? AND message_id > ? ORDER BY message_id LIMIT ?",
-                    (MessageStatus.failed, last_seen_id, batch_size),
-                )
-            except Exception as ex:
-                self._mark_as_db_failed(
-                    f"fetch_failed_messages_batched: failed to fetch failed messages from the DB, reason: {ex}"
-                )
-                raise
-
-            for row in rows:
-                batch.append(
-                    DBMessage(
-                        id=row[0], type=row[1], json=row[2], status=MessageStatus.failed
+            with self.__lock__:
+                try:
+                    rows = self.conn.execute(
+                        "SELECT message_id, message_type, message_json FROM messages "
+                        "WHERE status = ? AND message_id > ? ORDER BY message_id LIMIT ?",
+                        (MessageStatus.failed, last_seen_id, batch_size),
                     )
-                )
+                except Exception as ex:
+                    self._mark_as_db_failed(
+                        f"fetch_failed_messages_batched: failed to fetch failed messages from the DB, reason: {ex}"
+                    )
+                    raise
+
+                for row in rows:
+                    batch.append(
+                        DBMessage(
+                            id=row[0],
+                            type=row[1],
+                            json=row[2],
+                            status=MessageStatus.failed,
+                        )
+                    )
 
             if not batch:
                 break
