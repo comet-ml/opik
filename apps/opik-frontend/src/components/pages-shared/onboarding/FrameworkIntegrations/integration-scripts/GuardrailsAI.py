@@ -11,7 +11,7 @@ politeness_check = PolitenessCheck(
 )
 
 # Create a Guard with the validator
-guard: Guard = Guard().use_many(politeness_check)
+guard: Guard = Guard().use(politeness_check)
 
 # Track the Guard with Opik
 guard = track_guardrails(  # HIGHLIGHTED_LINE
