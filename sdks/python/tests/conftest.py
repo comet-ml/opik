@@ -57,6 +57,9 @@ def fake_replay_manager():
 
     fallback_replay = replay_manager.ReplayManager(
         monitor=monitor,
+        batch_size=10,
+        batch_replay_delay=0.5,
+        tick_interval_seconds=5.0,
     )
     return fallback_replay
 

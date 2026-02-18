@@ -16,6 +16,7 @@ import pytest
 import tenacity
 
 from opik.message_processing import messages
+from opik.message_processing.processors import online_message_processor
 from opik.message_processing.processors.online_message_processor import (
     OpikMessageProcessor,
 )
@@ -819,3 +820,79 @@ class TestAttachmentUploadCallbacks:
         )
         mock_file_uploader.upload.assert_not_called()
         offline_replay.unregister_message.assert_not_called()
+
+
+def _create_attachment_supporting_message(
+    message_id: int = 1,
+) -> messages.AttachmentSupportingMessage:
+    inner = _create_trace_message(message_id)
+    msg = messages.AttachmentSupportingMessage(original_message=inner)
+    msg.message_id = message_id
+    return msg
+
+
+class TestIgnoredMessageTypes:
+    """Tests for messages listed in _ignored_message_types_for_replay.
+
+    AttachmentSupportingMessage is the sole type on this list. Such messages
+    bypass replay registration entirely — the handler runs directly regardless
+    of connection state, and replay manager methods are never invoked.
+    """
+
+    def test_process__ignored_type__no_replay_on_online_connection__handler_still_called(
+        self,
+        processor: OpikMessageProcessor,
+        mock_replay: mock.MagicMock,
+    ):
+        """All three replay manager methods are untouched for ignored types when online."""
+        noop_handler = mock.MagicMock(
+            spec=online_message_processor.MessageProcessingHandler
+        )
+        processor.register_message_handler(
+            handler=noop_handler, message_type=messages.AttachmentSupportingMessage
+        )
+
+        msg = _create_attachment_supporting_message(message_id=106)
+        processor.process(msg)
+
+        # check that the noop handler was called
+        noop_handler.assert_called_once_with(msg)
+
+        # No replay interaction at all
+        mock_replay.register_message.assert_not_called()
+        mock_replay.unregister_message.assert_not_called()
+        mock_replay.message_sent_failed.assert_not_called()
+
+    def test_process__ignored_type__no_replay_called_on_offline_connection__handler_still_called(
+        self,
+        mock_rest_client: mock.MagicMock,
+        mock_file_uploader: mock.MagicMock,
+    ):
+        """The handler (noop) must be invoked for ignored types even when in offline mode —
+        replay state does not block execution for these message types."""
+        offline_replay = mock.MagicMock(spec=replay_manager.ReplayManager)
+        offline_replay.has_server_connection = False
+        offline_processor = OpikMessageProcessor(
+            rest_client=mock_rest_client,
+            file_upload_manager=mock_file_uploader,
+            fallback_replay_manager=offline_replay,
+        )
+
+        noop_handler = mock.MagicMock(
+            spec=online_message_processor.MessageProcessingHandler
+        )
+        offline_processor.register_message_handler(
+            handler=noop_handler, message_type=messages.AttachmentSupportingMessage
+        )
+
+        # Process completes without error — the noop handler runs
+        msg = _create_attachment_supporting_message(message_id=105)
+        offline_processor.process(msg)
+
+        # check that the noop handler was called
+        noop_handler.assert_called_once_with(msg)
+
+        # No replay interaction at all
+        offline_replay.register_message.assert_not_called()
+        offline_replay.unregister_message.assert_not_called()
+        offline_replay.message_sent_failed.assert_not_called()

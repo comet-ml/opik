@@ -58,9 +58,15 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateAttachmentMessage: self._process_create_attachment,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
+        self._ignored_message_types_for_replay = [messages.AttachmentSupportingMessage]
 
     def is_active(self) -> bool:
         return self._is_active
+
+    def register_message_handler(
+        self, message_type: Type, handler: MessageProcessingHandler
+    ) -> None:
+        self._handlers[message_type] = handler
 
     def process(self, message: messages.BaseMessage) -> None:
         if not self.is_active():
@@ -72,28 +78,39 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
-        should_unregister_message = self._replay_manager.has_server_connection
+        should_register_message = not self._should_ignore_replay_for_message_type(
+            message
+        )
+        should_unregister_message = (
+            self._replay_manager.has_server_connection and should_register_message
+        )
         if isinstance(message, messages.CreateAttachmentMessage):
             # it would be unregistered by callback when the upload is finished
             should_unregister_message = False
 
         try:
-            if self._replay_manager.has_server_connection:
-                # register a message with the replay manager and process it
-                self._replay_manager.register_message(message)
+            if should_register_message:
+                # handle replayable messages
+                if self._replay_manager.has_server_connection:
+                    # register a message with the replay manager and process it
+                    self._replay_manager.register_message(message)
 
-                handler(message)
+                    handler(message)
+                else:
+                    # register a message as failed and skip sending it to the backend
+                    self._replay_manager.register_message(
+                        message, status=db_manager.MessageStatus.failed
+                    )
             else:
-                # register a message as failed and skip sending it to the backend
-                self._replay_manager.register_message(
-                    message, status=db_manager.MessageStatus.failed
-                )
+                # handle non-replayable messages (ignored types bypass replay entirely)
+                handler(message)
 
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
-                self._replay_manager.unregister_message(message.message_id)  # type: ignore
+                if should_unregister_message:
+                    self._replay_manager.unregister_message(message.message_id)  # type: ignore
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -387,6 +404,18 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
     def _noop_handler(self, message: messages.BaseMessage) -> None:
         # just ignore the message
         pass
+
+    def _should_ignore_replay_for_message_type(
+        self, message: messages.BaseMessage
+    ) -> bool:
+        message_type = type(message)
+        if message_type in self._ignored_message_types_for_replay:
+            LOGGER.debug(
+                "Message type %s is ignored list, replay management skipping for it.",
+                message_type.__name__,
+            )
+            return True
+        return False
 
 
 def _generate_error_tracking_extra(
