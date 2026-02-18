@@ -31,16 +31,13 @@ This workflow will:
 
 ### 1. Preflight & Environment Check
 
-- **Check Jira MCP**: Test Jira MCP availability by attempting to fetch user info using `atlassianUserInfo`
-  > If unavailable, respond with: "This command needs Jira MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
-  > Stop here.
 - **Check GitHub CLI (preferred)**: Ensure `gh` is installed and authenticated (`gh auth status`)
 - **GitHub fallback path**: If `gh` is unavailable or unauthenticated, test GitHub MCP availability by fetching repository info for `comet-ml/opik`.
   > If both are unavailable, respond with: "Install/setup GitHub CLI first (`gh auth login`). If CLI cannot be used in your environment, configure GitHub MCP and retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Ensure we're not on `main`
-- **Tool Validation**: Jira MCP and at least one GitHub path (`gh` preferred, MCP fallback) must be available before proceeding
+- **Tool Validation**: At least one GitHub path (`gh` preferred, MCP fallback) must be available before proceeding. Jira MCP validation is conditional and runs after branch key extraction in Step 2.
 
 ---
 
@@ -52,6 +49,10 @@ This workflow will:
   > "Branch name doesn't follow Opik naming convention. Expected format: `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}` with ticket key `OPIK-<number>`, `issue-<number>`, or `NA`."  
   > Examples: `andrescrz/OPIK-2180-add-cursor-git-workflow-rule`, `someuser/issue-1234-some-task`, `someotheruser/NA-some-other-task`  
   > Current branch: `<actual-branch-name>`
+- **Conditional Jira MCP check**: If the extracted key is `OPIK-<number>`, test Jira MCP availability by attempting to fetch user info using `atlassianUserInfo`.
+  > If unavailable, respond with: "This command needs Jira MCP configured for OPIK ticket branches. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
+  > Stop here.
+- **No Jira branch key**: If the key is `issue-<number>` or `NA`, skip Jira MCP preflight and continue.
 
 ---
 
@@ -118,26 +119,19 @@ This workflow will:
 - **Execute quality checks**: Run the following commands in sequence based on the project type:
   ```bash
   # For Java backend projects
-  cd apps/opik-backend && mvn compile -DskipTests
-  cd apps/opik-backend && mvn test
-  cd apps/opik-backend && mvn spotless:check
+  (cd apps/opik-backend && mvn compile -DskipTests && mvn test && mvn spotless:check)
   
   # For frontend projects
-  cd apps/opik-frontend && npm run lint
-  cd apps/opik-frontend && npm run typecheck
+  (cd apps/opik-frontend && npm run lint && npm run typecheck)
   ```
 - **If all pass**: Continue to next step
 - **If errors found**: Run auto-fix commands, then re-verify:
   ```bash
   # For Java backend projects
-  cd apps/opik-backend && mvn spotless:apply
-  cd apps/opik-backend && mvn compile -DskipTests
-  cd apps/opik-backend && mvn test
+  (cd apps/opik-backend && mvn spotless:apply && mvn compile -DskipTests && mvn test)
   
   # For frontend projects
-  cd apps/opik-frontend && npm run lint:fix
-  cd apps/opik-frontend && npm run lint
-  cd apps/opik-frontend && npm run typecheck
+  (cd apps/opik-frontend && npm run lint:fix && npm run lint && npm run typecheck)
   ```
 - **If quality checks still fail**: Show errors and ask if user wants to continue
 - **If user chooses to continue**: Proceed with warnings
@@ -231,10 +225,10 @@ This workflow will:
 
 ### **Availability Errors**
 
-- **Jira MCP unavailable**: Stop immediately after testing and provide setup instructions
 - **GitHub CLI unavailable/auth missing**: Stop immediately and provide `gh` installation/auth instructions
-- **Jira MCP connection failures**: Stop immediately after testing and verify MCP server status
-- **Jira MCP test failures**: Stop immediately if MCP tests fail and provide troubleshooting steps
+- **Jira MCP unavailable (OPIK branches only)**: Stop immediately after testing and provide setup instructions
+- **Jira MCP connection failures (OPIK branches only)**: Stop immediately after testing and verify MCP server status
+- **Jira MCP test failures (OPIK branches only)**: Stop immediately if MCP tests fail and provide troubleshooting steps
 
 ### **Branch Validation Errors**
 
@@ -278,9 +272,9 @@ This workflow will:
 
 The command is successful when:
 
-1. ✅ Jira MCP is available and accessible
-2. ✅ GitHub path is available (`gh` authenticated preferred, MCP fallback optional)
-3. ✅ Feature branch is validated with key `OPIK-<number>`, `issue-<number>`, or `NA`
+1. ✅ GitHub path is available (`gh` authenticated preferred, MCP fallback optional)
+2. ✅ Feature branch is validated with key `OPIK-<number>`, `issue-<number>`, or `NA`
+3. ✅ Jira MCP is available and accessible (for OPIK branches)
 4. ✅ Git status is clean (no pending changes)
 5. ✅ Remote branch exists and is up to date
 6. ✅ No existing PRs found for the branch
@@ -295,7 +289,7 @@ The command is successful when:
 
 ## Notes
 
-- **Tool Requirements**: Jira MCP plus a GitHub path (`gh` preferred, MCP fallback) must be available before operations begin
+- **Tool Requirements**: A GitHub path (`gh` preferred, MCP fallback) must be available before operations begin; Jira MCP is required only for `OPIK-<number>` branches
 - **Repository**: Always uses `comet-ml/opik` for GitHub operations
 - **Template pre-filling**: Automatically extracts information from git changes and commit history
 - **Quality assurance**: Ensures code meets standards before PR creation
@@ -304,7 +298,7 @@ The command is successful when:
 - **User control**: Asks for confirmation on critical decisions (commits, pushes)
 - **Error handling**: Graceful degradation when non-critical operations fail
 - **Git operations**: Handles both missing remote branches and branches that are behind local commits
-- **Tool testing**: Validates Jira MCP and GitHub path (`gh` first, MCP fallback) before proceeding
+- **Tool testing**: Validates GitHub path (`gh` first, MCP fallback) before proceeding, and validates Jira MCP only for `OPIK-<number>` branches
 - **Opik conventions**: Follows Opik branch naming, commit message, and PR title conventions
 - **Logic reuse**: Implements the same git diff analysis and summary generation logic as `share-progress-in-jira` command:
   - Uses three-dot syntax (`git diff origin/main...HEAD`) for accurate change detection against latest remote main
