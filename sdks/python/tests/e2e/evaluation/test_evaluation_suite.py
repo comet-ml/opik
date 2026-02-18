@@ -867,6 +867,30 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     # 3. Retrieve the suite from backend (simulates a fresh client loading existing suite)
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
+    # 3a. Verify get_evaluators() returns suite-level evaluators from BE
+    evaluators = retrieved_suite.get_evaluators()
+    assert len(evaluators) == 1, (
+        f"Expected 1 suite-level evaluator, got {len(evaluators)}"
+    )
+    assert isinstance(evaluators[0], LLMJudge)
+
+    # 3b. Verify get_execution_policy() returns persisted policy from BE
+    policy = retrieved_suite.get_execution_policy()
+    assert policy["runs_per_item"] == 2, (
+        f"Expected runs_per_item=2, got {policy['runs_per_item']}"
+    )
+    assert policy["pass_threshold"] == 1, (
+        f"Expected pass_threshold=1, got {policy['pass_threshold']}"
+    )
+
+    # 3c. Verify get_items() returns items with data
+    items = retrieved_suite.get_items()
+    assert len(items) == 2, f"Expected 2 items, got {len(items)}"
+    for item in items:
+        assert "data" in item
+        assert "evaluators" in item
+        assert "execution_policy" in item
+
     # 4. Run the retrieved suite — evaluators/execution_policy come from BE
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         question = item["input"]["question"]
@@ -907,6 +931,144 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
         )
         assert len(exp_item.feedback_scores) == 1
         assert exp_item.feedback_scores[0]["name"] == suite_assertion
+
+
+def test_evaluation_suite__delete_items__items_removed(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that delete_items() removes items from the suite.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test delete items",
+    )
+
+    suite.add_item(data={"input": {"question": "Question 1"}})
+    suite.add_item(data={"input": {"question": "Question 2"}})
+    suite.add_item(data={"input": {"question": "Question 3"}})
+
+    items = suite.get_items()
+    assert len(items) == 3
+
+    # Delete the first item by getting its ID from the dataset
+    dataset_items = suite.dataset.get_items()
+    item_id_to_delete = dataset_items[0]["id"]
+
+    suite.delete_items([item_id_to_delete])
+
+    # Verify only 2 items remain
+    remaining_items = suite.get_items()
+    assert len(remaining_items) == 2
+
+
+def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_evaluators() returns LLMJudge instances from suite-level config.
+    """
+    judge_1 = LLMJudge(
+        name="judge_1",
+        assertions=["Response is helpful"],
+    )
+    judge_2 = LLMJudge(
+        name="judge_2",
+        assertions=["Response is accurate", "Response is concise"],
+    )
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test get_evaluators",
+        evaluators=[judge_1, judge_2],
+    )
+
+    # Retrieve from BE to verify persistence
+    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+
+    evaluators = retrieved_suite.get_evaluators()
+    assert len(evaluators) == 2
+    assert all(isinstance(e, LLMJudge) for e in evaluators)
+
+    # Verify evaluator names
+    evaluator_names = {e.name for e in evaluators}
+    assert "judge_1" in evaluator_names
+    assert "judge_2" in evaluator_names
+
+
+def test_evaluation_suite__get_execution_policy__returns_persisted_policy(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_execution_policy() returns the persisted execution policy.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test get_execution_policy",
+        execution_policy={"runs_per_item": 5, "pass_threshold": 3},
+    )
+
+    # Retrieve from BE to verify persistence
+    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+
+    policy = retrieved_suite.get_execution_policy()
+    assert policy["runs_per_item"] == 5
+    assert policy["pass_threshold"] == 3
+
+
+def test_evaluation_suite__get_execution_policy__default_when_not_set(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_execution_policy() returns default policy when none was set.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test default execution policy",
+    )
+
+    policy = suite.get_execution_policy()
+    assert policy["runs_per_item"] == 1
+    assert policy["pass_threshold"] == 1
+
+
+def test_evaluation_suite__get_items__returns_items_with_evaluators(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_items() returns items with evaluators as LLMJudge instances.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test get_items",
+    )
+
+    item_judge = LLMJudge(
+        name="item_judge",
+        assertions=["Response is correct"],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is 2 + 2?"}},
+        evaluators=[item_judge],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is 3 + 3?"}},
+    )
+
+    items = suite.get_items()
+    assert len(items) == 2
+
+    # Find the item with evaluators
+    items_with_evaluators = [i for i in items if len(i["evaluators"]) > 0]
+    items_without_evaluators = [i for i in items if len(i["evaluators"]) == 0]
+
+    assert len(items_with_evaluators) == 1
+    assert len(items_without_evaluators) == 1
+
+    # Verify evaluator is an LLMJudge instance
+    item_evaluators = items_with_evaluators[0]["evaluators"]
+    assert len(item_evaluators) == 1
+    assert isinstance(item_evaluators[0], LLMJudge)
 
 
 def test_get_or_create_evaluation_suite__existing__returns_existing(

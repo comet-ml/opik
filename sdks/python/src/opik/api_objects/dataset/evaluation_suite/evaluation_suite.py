@@ -103,7 +103,10 @@ class EvaluationSuite:
         """The underlying dataset storing suite items."""
         return self._dataset
 
-    def get_items(self) -> List[Dict[str, Any]]:
+    def get_items(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve suite items as a list of dictionaries.
 
@@ -111,6 +114,9 @@ class EvaluationSuite:
         - "data": the test case data (dict)
         - "evaluators": list of LLMJudge instances (or empty list)
         - "execution_policy": ExecutionPolicyItem or None
+
+        Args:
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
 
         Returns:
             A list of item dictionaries.
@@ -126,7 +132,11 @@ class EvaluationSuite:
                 for e in item.evaluators:
                     if e.type == "llm_judge":
                         cfg = llm_judge_config.LLMJudgeConfig(**e.config)
-                        evaluator_objects.append(llm_judge.LLMJudge.from_config(cfg))
+                        evaluator_objects.append(
+                            llm_judge.LLMJudge.from_config(
+                                cfg, init_kwargs={"model": evaluator_model}
+                            )
+                        )
 
             result.append(
                 {
@@ -136,6 +146,39 @@ class EvaluationSuite:
                 }
             )
         return result
+
+    def delete_items(self, item_ids: List[str]) -> None:
+        """
+        Delete items from the evaluation suite by their IDs.
+
+        Args:
+            item_ids: List of item IDs to delete.
+        """
+        self._dataset.delete(item_ids)
+
+    def get_execution_policy(self) -> execution_policy.ExecutionPolicy:
+        """
+        Get the suite-level execution policy.
+
+        Returns:
+            ExecutionPolicy dict with runs_per_item and pass_threshold.
+        """
+        return self._dataset.get_execution_policy()
+
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[llm_judge.LLMJudge]:
+        """
+        Get the suite-level evaluators as LLMJudge instances.
+
+        Args:
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+        Returns:
+            List of LLMJudge instances.
+        """
+        return self._dataset.get_evaluators(evaluator_model=evaluator_model)
 
     def add_item(
         self,

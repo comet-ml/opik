@@ -256,7 +256,7 @@ def get_dataset_experiments(
     return experiments
 
 
-def create_suite_version(
+def create_evaluation_suite_dataset(
     rest_client: OpikApi,
     dataset_name: str,
     description: Optional[str],
@@ -271,7 +271,7 @@ def create_suite_version(
         rest_client: The REST API client.
         dataset_name: The name of the dataset/suite.
         description: Optional description.
-        evaluators: Suite-level LLMJudge evaluators.
+        evaluators: LLMJudge evaluators.
         exec_policy: Execution policy dict.
 
     Returns:

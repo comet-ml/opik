@@ -1005,7 +1005,7 @@ class Opik:
         if evaluators:
             validators.validate_evaluators(evaluators, "suite-level evaluators")
 
-        rest_operations.create_suite_version(
+        rest_operations.create_evaluation_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             description=description,
