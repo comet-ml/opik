@@ -1459,26 +1459,53 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             // The baseVersion is the version ID directly (not a hash or tag)
             UUID baseVersionId = changes.baseVersion();
+            final int baseVersionItemCount;
 
-            // Verify the base version exists and get its item count
-            DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
-            int baseVersionItemCount = baseVersion.itemsTotal();
+            if (baseVersionId != null) {
+                // Verify the base version exists and get its item count
+                DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
+                baseVersionItemCount = baseVersion.itemsTotal();
 
-            // Check if baseVersion is the latest (unless override is set)
-            if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
-                log.warn("Version conflict: baseVersion '{}' is not the latest for dataset '{}'",
-                        changes.baseVersion(), datasetId);
-                return Mono.error(new ClientErrorException(
-                        Response.status(Response.Status.CONFLICT)
-                                .entity(new ErrorMessage(List.of(
-                                        "Version conflict: baseVersion is not the latest. " +
-                                                "Use override=true to force creation.")))
-                                .build()));
+                // Check if baseVersion is the latest (unless override is set)
+                if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
+                    log.warn("Version conflict: baseVersion '{}' is not the latest for dataset '{}'",
+                            changes.baseVersion(), datasetId);
+                    return Mono.error(new ClientErrorException(
+                            Response.status(Response.Status.CONFLICT)
+                                    .entity(new ErrorMessage(List.of(
+                                            "Version conflict: baseVersion is not the latest. " +
+                                                    "Use override=true to force creation.")))
+                                    .build()));
+                }
+            } else {
+                baseVersionItemCount = 0;
             }
 
             // Generate new version ID
             UUID newVersionId = idGenerator.generateId();
             log.info("Generated new version ID '{}' for dataset '{}'", newVersionId, datasetId);
+
+            // No base version: create the first version (metadata only, no item delta)
+            if (baseVersionId == null) {
+                if (versionService.hasVersions(workspaceId, datasetId)) {
+                    return Mono.error(new ClientErrorException(
+                            Response.status(Response.Status.BAD_REQUEST)
+                                    .entity(new ErrorMessage(List.of(
+                                            "baseVersion is required when the dataset already has versions.")))
+                                    .build()));
+                }
+                return Mono.fromCallable(() -> {
+                    DatasetVersion version = versionService.createVersionFromDelta(
+                            datasetId, newVersionId, 0, null,
+                            changes.tags(), changes.changeDescription(),
+                            changes.evaluators(), changes.executionPolicy(),
+                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
+                            null, workspaceId, userName);
+                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
+                            version.id(), datasetId, version.versionHash());
+                    return version;
+                });
+            }
 
             // Prepare added items (synchronous - no merging needed)
             List<DatasetItem> addedItems = prepareAddedItems(changes, datasetId);
