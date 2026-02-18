@@ -62,7 +62,7 @@
           "playwright",
           "run-test-mcp-server"
         ],
-        "cwd": "${workspaceFolder}/tests_end_to_end/tests_end_to_end_ts/typescript-tests"
+        "cwd": "${workspaceFolder}/tests_end_to_end/typescript-tests"
       },
       "context7": {
         "command": "npx",
