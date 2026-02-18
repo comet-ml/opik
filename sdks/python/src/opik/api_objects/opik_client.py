@@ -16,8 +16,8 @@ from typing import (
 
 if TYPE_CHECKING:
     from opik.evaluation.suite_evaluators import llm_judge
-    from opik.api_objects.evaluation_suite import EvaluationSuite
-    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
+    from opik.api_objects.dataset.evaluation_suite import EvaluationSuite
+    from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 
 import httpx
 
@@ -961,7 +961,7 @@ class Opik:
         name: str,
         description: Optional[str] = None,
         evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
-        execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = None,
+        execution_policy: Optional["dataset_execution_policy.ExecutionPolicy"] = None,
     ) -> "EvaluationSuite":
         """
         Create a new evaluation suite for regression testing.
@@ -1000,26 +1000,96 @@ class Opik:
             >>>
             >>> results = suite.run(task=my_llm_function)
         """
-        from . import evaluation_suite
-        from .evaluation_suite import validators
+        from .dataset import evaluation_suite, validators, rest_operations
 
         if evaluators:
             validators.validate_evaluators(evaluators, "suite-level evaluators")
 
-        suite_dataset = self.create_dataset(
+        rest_operations.create_suite_version(
+            rest_client=self._rest_client,
+            dataset_name=name,
+            description=description,
+            evaluators=evaluators,
+            exec_policy=execution_policy,
+        )
+        suite_dataset = dataset.Dataset(
             name=name,
             description=description,
-        )
-        suite_dataset.set_evaluators(evaluators or [])
-        suite_dataset.set_execution_policy(
-            execution_policy or validators.DEFAULT_EXECUTION_POLICY.copy()
+            rest_client=self._rest_client,
+            dataset_items_count=0,
         )
 
         return evaluation_suite.EvaluationSuite(
             name=name,
-            description=description,
             dataset_=suite_dataset,
         )
+
+    def get_evaluation_suite(self, name: str) -> "EvaluationSuite":
+        """
+        Get an existing evaluation suite by name.
+
+        Retrieves the dataset and its version-level evaluators/execution_policy
+        from the backend, returning a fully configured EvaluationSuite.
+
+        Args:
+            name: The name of the evaluation suite.
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+
+        Raises:
+            ApiError: If no dataset with the given name exists (404).
+        """
+        from .dataset import evaluation_suite
+
+        dataset_fern: dataset_public.DatasetPublic = (
+            self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
+        )
+
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=dataset_fern.description,
+            rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+        )
+
+        suite_dataset.__internal_api__sync_hashes__()
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            dataset_=suite_dataset,
+        )
+
+    def get_or_create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional["dataset_execution_policy.ExecutionPolicy"] = None,
+    ) -> "EvaluationSuite":
+        """
+        Get an existing evaluation suite by name or create a new one if it does not exist.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description (used only when creating).
+            evaluators: Suite-level evaluators (used only when creating).
+            execution_policy: Execution policy (used only when creating).
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+        """
+        try:
+            return self.get_evaluation_suite(name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_evaluation_suite(
+                    name=name,
+                    description=description,
+                    evaluators=evaluators,
+                    execution_policy=execution_policy,
+                )
+            raise
 
     def create_experiment(
         self,

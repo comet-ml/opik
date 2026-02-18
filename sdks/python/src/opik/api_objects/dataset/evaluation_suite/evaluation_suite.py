@@ -17,8 +17,7 @@ from opik.evaluation.suite_evaluators import llm_judge
 
 from . import suite_result_constructor
 from . import types as suite_types
-from . import validators
-from .types import ExecutionPolicy
+from .. import validators, execution_policy
 
 
 LOGGER = logging.getLogger(__name__)
@@ -75,7 +74,6 @@ class EvaluationSuite:
         self,
         name: str,
         dataset_: dataset.Dataset,
-        description: Optional[str] = None,
     ):
         """
         Initialize an EvaluationSuite.
@@ -86,11 +84,9 @@ class EvaluationSuite:
         Args:
             name: The name of the evaluation suite.
             dataset_: The underlying dataset storing suite items and config.
-            description: Optional description of what this suite tests.
         """
         self._name = name
         self._dataset = dataset_
-        self._description = description
 
     @property
     def name(self) -> str:
@@ -100,19 +96,53 @@ class EvaluationSuite:
     @property
     def description(self) -> Optional[str]:
         """The description of the evaluation suite."""
-        return self._description
+        return self._dataset.description
 
     @property
     def dataset(self) -> dataset.Dataset:
         """The underlying dataset storing suite items."""
         return self._dataset
 
+    def get_items(self) -> List[Dict[str, Any]]:
+        """
+        Retrieve suite items as a list of dictionaries.
+
+        Each item dict has keys:
+        - "data": the test case data (dict)
+        - "evaluators": list of LLMJudge instances (or empty list)
+        - "execution_policy": ExecutionPolicyItem or None
+
+        Returns:
+            A list of item dictionaries.
+        """
+        from opik.evaluation.suite_evaluators.llm_judge import (
+            config as llm_judge_config,
+        )
+
+        result = []
+        for item in self._dataset.__internal_api__stream_items_as_dataclasses__():
+            evaluator_objects: List[llm_judge.LLMJudge] = []
+            if item.evaluators:
+                for e in item.evaluators:
+                    if e.type == "llm_judge":
+                        cfg = llm_judge_config.LLMJudgeConfig(**e.config)
+                        evaluator_objects.append(llm_judge.LLMJudge.from_config(cfg))
+
+            result.append(
+                {
+                    "data": item.get_content(),
+                    "evaluators": evaluator_objects,
+                    "execution_policy": item.execution_policy,
+                }
+            )
+        return result
+
     def add_item(
         self,
         data: Dict[str, Any],
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
-        execution_policy: Optional[ExecutionPolicy] = None,
-    ) -> "EvaluationSuite":
+        execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
+    ) -> None:
         """
         Add a test case to the evaluation suite.
 
@@ -124,9 +154,6 @@ class EvaluationSuite:
                 used in addition to suite-level evaluators.
             execution_policy: Item-specific execution policy override.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
-
-        Returns:
-            Self for method chaining.
 
         Raises:
             TypeError: If any evaluator is not an LLMJudge instance.
@@ -171,8 +198,6 @@ class EvaluationSuite:
             **data,
         )
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
-
-        return self
 
     def run(
         self,

@@ -34,18 +34,11 @@ def create_mock_dataset(
             "id",
             "dataset_items_count",
             "get_version_info",
-            "get_execution_policy",
-            "get_evaluators",
         ]
     )
     mock_dataset.name = name
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
-    mock_dataset.get_execution_policy.return_value = {
-        "runs_per_item": 1,
-        "pass_threshold": 1,
-    }
-    mock_dataset.get_evaluators.return_value = []
     if items is not None:
         mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
             items

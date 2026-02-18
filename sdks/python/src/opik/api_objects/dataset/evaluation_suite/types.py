@@ -1,22 +1,9 @@
 """Type definitions for evaluation suite results."""
 
 import dataclasses
-from typing import Dict, List, Optional, TypedDict
+from typing import Dict, List, Optional
 
 from opik.evaluation import evaluation_result, test_result
-
-
-class ExecutionPolicy(TypedDict, total=False):
-    """
-    Execution policy for evaluation suite items.
-
-    Attributes:
-        runs_per_item: Number of times to run evaluation per item.
-        pass_threshold: Minimum number of passing runs required for item to pass.
-    """
-
-    runs_per_item: int
-    pass_threshold: int
 
 
 @dataclasses.dataclass

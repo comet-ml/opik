@@ -1,14 +1,6 @@
-"""Validators for evaluation suite configuration."""
+"""Validators for dataset and evaluation suite operations."""
 
 from typing import Any, List
-
-from .types import ExecutionPolicy
-
-
-DEFAULT_EXECUTION_POLICY: ExecutionPolicy = {
-    "runs_per_item": 1,
-    "pass_threshold": 1,
-}
 
 
 def validate_evaluators(evaluators: List[Any], context: str) -> None:

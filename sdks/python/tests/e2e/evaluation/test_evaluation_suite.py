@@ -825,3 +825,126 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
         assert assertion_1 in score_names, f"Missing score for '{assertion_1}'"
         assert assertion_2 in score_names, f"Missing score for '{assertion_2}'"
         assert assertion_3 in score_names, f"Missing score for '{assertion_3}'"
+
+
+# =============================================================================
+# PERSISTENCE: Create, get, and run suite from BE
+# =============================================================================
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__create_get_and_run__end_to_end(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    End-to-end test: create a suite with evaluators/execution_policy,
+    retrieve it via get_evaluation_suite(), then run it.
+
+    This verifies that suite-level config is persisted to the backend
+    and correctly reconstructed when loading the suite.
+    """
+    suite_assertion = "The response correctly identifies Paris as the capital of France"
+
+    suite_judge = LLMJudge(
+        name="geography_judge",
+        assertions=[suite_assertion],
+    )
+
+    # 1. Create suite with evaluators + execution_policy
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Persistence test suite",
+        evaluators=[suite_judge],
+        execution_policy={"runs_per_item": 2, "pass_threshold": 1},
+    )
+
+    # 2. Add items
+    suite.add_item(data={"input": {"question": "What is the capital of France?"}})
+    suite.add_item(data={"input": {"question": "What is the capital of Germany?"}})
+
+    # 3. Retrieve the suite from backend (simulates a fresh client loading existing suite)
+    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+
+    # 4. Run the retrieved suite — evaluators/execution_policy come from BE
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        question = item["input"]["question"]
+        if "France" in question:
+            return {"input": item["input"], "output": "The capital of France is Paris."}
+        return {"input": item["input"], "output": "The capital of Germany is Berlin."}
+
+    suite_result = retrieved_suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    # Verify suite ran with correct execution policy (runs_per_item=2)
+    assert suite_result.items_total == 2
+
+    for item_result in suite_result.item_results.values():
+        assert item_result.runs_total == 2, (
+            f"Expected 2 runs per item (from BE execution_policy), got {item_result.runs_total}"
+        )
+        assert item_result.pass_threshold == 1
+
+    # Verify feedback scores were created (evaluators loaded from BE)
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    # 2 items * 2 runs = 4 experiment items
+    assert len(experiment_items) == 4, (
+        f"Expected 4 experiment items (2 items * 2 runs), got {len(experiment_items)}"
+    )
+
+    # Each experiment item should have 1 feedback score from suite-level evaluator
+    for exp_item in experiment_items:
+        assert exp_item.feedback_scores is not None, (
+            "Expected feedback scores from BE evaluators"
+        )
+        assert len(exp_item.feedback_scores) == 1
+        assert exp_item.feedback_scores[0]["name"] == suite_assertion
+
+
+def test_get_or_create_evaluation_suite__existing__returns_existing(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite returns an existing suite
+    without creating a new one.
+    """
+    # 1. Create suite
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Original suite",
+    )
+
+    # 2. get_or_create should return the existing one
+    suite = opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        description="Should be ignored",
+    )
+
+    assert suite.name == dataset_name
+
+
+def test_get_or_create_evaluation_suite__new__creates_suite(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite creates a new suite when
+    none exists with the given name.
+    """
+    suite = opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        description="New suite via get_or_create",
+    )
+
+    assert suite.name == dataset_name
+
+    # Verify it was actually created by retrieving it
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+    assert retrieved.name == dataset_name

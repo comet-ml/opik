@@ -7,7 +7,7 @@ from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.dataset import dataset_item
 from ..api_objects.experiment import helpers as experiment_helpers
-from ..api_objects.evaluation_suite.types import ExecutionPolicy
+from ..api_objects.dataset import execution_policy as dataset_execution_policy
 from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
 from . import (
@@ -401,7 +401,7 @@ def _evaluate_task(
             dataset_sampler=dataset_sampler,
             dataset_filter_string=dataset_filter_string,
         )
-        policy = ExecutionPolicy(
+        policy = dataset_execution_policy.ExecutionPolicy(
             runs_per_item=trial_count,
             pass_threshold=trial_count,
         )
@@ -485,7 +485,7 @@ def _evaluate_suite_task(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        scoring_metrics = dataset.get_evaluators()
+        scoring_metrics = dataset.get_evaluators(evaluator_model)
         execution_policy = dataset.get_execution_policy()
         items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
             nb_samples=None,
@@ -891,7 +891,7 @@ def evaluate_prompt(
             dataset_sampler=dataset_sampler,
             dataset_filter_string=dataset_filter_string,
         )
-        policy = ExecutionPolicy(
+        policy = dataset_execution_policy.ExecutionPolicy(
             runs_per_item=trial_count,
             pass_threshold=trial_count,
         )
@@ -1221,7 +1221,9 @@ def evaluate_on_dict_items(
             dataset_item.DatasetItem(id=f"temp_item_{i}", **item)
             for i, item in enumerate(items)
         ]
-        policy = ExecutionPolicy(runs_per_item=1, pass_threshold=1)
+        policy = dataset_execution_policy.ExecutionPolicy(
+            runs_per_item=1, pass_threshold=1
+        )
 
         evaluation_engine = engine.EvaluationEngine(
             client=client,

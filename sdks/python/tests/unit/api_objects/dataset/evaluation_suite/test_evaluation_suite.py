@@ -3,10 +3,10 @@
 import pytest
 from unittest import mock
 
-from opik.api_objects.evaluation_suite import evaluation_suite
-from opik.api_objects.evaluation_suite import suite_result_constructor
-from opik.api_objects.evaluation_suite import types as suite_types
-from opik.api_objects.evaluation_suite import validators
+from opik.api_objects.dataset.evaluation_suite import evaluation_suite
+from opik.api_objects.dataset.evaluation_suite import suite_result_constructor
+from opik.api_objects.dataset.evaluation_suite import types as suite_types
+from opik.api_objects.dataset import validators
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import suite_evaluators
 from opik.evaluation import metrics

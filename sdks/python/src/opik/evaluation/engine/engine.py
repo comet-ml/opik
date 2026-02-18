@@ -8,7 +8,7 @@ import opik.opik_context as opik_context
 from opik.api_objects import opik_client, trace, local_recording
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
-from opik.api_objects.evaluation_suite.types import ExecutionPolicy
+from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
@@ -25,8 +25,8 @@ EVALUATION_TASK_NAME = "evaluation_task"
 
 def get_item_execution_policy(
     item: dataset_item.DatasetItem,
-    default_policy: ExecutionPolicy,
-) -> ExecutionPolicy:
+    default_policy: dataset_execution_policy.ExecutionPolicy,
+) -> dataset_execution_policy.ExecutionPolicy:
     """
     Get execution policy for a dataset item.
 
@@ -222,7 +222,7 @@ class EvaluationEngine:
         evaluator_model: Optional[str],
         description: str,
         total_items: Optional[int],
-        default_execution_policy: ExecutionPolicy,
+        default_execution_policy: dataset_execution_policy.ExecutionPolicy,
         show_scores_in_progress_bar: bool,
     ) -> List[test_result.TestResult]:
         """
@@ -372,7 +372,7 @@ class EvaluationEngine:
         evaluator_model: Optional[str],
         description: str,
         total_items: Optional[int],
-        default_execution_policy: ExecutionPolicy,
+        default_execution_policy: dataset_execution_policy.ExecutionPolicy,
         show_scores_in_progress_bar: bool,
     ) -> List[test_result.TestResult]:
         """
@@ -426,7 +426,7 @@ class EvaluationEngine:
         scoring_key_mapping: Optional[ScoringKeyMappingType],
         evaluator_model: Optional[str],
         experiment_: Optional[experiment.Experiment],
-        default_execution_policy: ExecutionPolicy,
+        default_execution_policy: dataset_execution_policy.ExecutionPolicy,
         total_items: Optional[int],
         description: str = "Evaluation",
         show_scores_in_progress_bar: bool = True,

@@ -14,9 +14,6 @@ from typing import (
     Iterator,
 )
 
-if TYPE_CHECKING:
-    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
-
 from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
@@ -31,7 +28,7 @@ from opik import id_helpers
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
-from . import dataset_item, converters, rest_operations
+from . import dataset_item, converters, rest_operations, execution_policy
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -298,7 +295,7 @@ class DatasetVersion(DatasetExportOperations):
         """
         return []
 
-    def get_execution_policy(self) -> "evaluation_suite_types.ExecutionPolicy":
+    def get_execution_policy(self) -> execution_policy.ExecutionPolicy:
         """
         Get the execution policy for this dataset version.
 
@@ -308,9 +305,7 @@ class DatasetVersion(DatasetExportOperations):
         Returns:
             Default execution policy.
         """
-        from opik.api_objects.evaluation_suite import validators
-
-        return validators.DEFAULT_EXECUTION_POLICY.copy()
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
 
 
 class Dataset(DatasetExportOperations):
@@ -331,12 +326,6 @@ class Dataset(DatasetExportOperations):
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
-
-        # Temporary storage for suite-level evaluators and execution policy until OPIK-4222/4223 is implemented
-        self._evaluators: List[Any] = []
-        self._execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = (
-            None
-        )
 
     @functools.cached_property
     def id(self) -> str:
@@ -368,55 +357,6 @@ class Dataset(DatasetExportOperations):
             )
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
-
-    def set_evaluators(self, evaluators: List[Any]) -> None:
-        """
-        Set suite-level evaluators for this dataset.
-
-        This is used internally by evaluation suites to store evaluators
-        that should be applied when running evaluations on this dataset.
-
-        Args:
-            evaluators: List of LLMJudge evaluators.
-        """
-        self._evaluators = evaluators
-
-    def get_evaluators(self) -> List[Any]:
-        """
-        Get suite-level evaluators for this dataset.
-
-        Returns:
-            List of evaluators set for this dataset, or empty list if none set.
-        """
-        return self._evaluators
-
-    def set_execution_policy(
-        self, execution_policy: "evaluation_suite_types.ExecutionPolicy"
-    ) -> None:
-        """
-        Set the execution policy for this dataset.
-
-        This is used internally by evaluation suites to store execution policy
-        that should be applied when running evaluations on this dataset.
-
-        Args:
-            execution_policy: Execution policy dict with runs_per_item and pass_threshold.
-        """
-        self._execution_policy = execution_policy
-
-    def get_execution_policy(self) -> "evaluation_suite_types.ExecutionPolicy":
-        """
-        Get the execution policy for this dataset.
-
-        Returns:
-            Execution policy dict if set, or default execution policy if not set.
-        """
-        if self._execution_policy is not None:
-            return self._execution_policy
-
-        from opik.api_objects.evaluation_suite import validators
-
-        return validators.DEFAULT_EXECUTION_POLICY.copy()
 
     def get_current_version_name(self) -> Optional[str]:
         """
@@ -459,6 +399,77 @@ class Dataset(DatasetExportOperations):
         if not versions_response or not versions_response.content:
             return None
         return versions_response.content[0]
+
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
+        """
+        Get suite-level evaluators from the current dataset version.
+
+        Converts EvaluatorItemPublic objects from the BE into LLMJudge instances.
+
+        Args:
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+        Returns:
+            List of LLMJudge instances extracted from the version.
+        """
+        from opik.evaluation.suite_evaluators import llm_judge
+        from opik.evaluation.suite_evaluators.llm_judge import (
+            config as llm_judge_config,
+        )
+
+        version_info = self.get_version_info()
+        if version_info is None or not version_info.evaluators:
+            return []
+
+        evaluators: List[Any] = []
+        for evaluator_item in version_info.evaluators:
+            try:
+                if evaluator_item.type == "llm_judge":
+                    cfg = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                    evaluator = llm_judge.LLMJudge.from_config(
+                        cfg, init_kwargs={"model": evaluator_model}
+                    )
+                    evaluators.append(evaluator)
+                else:
+                    LOGGER.warning(
+                        "Unsupported evaluator type in version: %s. Only 'llm_judge' is supported.",
+                        evaluator_item.type,
+                    )
+            except Exception:
+                LOGGER.error(
+                    "Failed to instantiate evaluator from version config: %s",
+                    evaluator_item.config,
+                    exc_info=True,
+                )
+                raise
+
+        return evaluators
+
+    def get_execution_policy(
+        self,
+    ) -> execution_policy.ExecutionPolicy:
+        """
+        Get suite-level execution policy from the current dataset version.
+
+        Returns:
+            ExecutionPolicy dict with runs_per_item and pass_threshold.
+        """
+        version_info = self.get_version_info()
+        if version_info is not None and version_info.execution_policy is not None:
+            ep = version_info.execution_policy
+            return {
+                "runs_per_item": ep.runs_per_item
+                if ep.runs_per_item is not None
+                else 1,
+                "pass_threshold": ep.pass_threshold
+                if ep.pass_threshold is not None
+                else 1,
+            }
+
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
 
     def _convert_to_rest_item(
         self, item: dataset_item.DatasetItem
