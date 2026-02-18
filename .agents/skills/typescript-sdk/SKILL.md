@@ -1,6 +1,6 @@
 ---
 name: typescript-sdk
-description: TypeScript SDK patterns for Opik. Use when working in sdks/opik-typescript.
+description: TypeScript SDK patterns for Opik. Use when working in sdks/typescript.
 ---
 
 # TypeScript SDK
