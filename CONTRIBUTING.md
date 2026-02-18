@@ -19,7 +19,7 @@ Thanks for taking the time to submit an issue, it's the best way to help us impr
 
 Before submitting a new issue, please check the [existing issues](https://github.com/comet-ml/opik/issues) to avoid duplicates.
 
-To help us understand the issue you're experiencing, please provide steps to reproduce the issue included a minimal code snippet that reproduces the issue. This helps us diagnose the issue and fix it more quickly.
+To help us understand the issue you're experiencing, please provide steps to reproduce the issue and include a minimal code snippet that reproduces it. This helps us diagnose the issue and fix it more quickly.
 
 ### Submitting a new feature request
 
@@ -28,7 +28,17 @@ Feature requests are welcome! To help us understand the feature you'd like to se
 1. A short description of the motivation behind this request
 2. A detailed description of the feature you'd like to see, including any code snippets if applicable
 
-If you are in a position to submit a PR for the feature, feel free to open a PR !
+If you are in a position to submit a PR for the feature, feel free to open a PR!
+
+## Contribution Checklist
+
+Use this before opening a PR:
+
+1. Open or confirm an issue/feature request and link it in your PR description.
+2. Pick the right component path (`apps/`, `sdks/`, `tests_end_to_end/`) and follow its local setup.
+3. Run format/lint checks in your touched area.
+4. Run relevant tests before pushing.
+5. Add/adjust docs when behavior, API, or public-facing CLI/docs strings change.
 
 ## General Contribution Guidelines
 
@@ -62,18 +72,22 @@ When contributing to Opik, please follow these formatting and code style guideli
 
 ## Project set up and Architecture
 
-The Opik project is made up of five main sub-projects:
+The Opik project includes multiple key sub-projects:
 
 * `apps/opik-documentation`: The Opik documentation website
 * `deployment/installer`: The Opik installer
 * `sdks/python`: The Opik Python SDK
 * `apps/opik-frontend`: The Opik frontend application
 * `apps/opik-backend`: The Opik backend server
+* `apps/opik-ai-backend`: AI/backend utilities and integrations
+* `apps/opik-guardrails-backend`: Guardrails service
+* `apps/opik-python-backend`: Python backend utilities
+* `apps/opik-sandbox-executor-python`: Python sandbox execution service
 
 
 In addition, Opik relies on:
 
-1. Clickhouse: Used to trace traces, spans and feedback scores
+1. ClickHouse: Used to trace traces, spans and feedback scores
 2. MySQL: Used to store metadata associated with projects, datasets, experiments, etc.
 3. Redis: Used for caching
 
@@ -111,7 +125,7 @@ Best for testing the complete system or when you need an environment closest to 
 ./opik.sh --stop
 ```
 
-Access the UI at http://localhost:5173
+Access the UI at http://localhost:5173.
 
 ### Local Process Mode (Recommended for Development)
 
@@ -134,7 +148,7 @@ scripts/dev-runner.sh --verify
 scripts/dev-runner.sh --logs
 ```
 
-Access the UI at http://localhost:5174 (Vite dev server with hot reload)
+Access the UI at http://localhost:5174 (Vite dev server with hot reload).
 
 #### Testing on Mobile Devices
 
@@ -175,7 +189,7 @@ scripts/dev-runner.sh --be-only-restart
 scripts\dev-runner.ps1 --be-only-restart
 ```
 
-Access the UI at http://localhost:5173
+Access the UI at http://localhost:5173.
 
 ### Additional Commands
 
@@ -239,7 +253,7 @@ The documentation is made up of two main parts:
 
 The documentation website is built with [Fern](https://www.buildwithfern.com/) and is located in `apps/opik-documentation/documentation`.
 
-In order to run the documentation website locally, you need to have Node.js and npm installed. You can follow this guide to install Node.js and npm [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
+To run the documentation website locally, you need Node.js and npm installed. You can follow this guide to install Node.js and npm [here](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/).
 
 Once installed, you can run the documentation locally using the following command:
 
@@ -264,7 +278,7 @@ When updating the documentation, you will need to update either:
 
 The Python SDK reference documentation is built using [Sphinx](https://www.sphinx-doc.org/en/master/) and is located in `apps/opik-documentation/python-sdk-docs`.
 
-In order to run the Python SDK reference documentation locally, you need to have `python` and `pip` installed. Once installed, you can run the documentation locally using the following command:
+To run the Python SDK reference documentation locally, you need `python` and `pip` installed. Once installed, you can run the documentation locally using the following command:
 
 ```bash
 cd apps/opik-documentation/python-sdk-docs
@@ -272,7 +286,7 @@ cd apps/opik-documentation/python-sdk-docs
 # Install dependencies - Only needs to be run once
 pip install -r requirements.txt
 
-# Run the python sdk reference documentation locally
+# Run the Python SDK reference documentation locally
 make dev
 ```
 
@@ -282,7 +296,7 @@ The Python SDK reference documentation will be built and available at `http://12
 
 **Setting up your development environment:**
 
-In order to develop features in the Python SDK, you will need to have Opik running locally. Use the provided scripts to start the appropriate services:
+To develop features in the Python SDK, you need Opik running locally. Use the provided scripts to start the appropriate services:
 
 On Linux or Mac:
 ```bash
@@ -329,7 +343,7 @@ The Python SDK is available under `sdks/python` and can be installed locally usi
 
 **Testing your changes:**
 
-For most SDK contributions, you should run the e2e tests which validate the core functionality:
+For most SDK contributions, run unit tests first and then e2e tests for end-to-end validation of core flows:
 
 ```bash
 cd sdks/python
@@ -341,7 +355,8 @@ pip install -r tests/unit/test_requirements.txt
 # Install pre-commit for linting
 pip install pre-commit
 
-# Run the e2e tests
+# Run unit tests (baseline), then e2e tests (full workflow validation)
+pytest tests/unit
 pytest tests/e2e
 ```
 
@@ -366,7 +381,7 @@ pre-commit run --all-files
 ```
 
 > [!NOTE]
-> If you changes impact public facing methods or docstrings, please also update the documentation. You can find more information about updating the docs in the [documentation contribution guide](#contributing-to-the-documentation).
+> If your changes impact public-facing methods or docstrings, please also update the documentation. You can find more information about updating the docs in the [documentation contribution guide](#contributing-to-the-documentation).
 
 ### Contributing to the frontend
 
@@ -391,7 +406,7 @@ scripts/dev-runner.sh --start
 scripts\dev-runner.ps1
 ```
 
-Access the UI at http://localhost:5174 (Vite dev server with hot reload)
+Access the UI at http://localhost:5174 (Vite dev server with hot reload).
 
 #### Alternative Setup Methods
 
@@ -415,7 +430,7 @@ cd apps/opik-frontend
 npm run lint
 npm run typecheck # TypeScript type checking
 npm run deps:validate # Dependency architecture validation
-````
+```
 
 #### Dependency Architecture
 
@@ -469,7 +484,7 @@ scripts/dev-runner.sh --be-only-start
 scripts\dev-runner.ps1 --be-only-restart
 ```
 
-Access the backend API at http://localhost:8080
+Access the backend API at http://localhost:8080.
 
 #### Alternative Setup Methods
 
@@ -500,10 +515,10 @@ mvn spotless:apply
 mvn test
 ```
 
-Tests leverage the `testcontainers` library to run integration tests against a real instances of the external services. Ports are randomly assigned by the library to avoid conflicts.
+Tests leverage the `testcontainers` library to run integration tests against real instances of external services. Ports are randomly assigned by the library to avoid conflicts.
 
 #### Health checks
-To see your applications health enter url `http://localhost:8080/healthcheck`
+To check your application's health, open `http://localhost:8080/healthcheck`.
 
 #### Database Migrations
 
@@ -522,9 +537,9 @@ java -jar target/opik-backend-*.jar dbAnalytics migrate config.yml # ClickHouse
 
 For detailed information on migrations, health checks, and advanced topics, see our [Backend Contribution Guide](apps/opik-documentation/documentation/fern/docs/contributing/backend.mdx).
 
-#### Accessing Clickhouse
+#### Accessing ClickHouse
 
-You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-`.
+You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-.`
 
 ```
 SHOW DATABASES
