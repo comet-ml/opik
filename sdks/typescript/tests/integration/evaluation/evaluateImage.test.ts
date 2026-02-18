@@ -120,9 +120,23 @@ function validateImageOutput(
         return normalized.content.flatMap((item) => collectText(item));
       }
 
-      if (Array.isArray(normalized.output)) {
-        return normalized.output.flatMap((item) => collectText(item));
+      if ("output" in normalized) {
+        if (Array.isArray(normalized.output)) {
+          return normalized.output.flatMap((item) => collectText(item));
+        }
+
+        if (typeof normalized.output === "object" && normalized.output !== null) {
+          return collectText(normalized.output);
+        }
+
+        if (typeof normalized.output === "string") {
+          return [normalized.output];
+        }
       }
+
+      return Object.entries(normalized)
+        .filter(([key]) => key !== "text" && key !== "content" && key !== "output")
+        .flatMap(([, value]) => collectText(value));
     }
 
     return [];

@@ -72,6 +72,9 @@ def _normalize_output(output: Any) -> str:
             if isinstance(text_value, str):
                 collected_parts.append(text_value)
 
+            if isinstance(text_value, list):
+                collect_values(text_value)
+
             content_value = value.get("content")
             if isinstance(content_value, str):
                 collected_parts.append(content_value)
@@ -83,6 +86,13 @@ def _normalize_output(output: Any) -> str:
                 collected_parts.append(output_value)
             elif isinstance(output_value, list):
                 collect_values(output_value)
+            elif isinstance(output_value, dict):
+                collect_values(output_value)
+
+            for key, item in value.items():
+                if key in {"text", "content", "output"}:
+                    continue
+                collect_values(item)
 
     collect_values(output)
     return " ".join(part.strip() for part in collected_parts).strip().lower()
@@ -150,9 +160,12 @@ def test_evaluate_prompt_supports_multimodal_images(
         reference = str(item.dataset_item_data.get("reference", "")).strip().lower()
         results[reference] = _normalize_output(item.evaluation_task_output["output"])
 
-    assert (
-        results["cat"].strip() in ["cat", "kitten", "kitty", "feline"]
-    )  # relaxed to avoid flakiness
+    assert results["cat"].strip() in [
+        "cat",
+        "kitten",
+        "kitty",
+        "feline",
+    ]  # relaxed to avoid flakiness
     assert results["dog"].strip() == "dog"
     assert results["fox"].strip() == "fox"
 
