@@ -27,7 +27,7 @@ import ExperimentsLeaderboardWidget from "./ExperimentsLeaderboardWidget/Experim
 import ExperimentsLeaderboardWidgetEditor from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor";
 import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLeaderboardWidget/helpers";
 
-const DISABLED_EXPERIMENTS_TOOLTIP =
+export const DISABLED_EXPERIMENTS_TOOLTIP =
   "You don't have permission to view experiments";
 
 export const widgetResolver: WidgetResolver = ({
