@@ -14,7 +14,7 @@ import {
   LLMMessageDescriptor,
   LLMBlockDescriptor,
 } from "@/components/shared/PrettyLLMMessage/llmMessages";
-import { getProvider } from "@/components/shared/PrettyLLMMessage/llmMessages/providers/registry";
+import { getFormat } from "@/components/shared/PrettyLLMMessage/llmMessages/providers/registry";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -45,10 +45,10 @@ function mapProviderMessages(
   detection: ReturnType<typeof detectLLMMessages>,
   fieldType: "input" | "output",
 ) {
-  if (!detection.supported || !detection.provider) return null;
-  const provider = getProvider(detection.provider);
-  if (!provider) return null;
-  return provider.mapper(data, { fieldType });
+  if (!detection.supported || !detection.format) return null;
+  const format = getFormat(detection.format);
+  if (!format) return null;
+  return format.mapper(data, { fieldType });
 }
 
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
