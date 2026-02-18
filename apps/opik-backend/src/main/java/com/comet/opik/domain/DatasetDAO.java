@@ -37,9 +37,9 @@ import java.util.UUID;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 public interface DatasetDAO {
 
-    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, workspace_id, created_by, last_updated_by, tags) "
+    @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, type, workspace_id, created_by, last_updated_by, tags) "
             +
-            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy, :dataset.tags)")
+            "VALUES (:dataset.id, :dataset.name, :dataset.description, COALESCE(:dataset.visibility, 'private'), COALESCE(:dataset.type, 'dataset'), :workspace_id, :dataset.createdBy, :dataset.lastUpdatedBy, :dataset.tags)")
     void save(@BindMethods("dataset") Dataset dataset, @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
