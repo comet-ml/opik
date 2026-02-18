@@ -12,6 +12,7 @@ import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuIt
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
 import { PlaygroundExperimentsLinkProps } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
+import { RunExperimentButtonProps } from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -37,6 +38,7 @@ type PluginStore = {
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
   PlaygroundExperimentsLink: React.ComponentType<PlaygroundExperimentsLinkProps> | null;
+  RunExperimentButton: React.ComponentType<RunExperimentButtonProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -64,6 +66,7 @@ const PLUGIN_NAMES = [
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
   "PlaygroundExperimentsLink",
+  "RunExperimentButton",
   "init",
 ];
 
@@ -89,6 +92,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,
   PlaygroundExperimentsLink: null,
+  RunExperimentButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
