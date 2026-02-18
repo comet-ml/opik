@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, TYPE_CHECKING
 
 from opik.rest_api import OpikApi
 from opik.rest_api.types import (
@@ -17,6 +17,9 @@ from . import dataset, dataset_item, execution_policy
 from .. import experiment, constants
 from ..experiment import experiments_client
 from ...rest_api.core.api_error import ApiError
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
 
 LOGGER = logging.getLogger(__name__)
 
@@ -260,7 +263,7 @@ def create_evaluation_suite_dataset(
     rest_client: OpikApi,
     dataset_name: str,
     description: Optional[str],
-    evaluators: Optional[List[Any]],
+    evaluators: Optional[List[llm_judge.LLMJudge]],
     exec_policy: Optional[execution_policy.ExecutionPolicy],
 ) -> str:
     """
