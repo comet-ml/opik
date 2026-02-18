@@ -143,6 +143,12 @@ class DBManager:
             self.__lock__ = threading.RLock()
         else:
             self.__lock__ = sync_lock
+
+        # Non-reentrant mutex that serializes concurrent replay_failed_messages
+        # calls. Producers (register_message / update_message) use self.__lock__,
+        # so they are never affected by this mutex.
+        self._replay_mutex = threading.Lock()
+
         self._create_db_schema()
 
     def _create_db_schema(self) -> None:
@@ -413,10 +419,19 @@ class DBManager:
         "in progress," and invoking the provided callback for processing.
 
         This method processes messages marked as failed in the database by updating
-        their status and invoking the replay callback. It ensures thread safety and supports
-        batch processing to limit memory usage. If the system is not initialized or already
-        closed, the replay process is skipped. Errors encountered during the replay or while
+        their status and invoking the replay callback. It supports batch processing to
+        limit memory usage. If the system is not initialized or already closed, the
+        replay process is skipped. Errors encountered during the replay or while
         updating the database are logged, and the replay process halts.
+
+        The lock is held only for the minimal critical sections (closed check and the
+        DB status update that marks each batch as in-progress). It is released before
+        calling the replay callback and before sleeping between batches so that
+        producers (register_message / update_message) are never blocked during replay.
+
+        Concurrent calls are serialized by a non-blocking mutex: if a replay is
+        already in progress, the second caller returns 0 immediately, preventing
+        duplicate re-fetching of the same failed messages.
 
         Args:
             replay_callback: A callback function that processes the
@@ -429,18 +444,41 @@ class DBManager:
             LOGGER.debug("Not initialized - messages replay ignored")
             return 0
 
+        # Prevent concurrent replay calls from re-fetching the same failed
+        # messages.  The SELECT in fetch_failed_messages_batched runs outside
+        # self.__lock__, so without this guard two simultaneous callers could
+        # both see the same rows before either has had a chance to mark them
+        # as in-progress.
+        if not self._replay_mutex.acquire(blocking=False):
+            LOGGER.debug("Replay already in progress - skipping concurrent call")
+            return 0
+
+        try:
+            return self._replay_failed_messages_impl(replay_callback)
+        finally:
+            self._replay_mutex.release()
+
+    def _replay_failed_messages_impl(self, replay_callback: ReplayCallback) -> int:
+        # The initial closed check — short critical section, no loop held inside.
         with self.__lock__:
             if self.closed:
                 LOGGER.warning("Already closed - messages replay ignored")
                 return 0
 
-            total_replayed = 0
-            for db_messages in self.fetch_failed_messages_batched(self.batch_size):
-                params = [
-                    (int(MessageStatus.registered), message.id)
-                    for message in db_messages
-                ]
-                # update DB records to mark failed messages as in progress
+        total_replayed = 0
+        for db_messages in self.fetch_failed_messages_batched(self.batch_size):
+            params = [
+                (int(MessageStatus.registered), message.id) for message in db_messages
+            ]
+            # Critical section: check closed and mark the batch as "in progress"
+            # so the same messages are not re-fetched on a concurrent replay call.
+            with self.__lock__:
+                if self.closed:
+                    LOGGER.debug(
+                        "Closed during replay - stopping after %d replayed",
+                        total_replayed,
+                    )
+                    break
                 try:
                     with self.conn:
                         c = self.conn.executemany(
@@ -458,16 +496,20 @@ class DBManager:
                     )
                     raise
 
-                replayed = self._replay_messages(
-                    db_messages=db_messages, replay_callback=replay_callback
-                )
-                total_replayed += replayed
-                # sleep to allow consumption of the messages batch and to avoid OOM (when subsequent batches loaded)
-                # applied only if full batch_size was replayed to avoid delays after the last batch or for smaller batches
-                if replayed >= self.batch_size:
-                    time.sleep(self.batch_replay_delay)
+            # Lock released — replay callback and inter-batch sleep run without
+            # blocking producers (register_message / update_message).
+            replayed = self._replay_messages(
+                db_messages=db_messages, replay_callback=replay_callback
+            )
+            total_replayed += replayed
 
-            return total_replayed
+            # Sleep without the lock so producers are not blocked during the pause.
+            # Applied only after a full batch to avoid unnecessary delays on the
+            # last (partial) batch.
+            if replayed >= self.batch_size:
+                time.sleep(self.batch_replay_delay)
+
+        return total_replayed
 
     def _replay_messages(
         self, db_messages: List[DBMessage], replay_callback: ReplayCallback

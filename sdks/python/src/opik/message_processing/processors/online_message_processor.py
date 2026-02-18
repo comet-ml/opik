@@ -66,6 +66,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
     def register_message_handler(
         self, message_type: Type, handler: MessageProcessingHandler
     ) -> None:
+        """Registers a handler for a specific message type."""
         self._handlers[message_type] = handler
 
     def process(self, message: messages.BaseMessage) -> None:

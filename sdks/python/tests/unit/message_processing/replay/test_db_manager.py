@@ -1,5 +1,7 @@
 import datetime
 import sqlite3
+import threading
+import time
 from typing import Generator
 from unittest import mock
 
@@ -586,6 +588,164 @@ class TestReplayFailedMessages:
         # Should return 2 because one callback failed
         assert result == 2
         assert call_count == 3
+
+    def test_replay_failed_messages__lock_not_held_during_sleep__producer_not_blocked(
+        self,
+    ):
+        """Lock must be released before time.sleep so producers are never blocked.
+
+        With batch_size=1 and two failed messages there is exactly one inter-batch
+        sleep.  A producer thread that calls register_message while that sleep is
+        in progress must complete in a fraction of the sleep duration — proving the
+        lock is not held during time.sleep().
+        """
+        long_delay = 0.5
+        mgr = db_manager.DBManager(batch_size=1, batch_replay_delay=long_delay)
+
+        # Two failed messages → two batches → one sleep after the first batch.
+        msg1 = _create_trace_message(message_id=1, trace_id="trace-1")
+        msg2 = _create_trace_message(message_id=2, trace_id="trace-2")
+        mgr.register_message(msg1, status=db_manager.MessageStatus.failed)
+        mgr.register_message(msg2, status=db_manager.MessageStatus.failed)
+
+        sleep_entered = threading.Event()
+        producer_elapsed: list = []
+
+        real_sleep = time.sleep
+
+        def patched_sleep(seconds: float) -> None:
+            sleep_entered.set()
+            real_sleep(seconds)
+
+        def producer() -> None:
+            # Wait until the replay thread is inside time.sleep, then race it.
+            sleep_entered.wait(timeout=5.0)
+            t0 = time.monotonic()
+            msg3 = _create_trace_message(message_id=3, trace_id="trace-3")
+            mgr.register_message(msg3)
+            producer_elapsed.append(time.monotonic() - t0)
+
+        producer_thread = threading.Thread(target=producer, daemon=True)
+        producer_thread.start()
+
+        callback = mock.Mock()
+
+        with mock.patch(
+            "opik.message_processing.replay.db_manager.time.sleep",
+            side_effect=patched_sleep,
+        ):
+            mgr.replay_failed_messages(callback)
+
+        producer_thread.join(timeout=long_delay * 3)
+        mgr.close()
+
+        assert len(producer_elapsed) == 1, "Producer thread did not complete"
+        # If the lock were held during sleep, elapsed ≈ long_delay (0.5 s).
+        # With the lock released, elapsed should be well under 50 ms.
+        assert producer_elapsed[0] < long_delay * 0.5, (
+            f"register_message blocked for {producer_elapsed[0]:.3f}s — "
+            f"lock was likely held during sleep (delay={long_delay}s)"
+        )
+
+        # the callback should be called twice, once for each message
+        expected_calls = [mock.call(msg1), mock.call(msg2)]
+        callback.assert_has_calls(expected_calls, any_order=False)
+
+    def test_replay_failed_messages__concurrent_calls__second_returns_zero_no_duplicates(
+        self,
+    ):
+        """Concurrent replay_failed_messages calls must not re-fetch the same messages.
+
+        The _replay_mutex ensures the second caller returns 0 immediately while
+        the first is still running, so the same failed messages are never replayed
+        twice simultaneously.
+        """
+        mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=0.0)
+
+        for i in range(3):
+            msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
+            mgr.register_message(msg, status=db_manager.MessageStatus.failed)
+
+        first_started = threading.Event()
+        first_may_finish = threading.Event()
+        second_result: list = []
+
+        def slow_callback(m: messages.BaseMessage) -> None:
+            # Signal that the first replay is inside the callback, then wait.
+            first_started.set()
+            first_may_finish.wait(timeout=5.0)
+
+        def run_second_replay() -> None:
+            second_result.append(mgr.replay_failed_messages(mock.Mock()))
+
+        second_thread = threading.Thread(target=run_second_replay, daemon=True)
+
+        # Start the first replay (will block inside slow_callback).
+        first_thread = threading.Thread(
+            target=mgr.replay_failed_messages, args=(slow_callback,), daemon=True
+        )
+        first_thread.start()
+
+        # Wait until the first replay is inside the callback, then launch the second.
+        first_started.wait(timeout=5.0)
+        second_thread.start()
+        second_thread.join(timeout=2.0)
+
+        # The second call must have returned 0 (mutex not acquired).
+        assert second_result == [0], (
+            f"Expected second replay to return 0, got {second_result}"
+        )
+
+        # Let the first replay finish.
+        first_may_finish.set()
+        first_thread.join(timeout=5.0)
+        mgr.close()
+
+    def test_replay_failed_messages__lock_not_held_during_callback__producer_not_blocked(
+        self,
+    ):
+        """Lock must be released before the replay callback so producers are not blocked.
+
+        A producer thread that calls register_message while the replay callback is
+        executing must complete quickly — proving the lock is not held during
+        _replay_messages / replay_callback.
+        """
+        long_delay = 0.0  # no sleep; focus purely on the callback window
+        mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=long_delay)
+
+        msg = _create_trace_message(message_id=1, trace_id="trace-1")
+        mgr.register_message(msg, status=db_manager.MessageStatus.failed)
+
+        callback_entered = threading.Event()
+        callback_may_exit = threading.Event()
+        producer_elapsed: list = []
+
+        def slow_callback(m: messages.BaseMessage) -> None:
+            callback_entered.set()
+            # Hold the callback open so the producer has time to race it.
+            callback_may_exit.wait(timeout=5.0)
+
+        def producer() -> None:
+            callback_entered.wait(timeout=5.0)
+            t0 = time.monotonic()
+            msg2 = _create_trace_message(message_id=2, trace_id="trace-2")
+            mgr.register_message(msg2)
+            producer_elapsed.append(time.monotonic() - t0)
+            callback_may_exit.set()
+
+        producer_thread = threading.Thread(target=producer, daemon=True)
+        producer_thread.start()
+
+        mgr.replay_failed_messages(slow_callback)
+        producer_thread.join(timeout=2.0)
+        mgr.close()
+
+        assert len(producer_elapsed) == 1, "Producer thread did not complete"
+        # register_message should return almost immediately (well under 100 ms).
+        assert producer_elapsed[0] < 0.1, (
+            f"register_message blocked for {producer_elapsed[0]:.3f}s — "
+            f"lock was likely held during callback"
+        )
 
 
 class TestReplayManagerStatusProperties:
