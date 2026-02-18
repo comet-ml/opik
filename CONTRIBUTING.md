@@ -6,7 +6,7 @@ The easiest way to get started is to:
 
 * Submit [bug reports](https://github.com/comet-ml/opik/issues) and [feature requests](https://github.com/comet-ml/opik/issues)
 * Review the documentation and submit [Pull Requests](https://github.com/comet-ml/opik/pulls) to improve it
-* Speaking or writing about Opik and [letting us know](https://chat.comet.com)
+* Speak or write about Opik and [let us know](https://chat.comet.com)
 * Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) to show your support
 * Review our [Contributor License Agreement](https://github.com/comet-ml/opik/blob/main/CLA.md)
 
@@ -36,9 +36,11 @@ Use this before opening a PR:
 
 1. Open or confirm an issue/feature request and link it in your PR description (`Fixes #...` or `Resolves #...`).
 2. Pick the right component path (`apps/`, `sdks/`, `tests_end_to_end/`) and follow its local setup.
-3. Run format/lint checks in your touched area.
-4. Run relevant tests before pushing.
-5. Add/adjust docs when behavior, API, or public-facing CLI/docs strings change.
+3. For parallel tasks, prefer Git worktrees to keep branches and local changes isolated.
+4. Run format/lint checks in your touched area.
+5. Run relevant tests before pushing.
+6. Add/adjust docs when behavior, API, or public-facing CLI/docs strings change.
+7. Open a draft PR with GitHub CLI (`gh pr create --draft`), fill `.github/pull_request_template.md`, and link related issues/tickets.
 
 ## General Contribution Guidelines
 
@@ -70,7 +72,7 @@ When contributing to Opik, please follow these formatting and code style guideli
 
 > **Remember**: Code reviews should focus on logic, functionality, and meaningful improvements. Excessive formatting changes can obscure the actual purpose of your contribution and make reviews more difficult.
 
-## Project set up and Architecture
+## Project Setup and Architecture
 
 The Opik project includes multiple key sub-projects:
 
@@ -87,7 +89,7 @@ The Opik project includes multiple key sub-projects:
 
 In addition, Opik relies on:
 
-1. ClickHouse: Used to trace traces, spans and feedback scores
+1. ClickHouse: Used to store traces, spans, and feedback scores
 2. MySQL: Used to store metadata associated with projects, datasets, experiments, etc.
 3. Redis: Used for caching
 
@@ -539,7 +541,7 @@ For detailed information on migrations, health checks, and advanced topics, see 
 
 #### Accessing ClickHouse
 
-You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-.`
+You can curl the ClickHouse REST endpoint with `echo 'SELECT version()' | curl -H 'X-ClickHouse-User: opik' -H 'X-ClickHouse-Key: opik' 'http://localhost:8123/' -d @-`.
 
 ```
 SHOW DATABASES
