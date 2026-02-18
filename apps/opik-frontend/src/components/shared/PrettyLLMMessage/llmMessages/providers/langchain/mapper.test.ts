@@ -373,6 +373,41 @@ describe("mapLangChainMessages", () => {
       expect(result.messages[0].id).toBe("output-0");
     });
 
+    it("should concatenate input + output when output has flat messages but fewer than input", () => {
+      const inputData = {
+        messages: [
+          { type: "human", content: "Hello" },
+          { type: "ai", content: "Let me check" },
+          { type: "human", content: "Thanks" },
+        ],
+      };
+      const outputData = {
+        messages: [
+          {
+            type: "ai",
+            content: "Here is the answer",
+            response_metadata: { finish_reason: "stop" },
+          },
+        ],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(4);
+      expect(result.messages[0].id).toBe("input-0");
+      expect(result.messages[3].id).toBe("output-0");
+    });
+
     it("should concatenate input + output when output has generations", () => {
       const inputData = {
         messages: [{ type: "human", content: "Hello" }],

@@ -282,11 +282,12 @@ const mapGenerationsOutput = (
 export const combineLangChainMessages: FormatCombiner = (input, output) => {
   const outputRaw = output.raw as Record<string, unknown> | null;
 
-  // LangGraph state: output.messages is flat array → superset of input → use only output
+  // LangGraph state: output.messages is a flat superset of input → use only output
   if (
     outputRaw &&
     Array.isArray(outputRaw.messages) &&
-    !Array.isArray(outputRaw.messages[0])
+    !Array.isArray(outputRaw.messages[0]) &&
+    output.mapped.messages.length >= input.mapped.messages.length
   ) {
     return {
       messages: output.mapped.messages,
