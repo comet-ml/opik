@@ -913,7 +913,7 @@ Retrieves a prompt by name and optional version.
 **Arguments:**
 
 - `options.name: string` - Prompt name (required)
-- `options.commit?: string` - Optional commit hash for specific version
+- `options.commit?: string` - Optional commit ID for specific version
 
 **Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
 
@@ -943,6 +943,41 @@ Deletes multiple prompts and all their versions.
 - `ids: string[]` - Array of prompt IDs to delete
 
 **Returns:** `Promise<void>`
+
+#### `updatePromptVersionTags(versionIds, options?)`
+
+Updates tags for one or more prompt versions in a single batch operation.
+
+**Arguments:**
+
+- `versionIds: string[]` - Array of prompt version IDs to update
+- `options.tags?: string[] | null` - Tags to set or merge:
+  - `[]` – clears all tags (when `mergeTags` is false or unspecified)
+  - `['tag1', 'tag2']` – sets or merges tags (based on `mergeTags`)
+  - `null` / omitted – preserves existing tags unchanged
+- `options.mergeTags?: boolean` – If `true`, adds new tags to existing tags (union). If `false` (default), replaces all existing tags.
+
+**Returns:** `Promise<void>`
+
+**Examples:**
+
+```typescript
+// Replace all tags on multiple versions (default behavior)
+await client.updatePromptVersionTags(["version-id-1", "version-id-2"], {
+  tags: ["production", "v2"],
+});
+
+// Merge new tags with existing tags
+await client.updatePromptVersionTags(["version-id-1"], {
+  tags: ["hotfix"],
+  mergeTags: true,
+});
+
+// Clear all tags
+await client.updatePromptVersionTags(["version-id-1"], {
+  tags: [],
+});
+```
 
 #### `createChatPrompt(options)`
 
@@ -984,7 +1019,7 @@ Retrieves a chat prompt by name and optional version.
 **Arguments:**
 
 - `options.name: string` - Chat prompt name (required)
-- `options.commit?: string` - Optional commit hash for specific version
+- `options.commit?: string` - Optional commit ID for specific version
 
 **Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
 
@@ -1004,11 +1039,88 @@ Formats the prompt template with provided variables.
 
 **Throws:** `PromptValidationError` if required variables missing (Mustache only)
 
-##### `getVersions()`
+##### `getVersions(options?)`
 
-Retrieves all version history for this prompt.
+Retrieves all version history for this prompt, with optional filtering, sorting, and search.
 
-**Returns:** `Promise<PromptVersion[]>` - Array of all versions (newest first)
+**Arguments:**
+
+- `options.search?: string` - Free-text search against template content and change description
+- `options.filters?: string` - JSON-encoded filter array. Each entry is `{ field, operator, value }`.
+- `options.sorting?: string` - JSON-encoded sort array. Each entry is `{ field, direction }` where `direction` is `"ASC"` or `"DESC"`.
+
+**Supported filter fields:**
+
+| Field | Type | Operators |
+|-------|------|-----------|
+| `id` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `commit` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `template` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `change_description` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `type` | Enum | `=`, `!=` |
+| `tags` | List | `contains` |
+| `created_at` | DateTime | `>=`, `<=`, `>`, `<` (ISO 8601) |
+
+**Returns:** `Promise<PromptVersion[]>` - Array of all matching versions (newest first by default)
+
+**Examples:**
+
+```typescript
+// Get all versions
+const versions = await prompt.getVersions();
+
+// Search by template or change description content
+const searched = await prompt.getVersions({ search: "customer" });
+
+// Filter by tag
+const prodVersions = await prompt.getVersions({
+  filters: JSON.stringify([
+    { field: "tags", operator: "contains", value: "production" },
+  ]),
+});
+
+// Filter by multiple tags (AND logic)
+const stable = await prompt.getVersions({
+  filters: JSON.stringify([
+    { field: "tags", operator: "contains", value: "production" },
+    { field: "tags", operator: "contains", value: "stable" },
+  ]),
+});
+
+// Filter by template content
+const customerVersions = await prompt.getVersions({
+  filters: JSON.stringify([
+    { field: "template", operator: "contains", value: "customer" },
+  ]),
+});
+
+// Filter by date
+const recentVersions = await prompt.getVersions({
+  filters: JSON.stringify([
+    { field: "created_at", operator: ">=", value: "2024-01-01T00:00:00Z" },
+  ]),
+});
+
+// Sort by creation date (oldest first)
+const oldest = await prompt.getVersions({
+  sorting: JSON.stringify([{ field: "created_at", direction: "ASC" }]),
+});
+
+// Sort alphabetically by template content
+const alphabetical = await prompt.getVersions({
+  sorting: JSON.stringify([{ field: "template", direction: "ASC" }]),
+});
+
+// Combine search, filter, and sort
+const results = await prompt.getVersions({
+  search: "customer",
+  filters: JSON.stringify([
+    { field: "tags", operator: "contains", value: "production" },
+  ]),
+  sorting: JSON.stringify([{ field: "created_at", direction: "DESC" }]),
+});
+```
 
 ##### `getVersion(commit)`
 
@@ -1053,7 +1165,7 @@ Deletes this prompt and all its versions.
 - `id: string` - Unique prompt identifier
 - `name: string` - Prompt name
 - `prompt: string` - Current template content
-- `commit?: string` - Current version commit hash
+- `commit?: string` - Current version commit ID
 - `type: PromptType` - Template engine type
 - `description?: string` - Prompt description
 - `tags?: readonly string[]` - Prompt tags
@@ -1101,8 +1213,9 @@ Compares this version's template with another version.
 - `id: string` - Version unique identifier
 - `name: string` - Associated prompt name
 - `prompt: string` - Template content for this version
-- `commit: string` - Version commit hash
+- `commit: string` - Version commit ID
 - `type: PromptType` - Template engine type
+- `tags?: string[]` - Tags associated with this version
 - `metadata?: JsonNode` - Version metadata
 - `changeDescription?: string` - Version change description
 - `createdAt?: Date` - Creation timestamp
@@ -1145,11 +1258,17 @@ const formatted = chatPrompt.format(
 );
 ```
 
-##### `getVersions()`
+##### `getVersions(options?)`
 
-Retrieves all version history for this chat prompt.
+Retrieves all version history for this chat prompt, with optional filtering, sorting, and search. Accepts the same options as the `Prompt.getVersions()` method.
 
-**Returns:** `Promise<PromptVersion[]>` - Array of all versions (newest first)
+**Arguments:**
+
+- `options.search?: string` - Search text to match against template content and change description
+- `options.sorting?: string` - Sort expression
+- `options.filters?: string` - JSON-encoded filter array (same format as `Prompt.getVersions`)
+
+**Returns:** `Promise<PromptVersion[]>` - Array of all matching versions (newest first)
 
 ##### `getVersion(commit)`
 
@@ -1194,7 +1313,7 @@ Deletes this chat prompt and all its versions.
 - `id: string` - Unique chat prompt identifier
 - `name: string` - Chat prompt name
 - `messages: ChatMessage[]` - Array of chat messages with roles and content
-- `commit?: string` - Current version commit hash
+- `commit?: string` - Current version commit ID
 - `type: PromptType` - Template engine type
 - `description?: string` - Chat prompt description
 - `tags?: readonly string[]` - Chat prompt tags

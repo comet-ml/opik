@@ -26,5 +26,6 @@ public record DatasetItemUpdate(
         @Schema(description = "Dataset item data", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
         @Schema(description = "Tags") Set<String> tags,
         @Schema(description = "Evaluators") List<@Valid EvaluatorItem> evaluators,
-        @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy) {
+        @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy,
+        @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
 }
