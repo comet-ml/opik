@@ -5,12 +5,14 @@ import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.UserMessage;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -108,6 +110,56 @@ class FreeModelLlmProviderTest {
         assertThat(transformedRequest.temperature()).isEqualTo(expectedTemperature);
         assertThat(transformedRequest.messages()).isEqualTo(request.messages());
         assertThat(transformedRequest.reasoningEffort()).isEqualTo("none");
+    }
+
+    @Test
+    @DisplayName("generate should forward customParameters from the original request")
+    void testGenerate_customParametersForwarded() {
+        OpenAiClient mockClient = mock(OpenAiClient.class);
+        when(mockClient.chatCompletion(any())).thenAnswer(invocation -> mock(Object.class));
+
+        FreeModelLlmProvider provider = new FreeModelLlmProvider(mockClient, "gpt-5-nano", false);
+
+        var customParams = Map.<String, Object>of("custom_key", "custom_value", "another_key", 42);
+        ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .model(FreeModelConfig.FREE_MODEL)
+                .messages(List.of(UserMessage.builder().content("test").build()))
+                .customParameters(customParams)
+                .build();
+
+        try {
+            provider.generate(request, "test-workspace-id");
+        } catch (Exception e) {
+        }
+
+        ArgumentCaptor<ChatCompletionRequest> requestCaptor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+        verify(mockClient).chatCompletion(requestCaptor.capture());
+
+        assertThat(requestCaptor.getValue().customParameters()).isEqualTo(customParams);
+    }
+
+    @Test
+    @DisplayName("generate should forward null customParameters without error")
+    void testGenerate_nullCustomParametersForwarded() {
+        OpenAiClient mockClient = mock(OpenAiClient.class);
+        when(mockClient.chatCompletion(any())).thenAnswer(invocation -> mock(Object.class));
+
+        FreeModelLlmProvider provider = new FreeModelLlmProvider(mockClient, "gpt-5-nano", false);
+
+        ChatCompletionRequest request = ChatCompletionRequest.builder()
+                .model(FreeModelConfig.FREE_MODEL)
+                .messages(List.of(UserMessage.builder().content("test").build()))
+                .build();
+
+        try {
+            provider.generate(request, "test-workspace-id");
+        } catch (Exception e) {
+        }
+
+        ArgumentCaptor<ChatCompletionRequest> requestCaptor = ArgumentCaptor.forClass(ChatCompletionRequest.class);
+        verify(mockClient).chatCompletion(requestCaptor.capture());
+
+        assertThat(requestCaptor.getValue().customParameters()).isNull();
     }
 
     private static Stream<Arguments> testGenerate_temperatureTransformation() {
