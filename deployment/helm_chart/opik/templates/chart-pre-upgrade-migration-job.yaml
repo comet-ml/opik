@@ -34,7 +34,7 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets", "deployments"]
-    verbs: ["get", "list", "watch", "delete"]
+    verbs: ["get", "list", "delete"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
