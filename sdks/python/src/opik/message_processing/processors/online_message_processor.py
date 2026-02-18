@@ -6,7 +6,8 @@ import pydantic
 import tenacity
 
 from opik import dict_utils, exceptions, logging_messages
-from opik.file_upload import base_upload_manager
+from opik.file_upload import base_upload_manager, types as upload_types
+from opik.file_upload.s3_multipart_upload import s3_upload_error
 from opik.rate_limit import rate_limit
 from opik.rest_api import client as rest_api_client, core as rest_api_core
 from opik.rest_api.types import (
@@ -18,6 +19,8 @@ from opik.rest_api.types import (
 
 from . import message_processors
 from .. import encoder_helpers, messages
+from ..replay import replay_manager, db_manager
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self,
         rest_client: rest_api_client.OpikApi,
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
+        fallback_replay_manager: replay_manager.ReplayManager,
         batch_memory_limit_mb: int = 50,
         active: bool = True,
     ):
@@ -37,6 +41,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._file_uploader = file_upload_manager
         self._batch_memory_limit_mb = batch_memory_limit_mb
         self._is_active = active
+        self._replay_manager = fallback_replay_manager
 
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
@@ -67,16 +72,28 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
-        # TODO: insert here adding new messages to the reply manager
+        should_unregister_message = self._replay_manager.has_server_connection
+        if isinstance(message, messages.CreateAttachmentMessage):
+            # it would be unregistered by callback when the upload is finished
+            should_unregister_message = False
 
         try:
-            handler(message)
+            if self._replay_manager.has_server_connection:
+                # register a message with the replay manager and process it
+                self._replay_manager.register_message(message)
 
-            # TODO: insert here marking message as delivered
+                handler(message)
+            else:
+                # register a message as failed and skip sending it to the backend
+                self._replay_manager.register_message(
+                    message, status=db_manager.MessageStatus.failed
+                )
+
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
+                self._replay_manager.unregister_message(message.message_id)  # type: ignore
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -115,12 +132,17 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 exc_info=True,
                 extra={"error_tracking_extra": error_tracking_extra},
             )
-        except (httpx.ConnectError, httpx.TimeoutException):
+        except (httpx.ConnectError, httpx.TimeoutException) as ex:
+            should_unregister_message = False
             LOGGER.warning(
-                "Failed to process message: '%s' due to connection error. Retrying...",
+                "Failed to process message: '%s' due to connection error. Will be retried later when connection is restored.",
                 message_type.__name__,
             )
-            # TODO: insert here marking message as failed
+            # mark a message as failed with replay manager due to a connection error
+            self._replay_manager.message_sent_failed(
+                message.message_id,  # type: ignore
+                failure_reason=str(ex),
+            )
         except Exception as exception:
             error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
@@ -131,6 +153,10 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 extra={"error_tracking_extra": error_tracking_extra},
             )
             LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
+
+        # unregister a message from the reply manager because it is delivered or other error occurred
+        if should_unregister_message:
+            self._replay_manager.unregister_message(message.message_id)  # type: ignore
 
     def _process_create_span_message(
         self,
@@ -322,8 +348,41 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateAttachmentMessage
     ) -> None:
         LOGGER.debug("Processing create attachment message")
-        self._file_uploader.upload(message)
+        self._file_uploader.upload(
+            message,
+            on_upload_failed=self._on_upload_failed_callback(message.message_id),  # type: ignore
+            on_upload_success=self._on_upload_success_callback(message.message_id),  # type: ignore
+        )
         LOGGER.debug("Uploaded attachment with %s", message.file_name)
+
+    def _on_upload_failed_callback(
+        self, message_id: int
+    ) -> upload_types.OnUploadFailureCallback:
+        def _callback(error: Exception) -> None:
+            if (
+                isinstance(error, httpx.ConnectError)
+                or isinstance(error, httpx.TimeoutException)
+                or (
+                    isinstance(error, s3_upload_error.S3UploadError)
+                    and error.connection_error
+                )
+            ):
+                self._replay_manager.message_sent_failed(
+                    message_id, failure_reason=str(error)
+                )
+            else:
+                # it is an unrecoverable error-unregister the message
+                self._replay_manager.unregister_message(message_id)
+
+        return _callback
+
+    def _on_upload_success_callback(
+        self, message_id: int
+    ) -> upload_types.OnUploadSuccessCallback:
+        def _callback() -> None:
+            self._replay_manager.unregister_message(message_id)
+
+        return _callback
 
     def _noop_handler(self, message: messages.BaseMessage) -> None:
         # just ignore the message

@@ -11,7 +11,9 @@ NOT_USED = sentinel.NOT_USED
 
 
 @pytest.fixture
-def batched_streamer_and_mock_message_processor(fake_file_upload_manager):
+def batched_streamer_and_mock_message_processor(
+    fake_file_upload_manager, fake_replay_manager
+):
     tested = None
     try:
         mock_message_processor = mock.Mock()
@@ -22,6 +24,7 @@ def batched_streamer_and_mock_message_processor(fake_file_upload_manager):
             use_attachment_extraction=False,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=fake_replay_manager,
         )
 
         yield tested, mock_message_processor
@@ -67,6 +70,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             use_attachment_extraction=False,
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=mock.Mock(),
         )
 
         for obj in objects:
