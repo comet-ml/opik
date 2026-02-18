@@ -22,7 +22,7 @@ Then you can run the example:
         llm_callable="gpt-3.5-turbo", on_fail=OnFailAction.NOOP
     )
 
-    guard: Guard = Guard().use_many(politeness_check)
+    guard: Guard = Guard().use(politeness_check)
     guard = track_guardrails(guard, project_name="guardrails-integration-example")
 
     result = guard.validate(
