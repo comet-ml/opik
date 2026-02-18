@@ -311,11 +311,17 @@ export const mapLangChainMessages: FormatMapper = (data, prettifyConfig) => {
 
   const d = data as Record<string, unknown>;
 
-  if (isInput && Array.isArray(d.messages)) {
-    if (Array.isArray(d.messages[0])) {
-      return mapBatchedInput(d);
+  if (isInput) {
+    let resolved = d;
+    if (!Array.isArray(d.messages) && d.input && typeof d.input === "object") {
+      resolved = d.input as Record<string, unknown>;
     }
-    return mapFlatMessages(d, "input");
+    if (Array.isArray(resolved.messages)) {
+      if (Array.isArray(resolved.messages[0])) {
+        return mapBatchedInput(resolved);
+      }
+      return mapFlatMessages(resolved, "input");
+    }
   }
 
   if (isOutput) {

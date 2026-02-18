@@ -111,6 +111,87 @@ describe("mapLangChainMessages", () => {
     });
   });
 
+  describe("Nested input mapping (Pydantic BaseModel state)", () => {
+    it("should map nested flat messages", () => {
+      const data = {
+        input: {
+          messages: [
+            { type: "human", content: "Hello" },
+            { type: "ai", content: "Hi there!" },
+          ],
+        },
+      };
+      const result = mapLangChainMessages(data, { fieldType: "input" });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[0].id).toBe("input-0");
+      expect(result.messages[1].role).toBe("ai");
+      expect(result.messages[1].id).toBe("input-1");
+    });
+
+    it("should map nested batched messages (first batch only)", () => {
+      const data = {
+        input: {
+          messages: [
+            [
+              { type: "human", content: "Hello" },
+              { type: "ai", content: "Response" },
+            ],
+          ],
+        },
+      };
+      const result = mapLangChainMessages(data, { fieldType: "input" });
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[1].role).toBe("ai");
+    });
+
+    it("should map real Pydantic trace shape with extra fields", () => {
+      const data = {
+        input: {
+          messages: [
+            {
+              type: "human",
+              content: "What is the weather?",
+              additional_kwargs: {},
+              response_metadata: {},
+              id: null,
+              name: null,
+            },
+          ],
+        },
+      };
+      const result = mapLangChainMessages(data, { fieldType: "input" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
+          "What is the weather?",
+        );
+      }
+    });
+
+    it("should prefer top-level messages over nested input", () => {
+      const data = {
+        messages: [{ type: "human", content: "Top level" }],
+        input: {
+          messages: [{ type: "ai", content: "Nested" }],
+        },
+      };
+      const result = mapLangChainMessages(data, { fieldType: "input" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("human");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe("Top level");
+      }
+    });
+  });
+
   describe("Output mapping", () => {
     it("should map flat output messages", () => {
       const data = {

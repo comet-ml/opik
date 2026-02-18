@@ -77,6 +77,49 @@ describe("detectLangChainFormat", () => {
       const data = { messages: [[]] };
       expect(detectLangChainFormat(data, { fieldType: "input" })).toBe(false);
     });
+
+    it("should detect nested flat messages (Pydantic BaseModel state)", () => {
+      const data = {
+        input: {
+          messages: [
+            { type: "human", content: "Hello" },
+            { type: "ai", content: "Hi there!" },
+          ],
+        },
+      };
+      expect(detectLangChainFormat(data, { fieldType: "input" })).toBe(true);
+    });
+
+    it("should detect nested batched messages", () => {
+      const data = {
+        input: {
+          messages: [
+            [
+              { type: "human", content: "Hello" },
+              { type: "ai", content: "Hi!" },
+            ],
+          ],
+        },
+      };
+      expect(detectLangChainFormat(data, { fieldType: "input" })).toBe(true);
+    });
+
+    it("should reject nested non-LangChain messages", () => {
+      const data = {
+        input: {
+          messages: [
+            { role: "user", content: "Hello" },
+            { role: "assistant", content: "Hi" },
+          ],
+        },
+      };
+      expect(detectLangChainFormat(data, { fieldType: "input" })).toBe(false);
+    });
+
+    it("should reject nested empty messages", () => {
+      const data = { input: { messages: [] } };
+      expect(detectLangChainFormat(data, { fieldType: "input" })).toBe(false);
+    });
   });
 
   describe("Output formats", () => {

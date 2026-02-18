@@ -76,6 +76,12 @@ export const detectLangChainFormat: FormatDetector = (data, prettifyConfig) => {
   if (isInput) {
     if (hasLangChainFlatMessages(data)) return true;
     if (hasLangChainBatchedMessages(data)) return true;
+    // Nested: { input: { messages: [...] } } (Pydantic BaseModel state)
+    const d = data as Record<string, unknown>;
+    if (d.input && typeof d.input === "object") {
+      if (hasLangChainFlatMessages(d.input)) return true;
+      if (hasLangChainBatchedMessages(d.input)) return true;
+    }
   }
 
   if (isOutput) {
