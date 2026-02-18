@@ -66,6 +66,10 @@ public class FreeModelLlmProvider implements LlmProviderService {
      * Transforms the request to use the actual model name instead of "opik-free-model".
      * For reasoning models (GPT-5, O-series), clamps temperature to >= 1.0 since existing
      * automation rules may have temperature=0.0 saved from when the free model was gpt-4o-mini.
+     *
+     * Reasoning is always disabled (reasoning_effort=none) because the free model is used for
+     * simple evaluation tasks where reasoning adds latency and cost without benefit. Models like
+     * gpt-5-nano default to medium reasoning effort, which makes them significantly slower.
      */
     private ChatCompletionRequest transformRequest(ChatCompletionRequest request) {
         Double temperature = request.temperature();
@@ -96,6 +100,8 @@ public class FreeModelLlmProvider implements LlmProviderService {
                 .tools(request.tools())
                 .toolChoice(request.toolChoice())
                 .parallelToolCalls(request.parallelToolCalls())
+                .reasoningEffort("none")
+                .customParameters(request.customParameters())
                 .build();
     }
 }
