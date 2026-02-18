@@ -73,6 +73,7 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case FEEDBACK_SCORES ->
                 key != null ? extractFeedbackScore(trace.feedbackScores(), key) : trace.feedbackScores();
             case DURATION -> calculateDuration(trace.startTime(), trace.endTime());
+            case TTFT -> trace.ttft();
             case THREAD_ID -> trace.threadId();
             case CUSTOM -> extractCustomFieldValue(key, trace);
             default -> {
