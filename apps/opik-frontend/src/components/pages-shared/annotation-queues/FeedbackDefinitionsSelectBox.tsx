@@ -16,6 +16,7 @@ import {
   FeedbackDefinition,
 } from "@/types/feedback-definitions";
 import useAppStore from "@/store/AppStore";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 
@@ -129,18 +130,13 @@ const FeedbackDefinitionsSelectBox: React.FC<
 
   const actionPanel = useMemo(
     () => (
-      <div className="px-0.5">
+      <>
         <Separator className="my-1" />
-        <div
-          className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
-          onClick={handleAddNewClick}
-        >
-          <div className="comet-body-s flex items-center gap-2 text-primary">
-            <Plus className="size-3.5 shrink-0" />
-            <span>Add new</span>
-          </div>
-        </div>
-      </div>
+        <ListAction onClick={handleAddNewClick}>
+          <Plus className="size-3.5 shrink-0" />
+          Add new
+        </ListAction>
+      </>
     ),
     [handleAddNewClick],
   );

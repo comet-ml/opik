@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Database, Plus } from "lucide-react";
 
 import { Separator } from "@/components/ui/separator";
+import { ListAction } from "@/components/ui/list-action";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
@@ -142,18 +143,15 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
           actionPanel={
             <div className="sticky inset-x-0 bottom-0">
               <Separator className="my-1" />
-              <div
-                className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
+              <ListAction
                 onClick={() => {
                   setIsDatasetDropdownOpen(false);
                   setIsDatasetDialogOpen(true);
                 }}
               >
-                <div className="comet-body-s flex items-center gap-2 text-primary">
-                  <Plus className="size-3.5 shrink-0" />
-                  <span>Create a new dataset</span>
-                </div>
-              </div>
+                <Plus className="size-3.5 shrink-0" />
+                Add new
+              </ListAction>
             </div>
           }
           disabled={disabled}
