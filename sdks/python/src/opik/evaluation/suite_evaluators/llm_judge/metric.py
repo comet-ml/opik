@@ -19,9 +19,9 @@ from . import parsers
 LLM_JUDGE_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
 
 For each assertion, provide:
-- value: true if the assertion passes, false if it fails
+- score: true if the assertion passes, false if it fails
 - reason: A brief explanation of your judgment
-- metadata: An object containing "confidence" (a float from 0.0 to 1.0 indicating how confident you are)
+- confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment
 """
 
 LLM_JUDGE_USER_TEMPLATE = """## Input
@@ -169,9 +169,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
                 Each result has:
                 - name: The assertion text
-                - value: 1.0 if passed, 0.0 if failed
+                - value: True if passed, False if failed
                 - reason: Explanation from the judge
-                - metadata: {"confidence": float}
         """
         llm_query = _generate_prompt(
             input=input,

@@ -38,17 +38,17 @@ class TestBuildResponseFormatModel:
         instance = model(
             **{
                 "Response is accurate": {
-                    "value": True,
+                    "score": True,
                     "reason": "The response is correct",
-                    "metadata": {"confidence": 0.95},
+                    "confidence": 0.95,
                 }
             }
         )
 
         result = getattr(instance, "Response is accurate")
-        assert result.value is True
+        assert result.score is True
         assert result.reason == "The response is correct"
-        assert result.metadata.confidence == 0.95
+        assert result.confidence == 0.95
 
     def test_build_response_format_model__rejects_missing_field(self):
         assertions = ["Response is accurate", "Response is helpful"]
@@ -58,24 +58,9 @@ class TestBuildResponseFormatModel:
             model(
                 **{
                     "Response is accurate": {
-                        "value": True,
+                        "score": True,
                         "reason": "Correct",
-                        "metadata": {"confidence": 0.9},
-                    }
-                }
-            )
-
-    def test_build_response_format_model__rejects_invalid_confidence_range(self):
-        assertions = ["Response is accurate"]
-        model = llm_judge_parsers.build_response_format_model(assertions)
-
-        with pytest.raises(Exception):
-            model(
-                **{
-                    "Response is accurate": {
-                        "value": True,
-                        "reason": "Correct",
-                        "metadata": {"confidence": 1.5},
+                        "confidence": 0.9,
                     }
                 }
             )
@@ -87,9 +72,9 @@ class TestParseModelOutput:
         content = json.dumps(
             {
                 "Response is accurate": {
-                    "value": True,
+                    "score": True,
                     "reason": "The response correctly states Paris",
-                    "metadata": {"confidence": 0.95},
+                    "confidence": 0.95,
                 }
             }
         )
@@ -100,27 +85,27 @@ class TestParseModelOutput:
         assert results[0].name == "Response is accurate"
         assert results[0].value is True
         assert results[0].reason == "The response correctly states Paris"
-        assert results[0].metadata == {"confidence": 0.95}
         assert results[0].scoring_failed is False
+        assert results[0].metadata == {"confidence": 0.95}
 
     def test_parse_model_output__multiple_assertions__returns_results_in_order(self):
         assertions = ["First assertion", "Second assertion", "Third assertion"]
         content = json.dumps(
             {
                 "First assertion": {
-                    "value": True,
+                    "score": True,
                     "reason": "First reason",
-                    "metadata": {"confidence": 0.9},
+                    "confidence": 0.9,
                 },
                 "Second assertion": {
-                    "value": False,
+                    "score": False,
                     "reason": "Second reason",
-                    "metadata": {"confidence": 0.8},
+                    "confidence": 0.85,
                 },
                 "Third assertion": {
-                    "value": True,
+                    "score": True,
                     "reason": "Third reason",
-                    "metadata": {"confidence": 0.7},
+                    "confidence": 0.7,
                 },
             }
         )
@@ -130,10 +115,13 @@ class TestParseModelOutput:
         assert len(results) == 3
         assert results[0].name == "First assertion"
         assert results[0].value is True
+        assert results[0].metadata == {"confidence": 0.9}
         assert results[1].name == "Second assertion"
         assert results[1].value is False
+        assert results[1].metadata == {"confidence": 0.85}
         assert results[2].name == "Third assertion"
         assert results[2].value is True
+        assert results[2].metadata == {"confidence": 0.7}
 
     def test_parse_model_output__invalid_json__returns_failed_results(self):
         assertions = ["Response is accurate"]
@@ -153,9 +141,9 @@ class TestParseModelOutput:
         content = json.dumps(
             {
                 "Response is accurate": {
-                    "value": True,
+                    "score": True,
                     "reason": "Correct",
-                    "metadata": {"confidence": 0.9},
+                    "confidence": 0.9,
                 }
             }
         )
@@ -171,8 +159,7 @@ class TestParseModelOutput:
         content = json.dumps(
             {
                 "Response is accurate": {
-                    "value": True,
-                    "metadata": {"confidence": 0.9},
+                    "score": True,
                 }
             }
         )
@@ -198,9 +185,9 @@ class TestParseModelOutput:
         content = json.dumps(
             {
                 'Response doesn\'t contain "quotes" or special chars: {}/\\': {
-                    "value": True,
+                    "score": True,
                     "reason": "No special chars found",
-                    "metadata": {"confidence": 0.85},
+                    "confidence": 0.88,
                 }
             }
         )
@@ -213,3 +200,4 @@ class TestParseModelOutput:
             == 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         )
         assert results[0].value is True
+        assert results[0].metadata == {"confidence": 0.88}

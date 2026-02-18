@@ -3,6 +3,9 @@ Parsing utilities for LLMJudge evaluator.
 
 This module provides functions to build response format models and parse
 LLM outputs into ScoreResult objects for the LLMJudge evaluator.
+
+The response format aligns with the backend's OnlineScoringEngine:
+each assertion produces {"score": <bool/int/float>, "reason": "..."}.
 """
 
 import json
@@ -16,22 +19,17 @@ from opik.evaluation.metrics import score_result
 LOGGER = logging.getLogger(__name__)
 
 
-class AssertionResultMetadata(pydantic.BaseModel):
-    """Metadata for a single assertion evaluation."""
-
-    confidence: float = pydantic.Field(ge=0.0, le=1.0)
-
-
 class AssertionResultItem(pydantic.BaseModel):
     """Result for a single assertion evaluation.
 
-    Mirrors ScoreResult shape: value, reason, metadata.
-    The assertion name comes from the parent model's field key.
+    Extends the backend's expected format {"score": <value>, "reason": "..."}
+    with an additional ``confidence`` field used by the SDK.
+    The backend ignores extra fields, so this is forward-compatible.
     """
 
-    value: bool
+    score: bool
     reason: str
-    metadata: AssertionResultMetadata
+    confidence: float = pydantic.Field(ge=0.0, le=1.0)
 
 
 def build_response_format_model(
@@ -52,14 +50,11 @@ def build_response_format_model(
 
     Example:
         >>> model = build_response_format_model(["Response is accurate", "Response is helpful"])
-        >>> # The model will have fields:
-        >>> # - "Response is accurate": AssertionResultItem
-        >>> # - "Response is helpful": AssertionResultItem
         >>> instance = model(**{
-        ...     "Response is accurate": {"value": True, "reason": "Correct", "confidence": 0.9},
-        ...     "Response is helpful": {"value": True, "reason": "Helpful", "confidence": 0.8},
+        ...     "Response is accurate": {"score": True, "reason": "Correct"},
+        ...     "Response is helpful": {"score": True, "reason": "Helpful"},
         ... })
-        >>> getattr(instance, "Response is accurate").value
+        >>> getattr(instance, "Response is accurate").score
         True
     """
     fields: dict[str, Any] = {
@@ -87,7 +82,7 @@ def parse_model_output(
         If parsing fails, returns ScoreResult objects with scoring_failed=True.
 
     Example:
-        >>> content = '{"Response is accurate": {"value": true, "reason": "Correct", "confidence": 0.95}}'
+        >>> content = '{"Response is accurate": {"score": true, "reason": "Correct"}}'
         >>> results = parse_model_output(content, ["Response is accurate"])
         >>> results[0].name
         'Response is accurate'
@@ -106,9 +101,9 @@ def parse_model_output(
             results.append(
                 score_result.ScoreResult(
                     name=assertion,
-                    value=item.value,
+                    value=item.score,
                     reason=item.reason,
-                    metadata=item.metadata.model_dump(),
+                    metadata={"confidence": item.confidence},
                 )
             )
 

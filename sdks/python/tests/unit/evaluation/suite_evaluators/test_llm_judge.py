@@ -78,7 +78,7 @@ class TestLLMJudgeToConfig:
             "seed": 123,
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
-        # Both name and description use the assertion text directly
+        # Schema items: name, type, description (matching backend's LlmAsJudgeOutputSchema)
         assert config_dict["schema"] == [
             {
                 "name": "Response is accurate",
@@ -121,6 +121,81 @@ class TestLLMJudgeToConfig:
 
         assert "schema" in config_dict
         assert "schema_" not in config_dict
+
+
+class TestLLMJudgeSerializedFormat:
+    def test_to_config__serialized_json__matches_expected_format(self):
+        """Shows the full serialized JSON that gets stored in the backend."""
+        evaluator = llm_judge.LLMJudge(
+            assertions=[
+                "Response is factually correct",
+                "Response does not contain hallucinations",
+            ],
+            name="my_judge",
+            temperature=0.0,
+            seed=42,
+            track=False,
+        )
+
+        config_dict = evaluator.to_config().model_dump(by_alias=True, exclude_none=True)
+
+        assert config_dict == {
+            "version": "1",
+            "name": "my_judge",
+            "model": {
+                "temperature": 0.0,
+                "seed": 42,
+            },
+            "messages": [
+                {
+                    "role": "SYSTEM",
+                    "content": (
+                        "You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.\n"
+                        "\n"
+                        "For each assertion, provide:\n"
+                        "- score: true if the assertion passes, false if it fails\n"
+                        "- reason: A brief explanation of your judgment\n"
+                        "- confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment\n"
+                    ),
+                },
+                {
+                    "role": "USER",
+                    "content": (
+                        "## Input\n"
+                        "The INPUT section contains all data that the agent received. "
+                        "This may include the actual user query, conversation history, context, metadata, "
+                        "or other structured information. Identify the core user request within this data.\n"
+                        "\n"
+                        "{input}\n"
+                        "\n"
+                        "## Output\n"
+                        "The OUTPUT section contains all data produced by the agent. "
+                        "This may include the agent's response text, tool calls, intermediate results, metadata, "
+                        "or other structured information. Focus on the substantive response when evaluating assertions.\n"
+                        "\n"
+                        "{output}\n"
+                        "\n"
+                        "## Assertions\n"
+                        "Evaluate each of the following assertions against the agent's output:\n"
+                        "\n"
+                        "{assertions}\n"
+                    ),
+                },
+            ],
+            "variables": {"input": "input", "output": "output"},
+            "schema": [
+                {
+                    "name": "Response is factually correct",
+                    "type": "BOOLEAN",
+                    "description": "Response is factually correct",
+                },
+                {
+                    "name": "Response does not contain hallucinations",
+                    "type": "BOOLEAN",
+                    "description": "Response does not contain hallucinations",
+                },
+            ],
+        }
 
 
 class TestLLMJudgeFromConfig:

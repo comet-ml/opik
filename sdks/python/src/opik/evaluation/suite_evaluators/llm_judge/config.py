@@ -61,20 +61,17 @@ class LLMJudgeMessage(pydantic.BaseModel):
 class LLMJudgeSchemaItem(pydantic.BaseModel):
     """Schema definition for an assertion output.
 
-    Matches backend's LlmAsJudgeOutputSchema structure.
+    Matches backend's LlmAsJudgeOutputSchema(name, type, description).
     """
 
     name: str
     """The name of the assertion/score."""
 
     type: Literal["INTEGER", "DOUBLE", "BOOLEAN"]
-    """The type of the result (matches backend's LlmAsJudgeOutputSchemaType)."""
+    """The type of the score value (matches backend's LlmAsJudgeOutputSchemaType)."""
 
     description: str
     """Description of the expected behavior to check."""
-
-    metadata: Optional[dict[str, Any]] = None
-    """Optional metadata dict for additional information."""
 
 
 CONFIG_VERSION = "1"
