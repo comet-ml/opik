@@ -9,14 +9,14 @@ import {
   MessageRole,
 } from "@/components/shared/PrettyLLMMessage/types";
 
-// Provider types
-export type LLMProvider = "openai" | "anthropic" | "google";
+// Format types
+export type LLMMessageFormat = "openai" | "langchain" | "anthropic" | "google";
 
 // Detection result
-export interface LLMProviderDetectionResult {
+export interface LLMMessageFormatDetectionResult {
   supported: boolean;
   empty?: boolean;
-  provider?: LLMProvider;
+  format?: LLMMessageFormat;
   confidence?: "high" | "medium" | "low";
 }
 
@@ -63,21 +63,28 @@ export interface LLMMapperResult {
   usage?: PrettyLLMMessageUsageProps["usage"];
 }
 
-// Provider detector contract
-export type ProviderDetector = (
+// Format detector contract
+export type FormatDetector = (
   data: unknown,
   prettifyConfig?: { fieldType?: "input" | "output" },
 ) => boolean;
 
-// Provider mapper contract
-export type ProviderMapper = (
+// Format mapper contract
+export type FormatMapper = (
   data: unknown,
   prettifyConfig?: { fieldType?: "input" | "output" },
 ) => LLMMapperResult;
 
-// Provider interface
-export interface LLMProviderImplementation {
-  name: LLMProvider;
-  detector: ProviderDetector;
-  mapper: ProviderMapper;
+// Format combiner contract
+export type FormatCombiner = (
+  input: { raw: unknown; mapped: LLMMapperResult },
+  output: { raw: unknown; mapped: LLMMapperResult },
+) => LLMMapperResult;
+
+// Format interface
+export interface LLMMessageFormatImplementation {
+  name: LLMMessageFormat;
+  detector: FormatDetector;
+  mapper: FormatMapper;
+  combiner?: FormatCombiner;
 }

@@ -1,7 +1,14 @@
 import { ReactNode, ComponentPropsWithoutRef } from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 
-export type MessageRole = "system" | "user" | "assistant" | "tool" | "function";
+export type MessageRole =
+  | "system"
+  | "user"
+  | "assistant"
+  | "tool"
+  | "function"
+  | "human"
+  | "ai";
 
 export type PrettyLLMMessageContainerProps = ComponentPropsWithoutRef<
   typeof AccordionPrimitive.Root
