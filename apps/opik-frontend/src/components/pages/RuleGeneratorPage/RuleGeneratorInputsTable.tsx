@@ -15,12 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export interface RuleGeneratorInput {
-  id: string;
-  inputType: string;
-  userInput: string;
-  result: string;
-}
+import { type RuleGeneratorInput } from "./types";
+export type { RuleGeneratorInput } from "./types";
 
 const STORAGE_KEY = "opik_rule_generator_inputs";
 

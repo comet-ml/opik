@@ -1,4 +1,4 @@
-import { RuleGeneratorInput } from "./RuleGeneratorInputsTable";
+import { RuleGeneratorInput } from "./types";
 
 type DefaultEntry = Pick<RuleGeneratorInput, "inputType" | "userInput">;
 
