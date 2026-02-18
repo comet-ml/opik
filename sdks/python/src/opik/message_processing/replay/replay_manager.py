@@ -11,11 +11,6 @@ from .. import messages
 LOGGER = logging.getLogger(__name__)
 
 
-DEFAULT_BATCH_SIZE = 100
-DEFAULT_BATCH_REPLAY_DELAY = 0.5
-DEFAULT_TICK_INTERVAL = 0.3
-
-
 def _check_message_id(message_id: Optional[int]) -> None:
     if message_id is None:
         # fail fast - it is a programming error if message ID is not provided
@@ -36,9 +31,9 @@ class ReplayManager(threading.Thread):
     def __init__(
         self,
         monitor: connection_monitor.OpikConnectionMonitor,
-        batch_size: int = DEFAULT_BATCH_SIZE,
-        batch_replay_delay: float = DEFAULT_BATCH_REPLAY_DELAY,
-        tick_interval_seconds: float = DEFAULT_TICK_INTERVAL,
+        batch_size: int,
+        batch_replay_delay: float,
+        tick_interval_seconds: float,
     ):
         """
         Initializes the ReplayManager instance.
