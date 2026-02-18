@@ -10,6 +10,7 @@ import {
   KeyRound,
   LogOut,
   Settings,
+  Settings2,
   Shield,
   UserPlus,
   Zap,
@@ -301,25 +302,34 @@ const UserMenu = () => {
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent className="w-60">
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onClick={() => {
-                        copy(user.apiKeys[0]);
-                        toast({ description: "Successfully copied API Key" });
-                      }}
-                    >
-                      <span className="truncate">
+                    <div className="flex h-10 items-center justify-between gap-2 px-4">
+                      <span className="comet-body-s truncate text-foreground">
                         {maskAPIKey(user.apiKeys[0])}
                       </span>
-                      <Copy className="ml-2 size-3 shrink-0" />
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <a
-                      className="comet-body-s flex justify-center"
-                      href={buildUrl("account-settings/apiKeys", workspaceName)}
-                    >
-                      <Button variant="link">Manage API keys</Button>
-                    </a>
+                      <div className="flex shrink-0 items-center gap-1 text-light-slate">
+                        <button
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          onClick={() => {
+                            copy(user.apiKeys[0]);
+                            toast({
+                              description: "Successfully copied API Key",
+                            });
+                          }}
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                        <div className="mx-0.5 h-3.5 w-px bg-border" />
+                        <a
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          href={buildUrl(
+                            "account-settings/apiKeys",
+                            workspaceName,
+                          )}
+                        >
+                          <Settings2 className="size-3.5" />
+                        </a>
+                      </div>
+                    </div>
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
