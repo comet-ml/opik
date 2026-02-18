@@ -31,25 +31,25 @@ def _chunk_has_content(chunk: Any) -> bool:
 
     Returns True if the chunk contains any meaningful content.
     """
-    try:
-        if not hasattr(chunk, "choices") or not chunk.choices:
-            return False
-
-        choice = chunk.choices[0]
-        if not hasattr(choice, "delta") or choice.delta is None:
-            return False
-
-        delta = choice.delta
-
-        if hasattr(delta, "content") and delta.content:
-            return True
-
-        if hasattr(delta, "tool_calls") and delta.tool_calls:
-            return True
-
+    if not hasattr(chunk, "choices") or not chunk.choices:
         return False
-    except Exception:
+
+    if not isinstance(chunk.choices, (list, tuple)):
         return False
+
+    choice = chunk.choices[0]
+    if not hasattr(choice, "delta") or choice.delta is None:
+        return False
+
+    delta = choice.delta
+
+    if hasattr(delta, "content") and delta.content:
+        return True
+
+    if hasattr(delta, "tool_calls") and delta.tool_calls:
+        return True
+
+    return False
 
 
 # Raw low-level stream methods
