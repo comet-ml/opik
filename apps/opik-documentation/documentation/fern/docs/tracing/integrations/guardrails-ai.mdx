@@ -26,7 +26,7 @@ For this guide we will use a simple example that logs guardrails validation step
 First, ensure you have both `opik` and `guardrails-ai` installed:
 
 ```bash
-pip install opik "guardrails-ai>=0.9.0"
+pip install opik guardrails-ai
 ```
 
 ### Configuring Opik
@@ -78,7 +78,11 @@ politeness_check = PolitenessCheck(
     llm_callable="gpt-3.5-turbo", on_fail=OnFailAction.NOOP
 )
 
-guard: Guard = Guard().use(politeness_check)
+guard: Guard = Guard()
+if hasattr(guard, "use_many"):
+    guard = guard.use_many(politeness_check)
+else:
+    guard = guard.use(politeness_check)
 guard = track_guardrails(guard, project_name="guardrails-integration-example")
 
 guard.validate(
