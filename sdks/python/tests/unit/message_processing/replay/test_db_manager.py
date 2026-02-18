@@ -615,7 +615,10 @@ class TestReplayManagerStatusProperties:
         conn.close()
         mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
-        assert mgr.failed
+        try:
+            assert mgr.failed
+        finally:
+            mgr.close()
 
 
 class TestFailedMessagesCount:
