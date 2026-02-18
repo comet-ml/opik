@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
+from opik import id_helpers
 from rich.console import Console
 
 from .experiment import recreate_experiments
@@ -96,15 +97,18 @@ def import_projects_from_directory(
                             trace_info.get("feedback_scores")
                         )
 
+                        original_start_time = (
+                            datetime.fromisoformat(
+                                trace_info["start_time"].replace("Z", "+00:00")
+                            )
+                            if trace_info.get("start_time")
+                            else None
+                        )
+
                         trace = client.trace(
+                            id=id_helpers.generate_id(timestamp=original_start_time),
                             name=trace_info.get("name", "imported_trace"),
-                            start_time=(
-                                datetime.fromisoformat(
-                                    trace_info["start_time"].replace("Z", "+00:00")
-                                )
-                                if trace_info.get("start_time")
-                                else None
-                            ),
+                            start_time=original_start_time,
                             end_time=(
                                 datetime.fromisoformat(
                                     trace_info["end_time"].replace("Z", "+00:00")
