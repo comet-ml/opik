@@ -977,7 +977,7 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
         assertions=["Response is accurate", "Response is concise"],
     )
 
-    suite = opik_client.create_evaluation_suite(
+    _ = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test get_evaluators",
         evaluators=[judge_1, judge_2],
@@ -1002,7 +1002,7 @@ def test_evaluation_suite__get_execution_policy__returns_persisted_policy(
     """
     Test that get_execution_policy() returns the persisted execution policy.
     """
-    suite = opik_client.create_evaluation_suite(
+    _ = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test get_execution_policy",
         execution_policy={"runs_per_item": 5, "pass_threshold": 3},
@@ -1069,6 +1069,63 @@ def test_evaluation_suite__get_items__returns_items_with_evaluators(
     item_evaluators = items_with_evaluators[0]["evaluators"]
     assert len(item_evaluators) == 1
     assert isinstance(item_evaluators[0], LLMJudge)
+
+
+def test_evaluation_suite__update__changes_evaluators_and_policy(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update() changes suite-level evaluators and execution policy.
+
+    Creates a suite with initial config, updates it, then verifies the
+    new config is persisted and returned by get_evaluators/get_execution_policy.
+    """
+    # 1. Create suite with initial evaluator and policy
+    initial_judge = LLMJudge(
+        name="initial_judge",
+        assertions=["Response is helpful"],
+    )
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test update",
+        evaluators=[initial_judge],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    # Verify initial state
+    evaluators = suite.get_evaluators()
+    assert len(evaluators) == 1
+    assert evaluators[0].name == "initial_judge"
+
+    policy = suite.get_execution_policy()
+    assert policy["runs_per_item"] == 1
+
+    # 2. Update with new evaluators and policy
+    new_judge_1 = LLMJudge(
+        name="updated_judge_1",
+        assertions=["Response is accurate"],
+    )
+    new_judge_2 = LLMJudge(
+        name="updated_judge_2",
+        assertions=["Response is concise"],
+    )
+    suite.update(
+        evaluators=[new_judge_1, new_judge_2],
+        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+    )
+
+    # 3. Retrieve from BE to verify persistence
+    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+
+    updated_evaluators = retrieved_suite.get_evaluators()
+    assert len(updated_evaluators) == 2
+    evaluator_names = {e.name for e in updated_evaluators}
+    assert "updated_judge_1" in evaluator_names
+    assert "updated_judge_2" in evaluator_names
+
+    updated_policy = retrieved_suite.get_execution_policy()
+    assert updated_policy["runs_per_item"] == 3
+    assert updated_policy["pass_threshold"] == 2
 
 
 def test_get_or_create_evaluation_suite__existing__returns_existing(

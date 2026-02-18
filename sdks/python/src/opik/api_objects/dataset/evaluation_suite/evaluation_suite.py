@@ -17,7 +17,7 @@ from opik.evaluation.suite_evaluators import llm_judge
 
 from . import suite_result_constructor
 from . import types as suite_types
-from .. import validators, execution_policy
+from .. import validators, execution_policy, rest_operations
 
 
 LOGGER = logging.getLogger(__name__)
@@ -146,6 +146,45 @@ class EvaluationSuite:
                 }
             )
         return result
+
+    def update(
+        self,
+        *,
+        execution_policy: execution_policy.ExecutionPolicy,
+        evaluators: List[llm_judge.LLMJudge],
+    ) -> None:
+        """
+        Update the suite-level execution policy and evaluators.
+
+        Creates a new dataset version based on the current latest version
+        with the updated configuration.
+
+        Both arguments are mandatory.
+
+        Args:
+            execution_policy: New execution policy for the suite.
+            evaluators: New suite-level LLMJudge evaluators.
+
+        Raises:
+            TypeError: If any evaluator is not an LLMJudge instance.
+            ValueError: If no current version exists to base the update on.
+        """
+        validators.validate_evaluators(evaluators, "suite-level evaluators")
+
+        version_info = self._dataset.get_version_info()
+        if version_info is None or version_info.id is None:
+            raise ValueError(
+                "Cannot update suite: no existing version found. "
+                "Use create_evaluation_suite() to create the suite first."
+            )
+
+        rest_operations.update_evaluation_suite_dataset(
+            rest_client=self._dataset._rest_client,
+            dataset_id=self._dataset.id,
+            base_version_id=version_info.id,
+            evaluators=evaluators,
+            exec_policy=execution_policy,
+        )
 
     def delete_items(self, item_ids: List[str]) -> None:
         """

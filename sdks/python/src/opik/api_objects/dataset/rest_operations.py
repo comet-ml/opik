@@ -308,3 +308,41 @@ def create_evaluation_suite_dataset(
     )
 
     return dataset_fern.id
+
+
+def update_evaluation_suite_dataset(
+    rest_client: OpikApi,
+    dataset_id: str,
+    base_version_id: str,
+    evaluators: List[llm_judge.LLMJudge],
+    exec_policy: execution_policy.ExecutionPolicy,
+) -> None:
+    """
+    Update suite-level evaluators and execution_policy by creating a new
+    dataset version based on the current latest version.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: The dataset ID.
+        base_version_id: The current latest version UUID to base the update on.
+        evaluators: Suite-level LLMJudge evaluators.
+        exec_policy: Execution policy dict.
+    """
+    request: Dict[str, Any] = {
+        "base_version": base_version_id,
+        "evaluators": [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ],
+        "execution_policy": {
+            "runs_per_item": exec_policy.get("runs_per_item", 1),
+            "pass_threshold": exec_policy.get("pass_threshold", 1),
+        },
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_id, request=request, override=False
+    )
