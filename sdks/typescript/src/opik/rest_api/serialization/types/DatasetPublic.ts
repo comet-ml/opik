@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { DatasetPublicStatus } from "./DatasetPublicStatus.js";
+import { DatasetPublicType } from "./DatasetPublicType.js";
 import { DatasetPublicVisibility } from "./DatasetPublicVisibility.js";
 import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic.js";
 
@@ -11,6 +12,7 @@ export const DatasetPublic: core.serialization.ObjectSchema<serializers.DatasetP
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        type: DatasetPublicType.optional(),
         visibility: DatasetPublicVisibility.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         description: core.serialization.string().optional(),
@@ -45,6 +47,7 @@ export declare namespace DatasetPublic {
     export interface Raw {
         id?: string | null;
         name: string;
+        type?: DatasetPublicType.Raw | null;
         visibility?: DatasetPublicVisibility.Raw | null;
         tags?: string[] | null;
         description?: string | null;

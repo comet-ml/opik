@@ -37,6 +37,10 @@ class DatasetItemUpdate(UniversalBaseModel):
     """
 
     execution_policy: typing.Optional[ExecutionPolicy] = None
+    clear_execution_policy: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    When true, clears the item-level execution policy (falls back to dataset-level)
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

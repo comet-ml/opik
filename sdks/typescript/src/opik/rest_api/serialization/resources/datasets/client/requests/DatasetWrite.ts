@@ -3,12 +3,14 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { DatasetWriteType } from "../../types/DatasetWriteType.js";
 import { DatasetWriteVisibility } from "../../types/DatasetWriteVisibility.js";
 
 export const DatasetWrite: core.serialization.Schema<serializers.DatasetWrite.Raw, OpikApi.DatasetWrite> =
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string(),
+        type: DatasetWriteType.optional(),
         visibility: DatasetWriteVisibility.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         description: core.serialization.string().optional(),
@@ -18,6 +20,7 @@ export declare namespace DatasetWrite {
     export interface Raw {
         id?: string | null;
         name: string;
+        type?: DatasetWriteType.Raw | null;
         visibility?: DatasetWriteVisibility.Raw | null;
         tags?: string[] | null;
         description?: string | null;

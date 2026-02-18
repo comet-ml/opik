@@ -8958,6 +8958,14 @@ components:
             type: string
             readOnly: true
           readOnly: true
+        evaluators:
+          type: array
+          description: Default evaluators for items in this version
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         created_at:
           type: string
           format: date-time
@@ -8972,6 +8980,40 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+      description: Default evaluators for items in this version
+      readOnly: true
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Default execution policy for items in this version
+      readOnly: true
     DatasetItemChanges_Public:
       type: object
     DatasetItemBatchUpdate:
@@ -9064,6 +9106,10 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        clear_execution_policy:
+          type: boolean
+          description: "When true, clears the item-level execution policy (falls back\
+            \ to dataset-level)"
       description: Dataset item update request
     EvaluatorItem:
       required:
@@ -9106,6 +9152,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9209,6 +9260,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10152,6 +10208,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10398,36 +10459,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    EvaluatorItem_Public:
-      required:
-      - config
-      - name
-      - type
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        type:
-          type: string
-          enum:
-          - llm_judge
-          - code_metric
-        config:
-          $ref: "#/components/schemas/JsonNode_Public"
-    ExecutionPolicy_Public:
-      type: object
-      properties:
-        runs_per_item:
-          maximum: 100
-          minimum: 1
-          type: integer
-          format: int32
-        pass_threshold:
-          maximum: 100
-          minimum: 1
-          type: integer
-          format: int32
     ExperimentItem_Public:
       required:
       - dataset_item_id
