@@ -4268,5 +4268,40 @@ class DatasetVersionResourceTest {
                     datasetId, changes2, false, API_KEY, TEST_WORKSPACE);
             assertThat(version3.evaluators()).isNull();
         }
+
+        @Test
+        @DisplayName("Success: Apply changes with null baseVersion creates first version with evaluators and executionPolicy")
+        void applyChanges__whenNullBaseVersion__thenFirstVersionCreatedWithEvaluatorsAndPolicy() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var versionEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+
+            var versionPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(3)
+                    .passThreshold(2)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(null)
+                    .evaluators(versionEvaluators)
+                    .executionPolicy(versionPolicy)
+                    .tags(List.of("initial"))
+                    .changeDescription("First version with evaluators")
+                    .build();
+
+            var version1 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, true, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version1).isNotNull();
+            assertThat(version1.itemsTotal()).isZero();
+            assertThat(version1.evaluators()).isEqualTo(versionEvaluators);
+            assertThat(version1.executionPolicy()).isEqualTo(versionPolicy);
+            assertThat(version1.tags()).contains("initial", DatasetVersionService.LATEST_TAG);
+        }
     }
 }

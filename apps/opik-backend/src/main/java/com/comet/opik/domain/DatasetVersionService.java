@@ -171,6 +171,12 @@ public interface DatasetVersionService {
     boolean isLatestVersion(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
+     * Checks if the dataset has any versions.
+     * Safe to call from reactive contexts where RequestContext is not available.
+     */
+    boolean hasVersions(String workspaceId, UUID datasetId);
+
+    /**
      * Finds a version by its batch ID.
      * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
      *
@@ -318,6 +324,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
             return dao.findByIds(versionIds, workspaceId);
+        });
+    }
+
+    @Override
+    public boolean hasVersions(@NonNull String workspaceId, @NonNull UUID datasetId) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.countByDatasetId(datasetId, workspaceId) > 0;
         });
     }
 
