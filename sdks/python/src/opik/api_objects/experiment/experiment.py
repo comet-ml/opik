@@ -86,12 +86,14 @@ class Experiment:
         Returns:
             None
         """
+
         experiment_item_messages = [
             messages.ExperimentItemMessage(
                 id=helpers.generate_id(),
                 experiment_id=self.id,
                 dataset_item_id=item.dataset_item_id,
                 trace_id=item.trace_id,
+                project_name=item.project_name,
             )
             for item in experiment_items_references
         ]

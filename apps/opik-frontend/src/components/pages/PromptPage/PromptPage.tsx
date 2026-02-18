@@ -11,6 +11,8 @@ import CommitsTab from "@/components/pages/PromptPage/CommitsTab/CommitsTab";
 import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import PromptTagsList from "@/components/pages/PromptPage/PromptTagsList";
+import { Separator } from "@/components/ui/separator";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -57,14 +59,20 @@ const PromptPage: React.FunctionComponent = () => {
         direction="horizontal"
         limitWidth
       >
-        {prompt?.created_at && (
-          <div className="flex gap-2 overflow-x-auto">
+        <div className="flex items-center overflow-x-auto">
+          {prompt?.created_at && (
             <DateTag
               date={prompt?.created_at}
               resource={RESOURCE_TYPE.prompt}
             />
-          </div>
-        )}
+          )}
+          <Separator orientation="vertical" className="mx-2 h-4" />
+          <PromptTagsList
+            tags={prompt?.tags ?? []}
+            promptId={promptId}
+            prompt={prompt}
+          />
+        </div>
       </PageBodyStickyContainer>
       <Tabs
         defaultValue="prompt"
