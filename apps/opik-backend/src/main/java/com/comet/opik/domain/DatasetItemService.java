@@ -1459,31 +1459,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             // The baseVersion is the version ID directly (not a hash or tag)
             UUID baseVersionId = changes.baseVersion();
-            final int baseVersionItemCount;
-
-            if (baseVersionId != null) {
-                // Verify the base version exists and get its item count
-                DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
-                baseVersionItemCount = baseVersion.itemsTotal();
-
-                // Check if baseVersion is the latest (unless override is set)
-                if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
-                    log.warn("Version conflict: baseVersion '{}' is not the latest for dataset '{}'",
-                            changes.baseVersion(), datasetId);
-                    return Mono.error(new ClientErrorException(
-                            Response.status(Response.Status.CONFLICT)
-                                    .entity(new ErrorMessage(List.of(
-                                            "Version conflict: baseVersion is not the latest. " +
-                                                    "Use override=true to force creation.")))
-                                    .build()));
-                }
-            } else {
-                baseVersionItemCount = 0;
-            }
-
-            // Generate new version ID
-            UUID newVersionId = idGenerator.generateId();
-            log.info("Generated new version ID '{}' for dataset '{}'", newVersionId, datasetId);
 
             // No base version: create the first version (metadata only, no item delta)
             if (baseVersionId == null) {
@@ -1491,6 +1466,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return Mono.error(new BadRequestException(
                             "baseVersion is required when the dataset already has versions."));
                 }
+                UUID newVersionId = idGenerator.generateId();
                 return Mono.fromCallable(() -> {
                     DatasetVersion version = versionService.createVersionFromDelta(
                             datasetId, newVersionId, 0, null,
@@ -1503,6 +1479,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return version;
                 });
             }
+
+            // Verify the base version exists and get its item count
+            DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
+            int baseVersionItemCount = baseVersion.itemsTotal();
+
+            // Check if baseVersion is the latest (unless override is set)
+            if (!override && !versionService.isLatestVersion(workspaceId, datasetId, baseVersionId)) {
+                log.warn("Version conflict: baseVersion '{}' is not the latest for dataset '{}'",
+                        changes.baseVersion(), datasetId);
+                return Mono.error(new ClientErrorException(
+                        Response.status(Response.Status.CONFLICT)
+                                .entity(new ErrorMessage(List.of(
+                                        "Version conflict: baseVersion is not the latest. " +
+                                                "Use override=true to force creation.")))
+                                .build()));
+            }
+
+            // Generate new version ID
+            UUID newVersionId = idGenerator.generateId();
+            log.info("Generated new version ID '{}' for dataset '{}'", newVersionId, datasetId);
 
             // Prepare added items (synchronous - no merging needed)
             List<DatasetItem> addedItems = prepareAddedItems(changes, datasetId);
