@@ -6,18 +6,18 @@
 
 Create a GitHub Pull Request for the current working branch with automatic Jira integration, quality checks, and template pre-filling. This command ensures code quality and proper workflow integration before creating PRs.
 
-- **Execution model**: Always runs from scratch. Each invocation re-checks MCP availability, re-validates the branch, re-evaluates git status, re-runs quality checks, and re-generates summary/template content regardless of prior runs.
+- **Execution model**: Always runs from scratch. Each invocation re-checks tool availability (`gh` preferred, GitHub MCP fallback), re-validates the branch, re-evaluates git status, re-runs quality checks, and re-generates summary/template content regardless of prior runs.
 
 This workflow will:
 
 - Validate the current branch follows Opik feature branch naming conventions
-- Extract Jira ticket number from branch name
+- Extract branch ticket key (`OPIK-<number>`, `issue-<number>`, or `NA`)
 - Check for pending changes and remote branch status
 - Run quality checks to ensure code quality
 - Pre-fill PR template with extracted information
-- Create GitHub draft PR using GitHub CLI
-- Update Jira ticket status to "In Review"
-- Document progress directly in Jira using the same analysis logic as `share-progress-in-jira`
+- Create GitHub draft PR using GitHub CLI (fallback to GitHub MCP only when CLI is unavailable)
+- Update Jira ticket status to "In Review" (for OPIK branches)
+- Document progress directly in Jira for OPIK branches using the same analysis logic as `share-progress-in-jira`
 
 ---
 
@@ -32,23 +32,24 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check Jira MCP**: Test Jira MCP availability by attempting to fetch user info using `atlassianUserInfo`
-  > If unavailable, respond with: "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs Jira MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
-- **Check GitHub CLI**: Ensure `gh` is installed and authenticated (`gh auth status`)
-  > If unavailable, respond with: "This command needs GitHub CLI auth. Install `gh`, run `gh auth login`, then rerun the command."  
+- **Check GitHub CLI (preferred)**: Ensure `gh` is installed and authenticated (`gh auth status`)
+- **GitHub fallback path**: If `gh` is unavailable or unauthenticated, test GitHub MCP availability by fetching repository info for `comet-ml/opik`.
+  > If both are unavailable, respond with: "Install/setup GitHub CLI first (`gh auth login`). If CLI cannot be used in your environment, configure GitHub MCP and retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Ensure we're not on `main`
-- **Tool Validation**: Jira MCP and GitHub CLI auth must be available before proceeding
+- **Tool Validation**: Jira MCP and at least one GitHub path (`gh` preferred, MCP fallback) must be available before proceeding
 
 ---
 
 ### 2. Validate Feature Branch
 
-- **Parse branch name**: Extract `OPIK-<number>` from current branch following Opik naming convention
-- **Validate format**: Ensure ticket number can be extracted from format `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`
+- **Parse branch name**: Extract one key from current branch: `OPIK-<number>`, `issue-<number>`, or `NA`
+- **Validate format**: Ensure branch follows `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`
 - **If invalid format**: Show error and stop:
-  > "Branch name doesn't follow Opik naming convention. Expected format: `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`"  
+  > "Branch name doesn't follow Opik naming convention. Expected format: `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}` with ticket key `OPIK-<number>`, `issue-<number>`, or `NA`."  
   > Examples: `andrescrz/OPIK-2180-add-cursor-git-workflow-rule`, `someuser/issue-1234-some-task`, `someotheruser/NA-some-other-task`  
   > Current branch: `<actual-branch-name>`
 
@@ -62,17 +63,19 @@ This workflow will:
   # Stage everything
   git add -A
 
-  # Agent: Generate commit message with Opik ticket prefix format:
-  # [OPIK-####] [COMPONENT] <description>
+  # Agent: Generate commit message with ticket prefix format:
+  # [OPIK-####] [COMPONENT] <description> (preferred)
+  # [issue-####] [COMPONENT] <description> (GitHub issue branches)
+  # [NA] [COMPONENT] <description> (no-ticket branches)
   #
   # <detailed description>
   #
-  # Implements OPIK-####: <ticket summary>
+  # Implements <TICKET-KEY>: <ticket summary>
   #
   # Example: "[OPIK-2180] [DOCS] Add cursor git workflow rule"
   # Then commit (only if there are staged changes)
   if ! git diff --cached --quiet; then
-    git commit -m "[OPIK-####] [COMPONENT] <AGENT_GENERATED_DESCRIPTION>"
+    git commit -m "[<TICKET-KEY>] [COMPONENT] <AGENT_GENERATED_DESCRIPTION>"
   fi
   ```
 
@@ -100,7 +103,7 @@ This workflow will:
 
 ### 4. Check for Existing PRs
 
-- **Search existing PRs**: Use GitHub CLI to check if there's already an open PR for this branch in `comet-ml/opik` (for example `gh pr list --head <branch> --state open`)
+- **Search existing PRs**: Use GitHub CLI when available (for example `gh pr list --head <branch> --state open`); if CLI is unavailable, use GitHub MCP fallback.
 - **If PR exists**: Show existing PR and ask:
   > "PR already exists for this branch: <PR_URL>. Do you want to update the PR description and continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
   - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–10 as usual
@@ -114,26 +117,26 @@ This workflow will:
 - **Execute quality checks**: Run the following commands in sequence based on the project type:
   ```bash
   # For Java backend projects
-  mvn compile -DskipTests
-  mvn test
-  mvn spotless:check
+  cd apps/opik-backend && mvn compile -DskipTests
+  cd apps/opik-backend && mvn test
+  cd apps/opik-backend && mvn spotless:check
   
   # For frontend projects
-  npm run lint
-  npm run typecheck
+  cd apps/opik-frontend && npm run lint
+  cd apps/opik-frontend && npm run typecheck
   ```
 - **If all pass**: Continue to next step
 - **If errors found**: Run auto-fix commands, then re-verify:
   ```bash
   # For Java backend projects
-  mvn spotless:apply
-  mvn compile -DskipTests
-  mvn test
+  cd apps/opik-backend && mvn spotless:apply
+  cd apps/opik-backend && mvn compile -DskipTests
+  cd apps/opik-backend && mvn test
   
   # For frontend projects
-  npm run lint:fix
-  npm run lint
-  npm run typecheck
+  cd apps/opik-frontend && npm run lint:fix
+  cd apps/opik-frontend && npm run lint
+  cd apps/opik-frontend && npm run typecheck
   ```
 - **If quality checks still fail**: Show errors and ask if user wants to continue
 - **If user chooses to continue**: Proceed with warnings
@@ -187,7 +190,8 @@ This workflow will:
 
 ### 8. Create GitHub PR
 
-- **Use GitHub CLI (preferred)**: Create a draft PR in `comet-ml/opik` with pre-filled template (`gh pr create --draft`)
+- **Use GitHub CLI (preferred)**: Create a draft PR in `comet-ml/opik` with pre-filled template (`gh pr create --draft`).
+- **Fallback**: If CLI is unavailable and GitHub MCP is available, create the PR with MCP and mark as draft when supported.
 - **Verify creation**: Confirm PR was created successfully
 - **If creation fails**: Show error details and stop
 
@@ -195,13 +199,14 @@ This workflow will:
 
 ### 9. Update Jira Status
 
-- **Fetch Jira ticket**: Use Jira MCP to get ticket details
-- **Transition status**: Change ticket status to "In Review"
-- **Verify transition**: Confirm status was updated successfully
+- **Fetch Jira ticket**: For `OPIK-<number>` branches, use Jira MCP to get ticket details
+- **Transition status**: If branch key is `OPIK-<number>`, change ticket status to "In Review"
+- **Verify transition**: Confirm status was updated successfully (for OPIK branches)
 - **If transition fails**: Show error details but continue
-- **Post progress summary**: After successful status update, add a progress comment directly to Jira using `addCommentToJiraIssue` with the standard 2-section format:
+- **Post progress summary**: For OPIK branches, after successful status update, add a progress comment directly to Jira using `addCommentToJiraIssue` with the standard 2-section format:
   - **Release Notes**: User-facing changes for Product Managers, including feature toggle changes (or "No user-facing changes were made in this ticket" if none)
   - **Docs**: Developer-focused technical details and implementation notes
+- **No Jira branch key**: If branch key is `issue-<number>` or `NA`, skip Jira transition/comment and continue.
 
 ---
 
@@ -214,9 +219,9 @@ This workflow will:
   - ✅ Quality checks passed
   - ✅ PR template pre-filled
   - ✅ GitHub PR created successfully
-  - ✅ Jira ticket status updated to "In Review"
-  - ✅ Progress documented in Jira
-- **Show summary**: Display PR URL and Jira ticket status
+  - ✅ Jira ticket status updated to "In Review" (for OPIK branches)
+  - ✅ Progress documented in Jira (for OPIK branches)
+- **Show summary**: Display PR URL and Jira ticket status (if applicable)
 - **Next steps**: Provide guidance on PR review process
 
 ---
@@ -234,7 +239,7 @@ This workflow will:
 
 - Invalid format: Show expected Opik pattern and current branch
 - On main: Explain this command is for feature branches only
-- No OPIK ticket number: Stop and explain the requirement
+- Missing ticket key (`OPIK-<number>`, `issue-<number>`, or `NA`): Stop and explain the requirement
 
 ### **Git Status Errors**
 
@@ -251,6 +256,7 @@ This workflow will:
 ### **PR Creation Failures**
 
 - GitHub CLI issues: Check `gh auth status` and repository permissions for `comet-ml/opik`
+- GitHub MCP fallback issues: Check MCP connectivity/authentication if fallback path was used
 - Template errors: Validate template format and content
 - Network issues: Verify connectivity to GitHub
 
@@ -272,32 +278,32 @@ This workflow will:
 The command is successful when:
 
 1. ✅ Jira MCP is available and accessible
-2. ✅ GitHub CLI is available and authenticated
-3. ✅ Feature branch is validated with OPIK ticket number
+2. ✅ GitHub path is available (`gh` authenticated preferred, MCP fallback optional)
+3. ✅ Feature branch is validated with key `OPIK-<number>`, `issue-<number>`, or `NA`
 4. ✅ Git status is clean (no pending changes)
 5. ✅ Remote branch exists and is up to date
 6. ✅ No existing PRs found for the branch
 7. ✅ Quality checks pass (linter, type checking, or Maven)
 8. ✅ PR template is pre-filled with meaningful content
 9. ✅ GitHub PR is created successfully
-10. ✅ Jira ticket status is updated to "In Review"
-11. ✅ Progress is documented in Jira (via direct MCP call)
+10. ✅ Jira ticket status is updated to "In Review" (for OPIK branches)
+11. ✅ Progress is documented in Jira (via direct MCP call, for OPIK branches)
 12. ✅ All operations complete with clear feedback
 
 ---
 
 ## Notes
 
-- **Tool Requirements**: Jira MCP and GitHub CLI auth must be available before any operations begin
+- **Tool Requirements**: Jira MCP plus a GitHub path (`gh` preferred, MCP fallback) must be available before operations begin
 - **Repository**: Always uses `comet-ml/opik` for GitHub operations
 - **Template pre-filling**: Automatically extracts information from git changes and commit history
 - **Quality assurance**: Ensures code meets standards before PR creation
 - **Workflow integration**: Seamlessly connects Git, GitHub, and Jira workflows following Opik conventions
-- **Progress documentation**: Directly adds progress comment to Jira using MCP (bypasses problematic cursor commands)
+- **Progress documentation**: Adds progress comment to Jira for OPIK branches using MCP
 - **User control**: Asks for confirmation on critical decisions (commits, pushes)
 - **Error handling**: Graceful degradation when non-critical operations fail
 - **Git operations**: Handles both missing remote branches and branches that are behind local commits
-- **MCP testing**: Actively tests MCP availability using real API calls before proceeding
+- **Tool testing**: Validates Jira MCP and GitHub path (`gh` first, MCP fallback) before proceeding
 - **Opik conventions**: Follows Opik branch naming, commit message, and PR title conventions
 - **Logic reuse**: Implements the same git diff analysis and summary generation logic as `share-progress-in-jira` command:
   - Uses three-dot syntax (`git diff origin/main...HEAD`) for accurate change detection against latest remote main
