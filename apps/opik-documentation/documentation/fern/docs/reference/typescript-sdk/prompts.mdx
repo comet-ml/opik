@@ -913,7 +913,7 @@ Retrieves a prompt by name and optional version.
 **Arguments:**
 
 - `options.name: string` - Prompt name (required)
-- `options.commit?: string` - Optional commit hash for specific version
+- `options.commit?: string` - Optional commit ID for specific version
 
 **Returns:** `Promise<Prompt | null>` - Prompt instance or null if not found
 
@@ -1019,7 +1019,7 @@ Retrieves a chat prompt by name and optional version.
 **Arguments:**
 
 - `options.name: string` - Chat prompt name (required)
-- `options.commit?: string` - Optional commit hash for specific version
+- `options.commit?: string` - Optional commit ID for specific version
 
 **Returns:** `Promise<ChatPrompt | null>` - ChatPrompt instance or null if not found
 
@@ -1165,7 +1165,7 @@ Deletes this prompt and all its versions.
 - `id: string` - Unique prompt identifier
 - `name: string` - Prompt name
 - `prompt: string` - Current template content
-- `commit?: string` - Current version commit hash
+- `commit?: string` - Current version commit ID
 - `type: PromptType` - Template engine type
 - `description?: string` - Prompt description
 - `tags?: readonly string[]` - Prompt tags
@@ -1213,7 +1213,7 @@ Compares this version's template with another version.
 - `id: string` - Version unique identifier
 - `name: string` - Associated prompt name
 - `prompt: string` - Template content for this version
-- `commit: string` - Version commit hash
+- `commit: string` - Version commit ID
 - `type: PromptType` - Template engine type
 - `tags?: string[]` - Tags associated with this version
 - `metadata?: JsonNode` - Version metadata
@@ -1313,7 +1313,7 @@ Deletes this chat prompt and all its versions.
 - `id: string` - Unique chat prompt identifier
 - `name: string` - Chat prompt name
 - `messages: ChatMessage[]` - Array of chat messages with roles and content
-- `commit?: string` - Current version commit hash
+- `commit?: string` - Current version commit ID
 - `type: PromptType` - Template engine type
 - `description?: string` - Chat prompt description
 - `tags?: readonly string[]` - Chat prompt tags

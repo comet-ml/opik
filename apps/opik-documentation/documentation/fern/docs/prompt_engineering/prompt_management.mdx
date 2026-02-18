@@ -1329,7 +1329,7 @@ Jinja2 templates support advanced features like conditionals, loops, and filters
 
 ### Chat prompt versioning
 
-Chat prompts are automatically versioned when the messages change. Each version has a unique commit hash.
+Chat prompts are automatically versioned when the messages change. Each version has a unique commit ID.
 
 <Tabs>
     <Tab value="Python" title="Python">
@@ -1375,7 +1375,7 @@ Chat prompts are automatically versioned when the messages change. Each version 
         print(f"Total versions: {len(history)}")
         ```
 
-        You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit hash, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
+        You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit ID, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
@@ -1557,7 +1557,7 @@ You can use this information to:
     </Tab>
 </Tabs>
 
-The `commit` parameter accepts the commit ID (also called commit hash) of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` or `get_chat_prompt_history` methods (see above).
+The `commit` parameter accepts the commit ID of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` or `get_chat_prompt_history` methods (see above).
 
 This is particularly useful when you want to:
 - **Pin to a specific version** in production to ensure consistent behavior
@@ -1578,7 +1578,7 @@ This section covers **prompt version tags** (the per-version ones).
 
 #### Prompt page and commit history
 
-When you open a prompt from the library, the prompt page shows its full commit history — each version listed as a row with its commit hash, creation date, author, and any tags assigned to it:
+When you open a prompt from the library, the prompt page shows its full commit history — each version listed as a row with its commit ID, creation date, and any tags assigned to it:
 
 <Frame>
   <img src="/img/prompt_engineering/prompt_commits_history.png" />
@@ -1586,7 +1586,7 @@ When you open a prompt from the library, the prompt page shows its full commit h
 
 #### Commits table
 
-The commits table gives you a detailed view of all versions for a prompt. Each row shows the commit hash, template preview, change description, author, creation date, and the tags attached to that version. You can add or remove tags directly from this table by clicking on the tag editor for any row:
+The commits table gives you a detailed view of all versions for a prompt. Each row shows the commit ID, template preview, change description, author, creation date, and the tags attached to that version. You can add or remove tags directly from this table by clicking on the tag editor for any row:
 
 <Frame>
   <img src="/img/prompt_engineering/prompt_version_tags.png" />
@@ -1608,7 +1608,7 @@ When selecting a version to compare, the dropdown lists all versions with their 
   <img src="/img/prompt_engineering/prompt_version_compare_dropdown.png" />
 </Frame>
 
-Once two versions are selected, their tags are shown alongside the commit hash and change description in the comparison dialog:
+Once two versions are selected, their tags are shown alongside the commit ID and change description in the comparison dialog:
 
 <Frame>
   <img src="/img/prompt_engineering/prompt_version_comparison_tags.png" />
