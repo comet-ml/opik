@@ -263,17 +263,7 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
   USER_FEEDBACK_COLUMN_ID,
 ];
 
-const DEFAULT_TRACES_ORDER: string[] = [
-  "start_time",
-  "input",
-  "output",
-  "error_info",
-  "duration",
-  "usage.total_tokens",
-  "total_estimated_cost",
-  "tags",
-  COLUMN_COMMENTS_ID,
-];
+const DEFAULT_TRACES_ORDER: string[] = [...DEFAULT_TRACES_COLUMNS];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
 const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
