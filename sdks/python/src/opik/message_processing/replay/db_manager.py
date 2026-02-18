@@ -118,8 +118,7 @@ class DBManager:
         directory, and other necessary properties for managing batch operations.
 
         Args:
-            batch_size: The size of batches for processing. Defaults to
-                DEFAULT_BATCH_SIZE.
+            batch_size: The size of batches for processing.
             batch_replay_delay: The delay (in seconds) between replaying batches of messages.
             db_file: Path to the database file. If not provided, a
                 temporary file will be created in a temporary directory.
