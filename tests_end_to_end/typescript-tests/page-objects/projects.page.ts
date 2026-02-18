@@ -29,11 +29,25 @@ export class ProjectsPage extends BasePage {
 
   async checkProjectExistsWithRetry(
     projectName: string,
-    timeout: number = 5000
+    timeout: number = 5000,
+    maxAttempts: number = 3
   ): Promise<void> {
-    await expect(
-      this.page.getByRole('cell', { name: projectName, exact: true })
-    ).toBeVisible({ timeout });
+    const locator = this.page.getByRole('cell', {
+      name: projectName,
+      exact: true,
+    });
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await locator.waitFor({ state: 'visible', timeout });
+        return;
+      } catch {
+        if (attempt === maxAttempts) throw new Error(
+          `Project "${projectName}" not visible after ${maxAttempts} attempts (${timeout}ms each)`
+        );
+        await this.page.reload({ waitUntil: 'networkidle' });
+      }
+    }
   }
 
   async createNewProject(projectName: string): Promise<void> {
