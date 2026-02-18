@@ -10,11 +10,10 @@ import { FoldVertical, UnfoldVertical } from "lucide-react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import {
   MediaProvider,
-  detectLLMMessages,
+  mapAndCombineMessages,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
 } from "@/components/shared/PrettyLLMMessage/llmMessages";
-import { getFormat } from "@/components/shared/PrettyLLMMessage/llmMessages/providers/registry";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -40,17 +39,6 @@ type MessagesTabProps = {
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
 };
 
-function mapProviderMessages(
-  data: object,
-  detection: ReturnType<typeof detectLLMMessages>,
-  fieldType: "input" | "output",
-) {
-  if (!detection.supported || !detection.format) return null;
-  const format = getFormat(detection.format);
-  if (!format) return null;
-  return format.mapper(data, { fieldType });
-}
-
 function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
   const Component = descriptor.component as React.ComponentType<
     typeof descriptor.props
@@ -71,40 +59,10 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   isLoading,
   scrollContainerRef,
 }) => {
-  const inputDetection = useMemo(
-    () => detectLLMMessages(transformedInput, { fieldType: "input" }),
-    [transformedInput],
+  const { messages: combinedMessages, usage } = useMemo(
+    () => mapAndCombineMessages(transformedInput, transformedOutput),
+    [transformedInput, transformedOutput],
   );
-
-  const outputDetection = useMemo(
-    () => detectLLMMessages(transformedOutput, { fieldType: "output" }),
-    [transformedOutput],
-  );
-
-  const outputMappedResult = useMemo(
-    () => mapProviderMessages(transformedOutput, outputDetection, "output"),
-    [outputDetection, transformedOutput],
-  );
-
-  const combinedMessages = useMemo(() => {
-    const inputResult = mapProviderMessages(
-      transformedInput,
-      inputDetection,
-      "input",
-    );
-    const messages: LLMMessageDescriptor[] = [];
-
-    if (inputResult) {
-      messages.push(...inputResult.messages);
-    }
-    if (outputMappedResult) {
-      messages.push(...outputMappedResult.messages);
-    }
-
-    return messages;
-  }, [inputDetection, transformedInput, outputMappedResult]);
-
-  const usage = outputMappedResult?.usage;
 
   const allMessageIds = useMemo(
     () => combinedMessages.map((msg) => msg.id),

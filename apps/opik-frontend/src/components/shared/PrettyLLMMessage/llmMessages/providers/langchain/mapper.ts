@@ -1,5 +1,6 @@
 import PrettyLLMMessage from "@/components/shared/PrettyLLMMessage";
 import {
+  FormatCombiner,
   FormatMapper,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
@@ -276,6 +277,28 @@ const mapGenerationsOutput = (
     : undefined;
 
   return { messages, usage };
+};
+
+export const combineLangChainMessages: FormatCombiner = (input, output) => {
+  const outputRaw = output.raw as Record<string, unknown> | null;
+
+  // LangGraph state: output.messages is flat array → superset of input → use only output
+  if (
+    outputRaw &&
+    Array.isArray(outputRaw.messages) &&
+    !Array.isArray(outputRaw.messages[0])
+  ) {
+    return {
+      messages: output.mapped.messages,
+      usage: output.mapped.usage,
+    };
+  }
+
+  // Generations or other: concatenate (no overlap)
+  return {
+    messages: [...input.mapped.messages, ...output.mapped.messages],
+    usage: output.mapped.usage,
+  };
 };
 
 export const mapLangChainMessages: FormatMapper = (data, prettifyConfig) => {

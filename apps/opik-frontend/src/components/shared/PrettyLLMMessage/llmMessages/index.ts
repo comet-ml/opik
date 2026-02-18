@@ -1,4 +1,5 @@
 export { detectLLMMessages } from "./detectLLMMessages";
+export { mapAndCombineMessages } from "./mapAndCombineMessages";
 
 export type {
   LLMMessageFormat,
@@ -19,5 +20,3 @@ export {
   resolvePlaceholderURL,
   resolveMediaItems,
 } from "./utils";
-
-export { getFormat, getAllFormats } from "./providers";

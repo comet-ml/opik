@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapLangChainMessages } from "./mapper";
+import { mapLangChainMessages, combineLangChainMessages } from "./mapper";
 
 describe("mapLangChainMessages", () => {
   describe("Input mapping", () => {
@@ -259,6 +259,98 @@ describe("mapLangChainMessages", () => {
           JSON.stringify({ query: "weather" }, null, 2),
         );
       }
+    });
+  });
+
+  describe("combineLangChainMessages", () => {
+    it("should use only output messages when output has flat messages (LangGraph state)", () => {
+      const inputData = {
+        messages: [{ type: "human", content: "Hello" }],
+      };
+      const outputData = {
+        messages: [
+          { type: "human", content: "Hello" },
+          { type: "ai", content: "Hi there!" },
+        ],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[1].role).toBe("ai");
+      expect(result.messages[0].id).toBe("output-0");
+    });
+
+    it("should concatenate input + output when output has generations", () => {
+      const inputData = {
+        messages: [{ type: "human", content: "Hello" }],
+      };
+      const outputData = {
+        generations: [[{ text: "Response text" }]],
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("human");
+      expect(result.messages[0].id).toBe("input-0");
+      expect(result.messages[1].role).toBe("ai");
+      expect(result.messages[1].id).toBe("output-0");
+    });
+
+    it("should preserve usage from output", () => {
+      const inputData = {
+        messages: [{ type: "human", content: "Hello" }],
+      };
+      const outputData = {
+        generations: [[{ text: "Response" }]],
+        llm_output: {
+          token_usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+          },
+        },
+      };
+
+      const inputMapped = mapLangChainMessages(inputData, {
+        fieldType: "input",
+      });
+      const outputMapped = mapLangChainMessages(outputData, {
+        fieldType: "output",
+      });
+
+      const result = combineLangChainMessages(
+        { raw: inputData, mapped: inputMapped },
+        { raw: outputData, mapped: outputMapped },
+      );
+
+      expect(result.usage).toEqual({
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        total_tokens: 30,
+      });
     });
   });
 

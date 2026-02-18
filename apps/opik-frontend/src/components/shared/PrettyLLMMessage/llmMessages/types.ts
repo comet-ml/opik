@@ -75,9 +75,16 @@ export type FormatMapper = (
   prettifyConfig?: { fieldType?: "input" | "output" },
 ) => LLMMapperResult;
 
+// Format combiner contract
+export type FormatCombiner = (
+  input: { raw: unknown; mapped: LLMMapperResult },
+  output: { raw: unknown; mapped: LLMMapperResult },
+) => LLMMapperResult;
+
 // Format interface
 export interface LLMMessageFormatImplementation {
   name: LLMMessageFormat;
   detector: FormatDetector;
   mapper: FormatMapper;
+  combiner?: FormatCombiner;
 }
