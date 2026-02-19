@@ -99,45 +99,39 @@ class CostServiceTest {
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
 
-    /**
-     * Test for issue #5018: GPT-5.2 costs are not tracked.
-     *
-     * This test verifies that model names with date suffixes (e.g., "gpt-5.2-2025-12-17")
-     * are correctly handled by stripping the date suffix and falling back to the base
-     * model name (e.g., "gpt-5.2") when the dated variant is not in the pricing database.
-     */
     @ParameterizedTest
     @MethodSource("provideModelNamesWithDateSuffixes")
-    void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider, boolean shouldHaveCost) {
+    void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
         Map<String, Integer> usage = Map.of(
                 "prompt_tokens", 1000,
                 "completion_tokens", 500);
 
         BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
 
-        if (shouldHaveCost) {
-            assertThat(cost).isGreaterThan(BigDecimal.ZERO);
-        } else {
-            assertThat(cost).isEqualTo(BigDecimal.ZERO);
-        }
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithDateSuffix_issue5018() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
         return Stream.of(
                 // Date suffixes should be stripped and fallback to base model
-                Arguments.of("gpt-5.2-2025-12-17", "openai", true),
-                Arguments.of("gpt-5.2-2026-01-15", "openai", true),
-                Arguments.of("gpt-5.1-2025-11-13", "openai", true),
-                Arguments.of("GPT-5.2-2025-12-17", "openai", true),
+                Arguments.of("gpt-5.2-2025-12-17", "openai"),
+                Arguments.of("gpt-5.2-2026-01-15", "openai"),
+                Arguments.of("gpt-5.1-2025-11-13", "openai"),
+                Arguments.of("GPT-5.2-2025-12-17", "openai"),
 
                 // Base models should still work
-                Arguments.of("gpt-5.2", "openai", true),
-                Arguments.of("gpt-5.1", "openai", true),
-
-                // Dot notation with date suffix
-                Arguments.of("gpt-5.2-2025-12-17", "openai", true),
-
-                // Unknown models with date suffixes should return zero
-                Arguments.of("unknown-model-2025-12-17", "openai", false));
+                Arguments.of("gpt-5.2", "openai"),
+                Arguments.of("gpt-5.1", "openai"));
     }
 }
