@@ -1138,13 +1138,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleMetadataOrderChange = useCallback(
-    (newOrder: string[]) => {
-      setMetadataOrder(newOrder);
-    },
-    [setMetadataOrder],
-  );
-
   const columnSections = useMemo(() => {
     const sections: {
       title: string;
@@ -1170,7 +1163,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         title: "Metadata",
         columns: allMetadataColumns,
         order: metadataOrder,
-        onOrderChange: handleMetadataOrderChange,
+        onOrderChange: setMetadataOrder,
       });
     }
 
@@ -1182,7 +1175,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataMainColumnData,
     metadataColumnsData,
     metadataOrder,
-    handleMetadataOrderChange,
+    setMetadataOrder,
   ]);
 
   return (
