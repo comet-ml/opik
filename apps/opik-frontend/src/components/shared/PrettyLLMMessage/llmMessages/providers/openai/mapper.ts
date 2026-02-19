@@ -511,6 +511,26 @@ const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
 };
 
 /**
+ * Maps conversation output format to LLMMapperResult by extracting the last assistant message.
+ * Used by integrations like OpenWebUI that store the full conversation as output.
+ */
+const mapConversationOutput = (data: OpenAIInputData): LLMMapperResult => {
+  if (!data.messages || !Array.isArray(data.messages)) {
+    return { messages: [] };
+  }
+
+  const lastAssistantMsg = [...data.messages]
+    .reverse()
+    .find((msg) => msg.role === "assistant");
+
+  if (!lastAssistantMsg) {
+    return { messages: [] };
+  }
+
+  return { messages: [mapOpenAIMessage(lastAssistantMsg, 0, "output")] };
+};
+
+/**
  * Maps OpenAI output format to LLMMapperResult
  */
 const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
@@ -649,6 +669,11 @@ export const mapOpenAIMessages: ProviderMapper = (data, prettifyConfig) => {
     // Standard format { choices: [...] }
     if (typeof data === "object" && "choices" in data) {
       return mapOpenAIOutput(data as OpenAIOutputData);
+    }
+
+    // Conversation format { messages: [...] } — extract last assistant message
+    if (typeof data === "object" && "messages" in data) {
+      return mapConversationOutput(data as OpenAIInputData);
     }
   }
 

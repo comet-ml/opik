@@ -94,6 +94,30 @@ describe("detectOpenAIFormat", () => {
       };
       expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
     });
+
+    it("should detect conversation output format with messages array containing assistant message", () => {
+      const data = {
+        chat_id: "some-uuid",
+        model: "llama3",
+        messages: [
+          { role: "user", content: "Hello" },
+          { role: "assistant", content: "Hi there!" },
+        ],
+      };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(true);
+    });
+
+    it("should reject conversation output format with no assistant message", () => {
+      const data = {
+        messages: [{ role: "user", content: "Hello" }],
+      };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
+    });
+
+    it("should reject conversation output format with empty messages array", () => {
+      const data = { messages: [] };
+      expect(detectOpenAIFormat(data, { fieldType: "output" })).toBe(false);
+    });
   });
 
   describe("Edge cases", () => {

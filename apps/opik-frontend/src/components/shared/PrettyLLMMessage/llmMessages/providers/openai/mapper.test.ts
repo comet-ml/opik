@@ -185,6 +185,54 @@ describe("mapOpenAIMessages", () => {
         );
       }
     });
+
+    it("should map conversation output format by extracting the last assistant message", () => {
+      const data = {
+        chat_id: "some-uuid",
+        model: "llama3",
+        messages: [
+          { role: "user", content: "Hello" },
+          { role: "assistant", content: "Hi there!" },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe("Hi there!");
+      }
+    });
+
+    it("should extract the last assistant message when multiple assistant messages exist", () => {
+      const data = {
+        messages: [
+          { role: "user", content: "First question" },
+          { role: "assistant", content: "First answer" },
+          { role: "user", content: "Second question" },
+          { role: "assistant", content: "Second answer" },
+        ],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
+          "Second answer",
+        );
+      }
+    });
+
+    it("should return empty result for conversation output with no assistant message", () => {
+      const data = {
+        messages: [{ role: "user", content: "Hello" }],
+      };
+      const result = mapOpenAIMessages(data, { fieldType: "output" });
+      expect(result.messages).toHaveLength(0);
+    });
   });
 
   describe("Edge cases", () => {

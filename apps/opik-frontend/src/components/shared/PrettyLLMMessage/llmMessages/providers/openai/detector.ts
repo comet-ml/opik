@@ -146,6 +146,27 @@ const hasCustomOutputFormat = (data: unknown): boolean => {
 };
 
 /**
+ * Checks if an object has conversation output format
+ * (messages array with at least one assistant message)
+ * Used by integrations like OpenWebUI that store the full conversation as output
+ */
+const hasConversationOutputFormat = (data: unknown): boolean => {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+
+  if (!Array.isArray(d.messages)) return false;
+  if (d.messages.length === 0) return false;
+  if (!d.messages.every(isOpenAIMessage)) return false;
+
+  return d.messages.some(
+    (msg: unknown) =>
+      typeof msg === "object" &&
+      msg !== null &&
+      (msg as OpenAIMessage).role === "assistant",
+  );
+};
+
+/**
  * Detects if the provided data is in OpenAI format.
  * Supports multiple input and output formats.
  */
@@ -187,6 +208,11 @@ export const detectOpenAIFormat: ProviderDetector = (data, prettifyConfig) => {
     }
     // Custom output format: { text: "...", usage: {...}, finish_reason: "..." }
     if (hasCustomOutputFormat(data)) {
+      return true;
+    }
+    // Conversation format: { messages: [...] } with at least one assistant message
+    // Used by integrations like OpenWebUI that store the full conversation as output
+    if (hasConversationOutputFormat(data)) {
       return true;
     }
   }
