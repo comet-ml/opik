@@ -253,6 +253,7 @@ const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
 const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
+const METADATA_ORDER_KEY_SUFFIX = "metadata-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
@@ -642,7 +643,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const [metadataOrder, setMetadataOrder] = useLocalStorageState<string[]>(
-    `${type}-metadata-order`,
+    `${type}-${METADATA_ORDER_KEY_SUFFIX}`,
     {
       defaultValue: [COLUMN_METADATA_ID],
     },
