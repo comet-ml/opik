@@ -85,7 +85,6 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHRACITE_ORG_MAGNUM_V4_72B = "anthracite-org/magnum-v4-72b",
   ANTHROPIC_CLAUDE_3_HAIKU = "anthropic/claude-3-haiku",
   ANTHROPIC_CLAUDE_3_OPUS = "anthropic/claude-3-opus",
-  ANTHROPIC_CLAUDE_3_5_HAIKU = "anthropic/claude-3.5-haiku",
   ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
