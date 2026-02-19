@@ -8,6 +8,7 @@ import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
+import ExecutionTab from "@/components/pages/TracesPage/ExecutionTab/ExecutionTab";
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,12 @@ const TracesPage = () => {
               >
                 Annotation queues
               </TabsTrigger>
+              <TabsTrigger
+                variant="underline"
+                value={PROJECT_TAB.execution}
+              >
+                Execution
+              </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
           <TabsContent value={PROJECT_TAB.logs}>
@@ -106,6 +113,9 @@ const TracesPage = () => {
           </TabsContent>
           <TabsContent value={PROJECT_TAB.annotationQueues}>
             <AnnotationQueuesTab projectId={projectId} />
+          </TabsContent>
+          <TabsContent value={PROJECT_TAB.execution}>
+            <ExecutionTab projectId={projectId} projectName={projectName} />
           </TabsContent>
         </Tabs>
       );

@@ -851,6 +851,12 @@ freeModel:
   # Default: empty
   apiKey: ${OPIK_FREE_MODEL_API_KEY:-}
 
+# Local runner configuration
+runner:
+  # Default: redis://:opik@localhost:6379/0
+  # Description: Redis URL returned to CLI runners during pairing (should be accessible from the host)
+  redisUrl: ${OPIK_RUNNER_REDIS_URL:-redis://:opik@localhost:6379/0}
+
 # Dataset Versioning Migration configuration
 # Includes both lazy migration (on-demand) and items_total migration (startup)
 datasetVersioningMigration:

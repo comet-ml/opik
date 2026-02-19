@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
+  Play,
   Share,
   Sparkles,
   Trash,
@@ -16,6 +17,8 @@ import {
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
+
+import { useNavigate } from "@tanstack/react-router";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -35,6 +38,7 @@ import {
 } from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -72,6 +76,8 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import useMyRunner, { getStoredRunnerId } from "@/api/runners/useMyRunner";
+import useCreateRunnerJobMutation from "@/api/runners/useCreateRunnerJobMutation";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -124,6 +130,13 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const { data: runner } = useMyRunner({ refetchInterval: 5000 });
+  const isRunnerConnected = runner?.status === "connected";
+  const runnerAgents = runner?.agents ?? [];
+  const runnerId = getStoredRunnerId();
+  const createJobMutation = useCreateRunnerJobMutation();
 
   const { mutate } = useTraceDeleteMutation();
 
@@ -608,6 +621,55 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                 Export as JSON
               </DropdownMenuItem>
             )}
+            {isRunnerConnected && runnerAgents.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                {runnerAgents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.name}
+                    onClick={() => {
+                      createJobMutation.mutate(
+                        {
+                          agent_name: agent.name,
+                          inputs: treeData[0]?.input ?? {},
+                          project: agent.project,
+                          runner_id: runnerId ?? "",
+                        },
+                        {
+                          onSuccess: () => {
+                            toast({
+                              title: "Job created",
+                              description: `Replay sent to "${agent.name}"`,
+                              actions: [
+                                <ToastAction
+                                  key="view"
+                                  altText="View in Execution tab"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    navigate({
+                                      search: (prev: Record<string, unknown>) => ({
+                                        ...prev,
+                                        tab: "execution",
+                                      }),
+                                    })
+                                  }
+                                >
+                                  View
+                                </ToastAction>,
+                              ],
+                            });
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    <Play className="mr-2 size-4" />
+                    Replay on {agent.name}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => setPopupOpen(true)}
@@ -623,7 +685,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           setOpen={setPopupOpen}
           onConfirm={handleTraceDelete}
           title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
+          description="Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?"
           confirmText="Delete trace"
           confirmButtonVariant="destructive"
         />

@@ -69,6 +69,7 @@ class BaseTrackDecorator(abc.ABC):
         flush: bool = False,
         project_name: Optional[str] = None,
         create_duplicate_root_span: bool = True,
+        entrypoint: bool = False,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -130,10 +131,13 @@ class BaseTrackDecorator(abc.ABC):
         track_options.name = name
 
         def decorator(func: Callable) -> Callable:
-            return self._decorate(
+            wrapped = self._decorate(
                 func=func,
                 track_options=track_options,
             )
+            if entrypoint:
+                _apply_entrypoint(func, wrapped, track_options)
+            return wrapped
 
         return decorator
 
@@ -607,6 +611,45 @@ class BaseTrackDecorator(abc.ABC):
         span/trace parameters from the function return value
         """
         pass
+
+
+def _apply_entrypoint(
+    original_func: Callable,
+    wrapped_func: Callable,
+    track_options: "arguments_helpers.TrackOptions",
+) -> None:
+    import os
+    import sys
+
+    from ..runner.entrypoint import (
+        _extract_params,
+        _self_register,
+        _dispatch,
+        _REGISTRY,
+    )
+
+    agent_name = track_options.name or original_func.__name__
+    agent_project = track_options.project_name or "default"
+    source_file = os.path.abspath(inspect.getfile(original_func))
+    params = _extract_params(original_func)
+
+    _REGISTRY[agent_name] = {
+        "func": wrapped_func,
+        "name": agent_name,
+        "project": agent_project,
+        "python": sys.executable,
+        "file": source_file,
+        "params": params,
+    }
+
+    _self_register(agent_name, agent_project, source_file, params)
+
+    target_agent = os.environ.get("OPIK_AGENT")
+    if target_agent == agent_name:
+        _dispatch(wrapped_func)
+
+    wrapped_func._entrypoint_name = agent_name  # type: ignore[attr-defined]
+    wrapped_func._entrypoint_project = agent_project  # type: ignore[attr-defined]
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:

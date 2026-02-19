@@ -35,6 +35,7 @@ from .decorator.context_manager.span_context_manager import start_as_current_spa
 from .decorator.context_manager.trace_context_manager import start_as_current_trace
 from .simulation import SimulatedUser, run_simulation
 from .api_objects.local_recording import record_traces_locally
+from .runner.entrypoint import entrypoint
 
 
 _logging.setup()
@@ -72,6 +73,7 @@ __all__ = [
     "SimulatedUser",
     "run_simulation",
     "record_traces_locally",
+    "entrypoint",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

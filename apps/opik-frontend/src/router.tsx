@@ -45,6 +45,7 @@ import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/Add
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
+
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
     hideUpgradeButton?: boolean;

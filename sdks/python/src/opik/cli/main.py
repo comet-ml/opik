@@ -6,6 +6,7 @@ from typing import Optional
 import click
 
 from . import configure
+from . import connect as connect_mod
 from . import exports
 from . import harbor
 from . import healthcheck
@@ -47,3 +48,4 @@ cli.add_command(exports.export_group)
 cli.add_command(imports.import_group)
 cli.add_command(usage_report.usage_report)
 cli.add_command(harbor.harbor)
+cli.add_command(connect_mod.connect)

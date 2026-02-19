@@ -10,6 +10,7 @@ import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus"
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import RunnerStatusBar from "@/components/layout/RunnerStatusBar/RunnerStatusBar";
 
 const MOBILE_BREAKPOINT = 1024; // lg breakpoint in Tailwind
 
@@ -74,12 +75,13 @@ const PageLayout = () => {
       ) : null}
 
       <SideBar expanded={expanded} setExpanded={setStoredExpanded} />
-      <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
+      <main className="comet-content-inset absolute bottom-7 right-0 top-[var(--banner-height)] flex transition-all">
         <TopBar />
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           <Outlet />
         </section>
       </main>
+      <RunnerStatusBar />
 
       {/* Welcome Wizard Dialog */}
       <WelcomeWizardDialog
