@@ -47,7 +47,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
 
   const EditorComponent =
     previewWidget?.type && widgetResolver
-      ? widgetResolver(previewWidget.type)?.Editor || null
+      ? widgetResolver({ type: previewWidget.type })?.Editor
       : null;
 
   useEffect(() => {

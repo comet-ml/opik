@@ -2,12 +2,13 @@ import React, { useCallback, memo } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-
+import isEmpty from "lodash/isEmpty";
 import {
   DashboardLayout,
   DashboardWidget,
   WIDGET_TYPE,
 } from "@/types/dashboard";
+import { WithPermissionsProps } from "@/types/permissions";
 import {
   GRID_COLUMNS,
   ROW_HEIGHT,
@@ -22,20 +23,20 @@ import {
   selectUpdateLayout,
   selectWidgetResolver,
 } from "@/store/DashboardStore";
-import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
-import isEmpty from "lodash/isEmpty";
+import DashboardWidgetGridEmpty from "../DashboardWidgetGridEmpty";
+import DashboardWidgetDisabled from "../../DashboardWidget/DashboardWidgetDisabled";
 
 const ResponsiveGridLayout = WidthProvider(GridLayout);
 
-interface DashboardWidgetGridProps {
+export interface DashboardWidgetGridProps {
   sectionId: string;
   widgets: DashboardWidget[];
   layout: DashboardLayout;
 }
 
 const DashboardWidgetGrid: React.FunctionComponent<
-  DashboardWidgetGridProps
-> = ({ sectionId, widgets, layout }) => {
+  DashboardWidgetGridProps & WithPermissionsProps
+> = ({ sectionId, widgets, layout, canViewExperiments }) => {
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
@@ -77,17 +78,25 @@ const DashboardWidgetGrid: React.FunctionComponent<
       autoSize={true}
     >
       {widgets.map((widget) => {
-        const widgetComponents = widgetResolver?.(
-          widget.type || WIDGET_TYPE.PROJECT_METRICS,
-        );
+        const widgetComponents = widgetResolver?.({
+          type: widget.type || WIDGET_TYPE.PROJECT_METRICS,
+          canViewExperiments,
+        });
 
         if (!widgetComponents) return null;
 
-        const { Widget } = widgetComponents;
+        const { Widget, metadata } = widgetComponents;
 
         return (
           <div key={widget.id}>
-            <Widget sectionId={sectionId} widgetId={widget.id} />
+            {metadata.disabled ? (
+              <DashboardWidgetDisabled
+                widget={widget}
+                disabledMessage={metadata.disabledTooltip}
+              />
+            ) : (
+              <Widget sectionId={sectionId} widgetId={widget.id} />
+            )}
           </div>
         );
       })}

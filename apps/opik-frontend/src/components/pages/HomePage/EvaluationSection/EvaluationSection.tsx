@@ -21,6 +21,7 @@ import {
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
+import { WithPermissionsProps } from "@/types/permissions";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
@@ -88,7 +89,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const EvaluationSection: React.FunctionComponent = () => {
+const EvaluationSection: React.FC<WithPermissionsProps> = ({
+  canViewExperiments,
+}) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -144,6 +147,10 @@ const EvaluationSection: React.FunctionComponent = () => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+
+  if (!canViewExperiments) {
+    return null;
+  }
 
   if (isPending) {
     return <Loader />;
