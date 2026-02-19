@@ -38,22 +38,21 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
-    @Test
-    void calculateCostForAudioSpeechUsesCharacterCount() {
-        // tts-1 at $0.000015 per character, 1000 characters → $0.015
-        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
-                Map.of("input_characters", 1000), null);
+    @ParameterizedTest
+    @MethodSource("provideAudioSpeechModels")
+    void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "openai",
+                Map.of("input_characters", inputCharacters), null);
 
-        assertThat(cost).isEqualByComparingTo("0.015");
+        assertThat(cost).isEqualByComparingTo(expectedCost);
     }
 
-    @Test
-    void calculateCostForAudioSpeechHD() {
-        // tts-1-hd at $0.000030 per character, 500 characters → $0.015
-        BigDecimal cost = CostService.calculateCost("tts-1-hd", "openai",
-                Map.of("input_characters", 500), null);
-
-        assertThat(cost).isEqualByComparingTo("0.015");
+    private static Stream<Arguments> provideAudioSpeechModels() {
+        return Stream.of(
+                // tts-1 at $0.000015 per character, 1000 characters → $0.015
+                Arguments.of("tts-1", 1000, "0.015"),
+                // tts-1-hd at $0.000030 per character, 500 characters → $0.015
+                Arguments.of("tts-1-hd", 500, "0.015"));
     }
 
     @Test

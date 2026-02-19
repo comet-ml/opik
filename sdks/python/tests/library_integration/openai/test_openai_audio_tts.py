@@ -18,10 +18,8 @@ from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
 
 from ...testlib import (
-    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
-    ANY_STRING,
     SpanModel,
     TraceModel,
     assert_equal,
