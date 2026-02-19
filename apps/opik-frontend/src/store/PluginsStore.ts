@@ -13,6 +13,9 @@ import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/step
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
 import { DashboardsViewGuardProps } from "@/plugins/comet/DashboardsViewGuard";
 import { ViewSelectorProps } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { PlaygroundExperimentsLinkProps } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
+import { RunExperimentButtonProps } from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
+import { DashboardTemplateItemsProps } from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/DashboardTemplateItems";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -40,6 +43,9 @@ type PluginStore = {
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
   ViewSelector: React.ComponentType<ViewSelectorProps> | null;
+  PlaygroundExperimentsLink: React.ComponentType<PlaygroundExperimentsLinkProps> | null;
+  RunExperimentButton: React.ComponentType<RunExperimentButtonProps> | null;
+  DashboardTemplateItems: React.ComponentType<DashboardTemplateItemsProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -69,6 +75,9 @@ const PLUGIN_NAMES = [
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
   "ViewSelector",
+  "PlaygroundExperimentsLink",
+  "RunExperimentButton",
+  "DashboardTemplateItems",
   "init",
 ];
 
@@ -96,6 +105,9 @@ const usePluginsStore = create<PluginStore>((set) => ({
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,
   ViewSelector: null,
+  PlaygroundExperimentsLink: null,
+  RunExperimentButton: null,
+  DashboardTemplateItems: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

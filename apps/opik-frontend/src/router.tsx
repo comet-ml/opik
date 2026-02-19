@@ -235,6 +235,7 @@ const compareExperimentsRoute = createRoute({
   getParentRoute: () => experimentsRoute,
   component: CompareExperimentsPage,
   staticData: {
+    title: "Compare",
     param: "compare",
     paramValue: "compare",
   },

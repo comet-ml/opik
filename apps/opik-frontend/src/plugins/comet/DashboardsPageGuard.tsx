@@ -1,10 +1,15 @@
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import PageGuard from "@/components/layout/PageGuard/PageGuard";
+import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const DashboardsGuard = () => {
   const { canViewDashboards } = useUserPermission();
 
-  return <PageGuard canViewPage={canViewDashboards} />;
+  return (
+    <NoAccessPageGuard
+      resourceName="dashboards"
+      canViewPage={canViewDashboards}
+    />
+  );
 };
 
 export default DashboardsGuard;

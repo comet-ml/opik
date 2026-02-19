@@ -1,5 +1,5 @@
 import usePluginsStore from "@/store/PluginsStore";
-import PageGuard from "@/components/layout/PageGuard/PageGuard";
+import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const ExperimentsPageGuard = () => {
   const ExperimentsPageGuardPlugin = usePluginsStore(
@@ -10,7 +10,7 @@ const ExperimentsPageGuard = () => {
     return <ExperimentsPageGuardPlugin />;
   }
 
-  return <PageGuard canViewPage />;
+  return <NoAccessPageGuard canViewPage />;
 };
 
 export default ExperimentsPageGuard;

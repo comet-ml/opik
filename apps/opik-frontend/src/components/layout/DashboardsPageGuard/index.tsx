@@ -1,5 +1,5 @@
 import usePluginsStore from "@/store/PluginsStore";
-import PageGuard from "@/components/layout/PageGuard/PageGuard";
+import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const DashboardsPageGuard = () => {
   const DashboardsPageGuardPlugin = usePluginsStore(
@@ -10,7 +10,7 @@ const DashboardsPageGuard = () => {
     return <DashboardsPageGuardPlugin />;
   }
 
-  return <PageGuard canViewPage />;
+  return <NoAccessPageGuard resourceName="dashboards" canViewPage />;
 };
 
 export default DashboardsPageGuard;
