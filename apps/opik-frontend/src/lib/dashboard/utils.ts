@@ -177,7 +177,7 @@ export const createDefaultWidgetConfig = (
     };
   }
 
-  const widgetComponents = widgetResolver(widgetType);
+  const widgetComponents = widgetResolver({ type: widgetType });
   const defaultConfig = widgetComponents.getDefaultConfig();
   const generatedTitle = widgetComponents.calculateTitle(defaultConfig);
 
@@ -261,7 +261,7 @@ export const updateWidgetWithGeneratedTitle = (
   };
 
   const generatedTitle = widgetResolver
-    ? widgetResolver(merged.type).calculateTitle(merged.config)
+    ? widgetResolver({ type: merged.type }).calculateTitle(merged.config)
     : "";
 
   return {

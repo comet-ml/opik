@@ -43,6 +43,8 @@ import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import usePluginsStore from "@/store/PluginsStore";
+import PlaygroundExperimentsLink from "./PlaygroundExperimentsLink";
 
 const EMPTY_DATASETS: Dataset[] = [];
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -84,6 +86,10 @@ const PlaygroundOutputActions = ({
   total,
   isLoadingTotal,
 }: PlaygroundOutputActionsProps) => {
+  const PlaygroundExperimentsLinkPlugin = usePluginsStore(
+    (state) => state.PlaygroundExperimentsLink,
+  );
+
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
     string | undefined
@@ -181,6 +187,18 @@ const PlaygroundOutputActions = ({
       datasetId: plainDatasetId || undefined,
       datasetVersionId: parsedDatasetId?.versionId || undefined,
     });
+
+  const experimentsLinkProps = {
+    plainDatasetId: plainDatasetId!,
+    isSingleExperiment: createdExperiments.length === 1,
+    experimentIds: createdExperiments.map((e) => e.id),
+  };
+
+  const experimentsLink = PlaygroundExperimentsLinkPlugin ? (
+    <PlaygroundExperimentsLinkPlugin {...experimentsLinkProps} />
+  ) : (
+    <PlaygroundExperimentsLink {...experimentsLinkProps} canViewExperiments />
+  );
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -425,24 +443,7 @@ const PlaygroundOutputActions = ({
       <div className="sticky flex items-center justify-between gap-2">
         {createdExperiments.length > 0 && plainDatasetId && (
           <div className="flex gap-2">
-            <div className="mt-2.5">
-              <NavigationTag
-                resource={RESOURCE_TYPE.experiment}
-                id={plainDatasetId}
-                name={
-                  createdExperiments.length === 1 ? "Experiment" : "Experiments"
-                }
-                className="h-8"
-                search={{
-                  experiments: createdExperiments.map((e) => e.id),
-                }}
-                tooltipContent={
-                  createdExperiments.length === 1
-                    ? "Your run was stored in this experiment. Explore your results to find insights."
-                    : "Your run was stored in experiments. Explore comparison results to get insights."
-                }
-              />
-            </div>
+            {experimentsLink}
             {createdExperiments.length === 1 &&
               playgroundProject?.id &&
               createdExperiments[0]?.id && (

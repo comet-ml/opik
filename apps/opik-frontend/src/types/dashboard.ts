@@ -213,6 +213,7 @@ export interface WidgetMetadata {
   category: WIDGET_CATEGORY;
   iconColor?: string;
   disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export interface WidgetComponents {
@@ -223,7 +224,13 @@ export interface WidgetComponents {
   metadata: WidgetMetadata;
 }
 
-export type WidgetResolver = (type: string) => WidgetComponents;
+export type WidgetResolver = ({
+  type,
+  canViewExperiments,
+}: {
+  type: string;
+  canViewExperiments?: boolean;
+}) => WidgetComponents;
 
 export interface AddEditWidgetCallbackParams {
   sectionId: string;

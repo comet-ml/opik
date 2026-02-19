@@ -31,5 +31,6 @@ export default function useUserPermissions(
     queryFn: (context) =>
       getUserPermissions(context, { organizationId, userName }),
     ...options,
+    enabled: Boolean(organizationId && userName) && (options?.enabled ?? true),
   });
 }
