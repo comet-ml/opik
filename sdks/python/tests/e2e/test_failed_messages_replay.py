@@ -37,7 +37,8 @@ import opik
 import opik.api_objects.opik_client
 from opik.types import FeedbackScoreDict
 
-from opik import Attachment
+from opik.api_objects import attachment
+from opik.api_objects.experiment import experiment_item
 
 from . import verifiers
 from ..conftest import random_chars
@@ -364,7 +365,7 @@ def test_failed_message_replay__create_attachment__replays_successfully(
             name="replay-attachment-trace",
             project_name=project_name,
             attachments=[
-                Attachment(
+                attachment.Attachment(
                     data=attachment_data_file.name,
                     file_name=file_name,
                     content_type="application/octet-stream",
@@ -375,7 +376,7 @@ def test_failed_message_replay__create_attachment__replays_successfully(
         span = trace.span(
             name="replay-attachment-span",
             attachments=[
-                Attachment(
+                attachment.Attachment(
                     data=attachment_data_file.name,
                     file_name=file_name,
                     content_type="application/octet-stream",
@@ -385,7 +386,7 @@ def test_failed_message_replay__create_attachment__replays_successfully(
         not_batching_opik_client.flush()
 
     expected_attachment = {
-        file_name: Attachment(
+        file_name: attachment.Attachment(
             data=attachment_data_file.name,
             file_name=file_name,
             content_type="application/octet-stream",
@@ -863,6 +864,73 @@ def test_failed_message_replay__batching__span_feedback_scores__replays_successf
         trace_id=trace.id,
         parent_span_id=None,
         feedback_scores=expected_scores,
+    )
+
+
+# ── CreateExperimentItemsBatchMessage ─────────────────────────────────────────
+
+
+def test_failed_message_replay__batching__create_experiment_items__replays_successfully(
+    opik_client: opik.Opik,
+    project_name: str,
+    dataset_name: str,
+    experiment_name: str,
+):
+    """CreateExperimentItemsBatchMessage stored while offline is delivered after replay.
+
+    In batching mode CreateExperimentItemsBatchMessage passes through the batcher:
+    individual ExperimentItemMessage items are unpacked and accumulated; on flush
+    they are re-emitted as a single CreateExperimentItemsBatchMessage with
+    ``supports_batching=False``, which is what gets stored in SQLite when the
+    connection is down.  On reconnection the message is replayed, the REST call
+    ``create_experiment_items`` is made, and the experiment's ``trace_count``
+    reflects the linked items.
+    """
+    item_count = 3
+
+    # ── Phase 1: online setup ─────────────────────────────────────────────────
+    dataset = opik_client.create_dataset(dataset_name)
+    dataset.insert(
+        [{"input": {"prompt": f"offline-prompt-{i}"}} for i in range(item_count)]
+    )
+    dataset_items = dataset.get_items()
+
+    traces = [
+        opik_client.trace(
+            name=f"replay-experiment-trace-{i}",
+            project_name=project_name,
+        )
+        for i in range(item_count)
+    ]
+
+    experiment = opik_client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset_name,
+    )
+    opik_client.flush()
+
+    # ── Phase 2: offline — link experiment items ──────────────────────────────
+    with offline_mode(opik_client):
+        experiment.insert(
+            [
+                experiment_item.ExperimentItemReferences(
+                    dataset_item_id=item["id"],
+                    trace_id=trace.id,
+                    project_name=project_name,
+                )
+                for item, trace in zip(dataset_items, traces)
+            ]
+        )
+        opik_client.flush()
+
+    # ── Phase 3: verify all experiment items reached the server ───────────────
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=experiment.id,
+        experiment_name=experiment_name,
+        experiment_metadata=None,
+        feedback_scores_amount=0,
+        traces_amount=item_count,
     )
 
 
