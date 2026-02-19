@@ -22,7 +22,7 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test test-all precommit build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
+.PHONY: help setup-venv install install-dev test test-all precommit precommit-all build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
 .PHONY: modal-list
 
 help:
@@ -35,6 +35,7 @@ help:
 	@echo "  test-all     Run tests including integration markers"
 	@echo "  profile      Profile unit tests (cProfile via pytest-profiling)"
 	@echo "  precommit    Run pre-commit hooks on changed files"
+	@echo "  precommit-all    Run all pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
 	@echo "  modal-worker Deploy Modal worker (benchmarks/runners/benchmark_worker.py)"
@@ -117,6 +118,10 @@ precommit:
 		exit 0; \
 	fi; \
 	PYTHONPATH=src $(PRECOMMIT) run --files $$files
+
+precommit-all:
+	$(call warn_if_no_venv)
+	PYTHONPATH=src $(PRECOMMIT) run --all-files -c .pre-commit-config.yaml
 
 build:
 	$(call warn_if_no_venv)

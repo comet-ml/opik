@@ -1,4 +1,4 @@
-.PHONY: cursor claude clean-agents help hooks hooks-remove
+.PHONY: cursor codex claude clean-agents help hooks hooks-remove precommit-sdks precommit-sdks-all
 
 AI_DIR := .agents
 CURSOR_DIR := .cursor
@@ -10,6 +10,7 @@ help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
+	@echo "  make codex         - Ensure .codex symlink points to .agents/"
 	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
 	@echo "  make clean-agents  - Remove synced files from .claude/ (preserves local customizations)"
 	@echo ""
@@ -17,6 +18,10 @@ help:
 	@echo ""
 	@echo "  make hooks         - Install pre-commit hooks"
 	@echo "  make hooks-remove  - Remove pre-commit hooks"
+	@echo ""
+	@echo "SDK Checks"
+	@echo "  make precommit-sdks       - Run staged/prepared file checks for all SDKs"
+	@echo "  make precommit-sdks-all   - Run all-file pre-commit checks for all SDKs"
 	@echo ""
 
 # Sync to Cursor (symlink .cursor -> .agents)
@@ -37,6 +42,24 @@ cursor:
 		ln -s $(AI_DIR) $(CURSOR_DIR); \
 	fi
 	@echo "Cursor ready!"
+
+codex:
+	@if [ ! -d "$(AI_DIR)" ]; then \
+		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
+		exit 1; \
+	fi
+	@if [ -d ".codex" ] && [ ! -L ".codex" ]; then \
+		echo "Error: .codex/ exists and is not a symlink."; \
+		echo "Remove it manually if you want to use .agents/ as source."; \
+		exit 1; \
+	fi
+	@if [ -L ".codex" ]; then \
+		echo ".codex symlink already exists"; \
+	else \
+		echo "Creating symlink .codex -> $(AI_DIR)..."; \
+		ln -s $(AI_DIR) .codex; \
+	fi
+	@echo "Codex ready!"
 
 # Sync to Claude (preserve nested structure, convert frontmatter)
 # Converts: .mdc -> .md, Cursor frontmatter -> Claude frontmatter
@@ -153,3 +176,17 @@ hooks-remove:
 	else \
 		echo "No pre-commit hook found."; \
 	fi
+
+# Run SDK pre-commit style checks (changed files only / explicit script checks)
+precommit-sdks:
+	@echo "Running SDK-level pre-commit checks on changed files..."
+	$(MAKE) -C sdks/python precommit
+	$(MAKE) -C sdks/opik_optimizer precommit
+	@cd sdks/typescript && npm run lint
+
+# Run full all-file SDK checks
+precommit-sdks-all:
+	@echo "Running all-file SDK checks..."
+	@cd sdks/python && pre-commit run --all-files -c .pre-commit-config.yaml
+	@cd sdks/opik_optimizer && pre-commit run --all-files -c .pre-commit-config.yaml
+	@cd sdks/typescript && npm run lint && npm run typecheck
