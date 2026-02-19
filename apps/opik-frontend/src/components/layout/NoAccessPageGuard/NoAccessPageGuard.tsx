@@ -4,12 +4,12 @@ import Loader from "@/components/shared/Loader/Loader";
 import NoData from "@/components/shared/NoData/NoData";
 import { Button } from "@/components/ui/button";
 
-interface PageGuardProps {
+interface NoAccessPageGuardProps {
   canViewPage?: boolean;
   resourceName?: string;
 }
 
-const PageGuard: React.FC<PageGuardProps> = ({
+const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
   canViewPage,
   resourceName = "this resource",
 }) => {
@@ -58,4 +58,4 @@ const PageGuard: React.FC<PageGuardProps> = ({
   return <Outlet />;
 };
 
-export default PageGuard;
+export default NoAccessPageGuard;
