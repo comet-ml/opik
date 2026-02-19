@@ -14,7 +14,7 @@ const DashboardsViewGuard: React.FC<DashboardsViewGuardProps> = ({
   const { canViewDashboards } = useUserPermission();
 
   useEffect(() => {
-    if (view === VIEW_TYPE.DASHBOARDS && !canViewDashboards) {
+    if (view === VIEW_TYPE.DASHBOARDS && canViewDashboards === false) {
       setView(VIEW_TYPE.DETAILS);
     }
   }, [view, canViewDashboards, setView]);
