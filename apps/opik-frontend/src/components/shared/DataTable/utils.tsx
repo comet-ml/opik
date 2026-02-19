@@ -49,6 +49,7 @@ export const calculateHeightStyle = (rowHeight: ROW_HEIGHT) => {
 export type GetCommonPinningStylesProps<TData> = {
   column: Column<TData>;
   isHeader?: boolean;
+  isLastHeaderRow?: boolean;
   applyStickyWorkaround?: boolean;
   forceGroup?: boolean;
   table: Table<TData>;
@@ -57,6 +58,7 @@ export type GetCommonPinningStylesProps<TData> = {
 export const getCommonPinningStyles = <TData,>({
   column,
   isHeader = false,
+  isLastHeaderRow = false,
   applyStickyWorkaround = false,
   forceGroup = false,
   table,
@@ -96,7 +98,9 @@ export const getCommonPinningStyles = <TData,>({
         : undefined,
     right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
     position: applyStickyWorkaround ? "unset" : "sticky",
-    zIndex: isHeader ? TABLE_HEADER_Z_INDEX + 1 : TABLE_ROW_Z_INDEX + 1,
+    zIndex: isHeader
+      ? TABLE_HEADER_Z_INDEX + 2 + (isLastHeaderRow ? 0 : 1)
+      : TABLE_ROW_Z_INDEX + 1,
   };
 };
 
