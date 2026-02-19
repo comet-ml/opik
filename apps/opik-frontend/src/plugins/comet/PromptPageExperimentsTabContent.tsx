@@ -11,7 +11,7 @@ export const TabContent: React.FC<PromptPageExperimentsTabProps> = (props) => {
   return (
     <PromptPageExperimentsTabContent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

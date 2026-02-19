@@ -10,7 +10,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = (props) => {
   return (
     <SideBarMenuItemsContent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

@@ -9,7 +9,7 @@ const DashboardWidgetGrid: React.FC<DashboardWidgetGridProps> = (props) => {
   return (
     <DashboardWidgetGridContent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

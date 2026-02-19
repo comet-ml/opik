@@ -10,7 +10,7 @@ const RunExperimentButton: React.FC<RunExperimentButtonProps> = (props) => {
   return (
     <RunExperimentButtonComponent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

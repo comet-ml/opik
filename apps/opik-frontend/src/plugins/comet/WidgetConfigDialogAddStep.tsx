@@ -11,7 +11,7 @@ const WidgetConfigDialogAddStep: React.FC<WidgetConfigDialogAddStepProps> = (
   return (
     <WidgetConfigDialogAddStepContent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

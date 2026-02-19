@@ -6,7 +6,9 @@ export const TabTrigger: React.FC = () => {
   const { canViewExperiments } = useUserPermission();
 
   return (
-    <PromptPageExperimentsTabTrigger canViewExperiments={canViewExperiments} />
+    <PromptPageExperimentsTabTrigger
+      canViewExperiments={!!canViewExperiments}
+    />
   );
 };
 

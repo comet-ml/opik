@@ -4,7 +4,7 @@ import EvaluationSectionContent from "@/components/pages/HomePage/EvaluationSect
 const EvaluationSection = () => {
   const { canViewExperiments } = useUserPermission();
 
-  return <EvaluationSectionContent canViewExperiments={canViewExperiments} />;
+  return <EvaluationSectionContent canViewExperiments={!!canViewExperiments} />;
 };
 
 export default EvaluationSection;

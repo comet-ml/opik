@@ -12,7 +12,7 @@ const DashboardTemplateItems: React.FC<DashboardTemplateItemsProps> = (
   return (
     <DashboardTemplateItemsComponent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

@@ -12,7 +12,7 @@ const PlaygroundExperimentsLink: React.FC<PlaygroundExperimentsLinkProps> = (
   return (
     <PlaygroundExperimentsLinkComponent
       {...props}
-      canViewExperiments={canViewExperiments}
+      canViewExperiments={!!canViewExperiments}
     />
   );
 };

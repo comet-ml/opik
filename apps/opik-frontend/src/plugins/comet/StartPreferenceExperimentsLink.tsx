@@ -9,7 +9,9 @@ const StartPreferenceExperimentsLink: React.FC<ExperimentsLinkProps> = (
 ) => {
   const { canViewExperiments } = useUserPermission();
 
-  return <ExperimentsLink {...props} canViewExperiments={canViewExperiments} />;
+  return (
+    <ExperimentsLink {...props} canViewExperiments={!!canViewExperiments} />
+  );
 };
 
 export default StartPreferenceExperimentsLink;

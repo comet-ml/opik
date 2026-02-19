@@ -6,7 +6,7 @@ import NoData from "@/components/shared/NoData/NoData";
 import { Button } from "@/components/ui/button";
 
 interface NoAccessPageGuardProps {
-  canViewPage?: boolean;
+  canViewPage?: boolean | null;
   resourceName?: string;
 }
 
