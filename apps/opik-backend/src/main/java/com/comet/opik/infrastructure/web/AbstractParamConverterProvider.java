@@ -24,7 +24,7 @@ public abstract class AbstractParamConverterProvider<T> implements ParamConverte
         return (ParamConverter<U>) new ParamConverter<T>() {
             @Override
             public T fromString(String value) {
-                if (StringUtils.isEmpty(value)) {
+                if (StringUtils.isBlank(value)) {
                     return null;
                 }
                 return parse(value);
