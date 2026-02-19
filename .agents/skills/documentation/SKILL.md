@@ -64,6 +64,7 @@ When documenting a feature, cover:
 - **Use `fern/img`** for documentation images (e.g. `apps/opik-documentation/documentation/fern/img/...`).
 - **Do not use `static/img`** for new assets; it is a legacy folder used by external integrations and cannot be deleted.
 - Reference images in docs as `/img/...` (e.g. `/img/tracing/openai_integration.png`).
+- In repos that define `docs.yaml`/`docs.yml`, treat that file as the routing source of truth; do not assume URLs mirror directory layout.
 
 ## Style
 

@@ -36,6 +36,7 @@
 - Use existing Markdown/MDX style in `documentation/fern/docs/**` and reStructuredText style in `python-sdk-docs/source/**`.
 - Keep file names descriptive and kebab-case (`quickstart.mdx`, `api-reference.mdx`).
 - Keep 2-space indentation in YAML/JSON snippets and frontmatter.
+- Treat `documentation/fern/docs.yml` (or `docs.yaml` where used) as the routing source of truth; do not infer URL paths from folder layout alone.
 - Store new images under `documentation/fern/img/`.
 
 ## Testing Guidelines

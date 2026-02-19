@@ -16,6 +16,7 @@ Public API → OpikClient → Domain (Trace/Span) → BatchQueues → REST Clien
 ```
 
 ## Critical Gotchas
+- When changing dependencies or minimum versions, update and verify version references in `README.md` and integration README files in the same PR.
 
 ### Flush Before Exit
 ```typescript
