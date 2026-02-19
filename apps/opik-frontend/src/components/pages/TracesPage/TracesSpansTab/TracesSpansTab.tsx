@@ -253,6 +253,7 @@ const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
 const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
 const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
+const METADATA_ORDER_KEY_SUFFIX = "metadata-order";
 const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
 const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
 const ROW_HEIGHT_KEY_SUFFIX = "row-height";
@@ -641,15 +642,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: [],
   });
 
-  const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
-    string[]
-  >(`${type}-metadata-columns-order`, {
-    defaultValue: [],
-  });
-  const [metadataMainColumnOrder, setMetadataMainColumnOrder] =
-    useLocalStorageState<string[]>(`${type}-metadata-main-column-order`, {
+  const [metadataOrder, setMetadataOrder] = useLocalStorageState<string[]>(
+    `${type}-${METADATA_ORDER_KEY_SUFFIX}`,
+    {
       defaultValue: [COLUMN_METADATA_ID],
-    });
+    },
+  );
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -1074,17 +1072,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         },
       ),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        metadataMainColumnData,
+        [...metadataMainColumnData, ...metadataColumnsData],
         {
-          columnsOrder: metadataMainColumnOrder,
-          selectedColumns,
-          sortableColumns: sortableBy,
-        },
-      ),
-      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
-        metadataColumnsData,
-        {
-          columnsOrder: metadataColumnsOrder,
+          columnsOrder: metadataOrder,
           selectedColumns,
           sortableColumns: sortableBy,
         },
@@ -1098,9 +1088,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsData,
     scoresColumnsOrder,
     metadataMainColumnData,
-    metadataMainColumnOrder,
     metadataColumnsData,
-    metadataColumnsOrder,
+    metadataOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -1149,50 +1138,39 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  // Handler to update combined order for Feedback scores and Metadata main column
-  const handleCombinedOrderChange = useCallback(
+  const handleMetadataOrderChange = useCallback(
     (newOrder: string[]) => {
-      // Split the combined order back into scores and metadata orders
-      const scoresIds = scoresColumnsData.map((col) => col.id);
-      const metadataIds = metadataMainColumnData.map((col) => col.id);
-
-      const newScoresOrder = newOrder.filter((id) => scoresIds.includes(id));
-      const newMetadataOrder = newOrder.filter((id) =>
-        metadataIds.includes(id),
-      );
-
-      setScoresColumnsOrder(newScoresOrder);
-      setMetadataMainColumnOrder(newMetadataOrder);
+      setMetadataOrder(newOrder);
     },
-    [
-      scoresColumnsData,
-      metadataMainColumnData,
-      setScoresColumnsOrder,
-      setMetadataMainColumnOrder,
-    ],
+    [setMetadataOrder],
   );
 
   const columnSections = useMemo(() => {
-    // Combine Feedback scores and Metadata main column into one section
-    const combinedColumns = [...scoresColumnsData, ...metadataMainColumnData];
-    const combinedOrder = [...scoresColumnsOrder, ...metadataMainColumnOrder];
-
-    const sections = [
+    const sections: {
+      title: string;
+      columns: typeof scoresColumnsData;
+      order: string[];
+      onOrderChange: (order: string[]) => void;
+    }[] = [
       {
         title: "Feedback scores",
-        columns: combinedColumns,
-        order: combinedOrder,
-        onOrderChange: handleCombinedOrderChange,
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
       },
     ];
 
-    // Add Metadata fields section if there are metadata columns
-    if (metadataColumnsData.length > 0) {
+    const allMetadataColumns = [
+      ...metadataMainColumnData,
+      ...metadataColumnsData,
+    ];
+
+    if (allMetadataColumns.length > 0) {
       sections.push({
-        title: "Metadata fields",
-        columns: metadataColumnsData,
-        order: metadataColumnsOrder,
-        onOrderChange: setMetadataColumnsOrder,
+        title: "Metadata",
+        columns: allMetadataColumns,
+        order: metadataOrder,
+        onOrderChange: handleMetadataOrderChange,
       });
     }
 
@@ -1200,12 +1178,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [
     scoresColumnsData,
     scoresColumnsOrder,
+    setScoresColumnsOrder,
     metadataMainColumnData,
-    metadataMainColumnOrder,
-    handleCombinedOrderChange,
     metadataColumnsData,
-    metadataColumnsOrder,
-    setMetadataColumnsOrder,
+    metadataOrder,
+    handleMetadataOrderChange,
   ]);
 
   return (
