@@ -79,6 +79,7 @@ public interface DatasetDAO {
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
             " <if(visibility)> AND visibility = :visibility <endif> " +
+            " <if(type)> AND type = :type <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
             " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> ")
     @UseStringTemplateEngine
@@ -87,6 +88,7 @@ public interface DatasetDAO {
             @Define("with_experiments_only") boolean withExperimentsOnly,
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -95,12 +97,14 @@ public interface DatasetDAO {
             "AND id IN (<ids>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> ")
+            "<if(visibility)> AND visibility = :visibility <endif> " +
+            "<if(type)> AND type = :type <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
             @Define("name") @Bind("name") String name,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -110,6 +114,7 @@ public interface DatasetDAO {
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
             "<if(visibility)> AND visibility = :visibility <endif> " +
+            "<if(type)> AND type = :type <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
@@ -118,6 +123,7 @@ public interface DatasetDAO {
             @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -126,12 +132,14 @@ public interface DatasetDAO {
             "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> ")
+            "<if(visibility)> AND visibility = :visibility <endif> " +
+            "<if(type)> AND type = :type <endif> ")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
             @Define("name") @Bind("name") String name,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -141,6 +149,7 @@ public interface DatasetDAO {
             "<if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
             "<if(visibility)> AND visibility = :visibility <endif> " +
+            "<if(type)> AND type = :type <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             " LIMIT :limit OFFSET :offset ")
     @UseStringTemplateEngine
@@ -149,6 +158,7 @@ public interface DatasetDAO {
             @Define("name") @Bind("name") String name, @Bind("limit") int limit, @Bind("offset") int offset,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
@@ -157,6 +167,7 @@ public interface DatasetDAO {
             " <if(name)> AND name like concat('%', :name, '%') <endif> " +
             "<if(filters)> AND <filters> <endif>" +
             " <if(visibility)> AND visibility = :visibility <endif> " +
+            " <if(type)> AND type = :type <endif> " +
             " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
             " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> " +
             " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
@@ -171,6 +182,7 @@ public interface DatasetDAO {
             @Define("with_optimizations_only") boolean withOptimizationOnly,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("visibility") @Bind("visibility") Visibility visibility,
+            @Define("type") @Bind("type") String type,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
