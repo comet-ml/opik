@@ -6,6 +6,8 @@ import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -169,6 +171,12 @@ public interface DatasetVersionService {
     boolean isLatestVersion(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
+     * Checks if the dataset has any versions.
+     * Safe to call from reactive contexts where RequestContext is not available.
+     */
+    boolean hasVersions(String workspaceId, UUID datasetId);
+
+    /**
      * Finds a version by its batch ID.
      * Used to support SDK batch operations where multiple API calls share the same batch_group_id.
      *
@@ -189,6 +197,8 @@ public interface DatasetVersionService {
      * @param baseVersionId the base version ID (for diff calculation)
      * @param tags optional tags for the new version
      * @param changeDescription optional description of the changes
+     * @param evaluators optional default evaluators for the version
+     * @param executionPolicy optional default execution policy for the version
      * @param batchGroupId optional batch group ID for SDK batch operations
      * @param workspaceId the workspace ID (required when called from reactive context)
      * @param userName the user name (required when called from reactive context)
@@ -196,6 +206,8 @@ public interface DatasetVersionService {
      */
     DatasetVersion createVersionFromDelta(UUID datasetId, UUID newVersionId, int itemsTotal,
             UUID baseVersionId, List<String> tags, String changeDescription,
+            List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
+            boolean clearExecutionPolicy,
             UUID batchGroupId, String workspaceId, String userName);
 
     /**
@@ -316,6 +328,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
+    public boolean hasVersions(@NonNull String workspaceId, @NonNull UUID datasetId) {
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.countByDatasetId(datasetId, workspaceId) > 0;
+        });
+    }
+
+    @Override
     public boolean isLatestVersion(@NonNull String workspaceId, @NonNull UUID datasetId, @NonNull UUID versionId) {
         return getLatestVersion(datasetId, workspaceId)
                 .map(latest -> latest.id().equals(versionId))
@@ -325,6 +345,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public DatasetVersion createVersionFromDelta(@NonNull UUID datasetId, @NonNull UUID newVersionId,
             int itemsTotal, UUID baseVersionId, List<String> tags, String changeDescription,
+            List<EvaluatorItem> evaluators, ExecutionPolicy executionPolicy,
+            boolean clearExecutionPolicy,
             UUID batchGroupId, @NonNull String workspaceId, @NonNull String userName) {
 
         log.info(
@@ -360,11 +382,17 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     DatasetVersionCreate.builder()
                             .tags(tags)
                             .changeDescription(changeDescription)
+                            .evaluators(evaluators)
+                            .executionPolicy(executionPolicy)
                             .build(),
                     userName);
 
             EntityConstraintHandler.handle(() -> {
-                datasetVersionDAO.insert(version, workspaceId);
+                if (baseVersionId != null) {
+                    datasetVersionDAO.insertWithBaseVersion(version, baseVersionId, clearExecutionPolicy, workspaceId);
+                } else {
+                    datasetVersionDAO.insert(version, workspaceId);
+                }
                 return version;
             }).withError(() -> new EntityAlreadyExistsException(
                     new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
@@ -628,7 +656,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Compare tags as sets (order-independent)
             boolean tagsChanged = !toTagSet(fromItem.tags()).equals(toTagSet(toItem.tags()));
 
-            if (dataChanged || tagsChanged) {
+            boolean evaluatorsChanged = fromItem.evaluatorsHash() != toItem.evaluatorsHash();
+            boolean executionPolicyChanged = fromItem.executionPolicyHash() != toItem.executionPolicyHash();
+
+            if (dataChanged || tagsChanged || evaluatorsChanged || executionPolicyChanged) {
                 modified++;
             } else {
                 unchanged++;
@@ -731,6 +762,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     diffStats.itemsAdded(), diffStats.itemsModified(), diffStats.itemsDeleted(),
                     DatasetVersionCreate.builder()
                             .changeDescription("Restored from version: " + versionRef)
+                            .evaluators(context.sourceVersion.evaluators())
+                            .executionPolicy(context.sourceVersion.executionPolicy())
                             .build(),
                     context.userName);
 

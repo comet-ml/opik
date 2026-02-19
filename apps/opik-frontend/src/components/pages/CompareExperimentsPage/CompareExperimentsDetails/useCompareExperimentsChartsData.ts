@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
 import uniq from "lodash/uniq";
 import { BarDataPoint, RadarDataPoint } from "@/types/chart";
-import { AggregatedFeedbackScore } from "@/types/shared";
+import { getScoreDisplayName } from "@/lib/feedback-scores";
+import { SCORE_TYPE_FEEDBACK } from "@/types/shared";
 
 export type ExperimentLabelsMap = Record<string, string>;
 type UseCompareExperimentsChartsDataArgs = {
@@ -16,6 +17,7 @@ type CompareExperimentsChartsData = {
   barChartData: BarDataPoint[];
   barChartKeys: string[];
   experimentLabelsMap: ExperimentLabelsMap;
+  scoreLabelsMap: Record<string, string>;
 };
 
 const MAX_VISIBLE_ENTITIES = 10;
@@ -28,28 +30,31 @@ const useCompareExperimentsChartsData = ({
     return experiments.slice(0, MAX_VISIBLE_ENTITIES);
   }, [experiments]);
 
-  const scoreMap = useMemo(() => {
-    if (!isCompare) return {};
+  const { scoreMap, scoreLabelsMap } = useMemo(() => {
+    if (!isCompare) return { scoreMap: {}, scoreLabelsMap: {} };
 
-    const createScoresMap = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      addAvgSuffix: boolean,
-    ): Record<string, number> =>
-      (scores || []).reduce<Record<string, number>>((acc, score) => {
-        const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
-        acc[key] = score.value;
-        return acc;
-      }, {});
+    const labelsMap: Record<string, string> = {};
 
-    return experimentsList.reduce<Record<string, Record<string, number>>>(
+    const map = experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
-        const feedbackScoresMap = createScoresMap(e.feedback_scores, true);
-        const experimentScoresMap = createScoresMap(e.experiment_scores, false);
-        acc[e.id] = { ...feedbackScoresMap, ...experimentScoresMap };
+        const scores: Record<string, number> = {};
+        (e.feedback_scores ?? []).forEach((score) => {
+          scores[score.name] = score.value;
+          labelsMap[score.name] = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_FEEDBACK,
+          );
+        });
+        (e.experiment_scores ?? []).forEach((score) => {
+          scores[score.name] = score.value;
+        });
+        acc[e.id] = scores;
         return acc;
       },
       {},
     );
+
+    return { scoreMap: map, scoreLabelsMap: labelsMap };
   }, [experimentsList, isCompare]);
 
   const scoreColumns = useMemo(() => {
@@ -104,6 +109,7 @@ const useCompareExperimentsChartsData = ({
     barChartData,
     barChartKeys,
     experimentLabelsMap,
+    scoreLabelsMap,
   };
 };
 

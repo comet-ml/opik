@@ -4,6 +4,8 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .evaluator_item import EvaluatorItem
+from .execution_policy import ExecutionPolicy
 from .json_node import JsonNode
 
 
@@ -27,6 +29,17 @@ class DatasetItemUpdate(UniversalBaseModel):
     tags: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
     """
     Tags
+    """
+
+    evaluators: typing.Optional[typing.List[EvaluatorItem]] = pydantic.Field(default=None)
+    """
+    Evaluators
+    """
+
+    execution_policy: typing.Optional[ExecutionPolicy] = None
+    clear_execution_policy: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    When true, clears the item-level execution policy (falls back to dataset-level)
     """
 
     if IS_PYDANTIC_V2:

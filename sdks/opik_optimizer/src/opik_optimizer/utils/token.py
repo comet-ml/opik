@@ -3,6 +3,7 @@ Token counting helpers.
 """
 
 import logging
+from .. import constants
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ except ImportError:
     )
 
 
-def count_tokens(text: str, model: str = "gpt-4") -> int:
+def count_tokens(text: str, model: str = constants.DEFAULT_MODEL) -> int:
     """Count tokens in text using litellm's token_counter or fallback approximation."""
     if LITELLM_TOKEN_COUNTER_AVAILABLE:
         try:

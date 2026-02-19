@@ -23,6 +23,7 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { Experiment } from "@/types/datasets";
+import { formatScoreDisplay, getScoreDisplayName } from "@/lib/feedback-scores";
 
 interface GetFeedbackScoreMapArguments {
   experiments: {
@@ -34,6 +35,7 @@ interface GetFeedbackScoreMapArguments {
 
 export type FeedbackScoreData = {
   name: string;
+  colorKey: string;
 } & Record<string, number>;
 
 type FiledValue = string | number | undefined | null;
@@ -104,17 +106,18 @@ export const getFeedbackScoresForExperimentsAsRows = ({
   return keys.map((key) => {
     const data = experimentsIds.reduce<Record<string, FiledValue>>(
       (acc, id: string) => {
-        acc[id] = feedbackScoresMap[id]?.[key] ?? "-";
+        const raw = feedbackScoresMap[id]?.[key];
+        acc[id] = raw != null ? formatScoreDisplay(raw) : "-";
         return acc;
       },
       {},
     );
 
-    const isFeedbackScore = scoreTypeMap[key] === SCORE_TYPE_FEEDBACK;
-    const name = isFeedbackScore ? `${key} (avg)` : key;
+    const name = getScoreDisplayName(key, scoreTypeMap[key]);
 
     return {
       name,
+      colorKey: key,
       ...data,
     } as FeedbackScoreData;
   });

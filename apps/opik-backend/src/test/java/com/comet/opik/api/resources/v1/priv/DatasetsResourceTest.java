@@ -14,6 +14,7 @@ import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
@@ -202,7 +203,7 @@ class DatasetsResourceTest {
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments"};
+            "lastUpdatedBy", "comments", "projectName"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
@@ -1386,6 +1387,31 @@ class DatasetsResourceTest {
                     .build();
 
             createAndAssert(dataset);
+        }
+
+        @Test
+        @DisplayName("when type is evaluation_suite, then create and return type in response")
+        void create__whenTypeIsEvaluationSuite__thenReturnTypeInResponse() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            getAndAssertEquals(id, dataset, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when type is null, then default to dataset")
+        void create__whenTypeIsNull__thenDefaultToDataset() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(null)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            var expectedDataset = dataset.toBuilder().type(DatasetType.DATASET).build();
+            getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
         }
 
         private Stream<Arguments> invalidDataset() {

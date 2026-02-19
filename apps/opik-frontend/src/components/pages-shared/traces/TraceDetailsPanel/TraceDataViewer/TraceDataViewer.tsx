@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
@@ -68,6 +68,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   isSpansLazyLoading,
   search,
 }) => {
+  const rootScrollRef = useRef<HTMLDivElement>(null);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
 
@@ -88,16 +89,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
 
-  // Get transformed data from useUnifiedMedia - single source of truth for LLM messages detection
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
-  // Detect if Messages tab should be shown
-  // Show tab if: at least one field is valid AND neither field is invalid
-  // Using transformedInput/transformedOutput ensures consistency with MessagesTab rendering
+  // Show Messages tab when at least one field is supported and neither is invalid
   const canShowMessagesTab = useMemo(() => {
-    const input = detectLLMMessages(transformedInput, {
-      fieldType: "input",
-    });
+    const input = detectLLMMessages(transformedInput, { fieldType: "input" });
     const output = detectLLMMessages(transformedOutput, {
       fieldType: "output",
     });
@@ -110,33 +106,25 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return hasValid && !hasInvalid;
   }, [transformedInput, transformedOutput]);
 
-  // Default tab: Messages if available, otherwise Details
   const defaultTab = canShowMessagesTab ? "messages" : "details";
 
   const [tab, setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  // Determine the selected tab based on availability
   const selectedTab = useMemo(() => {
-    // If no tab is set, use the default
     if (!tab) return defaultTab;
 
     // Normalize legacy tab values
-    let normalizedTab = tab;
-    if (tab === "input") {
-      normalizedTab = canShowMessagesTab ? "messages" : "details";
-    } else if (tab === "metadata") {
-      normalizedTab = "details";
-    }
+    const legacyTabMap: Record<string, string> = {
+      input: canShowMessagesTab ? "messages" : "details",
+      metadata: "details",
+    };
+    const normalizedTab = legacyTabMap[tab] ?? tab;
 
-    // If messages tab is selected but not available, fall back to details
+    // Fall back when a tab is not available
     if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
-
-    // If graph tab is selected but not available, fall back to default
     if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
-
-    // If prompts tab is selected but not available, fall back to default
     if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
 
     return normalizedTab;
@@ -147,13 +135,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
   const isTrace = type === TRACE_TYPE_FOR_TREE;
 
-  /**
-   * Type guard function to safely check if data is a Trace.
-   * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
-   */
-  const isTraceType = (data: Trace | Span): data is Trace => {
-    return type === TRACE_TYPE_FOR_TREE;
-  };
+  const isTraceType = (data: Trace | Span): data is Trace =>
+    type === TRACE_TYPE_FOR_TREE;
 
   const traceData = isTraceType(data) ? data : undefined;
   const hasSpanFeedbackScores = Boolean(
@@ -164,23 +147,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const onDeleteFeedbackScore = useCallback(
     (name: string, author?: string, spanIdToDelete?: string) => {
-      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
-      if (spanIdToDelete) {
-        feedbackScoreDeleteMutation.mutate({
-          traceId,
-          spanId: spanIdToDelete,
-          name,
-          author,
-        });
-      } else {
-        // Regular deletion (trace or single span)
-        feedbackScoreDeleteMutation.mutate({
-          traceId,
-          spanId,
-          name,
-          author,
-        });
-      }
+      feedbackScoreDeleteMutation.mutate({
+        traceId,
+        spanId: spanIdToDelete ?? spanId,
+        name,
+        author,
+      });
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -208,7 +180,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
 
   return (
-    <div className="size-full max-w-full overflow-auto">
+    <div ref={rootScrollRef} className="size-full max-w-full overflow-auto">
       {graphData && (
         <div className="h-72 min-w-[400px] max-w-full overflow-x-hidden border-b p-4">
           <AgentGraphTab data={graphData} />
@@ -268,14 +240,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
             {!isUndefined(estimatedCost) && (
               <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost)}`}
+                content={`Estimated cost ${formatCost(estimatedCost, {
+                  modifier: "full",
+                })}`}
               >
                 <div
                   className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-cost"
                 >
                   <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost, { modifier: "short" })}
+                  {formatCost(estimatedCost)}
                 </div>
               </TooltipWrapper>
             )}
@@ -350,7 +324,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           onValueChange={setTab}
         >
           <TabsList variant="underline">
-            {/* Tab order: Messages (conditional), Details, Feedback scores, Prompts (conditional), Agent graph (conditional) */}
             {canShowMessagesTab && (
               <TabsTrigger variant="underline" value="messages">
                 Messages
@@ -384,6 +357,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 transformedOutput={transformedOutput}
                 media={media}
                 isLoading={isSpanInputOutputLoading}
+                scrollContainerRef={rootScrollRef}
               />
             </TabsContent>
           )}

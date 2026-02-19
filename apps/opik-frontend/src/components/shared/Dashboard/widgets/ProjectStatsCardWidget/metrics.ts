@@ -13,6 +13,7 @@ export type MetricDefinition = {
   type: STATISTIC_AGGREGATION_TYPE;
   statName: string;
   formatter: (value: number) => string;
+  tooltipFormatter?: (value: number) => string;
 };
 
 export type MetricOption = {
@@ -69,6 +70,7 @@ const SHARED_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "tags",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "total_estimated_cost_sum",
@@ -76,6 +78,8 @@ const SHARED_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "total_estimated_cost_sum",
     formatter: formatCost,
+    tooltipFormatter: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     value: "usage.completion_tokens",
@@ -83,6 +87,7 @@ const SHARED_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.completion_tokens",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "usage.prompt_tokens",
@@ -90,6 +95,7 @@ const SHARED_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.prompt_tokens",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "usage.total_tokens",
@@ -97,6 +103,7 @@ const SHARED_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.total_tokens",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "error_count",
@@ -128,6 +135,7 @@ const TRACE_SPECIFIC_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "llm_span_count",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "span_count",
@@ -135,6 +143,7 @@ const TRACE_SPECIFIC_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "span_count",
     formatter: formatNumericData,
+    tooltipFormatter: String,
   },
   {
     value: "total_estimated_cost",
@@ -142,6 +151,8 @@ const TRACE_SPECIFIC_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "total_estimated_cost",
     formatter: formatCost,
+    tooltipFormatter: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     value: "guardrails_failed_count",
@@ -166,6 +177,8 @@ const SPAN_SPECIFIC_METRICS: MetricDefinition[] = [
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "total_estimated_cost",
     formatter: formatCost,
+    tooltipFormatter: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
 ];
 
@@ -210,11 +223,12 @@ export const getMetricDefinition = (
   return staticMetrics.find((m) => m.value === metricValue) || null;
 };
 
-export const formatMetricValue = (
+const formatWithFormatter = (
   value: number | string | object,
   metricDefinition: MetricDefinition,
+  formatter: (value: number) => string,
 ): string => {
-  const { type, formatter } = metricDefinition;
+  const { type } = metricDefinition;
 
   if (type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE) {
     const percentageValue = value as {
@@ -240,8 +254,27 @@ export const formatMetricValue = (
   return formatter(numValue);
 };
 
-export const formatFeedbackScoreValue = (value: number): string => {
-  return formatNumericData(value);
+export const formatMetricValue = (
+  value: number | string | object,
+  metricDefinition: MetricDefinition,
+): string => {
+  return formatWithFormatter(
+    value,
+    metricDefinition,
+    metricDefinition.formatter,
+  );
+};
+
+export const formatMetricTooltipValue = (
+  value: number | string | object,
+  metricDefinition: MetricDefinition,
+): string | undefined => {
+  if (!metricDefinition.tooltipFormatter) return undefined;
+  return formatWithFormatter(
+    value,
+    metricDefinition,
+    metricDefinition.tooltipFormatter,
+  );
 };
 
 export const isFeedbackScoreMetric = (metricValue: string): boolean => {

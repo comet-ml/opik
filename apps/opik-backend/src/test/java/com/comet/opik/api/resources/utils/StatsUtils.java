@@ -381,6 +381,13 @@ public class StatsUtils {
         };
     }
 
+    public static int compareDoubles(Double d1, Double d2) {
+        if (d1 == null && d2 == null) return 0;
+        if (d1 == null) return -1;
+        if (d2 == null) return 1;
+        return Math.abs(d1 - d2) < 1e-6 ? 0 : Double.compare(d1, d2);
+    }
+
     public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {
         //TODO This is a workaround to compare BigDecimals and clickhouse floats seems to have some precision issues
         // Compare the integer parts directly

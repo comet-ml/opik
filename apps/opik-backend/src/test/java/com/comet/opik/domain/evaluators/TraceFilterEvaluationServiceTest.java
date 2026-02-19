@@ -231,6 +231,49 @@ class TraceFilterEvaluationServiceTest {
     }
 
     @Nested
+    @DisplayName("TTFT Field Filtering")
+    class TtftFieldFiltering {
+
+        @Test
+        void matchesFilterWithTtft() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .ttft(150.0)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.TTFT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("100")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenTtftIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .ttft(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.TTFT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Tags Field Filtering")
     class TagsFieldFiltering {
 

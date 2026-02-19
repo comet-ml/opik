@@ -37,6 +37,7 @@ $script:SCRIPT_DIR = Split-Path -Parent $PSCommandPath
 $script:PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
 $script:BACKEND_DIR = Join-Path (Join-Path $PROJECT_ROOT "apps") "opik-backend"
 $script:FRONTEND_DIR = Join-Path (Join-Path $PROJECT_ROOT "apps") "opik-frontend"
+$script:AI_BACKEND_DIR = Join-Path (Join-Path $PROJECT_ROOT "apps") "opik-ai-backend"
 
 # Cross-platform temp directory handling
 $script:TEMP_DIR = if ($env:TEMP) { 
@@ -49,8 +50,10 @@ $script:TEMP_DIR = if ($env:TEMP) {
 
 $script:BACKEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-backend.pid"
 $script:FRONTEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-frontend.pid"
+$script:AI_BACKEND_PID_FILE = Join-Path $script:TEMP_DIR "opik-ai-backend.pid"
 $script:BACKEND_LOG_FILE = Join-Path $script:TEMP_DIR "opik-backend.log"
 $script:FRONTEND_LOG_FILE = Join-Path $script:TEMP_DIR "opik-frontend.log"
+$script:AI_BACKEND_LOG_FILE = Join-Path $script:TEMP_DIR "opik-ai-backend.log"
 
 # Logging functions
 function Write-LogInfo {
@@ -238,6 +241,18 @@ function Test-LocalBe {
     return Test-DockerServices -Mode "--local-be"
 }
 
+function Start-LocalAi {
+    Start-DockerServices -Mode "--local-ai"
+}
+
+function Stop-LocalAi {
+    Stop-DockerServices -Mode "--local-ai"
+}
+
+function Test-LocalAi {
+    return Test-DockerServices -Mode "--local-ai"
+}
+
 # Function to build backend
 function Build-Backend {
     Test-CommandExists "mvn"
@@ -294,6 +309,30 @@ function Build-Frontend {
         }
         else {
             Write-LogError "Frontend build failed"
+            exit 1
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# Function to build AI backend
+function Build-AiBackend {
+    Test-CommandExists "uv"
+    Write-LogInfo "Building AI backend..."
+    Write-LogDebug "AI backend directory: $script:AI_BACKEND_DIR"
+    
+    Push-Location $script:AI_BACKEND_DIR
+    
+    try {
+        uv sync
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-LogSuccess "AI backend build completed successfully"
+        }
+        else {
+            Write-LogError "AI backend build failed"
             exit 1
         }
     }
@@ -684,6 +723,206 @@ function Start-Frontend {
     }
 }
 
+# Function to wait for AI backend to be ready
+function Wait-AiBackendReady {
+    Test-CommandExists "curl"
+    Write-LogInfo "Waiting for AI backend to be ready on port 8081..."
+    $maxWait = 60
+    $count = 0
+    $aiBackendReady = $false
+    
+    while ($count -lt $maxWait) {
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8081/opik-ai/healthz" -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
+            if ($response.StatusCode -eq 200) {
+                $aiBackendReady = $true
+                break
+            }
+        }
+        catch {
+            # Continue waiting
+        }
+        
+        Start-Sleep -Seconds 1
+        $count++
+        
+        # Check if AI backend process is still running
+        if (Test-Path $script:AI_BACKEND_PID_FILE) {
+            $aiBackendPid = Get-Content $script:AI_BACKEND_PID_FILE
+            $process = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+            
+            if (-not $process) {
+                Write-LogError "AI backend process died while waiting for it to be ready"
+                Write-LogError "Check logs: Get-Content '$script:AI_BACKEND_LOG_FILE'"
+                Remove-Item $script:AI_BACKEND_PID_FILE -Force -ErrorAction SilentlyContinue
+                return $false
+            }
+        }
+    }
+    
+    if ($aiBackendReady) {
+        Write-LogSuccess "AI backend is ready and accepting connections"
+        Write-LogInfo "AI backend API: http://localhost:8081"
+        if ($script:DEBUG_MODE) {
+            Write-LogDebug "Debug mode enabled - check logs for detailed output"
+        }
+        return $true
+    }
+    else {
+        Write-LogError "AI backend failed to become ready after ${maxWait}s"
+        Write-LogError "Check logs: Get-Content '$script:AI_BACKEND_LOG_FILE'"
+        return $false
+    }
+}
+
+# Function to start AI backend
+function Start-AiBackend {
+    Test-CommandExists "uv"
+    Write-LogInfo "Starting AI backend on port 8081..."
+    Write-LogDebug "AI backend directory: $script:AI_BACKEND_DIR"
+    
+    # Verify AI backend directory exists
+    if (-not (Test-Path $script:AI_BACKEND_DIR)) {
+        Write-LogError "AI backend directory not found: $script:AI_BACKEND_DIR"
+        exit 1
+    }
+    
+    # Check if AI backend is already running
+    if (Test-Path $script:AI_BACKEND_PID_FILE) {
+        $aiBackendPid = Get-Content $script:AI_BACKEND_PID_FILE
+        $process = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+        
+        if ($process) {
+            Write-LogWarning "AI backend is already running (PID: $aiBackendPid)"
+            return
+        }
+        else {
+            Write-LogWarning "Removing stale AI backend PID file (process $aiBackendPid no longer exists)"
+            Remove-Item $script:AI_BACKEND_PID_FILE -Force
+        }
+    }
+    
+    # Check if uv sync has been run
+    if (-not (Test-Path (Join-Path $script:AI_BACKEND_DIR ".venv"))) {
+        Write-LogWarning "Virtual environment not found. Building AI backend automatically..."
+        Build-AiBackend
+    }
+    
+    # Set environment variables for local development
+    $env:PORT = "8081"
+    $env:URL_PREFIX = "/opik-ai"
+    $env:DEVELOPMENT_MODE = "true"
+    $env:DEV_USER_ID = "local-dev-user"
+    $env:DEV_WORKSPACE_NAME = "default"
+    # Use 127.0.0.1 instead of localhost to force TCP connection
+    $env:SESSION_SERVICE_URI = "mysql://opik:opik@127.0.0.1:3306/opik"
+    $env:AGENT_OPIK_URL = "http://localhost:8080"
+    $env:OPIK_URL_OVERRIDE = "http://localhost:8080"
+    # Set PYTHONPATH to include the src directory
+    $aiBackendSrc = Join-Path $script:AI_BACKEND_DIR "src"
+    $env:PYTHONPATH = if ($env:PYTHONPATH) { "$aiBackendSrc;$env:PYTHONPATH" } else { $aiBackendSrc }
+    
+    Write-LogDebug "AI backend configured with:"
+    Write-LogDebug "  PORT=$env:PORT"
+    Write-LogDebug "  URL_PREFIX=$env:URL_PREFIX"
+    Write-LogDebug "  DEVELOPMENT_MODE=$env:DEVELOPMENT_MODE"
+    Write-LogDebug "  SESSION_SERVICE_URI=$env:SESSION_SERVICE_URI"
+    Write-LogDebug "  AGENT_OPIK_URL=$env:AGENT_OPIK_URL"
+    Write-LogDebug "  OPIK_URL_OVERRIDE=$env:OPIK_URL_OVERRIDE"
+    Write-LogDebug "  PYTHONPATH=$env:PYTHONPATH"
+    
+    # Set debug logging if debug mode is enabled
+    if ($script:DEBUG_MODE) {
+        Write-LogDebug "Debug logging enabled for AI backend"
+    }
+    
+    Write-LogDebug "Starting AI backend with: uv run --directory $script:AI_BACKEND_DIR uvicorn opik_ai_backend.main:app --host 0.0.0.0 --port 8081 --reload --reload-dir src"
+    
+    # Start AI backend in background using Start-Process
+    $stdoutLog = "$script:AI_BACKEND_LOG_FILE"
+    $stderrLog = "$script:AI_BACKEND_LOG_FILE.err"
+    
+    $processParams = @{
+        FilePath = "uv"
+        ArgumentList = @("run", "--directory", $script:AI_BACKEND_DIR, "uvicorn", "opik_ai_backend.main:app", "--host", "0.0.0.0", "--port", "8081", "--reload", "--reload-dir", "src")
+        WorkingDirectory = $script:AI_BACKEND_DIR
+        RedirectStandardOutput = $stdoutLog
+        RedirectStandardError = $stderrLog
+        NoNewWindow = $true
+        PassThru = $true
+    }
+    
+    $process = Start-Process @processParams
+    $aiBackendPid = $process.Id
+    Set-Content -Path $script:AI_BACKEND_PID_FILE -Value $aiBackendPid
+    
+    Write-LogDebug "AI backend process started with PID: $aiBackendPid"
+    
+    # Wait a bit and check if process is still running
+    Start-Sleep -Seconds 3
+    
+    $stillRunning = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+    
+    if ($stillRunning) {
+        Write-LogSuccess "AI backend process started (PID: $aiBackendPid)"
+        Write-LogInfo "AI backend logs:"
+        Write-LogInfo "  stdout: Get-Content -Wait '$script:AI_BACKEND_LOG_FILE'"
+        Write-LogInfo "  stderr: Get-Content -Wait '$script:AI_BACKEND_LOG_FILE.err'"
+        
+        if (-not (Wait-AiBackendReady)) {
+            exit 1
+        }
+    }
+    else {
+        Write-LogError "AI backend failed to start. Check logs:"
+        Write-LogError "  Get-Content '$script:AI_BACKEND_LOG_FILE'"
+        Write-LogError "  Get-Content '$script:AI_BACKEND_LOG_FILE.err'"
+        Remove-Item $script:AI_BACKEND_PID_FILE -Force -ErrorAction SilentlyContinue
+        exit 1
+    }
+}
+
+# Function to stop AI backend
+function Stop-AiBackend {
+    if (Test-Path $script:AI_BACKEND_PID_FILE) {
+        $aiBackendPid = Get-Content $script:AI_BACKEND_PID_FILE -ErrorAction SilentlyContinue
+        $process = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+        if ($process) {
+            Write-LogInfo "Stopping AI backend (PID: $aiBackendPid)..."
+            
+            # Try graceful shutdown first
+            Stop-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+            
+            # Wait for graceful shutdown
+            $timeout = 10
+            for ($i = 0; $i -lt $timeout; $i++) {
+                $process = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+                if (-not $process) {
+                    break
+                }
+                Start-Sleep -Seconds 1
+            }
+            
+            # Force kill if still running
+            $process = Get-Process -Id $aiBackendPid -ErrorAction SilentlyContinue
+            if ($process) {
+                Write-LogWarning "Force killing AI backend..."
+                Stop-Process -Id $aiBackendPid -Force -ErrorAction SilentlyContinue
+            }
+            
+            Write-LogSuccess "AI backend stopped"
+        }
+        else {
+            Write-LogWarning "AI backend PID file exists but process is not running (cleaning up stale PID file)"
+        }
+        
+        Remove-Item $script:AI_BACKEND_PID_FILE -Force -ErrorAction SilentlyContinue
+    }
+    else {
+        Write-LogWarning "AI backend is not running"
+    }
+}
+
 # Helper function to stop a process and all its children (only first-level children)
 function Stop-ProcessAndChildren {
     param(
@@ -999,6 +1238,66 @@ function Test-BeOnlyServices {
     Write-Host "  Frontend:         docker logs -f opik-frontend-1"
 }
 
+# Function to verify AI backend services
+function Test-AiBackendServices {
+    Write-LogInfo "=== Opik AI Backend Development Status ==="
+    
+    $dockerServicesRunning = Test-LocalAi
+    if ($dockerServicesRunning) {
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "RUNNING" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Docker Services: " -NoNewline
+        Write-Host "STOPPED" -ForegroundColor Red
+    }
+    
+    # AI backend process status
+    $aiBackendRunning = $false
+    if (Test-Path $script:AI_BACKEND_PID_FILE) {
+        $processId = Get-Content $script:AI_BACKEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+            Write-Host "AI Backend Process: " -NoNewline
+            Write-Host "RUNNING" -ForegroundColor Green -NoNewline
+            Write-Host " (PID: $processId)"
+            $aiBackendRunning = $true
+        }
+    }
+    
+    if (-not $aiBackendRunning) {
+        Write-Host "AI Backend Process: " -NoNewline
+        Write-Host "STOPPED" -ForegroundColor Red
+    }
+    
+    # Frontend process status
+    $frontendRunning = $false
+    if (Test-Path $script:FRONTEND_PID_FILE) {
+        $processId = Get-Content $script:FRONTEND_PID_FILE -ErrorAction SilentlyContinue
+        if ($processId -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+            Write-Host "Frontend Process: " -NoNewline
+            Write-Host "RUNNING" -ForegroundColor Green -NoNewline
+            Write-Host " (PID: $processId)"
+            $frontendRunning = $true
+        }
+    }
+    
+    if (-not $frontendRunning) {
+        Write-Host "Frontend Process: " -NoNewline
+        Write-Host "STOPPED" -ForegroundColor Red
+    }
+    
+    # Show access information if all services are running
+    if ($dockerServicesRunning -and $aiBackendRunning -and $frontendRunning) {
+        Show-AccessInformation -UiUrl "http://localhost:5174" -ShowManualEdit $true
+    }
+    
+    Write-Host ""
+    Write-Host "Logs:"
+    Write-Host "  AI Backend Process: Get-Content -Wait '$script:AI_BACKEND_LOG_FILE'"
+    Write-Host "  Frontend Process:   Get-Content -Wait '$script:FRONTEND_LOG_FILE'"
+    Write-Host "  Backend:            docker logs -f opik-backend-1"
+}
+
 # Function to start services (without building)
 function Start-Services {
     Write-LogInfo "=== Starting Opik Development Environment ==="
@@ -1174,6 +1473,69 @@ function Restart-BeOnlyServices {
     Test-BeOnlyServices
 }
 
+# Function to start AI backend services (without building)
+function Start-AiBackendServices {
+    Write-LogInfo "=== Starting Opik AI Backend Development Environment ==="
+    Write-LogWarning "=== Not rebuilding: the latest local changes may not be reflected ==="
+    
+    # Enable OpikAI feature toggle for the backend
+    $env:TOGGLE_OPIK_AI_ENABLED = "true"
+    
+    Write-LogInfo "Step 1/5: Starting Docker services..."
+    Start-LocalAi
+    Write-LogInfo "Step 2/5: Running DB migrations..."
+    Invoke-DbMigrations
+    Write-LogInfo "Step 3/5: Starting AI backend process..."
+    Start-AiBackend
+    Write-LogInfo "Step 4/5: Starting frontend process..."
+    Start-Frontend
+    Write-LogInfo "Step 5/5: Creating demo data..."
+    New-DemoData -Mode "--local-ai"
+    Write-LogSuccess "=== AI Backend Start Complete ==="
+    Test-AiBackendServices
+}
+
+# Function to stop AI backend services
+function Stop-AiBackendServices {
+    Write-LogInfo "=== Stopping Opik AI Backend Development Environment ==="
+    Write-LogInfo "Step 1/3: Stopping frontend..."
+    Stop-Frontend
+    Write-LogInfo "Step 2/3: Stopping AI backend..."
+    Stop-AiBackend
+    Write-LogInfo "Step 3/3: Stopping Docker services..."
+    Stop-LocalAi
+    Write-LogSuccess "=== AI Backend Stop Complete ==="
+}
+
+# Function to restart AI backend services (stop, build, start)
+function Restart-AiBackendServices {
+    Write-LogInfo "=== Restarting Opik AI Backend Development Environment ==="
+    Write-LogInfo "Step 1/9: Stopping frontend process..."
+    Stop-Frontend
+    Write-LogInfo "Step 2/9: Stopping AI backend process..."
+    Stop-AiBackend
+    Write-LogInfo "Step 3/9: Stopping Docker services..."
+    Stop-LocalAi
+    
+    # Enable OpikAI feature toggle for the backend
+    $env:TOGGLE_OPIK_AI_ENABLED = "true"
+    
+    Write-LogInfo "Step 4/9: Starting Docker services..."
+    Start-LocalAi
+    Write-LogInfo "Step 5/9: Running DB migrations..."
+    Invoke-DbMigrations
+    Write-LogInfo "Step 6/9: Building AI backend..."
+    Build-AiBackend
+    Write-LogInfo "Step 7/9: Building frontend..."
+    Build-Frontend
+    Write-LogInfo "Step 8/9: Starting AI backend process..."
+    Start-AiBackend
+    Write-LogInfo "Step 9/9: Starting frontend process..."
+    Start-Frontend
+    Write-LogSuccess "=== AI Backend Restart Complete ==="
+    Test-AiBackendServices
+}
+
 # Function to show logs
 function Show-Logs {
     Write-LogInfo "=== Recent Logs ==="
@@ -1222,9 +1584,16 @@ function Show-Usage {
     Write-Host "  --be-only-restart  - Stop, build, and start Docker infrastructure and FE, and backend process"
     Write-Host "  --be-only-verify   - Verify status of Docker infrastructure and FE, and backend process"
     Write-Host ""
+    Write-Host "AI Backend Mode (AI backend as process, backend + Python backend + FE in Docker):"
+    Write-Host "  --ai-backend-start    - Start Docker infrastructure, backend, Python backend and FE, and AI backend process (without building)"
+    Write-Host "  --ai-backend-stop     - Stop Docker infrastructure, backend, Python backend and FE, and AI backend process"
+    Write-Host "  --ai-backend-restart  - Stop, build, and start Docker infrastructure, backend, Python backend and FE, and AI backend process"
+    Write-Host "  --ai-backend-verify   - Verify status of Docker infrastructure, backend, Python backend and FE, and AI backend process"
+    Write-Host ""
     Write-Host "Other options:"
     Write-Host "  --build-be     - Build backend"
     Write-Host "  --build-fe     - Build frontend"
+    Write-Host "  --build-ai     - Build AI backend"
     Write-Host "  --migrate      - Run database migrations"
     Write-Host "  --lint-be      - Lint backend code"
     Write-Host "  --lint-fe      - Lint frontend code"
@@ -1248,6 +1617,9 @@ switch ($Action.ToLower()) {
     }
     "--build-fe" {
         Build-Frontend
+    }
+    "--build-ai" {
+        Build-AiBackend
     }
     "--migrate" {
         Invoke-Migrations
@@ -1278,6 +1650,18 @@ switch ($Action.ToLower()) {
     }
     "--be-only-verify" {
         Test-BeOnlyServices
+    }
+    "--ai-backend-start" {
+        Start-AiBackendServices
+    }
+    "--ai-backend-stop" {
+        Stop-AiBackendServices
+    }
+    "--ai-backend-restart" {
+        Restart-AiBackendServices
+    }
+    "--ai-backend-verify" {
+        Test-AiBackendServices
     }
     "--logs" {
         Show-Logs

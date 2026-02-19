@@ -132,6 +132,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
       ...(columnData.statisticDataFormater && {
         statisticDataFormater: columnData.statisticDataFormater,
       }),
+      ...(columnData.statisticTooltipFormater && {
+        statisticTooltipFormater: columnData.statisticTooltipFormater,
+      }),
       ...(columnData.supportsPercentiles !== undefined && {
         supportsPercentiles: columnData.supportsPercentiles,
       }),

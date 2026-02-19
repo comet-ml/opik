@@ -54,7 +54,7 @@ const responseSchema = z.object({
  * ```typescript
  * import { AnswerRelevance } from 'opik/evaluation/metrics';
  *
- * // Using default model (gpt-4o)
+ * // Using default model (gpt-5-nano)
  * const metric = new AnswerRelevance();
  *
  * // With context (default behavior)
@@ -76,7 +76,7 @@ const responseSchema = z.object({
  *
  * // Using custom model with few-shot examples
  * const customMetric = new AnswerRelevance({
- *   model: 'gpt-4-turbo',
+ *   model: 'gpt-5',
  *   temperature: 0.3,
  *   seed: 42,
  *   fewShotExamples: [
@@ -112,7 +112,7 @@ export class AnswerRelevance extends BaseLLMJudgeMetric {
    * Creates a new AnswerRelevance metric.
    *
    * @param options - Configuration options
-   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-4o'.
+   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5-nano'.
    * @param options.name - The name of the metric. Defaults to "answer_relevance_metric".
    * @param options.fewShotExamples - Optional few-shot examples with context to guide the model. If not provided, default examples will be used.
    * @param options.fewShotExamplesNoContext - Optional few-shot examples without context for no-context mode. If not provided, default examples will be used.

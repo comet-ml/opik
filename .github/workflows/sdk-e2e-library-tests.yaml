@@ -87,6 +87,8 @@ jobs:
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
+          # Avoid Buildx Bake concurrent image export collisions in CI.
+          COMPOSE_BAKE: false
         shell: bash
         run: |
           cd ${{ github.workspace }}

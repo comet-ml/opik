@@ -14,4 +14,9 @@ export interface DatasetItemUpdate {
     data?: OpikApi.JsonNode;
     /** Tags */
     tags?: string[];
+    /** Evaluators */
+    evaluators?: OpikApi.EvaluatorItem[];
+    executionPolicy?: OpikApi.ExecutionPolicy;
+    /** When true, clears the item-level execution policy (falls back to dataset-level) */
+    clearExecutionPolicy?: boolean;
 }

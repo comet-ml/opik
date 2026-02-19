@@ -86,7 +86,6 @@ component:
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -192,7 +191,6 @@ component:
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -203,7 +201,7 @@ component:
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      # PYTHON_CODE_EXECUTOR_IMAGE_TAG defaults to Chart.AppVersion when not specified
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
@@ -272,17 +270,33 @@ component:
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
-
+      enabled: false
+      annotations: {}
+      additionalRules: []
+      # example networks to block
+      # # Allow egress to public internet, excluding private / reserved ranges
+      #   - to:
+      #     - ipBlock:
+      #         cidr: 0.0.0.0/0
+      #         except:
+      #           # Standard RFC1918 Private Ranges
+      #           - 10.0.0.0/8
+      #           - 172.16.0.0/12
+      #           - 192.168.0.0/16
+      #           # EKS / Carrier Grade NAT
+      #           - 100.64.0.0/10
+      #           # AWS Metadata & Link Local (Very Important)
+      #           - 169.254.0.0/16
+      #           # Loopback range
+      #           - 127.0.0.0/8
+      #           # Reserved / Protocol Ranges
+      #           - 192.0.0.0/24
+      #           - 198.18.0.0/15
+      #           # Multicast ranges
+      #           - 224.0.0.0/4
+      #           # Broadcast address
+      #           - 255.255.255.255/32
+      
     service:
       type: ClusterIP
       ports:
@@ -301,6 +315,80 @@ component:
         hosts: []
         secretName: ""
 
+  # Configuration for the AI backend service.
+  # Disabled by default; enable to run the AI backend in-cluster.
+  ai-backend:
+    # Whether to deploy the AI backend component (default: false).
+    enabled: false
+    # ServiceAccount configuration for the AI backend pods.
+    serviceAccount:
+      # Create a dedicated ServiceAccount for the AI backend (default: true).
+      create: true
+      # Name of the ServiceAccount used by the AI backend pods.
+      name: opik-ai-backend
+    metrics:
+      enabled: false
+    image:
+      repository: opik-ai-backend
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    backendConfigMap:
+      enabled: true
+    podDisruptionBudget:
+      enabled: false
+    env:
+      PORT: "8081"
+      URL_PREFIX: "/opik-ai"
+      SESSION_SERVICE_URI: "mysql://opik:opik@opik-mysql:3306/opik"
+      AGENT_OPIK_URL: "http://opik-backend:8080"
+      OPIK_URL_OVERRIDE: "http://opik-backend:8080"
+    # Optional: Reference external Kubernetes secrets for sensitive configuration
+    # Use this to inject LLM API keys (OPENAI_API_KEY, etc.)
+    # secretRefs:
+    #   - name: "opik-llm-api-keys"
+    secretRefs: []
+    envFrom:
+      - configMapRef:
+          name: opik-ai-backend
+    securityContext: {}
+    ports:
+      - name: http
+        containerPort: 8081
+        protocol: TCP
+    service:
+      type: ClusterIP
+      ports:
+      - name: http
+        port: 8081
+        protocol: TCP
+        targetPort: 8081
+    ingress:
+      enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
+    livenessProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+    readinessProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+      initialDelaySeconds: 10
+    startupProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+      failureThreshold: 30
+      periodSeconds: 10
+
   frontend:
     enabled: true
     serviceAccount:
@@ -311,7 +399,6 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -335,6 +422,12 @@ component:
         # - host: opik.example.com
         #   paths:
         #     - path: /
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /api
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /opik-ai
         #       port: 5173
         #       pathType: Prefix
       tls:
@@ -459,6 +552,13 @@ component:
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    # Upstream config for opik-ai-backend (SSE streaming)
+    aiBackendUpstreamConfig:
+      proxy_read_timeout: 300
+      proxy_connect_timeout: 90
+      proxy_send_timeout: 300
+      proxy_buffering: 'off'
+      gzip: 'off'
     podDisruptionBudget:
       enabled: false
 
@@ -484,8 +584,8 @@ minio:
   enabled: true
   image:
     registry: docker.io
-    repository: minio/minio
-    tag: "RELEASE.2025-03-12T18-04-18Z"
+    repository: cloudpirates/image-minio
+    tag: "RELEASE.2025-10-15T17-29-55Z-hardened"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   config:
@@ -544,7 +644,7 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
+  image: altinity/clickhouse-server:25.3.8.10041.altinitystable
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
@@ -763,9 +863,8 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
-  selectorLabels:
-    name: zookeeper-opik
-    instance: opik
+  commonLabels:
+    app.kubernetes.io/name: zookeeper-opik
 
     # resources:
     #   requests:

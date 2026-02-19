@@ -25,6 +25,7 @@ export const SpanUpdate: core.serialization.ObjectSchema<serializers.SpanUpdate.
         usage: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
+        ttft: core.serialization.number().optional(),
     });
 
 export declare namespace SpanUpdate {
@@ -45,5 +46,6 @@ export declare namespace SpanUpdate {
         usage?: Record<string, number> | null;
         total_estimated_cost?: number | null;
         error_info?: ErrorInfo.Raw | null;
+        ttft?: number | null;
     }
 }

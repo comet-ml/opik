@@ -28,19 +28,6 @@ const PrettyLLMMessage = {
 
 export default PrettyLLMMessage;
 
-export { PrettyLLMMessageContainer };
-export { PrettyLLMMessageRoot };
-export { PrettyLLMMessageHeader };
-export { PrettyLLMMessageContent };
-export { PrettyLLMMessageFooter };
-export { PrettyLLMMessageFinishReason };
-export { PrettyLLMMessageUsage };
-export { PrettyLLMMessageTextBlock };
-export { PrettyLLMMessageImageBlock };
-export { PrettyLLMMessageAudioPlayerBlock };
-export { PrettyLLMMessageVideoBlock };
-export { PrettyLLMMessageCodeBlock };
-
 export type {
   MessageRole,
   PrettyLLMMessageContainerProps,

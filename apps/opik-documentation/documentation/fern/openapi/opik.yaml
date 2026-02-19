@@ -2570,6 +2570,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: filters
         in: query
         schema:
@@ -2613,6 +2617,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
+          description: Filter experiments by deleted projects
       - name: filters
         in: query
         schema:
@@ -8949,6 +8958,14 @@ components:
             type: string
             readOnly: true
           readOnly: true
+        evaluators:
+          type: array
+          description: Default evaluators for items in this version
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         created_at:
           type: string
           format: date-time
@@ -8963,6 +8980,40 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+      description: Default evaluators for items in this version
+      readOnly: true
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Default execution policy for items in this version
+      readOnly: true
     DatasetItemChanges_Public:
       type: object
     DatasetItemBatchUpdate:
@@ -9048,7 +9099,48 @@ components:
           items:
             type: string
             description: Tags
+        evaluators:
+          type: array
+          description: Evaluators
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
+        clear_execution_policy:
+          type: boolean
+          description: "When true, clears the item-level execution policy (falls back\
+            \ to dataset-level)"
       description: Dataset item update request
+    EvaluatorItem:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode"
+    ExecutionPolicy:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     Dataset:
       required:
       - name
@@ -9060,6 +9152,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9163,6 +9260,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9237,6 +9339,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         experiment_items:
           type: array
           readOnly: true
@@ -9304,6 +9412,13 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
@@ -9482,6 +9597,42 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Write"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Write"
+    EvaluatorItem_Write:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    ExecutionPolicy_Write:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -9790,6 +9941,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Compare"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         experiment_items:
           type: array
           readOnly: true
@@ -9813,6 +9970,36 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Compare:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Compare"
+    ExecutionPolicy_Compare:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -9832,6 +10019,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
@@ -9936,6 +10127,8 @@ components:
         items:
           type: object
       - type: string
+    JsonNode_Compare:
+      type: object
     ValueEntry_Compare:
       type: object
       properties:
@@ -10015,6 +10208,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10232,6 +10430,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         experiment_items:
           type: array
           readOnly: true
@@ -10274,6 +10478,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -11049,6 +11257,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace:
       required:
       - start_time
@@ -11141,6 +11353,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -11342,6 +11558,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -11378,6 +11598,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
@@ -14323,6 +14547,9 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        ttft:
+          type: number
+          format: double
     ErrorInfo_Write:
       required:
       - exception_type
@@ -14401,6 +14628,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     SpanBatch:
       required:
       - spans
@@ -14589,6 +14820,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     ValueEntry_Public:
       type: object
       properties:
@@ -14782,6 +15017,9 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+        ttft:
+          type: number
+          format: double
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -14867,6 +15105,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
     TraceBatch:
@@ -15088,6 +15330,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -15477,6 +15723,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

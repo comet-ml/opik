@@ -141,6 +141,7 @@ services:
       - backend
       - opik
       - opik-otel
+      - local-ai
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -183,6 +184,7 @@ services:
       IS_MINIO: true
       S3_URL: http://minio:9000
       PYTHON_EVALUATOR_URL: ${PYTHON_EVALUATOR_URL:-http://python-backend:${PYTHON_BACKEND_PORT:-8000}}
+      TOGGLE_OPIK_AI_ENABLED: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
       TOGGLE_GUARDRAILS_ENABLED: ${TOGGLE_GUARDRAILS_ENABLED:-"false"}
       TOGGLE_WELCOME_WIZARD_ENABLED: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"true"}
       CORS: ${CORS:-false}
@@ -217,6 +219,7 @@ services:
       - opik
       - local-be-fe
       - local-be
+      - local-ai
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
@@ -280,6 +283,37 @@ services:
       retries: 30
       start_period: 10s
 
+  opik-ai-backend:
+    image: ghcr.io/comet-ml/opik/opik-ai-backend:${OPIK_VERSION:-latest}
+    pull_policy: ${OPIK_AI_BACKEND_PULL_POLICY:-always}
+    profiles:
+      - opik-ai-backend
+    build:
+      context: ../../apps/opik-ai-backend
+      dockerfile: Dockerfile
+    hostname: opik-ai-backend
+    environment:
+      # Server configuration
+      PORT: 8081
+      URL_PREFIX: /opik-ai
+      # MySQL session storage (uses same DB as Opik backend)
+      # Note: Uses mysql:// (mysqlclient driver), not mysql+pymysql://
+      SESSION_SERVICE_URI: "mysql://opik:opik@mysql:3306/opik"
+      # Opik backend connection
+      AGENT_OPIK_URL: http://backend:8080
+      OPIK_URL_OVERRIDE: http://backend:8080
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/opik-ai/healthz" ]
+      interval: 2s
+      timeout: 60s
+      retries: 30
+      start_period: 10s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
     pull_policy: always
@@ -305,7 +339,7 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: ${OPIK_FRONTEND_PULL_POLICY:-always}
     profiles:
       - opik
       - local-be

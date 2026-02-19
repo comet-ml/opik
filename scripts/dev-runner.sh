@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/apps/opik-backend"
 FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
+AI_BACKEND_DIR="$PROJECT_ROOT/apps/opik-ai-backend"
 
 # Source shared worktree utilities
 WORKTREE_UTILS_ROOT="$PROJECT_ROOT"
@@ -22,8 +23,10 @@ init_worktree_ports
 # Dynamic PID and log file paths (isolated per worktree)
 BACKEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-backend.pid"
 FRONTEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-frontend.pid"
+AI_BACKEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-ai-backend.pid"
 BACKEND_LOG_FILE="/tmp/${RESOURCE_PREFIX}-backend.log"
 FRONTEND_LOG_FILE="/tmp/${RESOURCE_PREFIX}-frontend.log"
+AI_BACKEND_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ai-backend.log"
 
 # Colors for output
 RED='\033[0;31m'
@@ -154,6 +157,18 @@ verify_local_be() {
     verify_docker_services "--local-be"
 }
 
+start_local_ai() {
+    start_docker_services "--local-ai"
+}
+
+stop_local_ai() {
+    stop_docker_services "--local-ai"
+}
+
+verify_local_ai() {
+    verify_docker_services "--local-ai"
+}
+
 # Function to build backend
 build_backend() {
     require_command mvn
@@ -182,6 +197,21 @@ build_frontend() {
         log_success "Frontend build completed successfully"
     else
         log_error "Frontend build failed"
+        exit 1
+    fi
+}
+
+# Function to build AI backend
+build_ai_backend() {
+    require_command uv
+    log_info "Building AI backend..."
+    log_debug "AI backend directory: $AI_BACKEND_DIR"
+    cd "$AI_BACKEND_DIR" || { log_error "AI backend directory not found"; exit 1; }
+
+    if uv sync; then
+        log_success "AI backend build completed successfully"
+    else
+        log_error "AI backend build failed"
         exit 1
     fi
 }
@@ -445,10 +475,12 @@ start_frontend() {
     # Set worktree-specific ports for frontend
     export VITE_DEV_PORT="$FRONTEND_PORT"
     export VITE_BACKEND_PORT="$BACKEND_PORT"
+    export VITE_OPIK_AI_BACKEND_PORT="$OPIK_AI_BACKEND_PORT"
 
     log_debug "Frontend configured with:"
     log_debug "  VITE_DEV_PORT=$VITE_DEV_PORT"
     log_debug "  VITE_BACKEND_PORT=$VITE_BACKEND_PORT"
+    log_debug "  VITE_OPIK_AI_BACKEND_PORT=$VITE_OPIK_AI_BACKEND_PORT"
 
     # Configure frontend API base URL (defaults to /api in frontend code if not set)
     # The Vite dev server proxy will forward /api/* requests to the backend
@@ -576,6 +608,162 @@ stop_frontend() {
                 fi
             fi
         done
+    fi
+}
+
+# Function to wait for AI backend to be ready
+wait_for_ai_backend_ready() {
+    require_command curl
+    log_info "Waiting for AI backend to be ready on port ${OPIK_AI_BACKEND_PORT}..."
+    local max_wait=60
+    local count=0
+    local ai_backend_ready=false
+
+    while [ $count -lt $max_wait ]; do
+        if curl -sf "http://localhost:${OPIK_AI_BACKEND_PORT}/opik-ai/healthz" >/dev/null 2>&1; then
+            ai_backend_ready=true
+            break
+        fi
+        sleep 1
+        count=$((count + 1))
+
+        if ! kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+            log_error "AI backend process died while waiting for it to be ready"
+            log_error "Check logs: tail -f $AI_BACKEND_LOG_FILE"
+            rm -f "$AI_BACKEND_PID_FILE"
+            return 1
+        fi
+    done
+
+    if [ "$ai_backend_ready" = true ]; then
+        log_success "AI backend is ready and accepting connections"
+        log_info "AI backend API: ${GREEN}http://localhost:${OPIK_AI_BACKEND_PORT}${NC}"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_debug "Debug mode enabled - check logs for detailed output"
+        fi
+        return 0
+    else
+        log_error "AI backend failed to become ready after ${max_wait}s"
+        log_error "Check logs: tail -f $AI_BACKEND_LOG_FILE"
+        return 1
+    fi
+}
+
+# Function to start AI backend
+start_ai_backend() {
+    require_command uv
+    log_info "Starting AI backend on port ${OPIK_AI_BACKEND_PORT}..."
+    log_debug "AI backend directory: $AI_BACKEND_DIR"
+    
+    # Verify AI backend directory exists
+    if [ ! -d "$AI_BACKEND_DIR" ]; then
+        log_error "AI backend directory not found: $AI_BACKEND_DIR"
+        exit 1
+    fi
+
+    # Check if AI backend is already running
+    if [ -f "$AI_BACKEND_PID_FILE" ]; then
+        AI_BACKEND_PID=$(cat "$AI_BACKEND_PID_FILE")
+        if kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+            log_warning "AI backend is already running (PID: $AI_BACKEND_PID)"
+            return 0
+        else
+            log_warning "Removing stale AI backend PID file (process $AI_BACKEND_PID no longer exists)"
+            rm -f "$AI_BACKEND_PID_FILE"
+        fi
+    fi
+
+    # Check if uv sync has been run
+    if [ ! -d ".venv" ]; then
+        log_warning "Virtual environment not found. Building AI backend automatically..."
+        build_ai_backend
+    fi
+
+    # Set environment variables for local development
+    export PORT="${OPIK_AI_BACKEND_PORT}"
+    export URL_PREFIX="/opik-ai"
+    export DEVELOPMENT_MODE="true"
+    export DEV_USER_ID="local-dev-user"
+    export DEV_WORKSPACE_NAME="default"
+    # Use 127.0.0.1 instead of localhost to force TCP connection (localhost uses Unix socket on Linux)
+    export SESSION_SERVICE_URI="mysql://opik:opik@127.0.0.1:${MYSQL_PORT}/opik"
+    export AGENT_OPIK_URL="http://localhost:${BACKEND_PORT}"
+    export OPIK_URL_OVERRIDE="http://localhost:${BACKEND_PORT}"
+    # Set PYTHONPATH to include the src directory where opik_ai_backend module is located
+    export PYTHONPATH="${AI_BACKEND_DIR}/src:${PYTHONPATH:-}"
+
+    log_debug "AI backend configured with:"
+    log_debug "  PORT=$PORT"
+    log_debug "  URL_PREFIX=$URL_PREFIX"
+    log_debug "  DEVELOPMENT_MODE=$DEVELOPMENT_MODE"
+    log_debug "  SESSION_SERVICE_URI=$SESSION_SERVICE_URI"
+    log_debug "  AGENT_OPIK_URL=$AGENT_OPIK_URL"
+    log_debug "  OPIK_URL_OVERRIDE=$OPIK_URL_OVERRIDE"
+    log_debug "  PYTHONPATH=$PYTHONPATH"
+
+    # Set debug logging if debug mode is enabled
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_debug "Debug logging enabled for AI backend"
+    fi
+
+    log_debug "Starting AI backend with: uv run --directory $AI_BACKEND_DIR uvicorn opik_ai_backend.main:app --host 0.0.0.0 --port ${OPIK_AI_BACKEND_PORT} --reload --reload-dir src"
+
+    # Start AI backend in background with --reload for hot-reloading during development
+    # --reload-dir src: Watch the src directory for changes
+    # PYTHONPATH includes src/ so the opik_ai_backend module can be imported
+    PYTHONPATH="${AI_BACKEND_DIR}/src:${PYTHONPATH:-}" nohup uv run --directory "$AI_BACKEND_DIR" uvicorn opik_ai_backend.main:app --host 0.0.0.0 --port "${OPIK_AI_BACKEND_PORT}" --reload --reload-dir src \
+        > "$AI_BACKEND_LOG_FILE" 2>&1 &
+
+    AI_BACKEND_PID=$!
+    echo "$AI_BACKEND_PID" > "$AI_BACKEND_PID_FILE"
+
+    log_debug "AI backend process started with PID: $AI_BACKEND_PID"
+
+    # Wait a bit and check if process is still running
+    sleep 3
+    if kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+        log_success "AI backend process started (PID: $AI_BACKEND_PID)"
+        log_info "AI backend logs: tail -f $AI_BACKEND_LOG_FILE"
+
+        if ! wait_for_ai_backend_ready; then
+            exit 1
+        fi
+    else
+        log_error "AI backend failed to start. Check logs: cat $AI_BACKEND_LOG_FILE"
+        rm -f "$AI_BACKEND_PID_FILE"
+        exit 1
+    fi
+}
+
+# Function to stop AI backend
+stop_ai_backend() {
+    if [ -f "$AI_BACKEND_PID_FILE" ]; then
+        AI_BACKEND_PID=$(cat "$AI_BACKEND_PID_FILE")
+        if kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+            log_info "Stopping AI backend (PID: $AI_BACKEND_PID)..."
+            kill "$AI_BACKEND_PID"
+
+            # Wait for graceful shutdown
+            for _ in {1..10}; do
+                if ! kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+            
+            # Force kill if still running
+            if kill -0 "$AI_BACKEND_PID" 2>/dev/null; then
+                log_warning "Force killing AI backend..."
+                kill -9 "$AI_BACKEND_PID"
+            fi
+
+            log_success "AI backend stopped"
+        else
+            log_warning "AI backend PID file exists but process is not running (cleaning up stale PID file)"
+        fi
+        rm -f "$AI_BACKEND_PID_FILE"
+    else
+        log_warning "AI backend is not running"
     fi
 }
 
@@ -735,6 +923,48 @@ verify_be_only_services() {
     echo "Logs:"
     echo "  Backend Process:  tail -f $BACKEND_LOG_FILE"
     echo "  Frontend:         docker logs -f ${RESOURCE_PREFIX}-frontend-1"
+}
+
+# Function to verify AI backend services
+verify_ai_backend_services() {
+    log_info "=== Opik AI Backend Development Status (Worktree: ${WORKTREE_ID}, Offset: ${PORT_OFFSET}) ==="
+
+    local docker_services_running=false
+    if verify_local_ai; then
+        echo -e "Docker Services: ${GREEN}RUNNING${NC}"
+        docker_services_running=true
+    else
+        echo -e "Docker Services: ${RED}STOPPED${NC}"
+    fi
+
+    # AI backend process status
+    local ai_backend_running=false
+    if [ -f "$AI_BACKEND_PID_FILE" ] && kill -0 "$(cat "$AI_BACKEND_PID_FILE")" 2>/dev/null; then
+        echo -e "AI Backend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$AI_BACKEND_PID_FILE"))"
+        ai_backend_running=true
+    else
+        echo -e "AI Backend Process: ${RED}STOPPED${NC}"
+    fi
+
+    # Frontend process status
+    local frontend_running=false
+    if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
+        echo -e "Frontend Process: ${GREEN}RUNNING${NC} (PID: $(cat "$FRONTEND_PID_FILE"))"
+        frontend_running=true
+    else
+        echo -e "Frontend Process: ${RED}STOPPED${NC}"
+    fi
+
+    # Show access information if all services are running
+    if [ "$docker_services_running" = true ] && [ "$ai_backend_running" = true ] && [ "$frontend_running" = true ]; then
+        show_access_information "http://localhost:${FRONTEND_PORT}" true
+    fi
+
+    echo ""
+    echo "Logs:"
+    echo "  AI Backend Process: tail -f $AI_BACKEND_LOG_FILE"
+    echo "  Frontend Process:   tail -f $FRONTEND_LOG_FILE"
+    echo "  Backend:            docker logs -f ${RESOURCE_PREFIX}-backend-1"
 }
 
 # Function to start services (without building)
@@ -920,6 +1150,74 @@ restart_be_only_services() {
     verify_be_only_services
 }
 
+# Function to start AI backend services (without building)
+start_ai_backend_services() {
+    log_info "=== Starting Opik AI Backend Development Environment (Worktree: ${WORKTREE_ID}) ==="
+    log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
+
+    # Check for port collisions before starting
+    if ! check_port_collisions; then
+        exit 1
+    fi
+
+    # Enable OpikAI feature toggle for the backend
+    export TOGGLE_OPIK_AI_ENABLED="true"
+
+    log_info "Step 1/5: Starting Docker services..."
+    start_local_ai
+    log_info "Step 2/5: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 3/5: Starting AI backend process..."
+    start_ai_backend
+    log_info "Step 4/5: Starting frontend process..."
+    start_frontend
+    log_info "Step 5/5: Creating demo data..."
+    create_demo_data "--local-ai"
+    log_success "=== AI Backend Start Complete ==="
+    verify_ai_backend_services
+}
+
+# Function to stop AI backend services
+stop_ai_backend_services() {
+    log_info "=== Stopping Opik AI Backend Development Environment ==="
+    log_info "Step 1/3: Stopping frontend..."
+    stop_frontend
+    log_info "Step 2/3: Stopping AI backend..."
+    stop_ai_backend
+    log_info "Step 3/3: Stopping Docker services..."
+    stop_local_ai
+    log_success "=== AI Backend Stop Complete ==="
+}
+
+# Function to restart AI backend services (stop, build, start)
+restart_ai_backend_services() {
+    log_info "=== Restarting Opik AI Backend Development Environment (Worktree: ${WORKTREE_ID}) ==="
+    log_info "Step 1/9: Stopping frontend process..."
+    stop_frontend
+    log_info "Step 2/9: Stopping AI backend process..."
+    stop_ai_backend
+    log_info "Step 3/9: Stopping Docker services..."
+    stop_local_ai
+
+    # Enable OpikAI feature toggle for the backend
+    export TOGGLE_OPIK_AI_ENABLED="true"
+
+    log_info "Step 4/9: Starting Docker services..."
+    start_local_ai
+    log_info "Step 5/9: Running DB migrations..."
+    run_db_migrations
+    log_info "Step 6/9: Building AI backend..."
+    build_ai_backend
+    log_info "Step 7/9: Building frontend..."
+    build_frontend
+    log_info "Step 8/9: Starting AI backend process..."
+    start_ai_backend
+    log_info "Step 9/9: Starting frontend process..."
+    start_frontend
+    log_success "=== AI Backend Restart Complete ==="
+    verify_ai_backend_services
+}
+
 # Function to show usage
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -1014,6 +1312,7 @@ check_port_collisions() {
         "$ZOOKEEPER_PORT:Zookeeper"
         "$MINIO_API_PORT:MinIO API"
         "$MINIO_CONSOLE_PORT:MinIO Console"
+        "$OPIK_AI_BACKEND_PORT:Opik AI Backend"
     )
 
     log_info "Checking for port collisions..."
@@ -1082,6 +1381,9 @@ case "${1:-}" in
     "--build-fe")
         build_frontend
         ;;
+    "--build-ai")
+        build_ai_backend
+        ;;
     "--migrate")
         migrate_services
         ;;
@@ -1111,6 +1413,18 @@ case "${1:-}" in
         ;;
     "--be-only-verify")
         verify_be_only_services
+        ;;
+    "--ai-backend-start")
+        start_ai_backend_services
+        ;;
+    "--ai-backend-stop")
+        stop_ai_backend_services
+        ;;
+    "--ai-backend-restart")
+        restart_ai_backend_services
+        ;;
+    "--ai-backend-verify")
+        verify_ai_backend_services
         ;;
     "--logs")
         show_logs
