@@ -11,6 +11,7 @@ import type * as OpikApi from "../../../../index.js";
 export interface DatasetWrite {
     id?: string;
     name: string;
+    type?: OpikApi.DatasetWriteType;
     visibility?: OpikApi.DatasetWriteVisibility;
     tags?: string[];
     description?: string;

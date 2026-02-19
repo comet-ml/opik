@@ -387,6 +387,20 @@ class GetTracesByProjectResourceTest {
                             arg.get()[1], arg.get()[2])));
         }
 
+        private Stream<Arguments> getTtftArgs() {
+            Stream<Arguments> arguments = Stream.of(
+                    arguments(Operator.EQUAL, 100.0),
+                    arguments(Operator.GREATER_THAN, 50.0),
+                    arguments(Operator.GREATER_THAN_EQUAL, 100.0),
+                    arguments(Operator.LESS_THAN, 150.0),
+                    arguments(Operator.LESS_THAN_EQUAL, 100.0));
+
+            return arguments.flatMap(arg -> Stream.of(
+                    arguments("/traces/stats", traceStatsAssertion, arg.get()[0], arg.get()[1]),
+                    arguments("/traces", traceTestAssertion, arg.get()[0], arg.get()[1]),
+                    arguments("/traces/search", traceStreamTestAssertion, arg.get()[0], arg.get()[1])));
+        }
+
         private Stream<Arguments> getFilterInvalidOperatorForFieldTypeArgs() {
             return filterQueryBuilder.getUnSupportedOperators(TraceField.values())
                     .entrySet()
@@ -3674,6 +3688,58 @@ class GetTracesByProjectResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource("getTtftArgs")
+        void whenFilterByTtft__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion,
+                Operator operator,
+                double ttftValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = UUID.randomUUID().toString();
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .ttft(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
+                                    ? (double) randomNumber(200, 500)
+                                    : (double) randomNumber(0, 50))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traces.set(0, traces.getFirst().toBuilder()
+                    .ttft(100.0)
+                    .build());
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var expectedTraces = List.of(traces.getFirst());
+
+            var unexpectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.TTFT)
+                            .operator(operator)
+                            .value(String.valueOf(ttftValue))
+                            .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
         @MethodSource("getFilterInvalidOperatorForFieldTypeArgs")
         void whenFilterInvalidOperatorForFieldType__thenReturn400(String path, TraceFilter filter) {
 
@@ -4406,6 +4472,14 @@ class GetTracesByProjectResourceTest {
                             Comparator.comparing(Trace::duration).reversed()
                                     .thenComparing(Comparator.comparing(Trace::id).reversed()),
                             SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::ttft)
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TTFT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Trace::ttft).reversed()
+                                    .thenComparing(Comparator.comparing(Trace::id).reversed()),
+                            SortingField.builder().field(SortableFields.TTFT).direction(Direction.DESC).build()),
                     Arguments.of(inputComparator,
                             SortingField.builder().field(SortableFields.INPUT).direction(Direction.ASC).build()),
                     Arguments.of(inputComparator.reversed(),

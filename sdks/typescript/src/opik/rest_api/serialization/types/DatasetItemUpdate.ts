@@ -18,6 +18,10 @@ export const DatasetItemUpdate: core.serialization.ObjectSchema<
     tags: core.serialization.list(core.serialization.string()).optional(),
     evaluators: core.serialization.list(EvaluatorItem).optional(),
     executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
+    clearExecutionPolicy: core.serialization.property(
+        "clear_execution_policy",
+        core.serialization.boolean().optional(),
+    ),
 });
 
 export declare namespace DatasetItemUpdate {
@@ -29,5 +33,6 @@ export declare namespace DatasetItemUpdate {
         tags?: string[] | null;
         evaluators?: EvaluatorItem.Raw[] | null;
         execution_policy?: ExecutionPolicy.Raw | null;
+        clear_execution_policy?: boolean | null;
     }
 }

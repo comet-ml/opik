@@ -16,6 +16,7 @@ from typing import (
 
 from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
+from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
     dataset_version_public,
@@ -355,12 +356,21 @@ class Dataset(DatasetExportOperations):
             DatasetVersionPublic containing the current version's metadata,
             or None if no version exists yet.
         """
-        versions_response = self._rest_client.datasets.list_dataset_versions(
-            id=self.id,
-            page=1,
-            size=1,
-        )
-        if not versions_response.content:
+        versions_response = None
+        try:
+            versions_response = self._rest_client.datasets.list_dataset_versions(
+                id=self.id,
+                page=1,
+                size=1,
+            )
+        except ApiError as e:
+            if e.status_code == 403:
+                LOGGER.debug(
+                    "Versioning is not enabled for datasets get version info returning None"
+                )
+            else:
+                raise
+        if not versions_response or not versions_response.content:
             return None
         return versions_response.content[0]
 

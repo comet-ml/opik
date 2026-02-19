@@ -28,6 +28,7 @@ from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
+from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
 
 # this is used as the default value for optional parameters
@@ -213,6 +214,7 @@ class DatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -226,6 +228,8 @@ class DatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -247,7 +251,13 @@ class DatasetsClient:
         client.datasets.create_dataset(name='name', )
         """
         _response = self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1573,6 +1583,7 @@ class AsyncDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -1586,6 +1597,8 @@ class AsyncDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -1610,7 +1623,13 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
