@@ -13,6 +13,8 @@
 - Related modules in the repository: `apps/opik-frontend`, `apps/opik-documentation`, `sdks/*`, `tests_end_to_end`, `deployment`
 
 ## Build, Test, and Development Commands
+See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
+
 - `./opik.sh --build` — launch full stack in Docker (full verification environment).
 - `./opik.sh --verify` / `./opik.sh --stop` — health check and shutdown.
 - `scripts/dev-runner.sh --be-only-restart` — local Java backend process mode with hot workflow.

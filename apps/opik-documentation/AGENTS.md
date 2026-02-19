@@ -18,6 +18,8 @@
 - `README.md` is present in this folder; follow `documentation/fern/docs/contributing/*` for contribution process details and conventions.
 
 ## Build, Test, and Development Commands
+See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
+
 - `cd documentation && npm install`
   - Install Fern docs dependencies (run once or after dependency updates).
 - `cd documentation && npm run dev`

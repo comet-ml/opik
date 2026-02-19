@@ -14,6 +14,8 @@
 - Config files (`tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, `tsup.config.js`, `eslint.config.js`) define local build/lint/test behavior.
 
 ## Build, Test, and Development Commands
+See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
+
 - `npm install` installs dependencies.
 - `npm run lint` runs ESLint across TypeScript source and tests.
 - `npm run format` applies Prettier formatting.

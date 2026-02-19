@@ -13,6 +13,7 @@ This SDK lives under `sdks/python`.
 - `README.md`: SDK overview and contributor entry points.
 
 ## Build, Test, and Development Commands
+See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
 Run commands from `sdks/python` unless noted.
 - `pip install -r tests/test_requirements.txt && pytest tests/unit tests/integration tests/e2e`: install test dependencies and run standard tests.
 - `pytest tests/e2e_library_integration tests/e2e_smoke`: run higher-cost integration coverage.

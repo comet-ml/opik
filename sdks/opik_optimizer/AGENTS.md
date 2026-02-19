@@ -15,6 +15,8 @@
 - `benchmarks/` + `benchmark_results/`: performance and experiment artifacts
 
 ## Build, Test, and Development Commands
+See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
+
 - `make setup-venv` — create a local virtual environment at `.venv`
 - `make install-dev` — install package + dev dependencies
 - `make test` — run unit tests with coverage (excludes integration/e2e)
