@@ -25,7 +25,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 - `make install-dev` — install package + dev dependencies
 - `make test` — run unit tests with coverage (excludes integration/e2e)
 - `make test-all` — run unit, integration, and e2e tests
-- `make precommit` — run pre-commit hooks across tracked files
+- `make precommit` — run pre-commit hooks on changed files in scope
 - `make build` — build sdist and wheel (`python setup.py sdist bdist_wheel`)
 - `make clean` — remove build artifacts and caches
 - `make modal-worker` / `make modal-coord` / `make modal-deploy` — benchmark worker/coordinator deployment tasks

@@ -34,7 +34,7 @@ help:
 	@echo "  test         Run tests"
 	@echo "  test-all     Run tests including integration markers"
 	@echo "  profile      Profile unit tests (cProfile via pytest-profiling)"
-	@echo "  precommit    Run pre-commit hooks on all files"
+	@echo "  precommit    Run pre-commit hooks on changed files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
 	@echo "  modal-worker Deploy Modal worker (benchmarks/runners/benchmark_worker.py)"
@@ -111,7 +111,12 @@ profile:
 
 precommit:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src $(PRECOMMIT) run --all-files
+	@files=$$(git diff --name-only --diff-filter=ACM | tr '\n' ' '); \
+	if [ -z "$$files" ]; then \
+		echo "No changed files found. Pre-commit skipped."; \
+		exit 0; \
+	fi; \
+	PYTHONPATH=src $(PRECOMMIT) run --files $$files
 
 build:
 	$(call warn_if_no_venv)

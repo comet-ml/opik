@@ -116,7 +116,7 @@ Ensure your code adheres to our linting standards:
 
 ```bash
 cd sdks/python
-pre-commit run --all-files
+git diff --name-only | xargs pre-commit run --files
 ```
 
 ### 7. Update Documentation (If Applicable)
