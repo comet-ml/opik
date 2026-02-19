@@ -65,6 +65,10 @@ This repository is a multi-module Opik codebase. Main areas:
 - Follow `pull_request_template.md` sections: Details, checklist, Issues, Testing, Documentation.
 - Include screenshots or short recordings for user-visible UI changes when possible.
 
+## Ignored Surfaces
+- `.github/instructions/` contains GitHub Copilot-specific instruction files. Other agents should ignore this directory and use `.agents/` as the canonical source.
+- `.github/copilot-instructions.md` is GitHub Copilot code review guidance only.
+
 ## Security & Configuration Tips
 - Keep secrets and API keys out of source control; use local `.env` or shell variables.
 - For local self-hosted testing, ensure dependencies are configured (MySQL, ClickHouse, Redis) before running backend tests.
