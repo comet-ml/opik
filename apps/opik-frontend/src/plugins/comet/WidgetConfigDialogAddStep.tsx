@@ -1,4 +1,4 @@
 import WidgetConfigDialogAddStep from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep/WidgetConfigDialogAddStep";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(WidgetConfigDialogAddStep);
+export default withPermissions(WidgetConfigDialogAddStep);

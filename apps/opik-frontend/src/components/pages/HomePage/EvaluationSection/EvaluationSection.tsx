@@ -21,10 +21,12 @@ import {
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
+import { WithPermissionsProps } from "@/types/permissions";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { transformExperimentScores } from "@/lib/feedback-scores";
+
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
 export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
@@ -87,7 +89,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const EvaluationSection: React.FC<{ canViewExperiments: boolean }> = ({
+const EvaluationSection: React.FC<WithPermissionsProps> = ({
   canViewExperiments,
 }) => {
   const navigate = useNavigate();

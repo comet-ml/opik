@@ -1,15 +1,12 @@
 import React from "react";
 import useUserPermission from "./useUserPermission";
+import { WithPermissionsProps } from "@/types/permissions";
 
-type WithCanViewExperiments = {
-  canViewExperiments: boolean;
-};
-
-export const withExperimentsViewPermission = <P extends WithCanViewExperiments>(
+export const withPermissions = <P extends WithPermissionsProps>(
   Component: React.ComponentType<P>,
 ) => {
   const WrappedComponent = (
-    props: Omit<P, "canViewExperiments"> & Partial<WithCanViewExperiments>,
+    props: Omit<P, "canViewExperiments"> & Partial<WithPermissionsProps>,
   ) => {
     const { canViewExperiments } = useUserPermission();
 
@@ -18,7 +15,7 @@ export const withExperimentsViewPermission = <P extends WithCanViewExperiments>(
     );
   };
 
-  WrappedComponent.displayName = `withExperimentsViewPermission(${
+  WrappedComponent.displayName = `withPermissions(${
     Component.displayName || Component.name || "Component"
   })`;
 

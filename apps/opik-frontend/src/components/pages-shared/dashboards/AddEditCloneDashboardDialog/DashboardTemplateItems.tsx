@@ -1,6 +1,7 @@
 import React from "react";
 import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import { TEMPLATE_SCOPE } from "@/types/dashboard";
+import { WithPermissionsProps } from "@/types/permissions";
 import { DISABLED_EXPERIMENTS_TOOLTIP } from "@/components/shared/Dashboard/widgets/widgetRegistry";
 import DashboardTemplateCard from "./DashboardTemplateCard";
 
@@ -9,7 +10,7 @@ export interface DashboardTemplateItemsProps {
 }
 
 const DashboardTemplateItems: React.FC<
-  DashboardTemplateItemsProps & { canViewExperiments: boolean }
+  DashboardTemplateItemsProps & WithPermissionsProps
 > = ({ canViewExperiments, onSelect }) => {
   return (
     <div className="grid grid-cols-2 gap-4">

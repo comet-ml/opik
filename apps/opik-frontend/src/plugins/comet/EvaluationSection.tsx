@@ -1,4 +1,4 @@
 import EvaluationSection from "@/components/pages/HomePage/EvaluationSection/EvaluationSection";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(EvaluationSection);
+export default withPermissions(EvaluationSection);

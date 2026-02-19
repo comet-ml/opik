@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import OnboardingStep from "@/components/shared/OnboardingOverlay/OnboardingStep";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export interface ExperimentsLinkProps {
   optionDescription: string;
@@ -9,7 +10,7 @@ export interface ExperimentsLinkProps {
 }
 
 const ExperimentsLink: React.FC<
-  ExperimentsLinkProps & { canViewExperiments: boolean }
+  ExperimentsLinkProps & WithPermissionsProps
 > = ({ optionDescription, showEnhancedOnboarding, canViewExperiments }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 

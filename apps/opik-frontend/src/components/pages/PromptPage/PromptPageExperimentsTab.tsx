@@ -3,14 +3,15 @@ import { TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import ExperimentsTab from "@/components/pages/PromptPage/ExperimentsTab/ExperimentsTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export interface PromptPageExperimentsTabProps {
   promptId: string;
 }
 
-export const PromptPageExperimentsTabTrigger: React.FC<{
-  canViewExperiments: boolean;
-}> = ({ canViewExperiments }) => {
+export const PromptPageExperimentsTabTrigger: React.FC<
+  WithPermissionsProps
+> = ({ canViewExperiments }) => {
   if (!canViewExperiments) return null;
 
   return (
@@ -27,7 +28,7 @@ export const PromptPageExperimentsTabTrigger: React.FC<{
 };
 
 export const PromptPageExperimentsTabContent: React.FC<
-  PromptPageExperimentsTabProps & { canViewExperiments: boolean }
+  PromptPageExperimentsTabProps & WithPermissionsProps
 > = ({ promptId, canViewExperiments }) => {
   if (!canViewExperiments) return null;
 

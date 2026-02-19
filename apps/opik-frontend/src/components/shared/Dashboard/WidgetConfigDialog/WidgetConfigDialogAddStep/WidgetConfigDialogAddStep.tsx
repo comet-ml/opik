@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { WIDGET_CATEGORY } from "@/types/dashboard";
+import { WithPermissionsProps } from "@/types/permissions";
 import {
   useDashboardStore,
   selectWidgetResolver,
@@ -30,7 +31,7 @@ export interface WidgetConfigDialogAddStepProps {
 }
 
 const WidgetConfigDialogAddStep: React.FunctionComponent<
-  WidgetConfigDialogAddStepProps & { canViewExperiments: boolean }
+  WidgetConfigDialogAddStepProps & WithPermissionsProps
 > = ({ canViewExperiments, onSelectWidget }) => {
   const widgetResolver = useDashboardStore(selectWidgetResolver);
 

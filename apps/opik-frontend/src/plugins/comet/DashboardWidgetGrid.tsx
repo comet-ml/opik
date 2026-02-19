@@ -1,4 +1,4 @@
 import DashboardWidgetGrid from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid/DashboardWidgetGrid";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(DashboardWidgetGrid);
+export default withPermissions(DashboardWidgetGrid);

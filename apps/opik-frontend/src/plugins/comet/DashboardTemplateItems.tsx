@@ -1,4 +1,4 @@
 import DashboardTemplateItems from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/DashboardTemplateItems";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(DashboardTemplateItems);
+export default withPermissions(DashboardTemplateItems);

@@ -1,4 +1,4 @@
 import RunExperimentButton from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(RunExperimentButton);
+export default withPermissions(RunExperimentButton);

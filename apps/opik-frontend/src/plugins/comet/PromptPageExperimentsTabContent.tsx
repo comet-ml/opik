@@ -1,4 +1,4 @@
 import { PromptPageExperimentsTabContent } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(PromptPageExperimentsTabContent);
+export default withPermissions(PromptPageExperimentsTabContent);

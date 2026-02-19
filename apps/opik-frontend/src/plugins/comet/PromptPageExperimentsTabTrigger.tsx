@@ -1,4 +1,4 @@
 import { PromptPageExperimentsTabTrigger } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(PromptPageExperimentsTabTrigger);
+export default withPermissions(PromptPageExperimentsTabTrigger);
