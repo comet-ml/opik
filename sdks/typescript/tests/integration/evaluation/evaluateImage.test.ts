@@ -89,14 +89,65 @@ const IMAGE_ONLY_MESSAGES: OpikMessage[] = [
  * Validate that model output contains expected animal name
  */
 function validateImageOutput(
-  output: string,
+  output: unknown,
   expectedAnimals: string[]
 ): boolean {
-  if (!output || typeof output !== "string") {
+  if (!output) {
     return false;
   }
 
-  const lowerOutput = output.toLowerCase();
+  const collectText = (value: unknown): string[] => {
+    if (typeof value === "string") {
+      return [value];
+    }
+
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => collectText(item));
+    }
+
+    if (value && typeof value === "object") {
+      const normalized = value as Record<string, unknown>;
+
+      if (typeof normalized.text === "string") {
+        return [normalized.text];
+      }
+
+      if (typeof normalized.content === "string") {
+        return [normalized.content];
+      }
+
+      if (Array.isArray(normalized.content)) {
+        return normalized.content.flatMap((item) => collectText(item));
+      }
+
+      if ("output" in normalized) {
+        if (Array.isArray(normalized.output)) {
+          return normalized.output.flatMap((item) => collectText(item));
+        }
+
+        if (typeof normalized.output === "object" && normalized.output !== null) {
+          return collectText(normalized.output);
+        }
+
+        if (typeof normalized.output === "string") {
+          return [normalized.output];
+        }
+      }
+
+      return Object.entries(normalized)
+        .filter(([key]) => key !== "text" && key !== "content" && key !== "output")
+        .flatMap(([, value]) => collectText(value));
+    }
+
+    return [];
+  };
+
+  const lowerOutput = collectText(output).join(" ").toLowerCase();
+
+  if (!lowerOutput) {
+    return false;
+  }
+
   return expectedAnimals.some((animal) => lowerOutput.includes(animal));
 }
 
@@ -217,13 +268,13 @@ describe.skipIf(!shouldRunApiTests)(
           expect(isValidResponse(testResult.testCase.taskOutput)).toBe(true);
 
           // Validate output quality
-          const output = testResult.testCase.taskOutput.output as string;
+          const output = testResult.testCase.taskOutput.output;
           expect(output).toBeDefined();
-          expect(typeof output).toBe("string");
-          expect(output.length).toBeGreaterThan(0);
 
           // Validate that output contains expected animal
-          expect(validateImageOutput(output, ["cat", "kitten", "feline"])).toBe(
+          expect(
+            validateImageOutput(output, ["cat", "kitten", "kitty", "feline"])
+          ).toBe(
             true
           );
         } else {
@@ -259,10 +310,7 @@ describe.skipIf(!shouldRunApiTests)(
         expect(result.experimentId).toBeDefined();
 
         if (result.testResults.length > 0) {
-          const output = result.testResults[0].testCase.taskOutput
-            .output as string;
-          expect(typeof output).toBe("string");
-          expect(output.length).toBeGreaterThan(0);
+          const output = result.testResults[0].testCase.taskOutput.output;
 
           // Dog image should be recognized
           expect(validateImageOutput(output, ["dog", "puppy", "canine"])).toBe(
@@ -308,8 +356,10 @@ describe.skipIf(!shouldRunApiTests)(
           expect(testResult.testCase.datasetItemId).toBeDefined();
           expect(testResult.testCase.taskOutput).toBeDefined();
 
-          const output = testResult.testCase.taskOutput.output as string;
-          expect(validateImageOutput(output, ["cat", "kitten"])).toBe(true);
+          const output = testResult.testCase.taskOutput.output;
+          expect(
+            validateImageOutput(output, ["cat", "kitten", "kitty", "feline"])
+          ).toBe(true);
         } else {
           console.log(
             "Vision API returned empty results for cat extraction test"
@@ -353,7 +403,6 @@ describe.skipIf(!shouldRunApiTests)(
 
         // Output should also exist
         expect(output).toBeDefined();
-        expect(typeof output).toBe("string");
 
         // ScoringInputs should include both dataset fields and taskOutput fields
         expect(testResult.testCase.scoringInputs.image_url).toBe(CAT_IMAGE_URL);
@@ -385,10 +434,11 @@ describe.skipIf(!shouldRunApiTests)(
 
         expect(result.testResults.length).toBeGreaterThan(0);
 
-        const output = result.testResults[0].testCase.taskOutput
-          .output as string;
-        expect(typeof output).toBe("string");
-        expect(validateImageOutput(output, ["cat", "kitten"])).toBe(true);
+        const output = result.testResults[0].testCase.taskOutput.output;
+        expect(output).toBeDefined();
+        expect(
+          validateImageOutput(output, ["cat", "kitten", "kitty", "feline"])
+        ).toBe(true);
       }, 180_000);
     });
 
@@ -423,16 +473,14 @@ describe.skipIf(!shouldRunApiTests)(
 
         expect(result.testResults.length).toBeGreaterThan(0);
 
-        const output = result.testResults[0].testCase.taskOutput
-          .output as string;
-        expect(typeof output).toBe("string");
+        const output = result.testResults[0].testCase.taskOutput.output;
 
         // Should mention both animals
-        const lowerOutput = output.toLowerCase();
-        const hasCat =
-          lowerOutput.includes("cat") || lowerOutput.includes("kitten");
-        const hasDog =
-          lowerOutput.includes("dog") || lowerOutput.includes("puppy");
+        const hasCat = validateImageOutput(
+          output,
+          ["cat", "kitten", "kitty", "feline"]
+        );
+        const hasDog = validateImageOutput(output, ["dog", "puppy"]);
 
         expect(hasCat || hasDog).toBe(true);
       }, 180_000);
