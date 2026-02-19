@@ -2,6 +2,9 @@
 
 import type * as OpikApi from "../index.js";
 
+/**
+ * Default evaluators for items in this version
+ */
 export interface EvaluatorItemPublic {
     name: string;
     type: OpikApi.EvaluatorItemPublicType;

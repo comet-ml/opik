@@ -217,8 +217,10 @@ from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
 from .dataset_public_status import DatasetPublicStatus
+from .dataset_public_type import DatasetPublicType
 from .dataset_public_visibility import DatasetPublicVisibility
 from .dataset_status import DatasetStatus
+from .dataset_type import DatasetType
 from .dataset_version_diff import DatasetVersionDiff
 from .dataset_version_diff_stats import DatasetVersionDiffStats
 from .dataset_version_page_public import DatasetVersionPagePublic
@@ -762,8 +764,10 @@ __all__ = [
     "DatasetPagePublic",
     "DatasetPublic",
     "DatasetPublicStatus",
+    "DatasetPublicType",
     "DatasetPublicVisibility",
     "DatasetStatus",
+    "DatasetType",
     "DatasetVersionDiff",
     "DatasetVersionDiffStats",
     "DatasetVersionPagePublic",

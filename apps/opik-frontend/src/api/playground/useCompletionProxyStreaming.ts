@@ -82,6 +82,17 @@ const getCompletionProxyStream = async ({
   configs,
   workspaceName,
 }: GetCompletionProxyStreamParams) => {
+  const configsRecord = { ...configs } as Record<string, unknown>;
+
+  // Anthropic rejects requests containing both temperature and top_p
+  if (
+    model.includes("claude") &&
+    configsRecord.topP != null &&
+    configsRecord.temperature != null
+  ) {
+    delete configsRecord.topP;
+  }
+
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
     method: "POST",
     headers: {
@@ -93,7 +104,7 @@ const getCompletionProxyStream = async ({
       messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...snakeCaseObj(configs),
+      ...snakeCaseObj(configsRecord),
     }),
     credentials: "include",
     signal,
