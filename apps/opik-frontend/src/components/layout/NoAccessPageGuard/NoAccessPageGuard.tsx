@@ -44,10 +44,10 @@ const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
         message={`You don't have permissions to view ${resourceName} in this workspace.`}
       >
         <div className="flex gap-2 pt-5">
-          <Button onClick={handleGoHome}>Back to Home</Button>
+          <Button onClick={handleGoHome}>Go to home</Button>
           {canGoBack && (
             <Button variant="outline" onClick={handleGoBack}>
-              Go back to previous page
+              Go back
             </Button>
           )}
         </div>
