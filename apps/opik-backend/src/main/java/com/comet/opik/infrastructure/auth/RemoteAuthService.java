@@ -6,6 +6,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -80,7 +81,8 @@ class RemoteAuthService implements AuthService {
     private final @NonNull CacheService cacheService;
 
     @Builder(toBuilder = true)
-    record AuthRequest(String workspaceName, String path) {
+    record AuthRequest(String workspaceName, String path,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> requiredPermissions) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -104,11 +106,13 @@ class RemoteAuthService implements AuthService {
             throw new ClientErrorException(MISSING_WORKSPACE, Response.Status.FORBIDDEN);
         }
 
+        List<String> requiredPermissions = contextInfo.requiredPermissions();
+
         try {
             if (sessionToken != null) {
-                authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path);
+                authenticateUsingSessionToken(sessionToken, currentWorkspaceName, path, requiredPermissions);
             } else {
-                authenticateUsingApiKey(headers, currentWorkspaceName, path);
+                authenticateUsingApiKey(headers, currentWorkspaceName, path, requiredPermissions);
             }
         } catch (ClientErrorException authException) {
             if (!isDefaultWorkspace(currentWorkspaceName) && isNotAuthenticated(authException)
@@ -133,7 +137,8 @@ class RemoteAuthService implements AuthService {
         }
     }
 
-    private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path) {
+    private void authenticateUsingSessionToken(Cookie sessionToken, String workspaceName, String path,
+            List<String> requiredPermissions) {
         if (isDefaultWorkspace(workspaceName)) {
             log.warn("Default workspace name is not allowed for UI authentication");
             throw new ClientErrorException(
@@ -145,7 +150,11 @@ class RemoteAuthService implements AuthService {
                 .request()
                 .accept(MediaType.APPLICATION_JSON)
                 .cookie(sessionToken)
-                .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).path(path).build()))) {
+                .post(Entity.json(AuthRequest.builder()
+                        .workspaceName(workspaceName)
+                        .path(path)
+                        .requiredPermissions(requiredPermissions)
+                        .build()))) {
             var credentials = verifyResponse(response);
             setCredentialIntoContext(credentials.user(), credentials.workspaceId(),
                     Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas());
@@ -153,25 +162,28 @@ class RemoteAuthService implements AuthService {
         }
     }
 
-    private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path) {
+    private void authenticateUsingApiKey(HttpHeaders headers, String workspaceName, String path,
+            List<String> requiredPermissions) {
         var apiKey = Optional.ofNullable(headers.getHeaderString(HttpHeaders.AUTHORIZATION)).orElse("");
         if (apiKey.isBlank()) {
             log.info("API key not found in headers");
             throw new ClientErrorException(MISSING_API_KEY, Response.Status.UNAUTHORIZED);
         }
-        var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path);
+        var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path, requiredPermissions);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
-                    credentials.workspaceName(), credentials.quotas);
+            cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.userName(),
+                    credentials.workspaceId(), credentials.workspaceName(), credentials.quotas);
         }
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
                 Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas);
         requestContext.get().setApiKey(apiKey);
     }
 
-    private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path) {
-        var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName);
+    private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path,
+            List<String> requiredPermissions) {
+        var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
+                requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
             try (var response = client.target(URI.create(reactServiceUrl.url()))
@@ -181,7 +193,11 @@ class RemoteAuthService implements AuthService {
                     .accept(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION,
                             apiKey)
-                    .post(Entity.json(AuthRequest.builder().workspaceName(workspaceName).path(path).build()))) {
+                    .post(Entity.json(AuthRequest.builder()
+                            .workspaceName(workspaceName)
+                            .path(path)
+                            .requiredPermissions(requiredPermissions)
+                            .build()))) {
                 var authResponse = verifyResponse(response);
                 return ValidatedAuthCredentials.builder()
                         .shouldCache(true)
