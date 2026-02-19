@@ -8,7 +8,7 @@ MODEL_FOR_TESTS = "gpt-4o-mini"
 TEST_MODELS_PARAMETRIZE = [
     ("gpt-4o-mini", "openai"),  # OpenAI - fully supported with usage tracking
     (
-        "anthropic/claude-3-5-haiku-20241022",
+        "anthropic/claude-3-5-haiku-20250124",
         "anthropic",
     ),  # Anthropic - fully supported with usage tracking
     (
