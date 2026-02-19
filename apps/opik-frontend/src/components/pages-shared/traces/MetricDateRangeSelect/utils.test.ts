@@ -8,8 +8,18 @@ dayjs.extend(utc);
 
 describe("calculateIntervalStartAndEnd", () => {
   const mockCurrentDate = "2024-01-15T14:30:00.000Z";
-  const getLocalDate = (daysFromCurrent: number, options?: { hour?: number; minute?: number; second?: number; millisecond?: number }) => {
-    const date = dayjs(mockCurrentDate).add(daysFromCurrent, "day").startOf("day");
+  const getLocalDate = (
+    daysFromCurrent: number,
+    options?: {
+      hour?: number;
+      minute?: number;
+      second?: number;
+      millisecond?: number;
+    },
+  ) => {
+    const date = dayjs(mockCurrentDate)
+      .add(daysFromCurrent, "day")
+      .startOf("day");
     if (!options) {
       return date.toDate();
     }
@@ -253,8 +263,18 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should handle Date objects with time components", () => {
-      const today = getLocalDate(0, { hour: 16, minute: 45, second: 30, millisecond: 500 });
-      const yesterday = getLocalDate(-1, { hour: 8, minute: 20, second: 15, millisecond: 250 });
+      const today = getLocalDate(0, {
+        hour: 16,
+        minute: 45,
+        second: 30,
+        millisecond: 500,
+      });
+      const yesterday = getLocalDate(-1, {
+        hour: 8,
+        minute: 20,
+        second: 15,
+        millisecond: 250,
+      });
       const dateRange: DateRangeValue = {
         from: yesterday,
         to: today,
