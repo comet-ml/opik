@@ -2,9 +2,9 @@
 that failed to reach the Opik server. DBManager exposes helpers for the full
 message lifecycle: register_message(s), fetch_failed_messages_batched, and
 replay_failed_messages (which accepts a ReplayCallback, typically Streamer.put,
-to re-inject messages). The manager tracks three states — initialized, closed,
-and failed — and if the underlying database becomes unavailable, it marks itself
-as failed and logs that resiliency features are disabled. The standalone helper
+to re-inject messages). The manager tracks three states — undefined, initialized, closed,
+and error — and if the underlying database becomes unavailable, it marks itself
+as failed (error) and logs that resiliency features are disabled. The standalone helper
 db_message_to_message raises ValueError for unsupported message types.
 """
 
@@ -665,7 +665,7 @@ class DBManager:
             yield batch
 
     def failed_messages_count(self) -> int:
-        """Returns the number of failed messages in the DB."""
+        """Returns the number of failed messages in the DB or -1 if not initialized, closed, or failed."""
         if not self.initialized:
             LOGGER.debug("Not initialized - failed messages count ignored")
             return -1
