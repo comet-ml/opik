@@ -35,6 +35,7 @@ public class CostService {
             "groq", "groq");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
+    private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
@@ -155,10 +156,7 @@ public class CostService {
      * @return Lowercase model name with date suffix removed if present, otherwise lowercase original name
      */
     private static String stripDateSuffix(String modelName) {
-        // Pattern: ends with -YYYY-MM-DD where YYYY is 2000-2099, MM is 01-12, DD is 01-31
-        // This is a simple heuristic that should work for most date-suffixed model names
-        String datePattern = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
-        return modelName.toLowerCase(Locale.ROOT).replaceFirst(datePattern, "");
+        return modelName.toLowerCase(Locale.ROOT).replaceFirst(DATE_SUFFIX_PATTERN, "");
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
