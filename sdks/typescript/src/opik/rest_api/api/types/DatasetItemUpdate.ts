@@ -12,6 +12,8 @@ export interface DatasetItemUpdate {
     expectedOutput?: string;
     metadata?: OpikApi.JsonNode;
     data?: OpikApi.JsonNode;
+    /** Dataset item description */
+    description?: string;
     /** Tags */
     tags?: string[];
     /** Evaluators */

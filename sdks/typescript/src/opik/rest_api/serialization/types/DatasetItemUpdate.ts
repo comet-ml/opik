@@ -15,6 +15,7 @@ export const DatasetItemUpdate: core.serialization.ObjectSchema<
     expectedOutput: core.serialization.property("expected_output", core.serialization.string().optional()),
     metadata: JsonNode.optional(),
     data: JsonNode.optional(),
+    description: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     evaluators: core.serialization.list(EvaluatorItem).optional(),
     executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
@@ -30,6 +31,7 @@ export declare namespace DatasetItemUpdate {
         expected_output?: string | null;
         metadata?: JsonNode.Raw | null;
         data?: JsonNode.Raw | null;
+        description?: string | null;
         tags?: string[] | null;
         evaluators?: EvaluatorItem.Raw[] | null;
         execution_policy?: ExecutionPolicy.Raw | null;
