@@ -192,13 +192,16 @@ class TestLiteLLMAgentInvoke:
 
         mock_response = make_litellm_completion_response(message=message)
 
-        with patch.object(
-            agent,
-            "_llm_complete",
-            return_value=mock_response,
-        ), patch(
-            "opik_optimizer.agents.litellm_agent.tool_call_max_iterations",
-            return_value=1,
+        with (
+            patch.object(
+                agent,
+                "_llm_complete",
+                return_value=mock_response,
+            ),
+            patch(
+                "opik_optimizer.agents.litellm_agent.tool_call_max_iterations",
+                return_value=1,
+            ),
         ):
             result = agent.invoke_agent(
                 prompts={"p": prompt},

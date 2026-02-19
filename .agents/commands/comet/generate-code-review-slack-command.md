@@ -73,7 +73,7 @@ This workflow will:
 
 - **Extract Jira ticket from PR title**:
   - Parse PR title for pattern `[OPIK-\d+]` or `[issue-\d+]` or `[NA]`
-  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] feat: add endpoint`)
+  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] feat: validate trace metadata ingestion`)
   - If not found in title, check PR description "## Issues" section for `OPIK-\d+` pattern
   - If still not found, prompt: "Jira ticket not found in PR. Enter Jira ticket number (e.g., OPIK-1234):"
   - Validate format and store
