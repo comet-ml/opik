@@ -102,7 +102,7 @@ public class CostService {
 
         // Try stripping date suffix from normalized name (e.g., "gpt-5-2-2025-12-17" -> "gpt-5-2")
         String baseNormalizedModelName = stripDateSuffix(normalizedModelName);
-        if (!baseNormalizedModelName.equals(normalizedModelName)) {
+        if (!baseNormalizedModelName.equalsIgnoreCase(normalizedModelName)) {
             String baseNormalizedKey = createModelProviderKey(baseNormalizedModelName, provider);
             ModelPrice baseNormalizedMatch = modelProviderPrices.get(baseNormalizedKey);
             if (baseNormalizedMatch != null) {
@@ -114,8 +114,8 @@ public class CostService {
         }
 
         // Try stripping date suffix from original name with dots preserved (e.g., "gpt-5.2-2025-12-17" -> "gpt-5.2")
-        String baseOriginalModelName = stripDateSuffix(modelName.toLowerCase(java.util.Locale.ROOT));
-        if (!baseOriginalModelName.equals(modelName.toLowerCase(java.util.Locale.ROOT))) {
+        String baseOriginalModelName = stripDateSuffix(modelName);
+        if (!baseOriginalModelName.equalsIgnoreCase(modelName)) {
             String baseOriginalKey = createModelProviderKey(baseOriginalModelName, provider);
             ModelPrice baseOriginalMatch = modelProviderPrices.get(baseOriginalKey);
             if (baseOriginalMatch != null) {
@@ -150,14 +150,14 @@ public class CostService {
      *
      * Date patterns recognized: YYYY-MM-DD (e.g., "2025-12-17") at the end of the model name.
      *
-     * @param modelName The model name (already normalized with hyphens and lowercase)
-     * @return Model name with date suffix removed if present, otherwise original name
+     * @param modelName The model name
+     * @return Lowercase model name with date suffix removed if present, otherwise lowercase original name
      */
     private static String stripDateSuffix(String modelName) {
         // Pattern: ends with -YYYY-MM-DD where YYYY is 2000-2099, MM is 01-12, DD is 01-31
         // This is a simple heuristic that should work for most date-suffixed model names
         String datePattern = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
-        return modelName.replaceFirst(datePattern, "");
+        return modelName.toLowerCase(java.util.Locale.ROOT).replaceFirst(datePattern, "");
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
