@@ -34,28 +34,18 @@ Use these as the source of operational detail:
 - Include screenshots/videos for user-facing UI changes.
 - Keep customer names, internal tickets beyond required references, and sensitive operational context out of public PR text.
 
-## AI-assisted contribution policy (required)
-AI assistance is allowed. Human authors remain fully accountable for correctness, licensing, and security.
-
-Every PR must include an AI disclosure watermark block in the PR description:
-
-```markdown
-## AI Assistance
-- AI-WATERMARK: yes|no
-- Tool(s): <tool names>
-- Model(s): <model IDs>
-- Scope: <files/sections generated or edited>
-- Human verification: <tests/checks/manual review performed - default is no/na>
-```
+## AI-assisted contributions
+AI assistance and authorship is allowed. Human authors remain fully accountable for correctness, licensing, and security.
 
 Rules:
-- Allways run relevant tests/linters for touched code.
-- Allways be explicit about human/users interaction with produced output.
-- Allways review prior issue, pull-requests and code-base for existing solutions.
-- Allways address any system generated reviews (Baz, Greptile).
+- Always run relevant tests/linters for touched code.
+- Always be explicit about human/users interaction with produced output.
+- Always review prior issue, pull-requests and code-base for existing solutions.
+- Always address any system generated reviews (Baz, Greptile).
 - Never submit unreviewed AI output.
 - Never include secrets, tokens, private prompts, internal system instructions, or customer-sensitive data in generated/public content.
 - Never disclose vulnerabilities, exploit steps, or incident details in public issues/PRs. Use private maintainer/security channels.
+- You must ensure every PR include an AI disclosure watermark block in the PR description: If AI is used, include a brief `## AI Assistance` note in the PR description with tool/model, scope, and confirmed human verification (if any); if no AI is used, omit that section entirely.
 
 ## Agent/editor setup
 - Cursor compatibility: `make cursor` (`.cursor -> .agents`)
