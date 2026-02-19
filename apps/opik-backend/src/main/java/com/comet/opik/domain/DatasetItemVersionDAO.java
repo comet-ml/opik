@@ -746,6 +746,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.id AS id,
                     div_dedup.dataset_item_id AS dataset_item_id,
                     div_dedup.data AS data,
+                    div_dedup.description AS description,
                     div_dedup.source AS source,
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
