@@ -1,4 +1,5 @@
 import { Outlet, useRouter } from "@tanstack/react-router";
+import { isNil } from "lodash";
 import useAppStore from "@/store/AppStore";
 import Loader from "@/components/shared/Loader/Loader";
 import NoData from "@/components/shared/NoData/NoData";
@@ -16,7 +17,7 @@ const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const router = useRouter();
 
-  if (canViewPage === undefined) {
+  if (isNil(canViewPage)) {
     return <Loader />;
   }
 

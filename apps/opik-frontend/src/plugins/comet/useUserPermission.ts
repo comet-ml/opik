@@ -17,7 +17,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
-  const { data: userPermissions } = useUserPermissions(
+  const { data: userPermissions, isPending } = useUserPermissions(
     {
       organizationId: currentOrganization?.id || "",
       userName: userName || "",
@@ -58,16 +58,21 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const canViewExperiments = useMemo(
-    () =>
-      isWorkspaceOwner ||
-      getUserPermissionValue(
-        workspacePermissions,
-        ManagementPermissionsNames.EXPERIMENT_VIEW,
-        // should default to true if the permission is not found
-      ) !== false,
-    [workspacePermissions, isWorkspaceOwner],
-  );
+  const canViewExperiments = useMemo(() => {
+    if (isWorkspaceOwner) return true;
+
+    const permissionValue = getUserPermissionValue(
+      workspacePermissions,
+      ManagementPermissionsNames.EXPERIMENT_VIEW,
+    );
+
+    if (isPending) {
+      return permissionValue;
+    }
+
+    // should default to true if the permission is not found
+    return permissionValue !== false;
+  }, [workspacePermissions, isWorkspaceOwner, isPending]);
 
   return { canInviteMembers, isWorkspaceOwner, canViewExperiments };
 };
