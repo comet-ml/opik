@@ -11,6 +11,7 @@ const ROOT_KEYS: TRACE_AUTOCOMPLETE_ROOT_KEY[] = [
   "input",
   "output",
   "metadata",
+  "error_info",
 ];
 
 interface LLMPromptMessagesVariableProps {
