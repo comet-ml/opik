@@ -5,7 +5,7 @@ alwaysApply: true
 # Git Workflow
 
 ## Branch Naming
-`{USERNAME}/{TICKET}-{summary}`
+`{username}/{ticket}-{summary}`
 - `andrescrz/OPIK-2180-add-feature`
 - `user/issue-123-fix-bug`
 - `user/NA-hotfix-description`

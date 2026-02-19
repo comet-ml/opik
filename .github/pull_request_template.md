@@ -33,17 +33,3 @@ Video evidence:
 -->
 
 ## Documentation
-
-<!--
-REPLACE ME WITH (if relevant to you as an AI agent)
-## AI Assistance
-
-- [ ] No AI assistance used
-- [ ] AI assistance used (complete the disclosure below)
-
-- AI-WATERMARK:
-- Tool(s):
-- Model(s):
-- Scope:
-- Human verification:
--->
