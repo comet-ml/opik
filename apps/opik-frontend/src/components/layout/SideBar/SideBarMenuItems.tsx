@@ -26,7 +26,7 @@ export interface SideBarMenuItemsProps {
 
 const SideBarMenuItems: React.FC<
   SideBarMenuItemsProps & WithPermissionsProps
-> = ({ expanded, canViewExperiments, canViewDashboards }) => {
+> = ({ expanded, canViewExperiments = true, canViewDashboards = true }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
 
   const menuItems = getMenuItems({ canViewExperiments, canViewDashboards });
