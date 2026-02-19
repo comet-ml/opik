@@ -2948,42 +2948,16 @@ class DatasetsResourceTest {
                     arguments(10, 5));
         }
 
-        @Test
-        @DisplayName("when filtering by type=dataset, then return only datasets of that type")
-        void getDatasets__whenFilteringByTypeDataset__thenReturnOnlyDatasets() {
-            String workspaceName = UUID.randomUUID().toString();
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                    .type(DatasetType.DATASET)
-                    .build();
-            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
-                    .type(DatasetType.EVALUATION_SUITE)
-                    .build();
-
-            createAndAssert(regularDataset, apiKey, workspaceName);
-            createAndAssert(evaluationSuite, apiKey, workspaceName);
-
-            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .queryParam("size", 100)
-                    .queryParam("type", "dataset")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get();
-
-            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(regularDataset));
+        Stream<Arguments> filterByType() {
+            return Stream.of(
+                    arguments(DatasetType.DATASET, "dataset"),
+                    arguments(DatasetType.EVALUATION_SUITE, "evaluation_suite"));
         }
 
-        @Test
-        @DisplayName("when filtering by type=evaluation_suite, then return only evaluation suites")
-        void getDatasets__whenFilteringByTypeEvaluationSuite__thenReturnOnlyEvaluationSuites() {
+        @ParameterizedTest
+        @MethodSource("filterByType")
+        @DisplayName("when filtering by type, then return only datasets of that type")
+        void getDatasets__whenFilteringByType__thenReturnOnlyMatchingType(DatasetType filterType, String queryValue) {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -3000,9 +2974,11 @@ class DatasetsResourceTest {
             createAndAssert(regularDataset, apiKey, workspaceName);
             createAndAssert(evaluationSuite, apiKey, workspaceName);
 
+            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+
             var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .queryParam("size", 100)
-                    .queryParam("type", "evaluation_suite")
+                    .queryParam("type", queryValue)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -3011,7 +2987,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 1, 1, 1, List.of(evaluationSuite));
+            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
         }
 
         @Test
