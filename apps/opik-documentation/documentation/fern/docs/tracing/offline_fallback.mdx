@@ -1,0 +1,227 @@
+---
+headline: Offline fallback and message replay | Opik Documentation
+og:description: Keep your tracing data intact during network outages with Opik's
+  offline fallback. Learn how failed messages are automatically stored and replayed
+  when connectivity is restored.
+og:site_name: Opik Documentation
+og:title: Offline Fallback & Message Replay - Opik Python SDK
+title: Offline fallback and message replay
+---
+
+# Offline fallback and message replay
+
+The Opik Python SDK includes a built-in offline fallback mechanism that protects your tracing data during
+network outages. When the SDK cannot reach the Opik server, messages are automatically persisted to a local
+SQLite database. Once connectivity is restored, all stored messages are replayed to the server transparently,
+with no changes required in your application code.
+
+<Note>
+  The offline fallback feature is available in the Python SDK only and is enabled by default with no
+  configuration required.
+</Note>
+
+## How it works
+
+The feature operates entirely in the background across three phases:
+
+**1. Detection** — A lightweight background thread uses (`OpikConnectionMonitor`) to periodically ping the `/is-alive/ping`
+endpoint on the Opik server. When a ping fails, or when a message sending encounters a connection error, the
+SDK marks the connection as unavailable.
+
+**2. Storage** — While the connection is unavailable, every new message is immediately written to a local
+SQLite database (stored in a system temporary directory) instead of being sent over the network. If a message
+was in flight when the connection dropped, it is re-marked as failed and added to the same store.
+
+**3. Replay** — When the `OpikConnectionMonitor` detects that the server is reachable again, a `ReplayManager`
+thread reads all stored messages in configurable batches and reinjects them into the SDK's normal processing
+pipeline. After that, they are delivered to the server just like any other message.
+
+```
+Application code
+      │
+      ▼
+ Opik SDK client
+      │
+      ├─ Connection OK? ──Yes──▶ Send to REST API ──Success──▶ Done
+      │                                           └─Failure──▶ Write to SQLite
+      │
+      └─ Connection down? ───▶ Write to SQLite as "failed"
+                                       │
+                                 ConnectionMonitor
+                                 detects recovery
+                                       │
+                                       ▼
+                                 ReplayManager reads
+                                 failed messages in
+                                 batches and resubmits
+```
+
+The SQLite database is cleaned up automatically when the SDK shuts down. Delivered messages are deleted
+from the database as soon as the server confirms receipt.
+
+## Supported message types
+
+All SDK operations that produce the following message types are protected by the offline fallback:
+
+| Operation | Message type stored |
+| --- | --- |
+| `client.trace()` | `CreateTraceMessage` / `CreateTraceBatchMessage` |
+| `trace.update()` | `UpdateTraceMessage` |
+| `trace.span()` / `client.span()` | `CreateSpanMessage` / `CreateSpansBatchMessage` |
+| `span.update()` | `UpdateSpanMessage` |
+| `client.log_traces_feedback_scores()` | `AddTraceFeedbackScoresBatchMessage` |
+| `client.log_spans_feedback_scores()` | `AddSpanFeedbackScoresBatchMessage` |
+| Guardrail evaluations | `GuardrailBatchMessage` |
+| `experiment.insert()` | `CreateExperimentItemsBatchMessage` |
+| File attachments | `CreateAttachmentMessage` |
+
+## Configuration
+
+The offline fallback works out of the box with sensible defaults. You can tune its behaviour using
+environment variables or the `~/.opik.config` file.
+
+### Environment variables
+
+Set these before starting your application:
+
+```bash
+# How often (seconds) to ping the server to check connectivity (default: 10)
+export OPIK_CONNECTION_MONITOR_PING_INTERVAL=10
+
+# Timeout (seconds) for each connectivity ping (default: 5)
+export OPIK_CONNECTION_MONITOR_CHECK_TIMEOUT=5
+
+# Number of failed messages to replay in one batch after recovery (default: 50)
+export OPIK_REPLAY_BATCH_SIZE=50
+
+# Delay (seconds) between replay batches to control throughput (default: 0.5)
+export OPIK_REPLAY_BATCH_REPLAY_DELAY=0.5
+
+# How often (seconds) the replay manager thread checks connection state (default: 0.3)
+export OPIK_REPLAY_TICK_INTERVAL=0.3
+```
+
+### Configuration file
+
+Add the parameters to your `~/.opik.config` file under the `[opik]` section:
+
+```toml
+[opik]
+url_override = https://www.comet.com/opik/api
+api_key = <your-api-key>
+
+# Offline fallback tuning
+connection_monitor_ping_interval = 10
+connection_monitor_check_timeout = 5
+replay_batch_size = 50
+replay_batch_replay_delay = 0.5
+replay_tick_interval = 0.3
+```
+
+## Configuration reference
+
+| Parameter | Environment variable | Default | Description |
+| --- | --- | --- | --- |
+| `connection_monitor_ping_interval` | `OPIK_CONNECTION_MONITOR_PING_INTERVAL` | `10` | Seconds between server health pings. Lower values detect outages faster at the cost of slightly more network traffic. |
+| `connection_monitor_check_timeout` | `OPIK_CONNECTION_MONITOR_CHECK_TIMEOUT` | `5` | Seconds to wait for a ping response before treating the server as unreachable. |
+| `replay_batch_size` | `OPIK_REPLAY_BATCH_SIZE` | `50` | Number of stored messages to replay in a single batch. Reduce this value in memory-constrained environments. |
+| `replay_batch_replay_delay` | `OPIK_REPLAY_BATCH_REPLAY_DELAY` | `0.5` | Seconds to pause between replay batches. Increase this value to reduce load on the server during recovery. |
+| `replay_tick_interval` | `OPIK_REPLAY_TICK_INTERVAL` | `0.3` | Seconds between replay manager loop iterations. Lower values make the SDK react to connection recovery faster. |
+
+## Tuning for your environment
+
+### High-volume applications
+
+If your application logs many traces per second, a large backlog may accumulate during an outage.
+To replay it quickly after recovery, increase the batch size and reduce the inter-batch delay:
+
+```bash
+export OPIK_REPLAY_BATCH_SIZE=200
+export OPIK_REPLAY_BATCH_REPLAY_DELAY=0.1
+```
+
+### Memory-constrained environments
+
+To limit the amount of memory used when reading messages from the database during replay:
+
+```bash
+export OPIK_REPLAY_BATCH_SIZE=10
+export OPIK_REPLAY_BATCH_REPLAY_DELAY=1.0
+```
+
+### Slow or unreliable networks
+
+If connectivity is intermittent, reduce the ping interval so the SDK stops trying to send
+messages sooner after an outage begins:
+
+```bash
+export OPIK_CONNECTION_MONITOR_PING_INTERVAL=5
+export OPIK_CONNECTION_MONITOR_CHECK_TIMEOUT=3
+```
+
+### Fast recovery detection
+
+To minimise the delay between the server becoming available again and replay starting:
+
+```bash
+export OPIK_CONNECTION_MONITOR_PING_INTERVAL=5
+export OPIK_REPLAY_TICK_INTERVAL=0.1
+```
+
+## Recovery time estimate
+
+The approximate time to replay a backlog after connectivity is restored is:
+
+```
+replay_time ≈ ceil(failed_messages / replay_batch_size) × replay_batch_replay_delay
+```
+
+**Example:** 500 stored messages with default settings (`batch_size=50`, `delay=0.5 s`):
+
+```
+ceil(500 / 50) × 0.5 = 10 × 0.5 = 5 seconds
+```
+
+## Graceful degradation
+
+If the local SQLite database itself becomes unavailable (for example, the temporary directory is not
+writable), the SDK logs a warning and continues operating without the offline fallback. Tracing data
+will be lost during any later outage, but the application will not crash.
+
+<Warning>
+  Ensure the system temporary directory is writable by the process running the SDK. On most systems
+  this is `/tmp` or the path returned by `tempfile.gettempdir()`.
+</Warning>
+
+## Troubleshooting
+
+### Messages are not replayed after recovery
+
+1. **Verify connectivity** — Run `opik healthcheck` to confirm the SDK can reach the server.
+2. **Check the ping interval** — The SDK may take up to `connection_monitor_ping_interval` seconds to
+   detect that the server is back. With the default of 10 seconds, wait at least 10–15 seconds after
+   the server recovers before concluding that replay is not happening.
+3. **Call `client.flush()`** — Explicitly flushing the client triggers an immediate replay attempt and
+   waits for all pending messages to be delivered.
+
+### Large backlog taking too long to replay
+
+Increase `OPIK_REPLAY_BATCH_SIZE` and decrease `OPIK_REPLAY_BATCH_REPLAY_DELAY` as shown in the
+high-volume tuning section above.
+
+### Database error in logs
+
+If you see a log message such as `"Some network resiliency features were disabled"`, the SQLite
+database could not be initialised. Check that the temporary directory is writable and that there is
+sufficient disk space.
+
+### Enable debug logging
+
+To see detailed replay activity, enable debug logging before importing `opik`:
+
+```bash
+export OPIK_FILE_LOGGING_LEVEL=DEBUG
+export OPIK_LOGGING_FILE=/tmp/opik-debug.log
+```
+
+Then inspect `/tmp/opik-debug.log` for entries from `replay_manager` and `db_manager`.
