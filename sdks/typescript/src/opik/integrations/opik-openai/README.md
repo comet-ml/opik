@@ -30,8 +30,8 @@ pnpm add opik-openai
 ### Requirements
 
 - Node.js ≥ 18
-- OpenAI SDK (`openai` ≥ 4.0.0)
-- Opik SDK (automatically installed as a dependency)
+- OpenAI SDK (`openai` ≥ 6.0.1)
+- Opik SDK (`opik` peer dependency)
 
 ## Usage
 
