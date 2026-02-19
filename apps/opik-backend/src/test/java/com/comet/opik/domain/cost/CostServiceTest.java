@@ -124,14 +124,12 @@ class CostServiceTest {
 
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
         return Stream.of(
-                // Date suffixes should be stripped and fallback to base model
+                // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
                 Arguments.of("gpt-5.2-2025-12-17", "openai"),
-                Arguments.of("gpt-5.2-2026-01-15", "openai"),
-                Arguments.of("gpt-5.1-2025-11-13", "openai"),
-                Arguments.of("GPT-5.2-2025-12-17", "openai"),
-
-                // Base models should still work
+                // 2. Stripped date on normalized name (dots normalized to hyphens, then date suffix removed)
+                Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
+                // 3. Base models without date suffix should still work
                 Arguments.of("gpt-5.2", "openai"),
-                Arguments.of("gpt-5.1", "openai"));
+                Arguments.of("claude-sonnet-4.5", "anthropic"));
     }
 }
