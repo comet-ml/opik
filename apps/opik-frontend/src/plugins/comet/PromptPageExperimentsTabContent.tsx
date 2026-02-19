@@ -1,19 +1,4 @@
-import React from "react";
-import {
-  PromptPageExperimentsTabContent,
-  PromptPageExperimentsTabProps,
-} from "@/components/pages/PromptPage/PromptPageExperimentsTab";
-import useUserPermission from "./useUserPermission";
+import { PromptPageExperimentsTabContent } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-export const TabContent: React.FC<PromptPageExperimentsTabProps> = (props) => {
-  const { canViewExperiments } = useUserPermission();
-
-  return (
-    <PromptPageExperimentsTabContent
-      {...props}
-      canViewExperiments={!!canViewExperiments}
-    />
-  );
-};
-
-export default TabContent;
+export default withExperimentsViewPermission(PromptPageExperimentsTabContent);

@@ -1,18 +1,4 @@
-import React from "react";
-import SideBarMenuItemsContent, {
-  SideBarMenuItemsProps,
-} from "@/components/layout/SideBar/SideBarMenuItems";
-import useUserPermission from "./useUserPermission";
+import SideBarMenuItems from "@/components/layout/SideBar/SideBarMenuItems";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = (props) => {
-  const { canViewExperiments } = useUserPermission();
-
-  return (
-    <SideBarMenuItemsContent
-      {...props}
-      canViewExperiments={!!canViewExperiments}
-    />
-  );
-};
-
-export default SideBarMenuItems;
+export default withExperimentsViewPermission(SideBarMenuItems);

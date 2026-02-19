@@ -1,20 +1,4 @@
-import React from "react";
-import PlaygroundExperimentsLinkComponent, {
-  PlaygroundExperimentsLinkProps,
-} from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
-import useUserPermission from "./useUserPermission";
+import PlaygroundExperimentsLink from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-const PlaygroundExperimentsLink: React.FC<PlaygroundExperimentsLinkProps> = (
-  props,
-) => {
-  const { canViewExperiments } = useUserPermission();
-
-  return (
-    <PlaygroundExperimentsLinkComponent
-      {...props}
-      canViewExperiments={!!canViewExperiments}
-    />
-  );
-};
-
-export default PlaygroundExperimentsLink;
+export default withExperimentsViewPermission(PlaygroundExperimentsLink);
