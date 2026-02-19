@@ -202,10 +202,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Claude Haiku 4.5",
     },
     {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
-      label: "Claude Haiku 3.5",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3,
       label: "Claude Haiku 3",
     },
@@ -287,10 +283,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
       label: "anthropic/claude-3.5-haiku",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022,
-      label: "anthropic/claude-haiku-4.5",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
