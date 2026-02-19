@@ -15,10 +15,10 @@ const RunExperimentButton: React.FC<
   return (
     <div
       onClick={openNewExperimentDialog}
-      className="bg-background hover:shadow-action-card dark:hover:bg-primary-foreground flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border p-4 transition-shadow dark:hover:shadow-none"
+      className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"
     >
-      <div className="bg-action-experiment-background flex size-[24px] items-center justify-center rounded">
-        <MousePointer className="text-action-experiment-text size-3.5" />
+      <div className="flex size-[24px] items-center justify-center rounded bg-action-experiment-background">
+        <MousePointer className="size-3.5 text-action-experiment-text" />
       </div>
       <div className="comet-body-s">Run an experiment</div>
     </div>

@@ -39,7 +39,7 @@ const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
 
     return (
       <NoData
-        icon={<div className="comet-title-m text-foreground mb-1">403</div>}
+        icon={<div className="comet-title-m mb-1 text-foreground">403</div>}
         title="Access denied"
         message={`You don't have permissions to view ${resourceName} in this workspace.`}
       >
