@@ -16,8 +16,6 @@ from typing import (
 
 if TYPE_CHECKING:
     from opik.evaluation.suite_evaluators import llm_judge
-    from opik.api_objects.dataset.evaluation_suite import EvaluationSuite
-    from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 
 import httpx
 
@@ -41,6 +39,8 @@ from .annotation_queue import rest_operations as annotation_queue_rest_operation
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
+from .dataset import evaluation_suite
+from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
@@ -961,8 +961,8 @@ class Opik:
         name: str,
         description: Optional[str] = None,
         evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
-        execution_policy: Optional["dataset_execution_policy.ExecutionPolicy"] = None,
-    ) -> "EvaluationSuite":
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
         """
         Create a new evaluation suite for regression testing.
 
@@ -1000,7 +1000,7 @@ class Opik:
             >>>
             >>> results = suite.run(task=my_llm_function)
         """
-        from .dataset import evaluation_suite, validators, rest_operations
+        from .dataset import validators, rest_operations
 
         if evaluators:
             validators.validate_evaluators(evaluators, "suite-level evaluators")
@@ -1024,7 +1024,7 @@ class Opik:
             dataset_=suite_dataset,
         )
 
-    def get_evaluation_suite(self, name: str) -> "EvaluationSuite":
+    def get_evaluation_suite(self, name: str) -> evaluation_suite.EvaluationSuite:
         """
         Get an existing evaluation suite by name.
 
@@ -1040,8 +1040,6 @@ class Opik:
         Raises:
             ApiError: If no dataset with the given name exists (404).
         """
-        from .dataset import evaluation_suite
-
         dataset_fern: dataset_public.DatasetPublic = (
             self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
         )
@@ -1065,8 +1063,8 @@ class Opik:
         name: str,
         description: Optional[str] = None,
         evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
-        execution_policy: Optional["dataset_execution_policy.ExecutionPolicy"] = None,
-    ) -> "EvaluationSuite":
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
         """
         Get an existing evaluation suite by name or create a new one if it does not exist.
 

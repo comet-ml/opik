@@ -1,9 +1,12 @@
 """Type definitions for evaluation suite results."""
 
-import dataclasses
-from typing import Dict, List, Optional
+from __future__ import annotations
 
-from opik.evaluation import evaluation_result, test_result
+import dataclasses
+from typing import Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.evaluation import evaluation_result, test_result
 
 
 @dataclasses.dataclass

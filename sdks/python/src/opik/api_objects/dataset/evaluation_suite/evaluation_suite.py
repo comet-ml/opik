@@ -6,18 +6,20 @@ validate that prompt changes, model updates, or code modifications don't
 break existing functionality.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset, dataset_item
-from opik.evaluation import evaluator as opik_evaluator
-from opik.evaluation.suite_evaluators import llm_judge
 
-from . import suite_result_constructor
 from . import types as suite_types
 from .. import validators, execution_policy, rest_operations
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
 
 
 LOGGER = logging.getLogger(__name__)
@@ -121,13 +123,14 @@ class EvaluationSuite:
         Returns:
             A list of item dictionaries.
         """
+        from opik.evaluation.suite_evaluators import llm_judge
         from opik.evaluation.suite_evaluators.llm_judge import (
             config as llm_judge_config,
         )
 
         result = []
         for item in self._dataset.__internal_api__stream_items_as_dataclasses__():
-            evaluator_objects: List[llm_judge.LLMJudge] = []
+            evaluator_objects: list[llm_judge.LLMJudge] = []
             if item.evaluators:
                 for e in item.evaluators:
                     if e.type == "llm_judge":
@@ -327,6 +330,9 @@ class EvaluationSuite:
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
+        from opik.evaluation import evaluator as opik_evaluator
+        from . import suite_result_constructor
+
         eval_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=task,
