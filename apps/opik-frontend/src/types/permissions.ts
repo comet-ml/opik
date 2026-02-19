@@ -1,4 +1,4 @@
 export interface WithPermissionsProps {
-  canViewExperiments: boolean;
-  canViewDashboards: boolean;
+  canViewExperiments?: boolean;
+  canViewDashboards?: boolean;
 }
