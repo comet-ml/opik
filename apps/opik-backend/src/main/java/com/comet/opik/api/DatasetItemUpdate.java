@@ -24,7 +24,7 @@ public record DatasetItemUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item expected output") String expectedOutput,
         @Schema(description = "Dataset item metadata", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> metadata,
         @Schema(description = "Dataset item data", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
-        @Schema(description = "Dataset item description") String description,
+        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item description") String description,
         @Schema(description = "Tags") Set<String> tags,
         @Schema(description = "Evaluators") List<@Valid EvaluatorItem> evaluators,
         @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy,

@@ -4336,7 +4336,13 @@ class DatasetVersionResourceTest {
             assertThat(returnedItems).hasSize(1);
 
             var returnedItem = returnedItems.getFirst();
-            assertThat(returnedItem.description()).isEqualTo(description);
+            var expectedItem = items.getFirst().toBuilder()
+                    .id(returnedItem.id())
+                    .build();
+            assertThat(returnedItem)
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(expectedItem);
         }
 
         @Test
