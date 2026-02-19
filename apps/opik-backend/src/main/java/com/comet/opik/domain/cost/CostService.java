@@ -101,29 +101,29 @@ public class CostService {
             }
         }
 
-        // Try stripping date suffix from normalized name (e.g., "gpt-5-2-2025-12-17" -> "gpt-5-2")
-        String baseNormalizedModelName = stripDateSuffix(normalizedModelName);
-        if (!baseNormalizedModelName.equalsIgnoreCase(normalizedModelName)) {
-            String baseNormalizedKey = createModelProviderKey(baseNormalizedModelName, provider);
-            ModelPrice baseNormalizedMatch = modelProviderPrices.get(baseNormalizedKey);
-            if (baseNormalizedMatch != null) {
-                log.debug(
-                        "Found model price using normalized base name after stripping date suffix. Original: '{}', Base: '{}'",
-                        modelName, baseNormalizedModelName);
-                return baseNormalizedMatch;
-            }
-        }
-
         // Try stripping date suffix from original name with dots preserved (e.g., "gpt-5.2-2025-12-17" -> "gpt-5.2")
         String baseOriginalModelName = stripDateSuffix(modelName);
         if (!baseOriginalModelName.equalsIgnoreCase(modelName)) {
-            String baseOriginalKey = createModelProviderKey(baseOriginalModelName, provider);
-            ModelPrice baseOriginalMatch = modelProviderPrices.get(baseOriginalKey);
-            if (baseOriginalMatch != null) {
+            String normalizedKey = createModelProviderKey(baseOriginalModelName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
                 log.debug(
                         "Found model price using original base name after stripping date suffix. Original: '{}', Base: '{}'",
                         modelName, baseOriginalModelName);
-                return baseOriginalMatch;
+                return normalizedMatch;
+            }
+        }
+
+        // Try stripping date suffix from normalized name (e.g., "gpt-5-2-2025-12-17" -> "gpt-5-2")
+        String baseNormalizedModelName = stripDateSuffix(normalizedModelName);
+        if (!baseNormalizedModelName.equalsIgnoreCase(normalizedModelName)) {
+            String normalizedKey = createModelProviderKey(baseNormalizedModelName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug(
+                        "Found model price using normalized base name after stripping date suffix. Original: '{}', Base: '{}'",
+                        modelName, baseNormalizedModelName);
+                return normalizedMatch;
             }
         }
 
