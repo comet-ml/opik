@@ -6,6 +6,7 @@ import {
   LucideIcon,
   CodeIcon,
 } from "lucide-react";
+import { MessageRole } from "./types";
 
 export type RoleConfig = {
   icon: LucideIcon;
@@ -14,10 +15,7 @@ export type RoleConfig = {
   iconBgColor: string;
 };
 
-export const ROLE_CONFIG: Record<
-  "system" | "user" | "assistant" | "tool" | "function",
-  RoleConfig
-> = {
+export const ROLE_CONFIG: Record<MessageRole, RoleConfig> = {
   system: {
     icon: Settings,
     label: "System",
@@ -47,5 +45,17 @@ export const ROLE_CONFIG: Record<
     label: "Function",
     iconColor: "text-[var(--tag-green-text)]",
     iconBgColor: "bg-[var(--tag-green-bg)]",
+  },
+  human: {
+    icon: User,
+    label: "Human",
+    iconColor: "text-[var(--tag-turquoise-text)]",
+    iconBgColor: "bg-[var(--tag-turquoise-bg)]",
+  },
+  ai: {
+    icon: Bot,
+    label: "AI",
+    iconColor: "text-[var(--tag-yellow-text)]",
+    iconBgColor: "bg-[var(--tag-yellow-bg)]",
   },
 };

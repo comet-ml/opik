@@ -1,6 +1,6 @@
 import PrettyLLMMessage from "@/components/shared/PrettyLLMMessage";
 import {
-  ProviderMapper,
+  FormatMapper,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
   LLMMapperResult,
@@ -611,7 +611,7 @@ const mapCustomOutputFormat = (
  * Maps OpenAI format data to normalized LLMMapperResult.
  * Supports multiple input and output formats.
  */
-export const mapOpenAIMessages: ProviderMapper = (data, prettifyConfig) => {
+export const mapOpenAIMessages: FormatMapper = (data, prettifyConfig) => {
   if (!data) {
     return { messages: [] };
   }

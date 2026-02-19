@@ -1,14 +1,15 @@
 export { detectLLMMessages } from "./detectLLMMessages";
+export { mapAndCombineMessages } from "./mapAndCombineMessages";
 
 export type {
-  LLMProvider,
-  LLMProviderDetectionResult,
+  LLMMessageFormat,
+  LLMMessageFormatDetectionResult,
   LLMBlockDescriptor,
   LLMMessageDescriptor,
   LLMMapperResult,
-  ProviderDetector,
-  ProviderMapper,
-  LLMProviderImplementation,
+  FormatDetector,
+  FormatMapper,
+  LLMMessageFormatImplementation,
 } from "./types";
 
 export { MediaProvider, useMediaContext } from "./MediaContext";
@@ -19,5 +20,3 @@ export {
   resolvePlaceholderURL,
   resolveMediaItems,
 } from "./utils";
-
-export { getProvider, getAllProviders } from "./providers";
