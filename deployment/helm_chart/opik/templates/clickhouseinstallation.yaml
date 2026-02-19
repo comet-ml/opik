@@ -122,6 +122,10 @@ spec:
             ports:
             - name: ch-backup-rest
               containerPort: {{ .Values.clickhouse.backupServer.port }}
+            {{- with .Values.clickhouse.backupServer.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
           {{- end }}
           {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
@@ -134,6 +138,10 @@ spec:
           {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes }}
+          volumes:
+            {{- toYaml .Values.clickhouse.backupServer.extraVolumes | nindent 12 }}
           {{- end }}
       {{- with .Values.clickhouse.extraPodTemplates }}
       {{- . | toYaml | nindent 6 }}
