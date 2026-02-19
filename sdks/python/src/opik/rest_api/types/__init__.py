@@ -217,8 +217,10 @@ from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
 from .dataset_public_status import DatasetPublicStatus
+from .dataset_public_type import DatasetPublicType
 from .dataset_public_visibility import DatasetPublicVisibility
 from .dataset_status import DatasetStatus
+from .dataset_type import DatasetType
 from .dataset_version_diff import DatasetVersionDiff
 from .dataset_version_diff_stats import DatasetVersionDiffStats
 from .dataset_version_page_public import DatasetVersionPagePublic
@@ -241,6 +243,18 @@ from .error_message import ErrorMessage
 from .error_message_detail import ErrorMessageDetail
 from .error_message_detailed import ErrorMessageDetailed
 from .error_message_public import ErrorMessagePublic
+from .evaluator_item import EvaluatorItem
+from .evaluator_item_compare import EvaluatorItemCompare
+from .evaluator_item_compare_type import EvaluatorItemCompareType
+from .evaluator_item_public import EvaluatorItemPublic
+from .evaluator_item_public_type import EvaluatorItemPublicType
+from .evaluator_item_type import EvaluatorItemType
+from .evaluator_item_write import EvaluatorItemWrite
+from .evaluator_item_write_type import EvaluatorItemWriteType
+from .execution_policy import ExecutionPolicy
+from .execution_policy_compare import ExecutionPolicyCompare
+from .execution_policy_public import ExecutionPolicyPublic
+from .execution_policy_write import ExecutionPolicyWrite
 from .experiment import Experiment
 from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from .experiment_group_response import ExperimentGroupResponse
@@ -254,6 +268,8 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_item_public_trace_visibility_mode import ExperimentItemPublicTraceVisibilityMode
+from .experiment_item_reference import ExperimentItemReference
+from .experiment_item_reference_public import ExperimentItemReferencePublic
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
@@ -336,6 +352,7 @@ from .json_list_string_experiment_item_bulk_write_view import JsonListStringExpe
 from .json_list_string_public import JsonListStringPublic
 from .json_list_string_write import JsonListStringWrite
 from .json_node import JsonNode
+from .json_node_compare import JsonNodeCompare
 from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
@@ -747,8 +764,10 @@ __all__ = [
     "DatasetPagePublic",
     "DatasetPublic",
     "DatasetPublicStatus",
+    "DatasetPublicType",
     "DatasetPublicVisibility",
     "DatasetStatus",
+    "DatasetType",
     "DatasetVersionDiff",
     "DatasetVersionDiffStats",
     "DatasetVersionPagePublic",
@@ -771,6 +790,18 @@ __all__ = [
     "ErrorMessageDetail",
     "ErrorMessageDetailed",
     "ErrorMessagePublic",
+    "EvaluatorItem",
+    "EvaluatorItemCompare",
+    "EvaluatorItemCompareType",
+    "EvaluatorItemPublic",
+    "EvaluatorItemPublicType",
+    "EvaluatorItemType",
+    "EvaluatorItemWrite",
+    "EvaluatorItemWriteType",
+    "ExecutionPolicy",
+    "ExecutionPolicyCompare",
+    "ExecutionPolicyPublic",
+    "ExecutionPolicyWrite",
     "Experiment",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
@@ -782,6 +813,8 @@ __all__ = [
     "ExperimentItemCompareTraceVisibilityMode",
     "ExperimentItemPublic",
     "ExperimentItemPublicTraceVisibilityMode",
+    "ExperimentItemReference",
+    "ExperimentItemReferencePublic",
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
@@ -859,6 +892,7 @@ __all__ = [
     "JsonListStringPublic",
     "JsonListStringWrite",
     "JsonNode",
+    "JsonNodeCompare",
     "JsonNodeDetail",
     "JsonNodePublic",
     "JsonNodeWrite",

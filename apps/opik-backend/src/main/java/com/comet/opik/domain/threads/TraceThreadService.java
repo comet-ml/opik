@@ -248,18 +248,19 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
                                 })
                         .flatMap(count -> Mono.fromCallable(() -> {
-                            List<TraceThreadModel> reopenedThreads = existingThreads.stream()
-                                    .filter(TraceThreadModel::isInactive)
-                                    .toList();
-
-                            if (reopenedThreads.isEmpty()) {
+                            // Trigger ThreadsReopened for all existing threads that received new traces,
+                            // regardless of their status. This ensures consistent behavior for score deletion
+                            // and other side effects, independent of the thread status concept.
+                            // Note: The event is named "Reopened" because internally threads still have
+                            // an active/inactive status, even though this is hidden from the UI.
+                            if (existingThreads.isEmpty()) {
                                 return Mono.empty();
                             }
-                            log.info("Reopened '{}' trace threads for projectId: '{}'", reopenedThreads.size(),
-                                    projectId);
+                            log.info("Processing '{}' threads with new traces for projectId: '{}'",
+                                    existingThreads.size(), projectId);
 
                             eventBus.post(new ThreadsReopened(
-                                    reopenedThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
+                                    existingThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
                                     projectId,
                                     context.get(RequestContext.WORKSPACE_ID),
                                     context.get(RequestContext.USER_NAME)));

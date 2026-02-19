@@ -166,6 +166,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      label: "Claude Sonnet 4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      label: "Claude Opus 4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
       label: "Claude Opus 4.5",
     },
@@ -313,12 +321,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+      label: "anthropic/claude-opus-4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5,
       label: "anthropic/claude-sonnet-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
+      label: "anthropic/claude-sonnet-4.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_AFM_4_5B,

@@ -22,6 +22,7 @@ export const MINE_TYPE_TO_ATTACHMENT_TYPE_MAP: Record<string, ATTACHMENT_TYPE> =
     "audio/vorbis": ATTACHMENT_TYPE.AUDIO,
     "audio/wav": ATTACHMENT_TYPE.AUDIO,
     "audio/x-wav": ATTACHMENT_TYPE.AUDIO,
+    "audio/vnd.wave": ATTACHMENT_TYPE.AUDIO,
     "audio/mpeg": ATTACHMENT_TYPE.AUDIO,
     "text/plain": ATTACHMENT_TYPE.TEXT,
     "text/markdown": ATTACHMENT_TYPE.TEXT,

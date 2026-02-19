@@ -7,7 +7,7 @@ const ExperimentsLeaderboardTableWrapper: React.FC<DataTableWrapperProps> = ({
 }) => {
   return (
     <div
-      className="comet-sticky-table relative h-full overflow-auto [&_thead[data-sticky-vertical]]:top-0"
+      className="comet-sticky-table relative h-full overflow-auto [&_thead[data-sticky-vertical]]:!top-0"
       {...{ [TABLE_WRAPPER_ATTRIBUTE]: "" }}
     >
       {children}

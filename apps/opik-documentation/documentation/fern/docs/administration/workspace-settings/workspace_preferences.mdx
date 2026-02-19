@@ -1,0 +1,32 @@
+---
+headline: Workspace Preferences | Opik Documentation
+og:description: Configure workspace-wide preferences including thread timeout and data truncation settings in Opik.
+og:site_name: Opik Documentation
+og:title: 'Opik Workspace Preferences: Customize Your Workspace Behavior'
+subtitle: Configure workspace-wide behavior settings
+title: Workspace Preferences
+---
+
+Workspace preferences let workspace owners configure behavior settings that apply across the entire workspace.
+
+<Note>
+Only workspace owners can modify these preferences. See [Roles and Permissions](/administration/roles_and_permissions) for details.
+</Note>
+
+## Thread Timeout
+
+Set how long a thread stays active before switching to inactive. Options range from 5 minutes up to 1 hour.
+
+Once inactive, you can log feedback scores via the UI, SDK, or online evaluation rules. Sending a new message reactivates the thread and clears all scores, tags, and comments.
+
+**Default:** 5 minutes
+
+## Data Truncation in Tables
+
+Control whether long text values are truncated in table views. When enabled, long values show an ellipsis (...) and you can click to view the full content.
+
+**Default:** Enabled
+
+<Warning>
+Disabling truncation displays full content in tables but limits pagination to 10 items per page. Large amounts of data may cause slower page loading and increased memory usage.
+</Warning>

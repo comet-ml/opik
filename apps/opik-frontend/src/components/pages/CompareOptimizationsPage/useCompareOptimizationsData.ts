@@ -106,6 +106,8 @@ export const useCompareOptimizationsData = () => {
   const {
     data,
     isPending: isExperimentsPending,
+    isPlaceholderData: isExperimentsPlaceholderData,
+    isFetching: isExperimentsFetching,
     refetch: refetchExperiments,
   } = useExperimentsList(
     {
@@ -207,6 +209,8 @@ export const useCompareOptimizationsData = () => {
     // Loading states
     isOptimizationPending,
     isExperimentsPending,
+    isExperimentsPlaceholderData,
+    isExperimentsFetching,
     // Search
     search,
     setSearch,

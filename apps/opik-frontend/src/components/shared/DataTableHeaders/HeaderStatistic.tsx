@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 // Aggregation value constants
 export const AGGREGATION_VALUE = {
@@ -62,6 +63,7 @@ type HeaderStatisticProps = {
   columnsStatistic?: ColumnsStatistic;
   statisticKey?: string;
   dataFormater?: (value: number) => string;
+  tooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
 };
 
@@ -69,8 +71,12 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   columnsStatistic,
   statisticKey,
   dataFormater = formatNumericData,
+  tooltipFormater,
   supportsPercentiles = false,
 }) => {
+  const formatTooltip = (value: number) =>
+    tooltipFormater ? tooltipFormater(value) : String(value);
+
   // Find all statistics matching the key (could have both AVG and PERCENTAGE)
   const matchingStatistics = React.useMemo(() => {
     if (!columnsStatistic || !statisticKey) return [];
@@ -187,9 +193,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
               <div className="flex max-w-full">
                 <span className="comet-body-s truncate text-foreground">
                   <span>{selectedValue}</span>
-                  <span className="ml-1 font-semibold">
-                    {dataFormater(displayValue)}
-                  </span>
+                  <TooltipWrapper content={formatTooltip(displayValue)}>
+                    <span className="ml-1 font-semibold">
+                      {dataFormater(displayValue)}
+                    </span>
+                  </TooltipWrapper>
                 </span>
                 <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
               </div>
@@ -235,9 +243,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
       return (
         <span className="comet-body-s truncate text-foreground">
           <span>{AGGREGATION_VALUE.AVG}</span>
-          <span className="ml-1 font-semibold">
-            {dataFormater(statistic.value)}
-          </span>
+          <TooltipWrapper content={formatTooltip(statistic.value)}>
+            <span className="ml-1 font-semibold">
+              {dataFormater(statistic.value)}
+            </span>
+          </TooltipWrapper>
         </span>
       );
     }
@@ -245,9 +255,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
       return (
         <span className="comet-body-s truncate text-foreground">
           <span>{statistic.type.toLowerCase()}</span>
-          <span className="ml-1 font-semibold">
-            {dataFormater(statistic.value)}
-          </span>
+          <TooltipWrapper content={formatTooltip(statistic.value)}>
+            <span className="ml-1 font-semibold">
+              {dataFormater(statistic.value)}
+            </span>
+          </TooltipWrapper>
         </span>
       );
     case STATISTIC_AGGREGATION_TYPE.PERCENTAGE:
@@ -257,9 +269,15 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground">
                 <span>{selectedValue}</span>
-                <span className="ml-1 font-semibold">
-                  {dataFormater(get(statistic.value, selectedValue, 0))}
-                </span>
+                <TooltipWrapper
+                  content={formatTooltip(
+                    get(statistic.value, selectedValue, 0),
+                  )}
+                >
+                  <span className="ml-1 font-semibold">
+                    {dataFormater(get(statistic.value, selectedValue, 0))}
+                  </span>
+                </TooltipWrapper>
               </span>
               <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
             </div>

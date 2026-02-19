@@ -86,7 +86,6 @@ component:
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -192,7 +191,6 @@ component:
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -203,7 +201,7 @@ component:
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      # PYTHON_CODE_EXECUTOR_IMAGE_TAG defaults to Chart.AppVersion when not specified
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
@@ -272,17 +270,33 @@ component:
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
-
+      enabled: false
+      annotations: {}
+      additionalRules: []
+      # example networks to block
+      # # Allow egress to public internet, excluding private / reserved ranges
+      #   - to:
+      #     - ipBlock:
+      #         cidr: 0.0.0.0/0
+      #         except:
+      #           # Standard RFC1918 Private Ranges
+      #           - 10.0.0.0/8
+      #           - 172.16.0.0/12
+      #           - 192.168.0.0/16
+      #           # EKS / Carrier Grade NAT
+      #           - 100.64.0.0/10
+      #           # AWS Metadata & Link Local (Very Important)
+      #           - 169.254.0.0/16
+      #           # Loopback range
+      #           - 127.0.0.0/8
+      #           # Reserved / Protocol Ranges
+      #           - 192.0.0.0/24
+      #           - 198.18.0.0/15
+      #           # Multicast ranges
+      #           - 224.0.0.0/4
+      #           # Broadcast address
+      #           - 255.255.255.255/32
+      
     service:
       type: ClusterIP
       ports:
@@ -301,6 +315,80 @@ component:
         hosts: []
         secretName: ""
 
+  # Configuration for the AI backend service.
+  # Disabled by default; enable to run the AI backend in-cluster.
+  ai-backend:
+    # Whether to deploy the AI backend component (default: false).
+    enabled: false
+    # ServiceAccount configuration for the AI backend pods.
+    serviceAccount:
+      # Create a dedicated ServiceAccount for the AI backend (default: true).
+      create: true
+      # Name of the ServiceAccount used by the AI backend pods.
+      name: opik-ai-backend
+    metrics:
+      enabled: false
+    image:
+      repository: opik-ai-backend
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    backendConfigMap:
+      enabled: true
+    podDisruptionBudget:
+      enabled: false
+    env:
+      PORT: "8081"
+      URL_PREFIX: "/opik-ai"
+      SESSION_SERVICE_URI: "mysql://opik:opik@opik-mysql:3306/opik"
+      AGENT_OPIK_URL: "http://opik-backend:8080"
+      OPIK_URL_OVERRIDE: "http://opik-backend:8080"
+    # Optional: Reference external Kubernetes secrets for sensitive configuration
+    # Use this to inject LLM API keys (OPENAI_API_KEY, etc.)
+    # secretRefs:
+    #   - name: "opik-llm-api-keys"
+    secretRefs: []
+    envFrom:
+      - configMapRef:
+          name: opik-ai-backend
+    securityContext: {}
+    ports:
+      - name: http
+        containerPort: 8081
+        protocol: TCP
+    service:
+      type: ClusterIP
+      ports:
+      - name: http
+        port: 8081
+        protocol: TCP
+        targetPort: 8081
+    ingress:
+      enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
+    livenessProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+    readinessProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+      initialDelaySeconds: 10
+    startupProbe:
+      httpGet:
+        path: /opik-ai/healthz
+        port: 8081
+      failureThreshold: 30
+      periodSeconds: 10
+
   frontend:
     enabled: true
     serviceAccount:
@@ -311,7 +399,6 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -337,6 +424,12 @@ component:
         #     - path: /
         #       port: 5173
         #       pathType: Prefix
+        #     - path: /api
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /opik-ai
+        #       port: 5173
+        #       pathType: Prefix
       tls:
         enabled: false
         hosts: []
@@ -348,57 +441,124 @@ component:
     # use internal aws resolvr on vpc
     awsResolver: false
     # Enable HSTS header (only enable when running behind HTTPS termination)
+    # DEPRECATED: Use extraServerHeaders instead for more flexibility
     hstsEnabled: false
+    # Cache control configuration for static assets
+    # Defines max-age values for different file types based on deployment frequency
+    # List of pattern/value pairs - order matters! First match wins in nginx map.
+    # Patterns are evaluated in the order defined here.
+    cacheControl:
+      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
+      - pattern: "~assets/.*\\.(js|css)$"
+        value: "public, max-age=604800, immutable"
+      # Images - 30 days cache (static assets, but may update)
+      - pattern: "~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$"
+        value: "public, max-age=2592000"
+      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
+      - pattern: "~assets/.*\\.(woff|woff2|ttf|eot)$"
+        value: "public, max-age=2592000"
+      # JSON/data files - 1 day cache (may update frequently)
+      - pattern: "~assets/.*\\.json$"
+        value: "public, max-age=86400"
+      # HTML files and everything else - always revalidate to get fresh content
+      - pattern: "default"
+        value: "no-cache, must-revalidate"
+    # Extra server-level headers to add to all responses
+    # Use this to add custom security headers or override defaults
+    # Key is the header name, value can be a string or list of strings
+    # If list, multiple add_header directives will be generated
+    extraServerHeaders:
+      # OWASP recommended security headers (defaults)
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "0"
+      # Add custom headers or override defaults:
+      # X-Custom-Header: "custom-value"
+      # Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+      # Multiple values example (list):
+      # Link:
+      #   - "</style.css>; rel=preload; as=style"
+      #   - "</script.js>; rel=preload; as=script"
     # Content Security Policy (CSP) configuration
     # Customize these lists to allow additional external services (analytics, CDNs, etc.)
-    csp:
-      enabled: true
+    # Note: The legacy 'csp.enabled' flag is still honored for backward compatibility.
+    # If you previously set 'csp.enabled: false', CSP headers will not be added.
+    contentSecurityPolicy:
+      # Default source for all directives
+      default-src:
+        - "'self'"
       # Scripts allowed to execute
-      scriptSrc:
+      script-src:
         - "'self'"
         - "'unsafe-inline'"
         - "'unsafe-eval'"
         # Add external services here, e.g.:
         # - "https://cdn.example.com"
       # Styles allowed to load
-      styleSrc:
+      style-src:
         - "'self'"
         - "'unsafe-inline'"
         - "https://fonts.googleapis.com"
       # Images allowed to load
-      imgSrc:
+      img-src:
         - "'self'"
         - "data:"
         - "blob:"
         - "https:"
         - "http:"
       # Media (audio/video) allowed to load
-      mediaSrc:
+      media-src:
         - "'self'"
         - "https:"
         - "http:"
       # Fonts allowed to load
-      fontSrc:
+      font-src:
         - "'self'"
         - "data:"
         - "https://fonts.gstatic.com"
       # XHR/Fetch/WebSocket connections allowed
-      connectSrc:
+      connect-src:
         - "'self'"
         - "ws:"
         - "wss:"
         - "https:"
         # Add external API endpoints here, e.g.:
         # - "https://api.example.com"
-      # Frame ancestors (who can embed this site)
-      frameAncestors:
+      # Objects/plugins (Flash, Java, etc.)
+      object-src:
         - "'none'"
+      # Base URI for relative URLs
+      base-uri:
+        - "'self'"
+      # Frame ancestors (who can embed this site)
+      frame-ancestors:
+        - "'none'"
+      # Child frames/workers
+      child-src:
+        - "'self'"
+      # Form submission targets
+      form-action:
+        - "'self'"
+      # Manifest files
+      manifest-src:
+        - "'self'"
+      # Worker, shared worker, service worker sources
+      worker-src:
+        - "'self'"
+        - "blob:"
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    # Upstream config for opik-ai-backend (SSE streaming)
+    aiBackendUpstreamConfig:
+      proxy_read_timeout: 300
+      proxy_connect_timeout: 90
+      proxy_send_timeout: 300
+      proxy_buffering: 'off'
+      gzip: 'off'
     podDisruptionBudget:
       enabled: false
 
@@ -424,8 +584,8 @@ minio:
   enabled: true
   image:
     registry: docker.io
-    repository: minio/minio
-    tag: "RELEASE.2025-03-12T18-04-18Z"
+    repository: cloudpirates/image-minio
+    tag: "RELEASE.2025-10-15T17-29-55Z-hardened"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   config:
@@ -484,7 +644,7 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
+  image: altinity/clickhouse-server:25.3.8.10041.altinitystable
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
@@ -703,9 +863,8 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
-  selectorLabels:
-    name: zookeeper-opik
-    instance: opik
+  commonLabels:
+    app.kubernetes.io/name: zookeeper-opik
 
     # resources:
     #   requests:

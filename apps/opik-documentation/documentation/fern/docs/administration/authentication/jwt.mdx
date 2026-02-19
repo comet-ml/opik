@@ -1,0 +1,404 @@
+---
+headline: JWT Authentication | Opik Documentation
+og:description: Learn how to configure JWT-based authentication for programmatic access to your Opik organization.
+og:site_name: Opik Documentation
+og:title: 'Configure JWT Authentication in Opik: API Access Guide'
+subtitle: Setting up JWT token authentication for programmatic and service access
+title: JWT Authentication
+---
+
+JWT (JSON Web Token) authentication enables programmatic access to Opik using externally issued tokens. This is ideal for service-to-service authentication, custom auth flows, and integration with existing JWT-based systems.
+
+<Note>
+JWT authentication is available on Enterprise plans. This feature is not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable this feature for your Opik deployment.
+</Note>
+
+## When to use JWT authentication
+
+JWT authentication is best suited for:
+
+- **Backend services** that need to access Opik's API
+- **CI/CD pipelines** running automated experiments
+- **Custom applications** with existing JWT infrastructure
+- **Service-to-service** communication without user interaction
+
+For human users logging in interactively, consider [SAML](/administration/authentication/saml) or [OIDC](/administration/authentication/oidc) SSO instead.
+
+## Prerequisites
+
+Before configuring JWT authentication, you need:
+
+- **Organization admin access** to Opik
+- **Enterprise plan** enabled for your organization
+- **JWT infrastructure** capable of issuing signed tokens
+- **JWKS endpoint** (recommended) or public key for token verification
+
+## How JWT authentication works
+
+```
+┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+│   Service/   │      │    Opik      │      │    JWKS      │
+│   Client     │      │    API       │      │   Endpoint   │
+└──────┬───────┘      └──────┬───────┘      └──────┬───────┘
+       │                     │                     │
+       │  1. Request with    │                     │
+       │     JWT in header   │                     │
+       │────────────────────>│                     │
+       │                     │  2. Fetch keys      │
+       │                     │     (cached)        │
+       │                     │────────────────────>│
+       │                     │<────────────────────│
+       │                     │                     │
+       │                     │  3. Verify JWT      │
+       │                     │     signature       │
+       │                     │                     │
+       │                     │  4. Validate claims │
+       │                     │     (iss, aud, sub) │
+       │                     │                     │
+       │  5. API response    │                     │
+       │<────────────────────│                     │
+```
+
+1. Client sends an API request with a JWT in the `Authorization` header.
+2. Opik fetches public keys from your JWKS endpoint (cached for performance).
+3. Opik verifies the JWT signature using the appropriate key.
+4. Opik validates claims (issuer, audience, subject).
+5. If valid, the request is processed as the mapped user.
+
+## Configuration options
+
+JWT authentication can be configured with either:
+
+| Option | Description | Use case |
+| --- | --- | --- |
+| **JWKS URI** | URL to fetch public keys dynamically | Recommended for most deployments |
+| **Static Public Key** | Fixed public key for verification | On-premises deployments only |
+
+<Note>
+You must configure **either** a JWKS URI **or** a static public key, but not both.
+</Note>
+
+## Configuring JWT authentication
+
+### Step 1: Navigate to SSO settings
+
+1. Go to **Admin Dashboard** > **SSO Configuration**.
+2. Select **JWT Authentication** (may be under advanced options).
+
+### Step 2: Choose key verification method
+
+<Tabs>
+<Tab value="jwks" title="JWKS URI (Recommended)">
+
+### Using JWKS URI
+
+JWKS (JSON Web Key Set) is the recommended approach as it:
+
+- Supports automatic key rotation
+- Allows multiple keys for seamless rotation
+- Follows industry best practices
+
+**Configuration:**
+
+| Field | Description | Example |
+| --- | --- | --- |
+| **JWKS URI** | URL of your JWKS endpoint | `https://auth.company.com/.well-known/jwks.json` |
+
+**Requirements:**
+
+- The endpoint must be publicly accessible (or accessible from Opik's servers).
+- Must return valid JWKS JSON format.
+- Must be unique across organizations (no two orgs can share a JWKS URI).
+- Should support HTTPS.
+
+**Example JWKS response:**
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "kid": "key-1",
+      "use": "sig",
+      "n": "0vx7agoebGcQ...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+</Tab>
+<Tab value="static" title="Static Public Key (On-Prem Only)">
+
+### Using static public key
+
+<Note>
+**On-premises only**: Static public key configuration is only available for on-premises deployments. Cloud deployments must use JWKS URI.
+</Note>
+
+Static public key configuration is simpler but requires manual key rotation:
+
+| Field | Description | Example |
+| --- | --- | --- |
+| **Static Public Key** | PEM-encoded public key | `-----BEGIN PUBLIC KEY-----...` |
+
+**Format:**
+
+The public key must be in PEM format:
+
+```
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+-----END PUBLIC KEY-----
+```
+
+<Warning>
+**Key rotation**: When using static keys, you must manually update the configuration when rotating keys. Plan for rotation procedures to avoid service disruptions.
+</Warning>
+
+</Tab>
+</Tabs>
+
+### Step 3: Configure subject mapping
+
+Subject mapping determines how Opik identifies users from JWT claims:
+
+| Field | Description | Options |
+| --- | --- | --- |
+| **Subject Mapping Type** | How to interpret the subject claim | `EMAIL` or `USER_NAME` |
+| **Subject Claim Name** | Which claim contains the subject | Default: `sub` |
+
+**Subject mapping types:**
+
+| Type | Description | Example claim value |
+| --- | --- | --- |
+| `EMAIL` | Subject is an email address | `user@company.com` |
+| `USER_NAME` | Subject is a username | `jsmith` |
+
+<Tip>
+Use `EMAIL` mapping when your JWT tokens contain email addresses in the subject claim. This is the most common configuration.
+</Tip>
+
+**Custom claim name:**
+
+By default, Opik reads the `sub` (subject) claim. If your tokens use a different claim:
+
+```json
+{
+  "sub": "12345",
+  "email": "user@company.com",
+  "preferred_username": "jsmith"
+}
+```
+
+Set **Subject Claim Name** to `email` or `preferred_username` to use those claims instead.
+
+### Step 4: Configure optional restrictions
+
+#### Allowed issuers
+
+Restrict which token issuers are accepted:
+
+| Field | Description |
+| --- | --- |
+| **Allowed Issuers** | List of accepted `iss` claim values |
+
+**Example:**
+
+```
+https://auth.company.com
+https://auth.partner.com
+```
+
+If configured, tokens with issuers not in this list will be rejected.
+
+#### Allowed audiences
+
+Restrict which audiences are accepted:
+
+| Field | Description |
+| --- | --- |
+| **Allowed Audiences** | List of accepted `aud` claim values |
+
+**Example:**
+
+```
+opik-api
+https://api.opik.com
+```
+
+If configured, tokens without a matching audience claim will be rejected.
+
+<Tip>
+**Security best practice**: Configure both allowed issuers and audiences to ensure only specifically intended tokens can access your organization.
+</Tip>
+
+## JWT token requirements
+
+### Required claims
+
+Your JWT tokens must include:
+
+| Claim | Description | Example |
+| --- | --- | --- |
+| `sub` (or custom) | Subject identifying the user | `user@company.com` |
+| `iat` | Issued at timestamp | `1704067200` |
+| `exp` | Expiration timestamp | `1704070800` |
+
+### Recommended claims
+
+| Claim | Description | Example |
+| --- | --- | --- |
+| `iss` | Token issuer | `https://auth.company.com` |
+| `aud` | Intended audience | `opik-api` |
+
+### Required header
+
+When using JWKS with multiple keys:
+
+| Header | Description | Example |
+| --- | --- | --- |
+| `kid` | Key ID matching JWKS key | `key-1` |
+| `alg` | Algorithm (must match key) | `RS256` |
+
+<Warning>
+**Multi-tenant requirement**: If your JWKS endpoint contains multiple keys, the JWT **must include a `kid` (Key ID)** header to identify which key to use for verification. Missing `kid` headers can cause authentication failures.
+</Warning>
+
+## Using JWT authentication
+
+### API requests
+
+Include the JWT in the `Authorization` header:
+
+```bash
+curl -X GET "https://api.opik.com/v1/projects" \
+  -H "Authorization: Bearer <your-jwt-token>"
+```
+
+### SDK configuration
+
+Configure the Opik SDK to use JWT authentication:
+
+<Tabs>
+<Tab value="python" title="Python">
+
+```python
+import opik
+
+# Configure with JWT token
+client = opik.Opik(
+    api_key="<your-jwt-token>",
+    workspace="your-workspace"
+)
+```
+
+</Tab>
+<Tab value="typescript" title="TypeScript">
+
+```typescript
+import { Opik } from 'opik';
+
+const client = new Opik({
+  apiKey: '<your-jwt-token>',
+  workspace: 'your-workspace'
+});
+```
+
+</Tab>
+</Tabs>
+
+## Key caching and performance
+
+### JWKS caching
+
+Opik caches JWKS responses to improve performance:
+
+- **Cache duration**: Keys are cached and periodically refreshed.
+- **Automatic refresh**: Keys are fetched on cache expiry or when a new `kid` is encountered.
+- **Fallback**: If JWKS endpoint is temporarily unavailable, cached keys are used.
+
+### Configuration options (on-premises)
+
+On-premises deployments can configure caching behavior:
+
+| Environment variable | Description | Default |
+| --- | --- | --- |
+| `JWKS_CACHE_UPDATE_SECONDS` | How often to refresh the cache | 300 (5 minutes) |
+| `JWKS_FETCH_TIMEOUT_MS` | Timeout for JWKS fetch requests | 5000 (5 seconds) |
+
+## Troubleshooting
+
+### Common issues
+
+| Issue | Possible cause | Solution |
+| --- | --- | --- |
+| "Invalid token signature" | Key mismatch | Verify JWKS endpoint returns correct keys |
+| "Token expired" | `exp` claim in the past | Issue tokens with appropriate expiration |
+| "Unknown key ID" | `kid` not in JWKS | Ensure token `kid` matches a key in JWKS |
+| "Invalid issuer" | `iss` not in allowed list | Add issuer to allowed issuers or remove restriction |
+| "Invalid audience" | `aud` not in allowed list | Add audience to allowed audiences or remove restriction |
+| "User not found" | Subject doesn't map to user | Verify subject claim contains valid email/username |
+
+### Debugging JWT tokens
+
+Decode and inspect your JWT token (do not use for production tokens containing secrets):
+
+```bash
+# Decode JWT header and payload (without verification)
+echo "<your-jwt>" | cut -d'.' -f1 | base64 -d 2>/dev/null | jq .
+echo "<your-jwt>" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .
+```
+
+Or use [jwt.io](https://jwt.io) to inspect token contents.
+
+### Verifying JWKS endpoint
+
+Test that your JWKS endpoint is accessible and returns valid JSON:
+
+```bash
+curl -s "https://auth.company.com/.well-known/jwks.json" | jq .
+```
+
+Verify that:
+
+- The endpoint returns HTTP 200.
+- Response is valid JSON with a `keys` array.
+- Keys include `kid`, `kty`, and algorithm-specific fields.
+
+### Token generation checklist
+
+Before integrating, verify your tokens:
+
+1. **Signature**: Token is signed with a key in your JWKS.
+2. **Header**: Includes `kid` matching a key in JWKS (if multiple keys).
+3. **Subject**: Contains user email or username in the configured claim.
+4. **Expiration**: `exp` claim is in the future.
+5. **Issuer**: Matches allowed issuers (if configured).
+6. **Audience**: Matches allowed audiences (if configured).
+
+## Security best practices
+
+### Token lifecycle
+
+- **Short expiration**: Use short-lived tokens (e.g., 1 hour).
+- **Refresh tokens**: Implement token refresh for long-running processes.
+- **Revocation**: Have a process to rotate keys if compromised.
+
+### Key management
+
+- **Key rotation**: Rotate keys periodically (e.g., every 90 days).
+- **Multiple keys**: Maintain multiple keys in JWKS during rotation.
+- **Secure storage**: Protect private keys used for signing.
+
+### Access restrictions
+
+- **Limit issuers**: Configure allowed issuers to prevent token from unauthorized sources.
+- **Limit audiences**: Configure allowed audiences to ensure tokens are intended for Opik.
+- **Monitor usage**: Review authentication logs for anomalies.
+
+## Next steps
+
+- [Configure SAML](/administration/authentication/saml) for interactive user authentication.
+- [Configure OIDC](/administration/authentication/oidc) for OAuth-based authentication.
+- [Create service accounts](/administration/admin-dashboard/service_accounts) for an alternative programmatic access method.

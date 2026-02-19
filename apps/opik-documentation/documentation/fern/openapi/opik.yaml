@@ -2222,6 +2222,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/retrieve:
+    post:
+      tags:
+      - Datasets
+      summary: Retrieve dataset version by name
+      description: "Get a specific version by its version name (e.g., 'v1', 'v373').\
+        \ This is more efficient than paginating through all versions for large datasets."
+      operationId: retrieveDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRetrieveRequest_Public"
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/hash/{versionHash}:
     patch:
       tags:
@@ -2531,6 +2570,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: filters
         in: query
         schema:
@@ -2574,6 +2617,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
+          description: Filter experiments by deleted projects
       - name: filters
         in: query
         schema:
@@ -8910,6 +8958,14 @@ components:
             type: string
             readOnly: true
           readOnly: true
+        evaluators:
+          type: array
+          description: Default evaluators for items in this version
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         created_at:
           type: string
           format: date-time
@@ -8924,6 +8980,40 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+      description: Default evaluators for items in this version
+      readOnly: true
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Default execution policy for items in this version
+      readOnly: true
     DatasetItemChanges_Public:
       type: object
     DatasetItemBatchUpdate:
@@ -9009,7 +9099,48 @@ components:
           items:
             type: string
             description: Tags
+        evaluators:
+          type: array
+          description: Evaluators
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
+        clear_execution_policy:
+          type: boolean
+          description: "When true, clears the item-level execution policy (falls back\
+            \ to dataset-level)"
       description: Dataset item update request
+    EvaluatorItem:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode"
+    ExecutionPolicy:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     Dataset:
       required:
       - name
@@ -9021,6 +9152,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9124,6 +9260,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9198,6 +9339,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         experiment_items:
           type: array
           readOnly: true
@@ -9265,6 +9412,13 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
@@ -9443,6 +9597,42 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Write"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Write"
+    EvaluatorItem_Write:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    ExecutionPolicy_Write:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -9751,6 +9941,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Compare"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         experiment_items:
           type: array
           readOnly: true
@@ -9774,6 +9970,36 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Compare:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Compare"
+    ExecutionPolicy_Compare:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -9793,6 +10019,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
@@ -9897,6 +10127,8 @@ components:
         items:
           type: object
       - type: string
+    JsonNode_Compare:
+      type: object
     ValueEntry_Compare:
       type: object
       properties:
@@ -9976,6 +10208,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10193,6 +10430,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         experiment_items:
           type: array
           readOnly: true
@@ -10235,6 +10478,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10444,6 +10691,17 @@ components:
           minLength: 1
           type: string
           description: Version hash or tag to restore from
+    DatasetVersionRetrieveRequest_Public:
+      required:
+      - version_name
+      type: object
+      properties:
+        version_name:
+          minLength: 1
+          pattern: ^v\d+$
+          type: string
+          description: "Version name in format 'vN' (e.g., 'v1', 'v373')"
+          example: v1
     DatasetVersionUpdate_Public:
       type: object
       properties:
@@ -10868,6 +11126,32 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    ExperimentItemReference:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation:
       type: object
       properties:
@@ -10973,6 +11257,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace:
       required:
       - start_time
@@ -11065,6 +11353,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -11090,6 +11382,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference"
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -11264,6 +11558,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -11300,6 +11598,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
@@ -14245,6 +14547,9 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        ttft:
+          type: number
+          format: double
     ErrorInfo_Write:
       required:
       - exception_type
@@ -14323,6 +14628,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     SpanBatch:
       required:
       - spans
@@ -14511,6 +14820,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     ValueEntry_Public:
       type: object
       properties:
@@ -14704,6 +15017,9 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+        ttft:
+          type: number
+          format: double
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -14789,6 +15105,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
     TraceBatch:
@@ -14885,6 +15205,32 @@ components:
           enum:
           - passed
           - failed
+    ExperimentItemReference_Public:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -14984,6 +15330,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -15009,6 +15359,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference_Public"
     TraceThread:
       type: object
       properties:
@@ -15371,6 +15723,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

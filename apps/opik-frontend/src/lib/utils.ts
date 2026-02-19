@@ -220,7 +220,7 @@ export const calculateWorkspaceName = (
 export const extractIdFromLocation = (location: string) =>
   last(location?.split("/"));
 
-export const formatNumericData = (value: number, precision = 3) =>
+export const formatNumericData = (value: number, precision = 2) =>
   String(round(value, precision));
 
 export const formatNumberInK = (value: number, precision = 1): string => {

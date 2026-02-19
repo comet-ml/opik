@@ -514,7 +514,7 @@ export async function getPackageManager({
   const selectedPackageManager: PackageManager = await abortIfCancelled(
     clack.select({
       message,
-      options: options.map((packageManager) => ({
+      options: options.map((packageManager: PackageManager) => ({
         value: packageManager,
         label: packageManager.label,
       })),
@@ -570,7 +570,7 @@ async function handleLocalDeploymentConfig(): Promise<string> {
       clack.text({
         message: 'Please enter your Opik instance URL',
         placeholder: 'http://localhost:5173/',
-        validate: (value: string) => {
+        validate: (value: string | undefined) => {
           if (!value || value.trim() === '') {
             return 'URL cannot be empty. Please enter a valid URL...';
           }
@@ -628,7 +628,7 @@ async function handleSelfHostedDeploymentConfig(): Promise<string> {
       clack.text({
         message: 'Please enter your Opik instance URL',
         placeholder: 'https://your-opik-instance.com/',
-        validate: (value: string) => {
+        validate: (value: string | undefined) => {
           if (!value || value.trim() === '') {
             return 'URL cannot be empty. Please enter a valid URL...';
           }
@@ -801,7 +801,7 @@ export async function getOrAskForProjectData(options?: {
       projectApiKey = await abortIfCancelled(
         clack.password({
           message: 'Enter your Opik API key',
-          validate: (value: string) => {
+          validate: (value: string | undefined) => {
             if (!value || value.trim() === '') {
               return 'API key is required';
             }
@@ -840,7 +840,7 @@ export async function getOrAskForProjectData(options?: {
           : 'Enter your workspace name',
         placeholder: defaultWorkspaceName || 'your-workspace-name',
         defaultValue: defaultWorkspaceName,
-        validate: (value: string) => {
+        validate: (value: string | undefined) => {
           // Allow empty input if defaultValue is set (Enter key will use default)
           if ((!value || value.trim() === '') && !defaultWorkspaceName) {
             return 'Workspace name is required';
@@ -1031,7 +1031,7 @@ export async function askForToolConfigPath(
     clack.text({
       message: `Please enter the path to your ${toolName} config file:`,
       placeholder: join('.', configFileName),
-      validate: (value: string) => {
+      validate: (value: string | undefined) => {
         if (!value) {
           return 'Please enter a path.';
         }

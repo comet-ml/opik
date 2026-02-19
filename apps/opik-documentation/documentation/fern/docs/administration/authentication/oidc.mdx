@@ -1,0 +1,350 @@
+---
+headline: OIDC SSO Configuration | Opik Documentation
+og:description: Learn how to configure OpenID Connect (OIDC) single sign-on for your Opik organization.
+og:site_name: Opik Documentation
+og:title: 'Configure OIDC SSO in Opik: Step-by-Step Guide'
+subtitle: Setting up OpenID Connect authentication with your identity provider
+title: OIDC SSO
+---
+
+OpenID Connect (OIDC) is a modern authentication protocol built on OAuth 2.0. This guide walks you through configuring OIDC SSO for your Opik organization.
+
+<Note>
+OIDC SSO is available on Enterprise plans. This feature is not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable this feature for your Opik deployment.
+</Note>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Organization admin access** to Opik
+- **Admin access** to your identity provider that supports OIDC
+- **Enterprise plan** enabled for your organization
+- **Email domain** you want to use for SSO (e.g., `company.com`)
+
+## OIDC vs. SAML
+
+OIDC offers several advantages over SAML:
+
+| Feature | OIDC | SAML |
+| --- | --- | --- |
+| Protocol | REST/JSON-based | XML-based |
+| Token format | JWT | XML assertions |
+| Setup complexity | Simpler | More complex |
+| Mobile/API friendly | Yes | Limited |
+| Workspace sync | Via default workspace | Via attribute mapping |
+
+Choose OIDC when:
+
+- Your IdP supports OIDC (most modern IdPs do)
+- You prefer simpler configuration
+- You don't need attribute-based workspace sync
+
+Choose [SAML](/administration/authentication/saml) when:
+
+- You need automatic workspace assignment based on user attributes
+- Your organization requires SAML specifically
+
+## Configuration overview
+
+Setting up OIDC SSO involves:
+
+1. **Register Opik** in your identity provider as an OIDC application.
+2. **Configure Opik** with your IdP's OIDC endpoints and credentials.
+
+## Step 1: Register Opik in your IdP
+
+Create a new OIDC/OAuth application in your identity provider:
+
+### Application settings
+
+| Setting | Value |
+| --- | --- |
+| **Application type** | Web application |
+| **Grant type** | Authorization Code |
+| **Redirect/Callback URL** | `https://www.comet.com/opik/oauth/callback/<organization-id>` |
+
+<Tip>
+The exact callback URL will be displayed in your Opik SSO configuration page. Copy it directly from there.
+</Tip>
+
+### Required scopes
+
+Ensure your OIDC application requests these scopes:
+
+- `openid` - Required for OIDC
+- `profile` - User profile information
+- `email` - User's email address
+
+## Step 2: Gather IdP information
+
+After registering the application, collect the following from your IdP:
+
+| Information | Description | Where to find |
+| --- | --- | --- |
+| **Client ID** | Unique identifier for your application | IdP application settings |
+| **Client Secret** | Secret key for authentication | IdP application settings |
+| **Authorization URL** | Endpoint for authorization requests | IdP documentation or well-known endpoint |
+| **Token URL** | Endpoint to exchange codes for tokens | IdP documentation or well-known endpoint |
+| **User Info URL** | Endpoint to fetch user profile | IdP documentation or well-known endpoint |
+
+<Tip>
+**Well-known endpoint**: Most OIDC providers expose a discovery document at `/.well-known/openid-configuration` containing all endpoint URLs.
+</Tip>
+
+## Step 3: Configure Opik
+
+1. Navigate to **Admin Dashboard** > **SSO Configuration**.
+2. Select **OIDC** as the SSO protocol.
+3. Enter the following settings:
+
+### Required OIDC settings
+
+| Field | Description | Example |
+| --- | --- | --- |
+| **Domain** | Email domain for SSO users | `company.com` |
+| **Client ID** | Application identifier from your IdP | `abc123xyz` |
+| **Client Secret** | Secret key from your IdP | `secret_...` |
+| **Authorization URL** | IdP's authorization endpoint | `https://idp.company.com/oauth/authorize` |
+| **Token URL** | IdP's token endpoint | `https://idp.company.com/oauth/token` |
+| **Callback URL** | Opik's callback URL | `https://www.comet.com/opik/oauth/callback/...` |
+| **User Info URL** | IdP's user info endpoint | `https://idp.company.com/oauth/userinfo` |
+
+### Optional OIDC settings
+
+| Field | Description | Default |
+| --- | --- | --- |
+| **Default Workspace** | Workspace for new SSO users | Organization default |
+| **Application Resource ID** | Custom resource identifier | Not set |
+
+## Field reference
+
+### Client ID
+
+The unique identifier assigned to Opik when you registered it with your IdP:
+
+- Created when you register the application
+- Used in authorization requests to identify Opik
+- Should be treated as public (not secret)
+
+### Client Secret
+
+The secret key used to authenticate Opik with your IdP:
+
+- Created when you register the application
+- Used when exchanging authorization codes for tokens
+- **Must be kept secret** - never expose in client-side code
+
+<Warning>
+**Security**: The client secret is sensitive. If compromised, regenerate it in your IdP and update the configuration in Opik.
+</Warning>
+
+### Authorization URL (Auth Base URL)
+
+The endpoint where users are redirected to authenticate:
+
+```
+https://idp.company.com/oauth/authorize
+```
+
+This URL receives authorization requests with:
+
+- `client_id` - Your application's client ID
+- `redirect_uri` - The callback URL
+- `scope` - Requested permissions
+- `response_type` - Always `code` for authorization code flow
+- `state` - Security parameter to prevent CSRF
+
+### Token URL (Access Token URL)
+
+The endpoint where Opik exchanges authorization codes for access tokens:
+
+```
+https://idp.company.com/oauth/token
+```
+
+Opik sends a POST request with:
+
+- `grant_type` - Always `authorization_code`
+- `code` - The authorization code received
+- `redirect_uri` - The callback URL
+- `client_id` and `client_secret` - For authentication
+
+### Callback URL
+
+The URL where your IdP redirects users after authentication:
+
+```
+https://www.comet.com/opik/oauth/callback/<organization-id>
+```
+
+- Must be registered in your IdP's allowed redirect URIs
+- Must match exactly (including trailing slashes)
+- Opik generates this URL based on your organization ID
+
+### Protected Resource URL (User Info URL)
+
+The endpoint where Opik fetches user profile information:
+
+```
+https://idp.company.com/oauth/userinfo
+```
+
+Opik uses the access token to request:
+
+- `sub` - User's unique identifier
+- `email` - User's email address
+- `name` - User's display name
+
+### Default Workspace
+
+When users authenticate via OIDC for the first time:
+
+- They are added to the **default workspace** specified in SSO settings.
+- If not specified, they are added to the organization's default workspace.
+- Workspace assignment can be managed manually after initial login.
+
+<Note>
+Unlike SAML with workspace sync, OIDC does not support automatic workspace assignment based on user attributes. Users are added to the default workspace on first login.
+</Note>
+
+## IdP-specific configuration guides
+
+<Tabs>
+<Tab value="okta" title="Okta">
+
+### Configuring Okta
+
+1. In Okta Admin Console, go to **Applications** > **Create App Integration**.
+2. Select **OIDC - OpenID Connect** and **Web Application**.
+3. Configure settings:
+   - **Sign-in redirect URI**: Your callback URL from Opik
+   - **Sign-out redirect URI**: `https://www.comet.com/opik`
+   - **Controlled access**: Assign users/groups as needed
+4. Note the **Client ID** and **Client Secret**.
+5. Find endpoints in Okta's **OpenID Connect Metadata** or use:
+   - Authorization: `https://<your-domain>.okta.com/oauth2/v1/authorize`
+   - Token: `https://<your-domain>.okta.com/oauth2/v1/token`
+   - User Info: `https://<your-domain>.okta.com/oauth2/v1/userinfo`
+
+</Tab>
+<Tab value="azure-ad" title="Azure AD (Entra ID)">
+
+### Configuring Azure AD
+
+1. In Azure Portal, go to **Azure Active Directory** > **App registrations**.
+2. Click **New registration**:
+   - **Name**: Opik
+   - **Supported account types**: Choose based on your needs
+   - **Redirect URI**: Web, your callback URL from Opik
+3. After creation, note the **Application (client) ID**.
+4. Go to **Certificates & secrets** > **New client secret** and note the value.
+5. Use these endpoints (replace `<tenant-id>`):
+   - Authorization: `https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/authorize`
+   - Token: `https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token`
+   - User Info: `https://graph.microsoft.com/oidc/userinfo`
+
+</Tab>
+<Tab value="google" title="Google Workspace">
+
+### Configuring Google Workspace
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/).
+2. Create or select a project.
+3. Go to **APIs & Services** > **Credentials**.
+4. Click **Create Credentials** > **OAuth client ID**.
+5. Configure:
+   - **Application type**: Web application
+   - **Authorized redirect URIs**: Your callback URL from Opik
+6. Note the **Client ID** and **Client Secret**.
+7. Use these endpoints:
+   - Authorization: `https://accounts.google.com/o/oauth2/v2/auth`
+   - Token: `https://oauth2.googleapis.com/token`
+   - User Info: `https://openidconnect.googleapis.com/v1/userinfo`
+
+</Tab>
+<Tab value="auth0" title="Auth0">
+
+### Configuring Auth0
+
+1. In Auth0 Dashboard, go to **Applications** > **Create Application**.
+2. Select **Regular Web Applications**.
+3. Configure settings:
+   - **Allowed Callback URLs**: Your callback URL from Opik
+   - **Allowed Logout URLs**: `https://www.comet.com/opik`
+4. Note the **Domain**, **Client ID**, and **Client Secret**.
+5. Use these endpoints (replace `<your-domain>`):
+   - Authorization: `https://<your-domain>.auth0.com/authorize`
+   - Token: `https://<your-domain>.auth0.com/oauth/token`
+   - User Info: `https://<your-domain>.auth0.com/userinfo`
+
+</Tab>
+</Tabs>
+
+## Testing the configuration
+
+After configuring both Opik and your IdP:
+
+1. **Open an incognito/private browser window** (to avoid cached sessions).
+2. Navigate to Opik's login page.
+3. Enter an email address with your configured domain.
+4. You should be redirected to your IdP for authentication.
+5. After authenticating, you should be redirected back to Opik and logged in.
+
+## Troubleshooting
+
+### Common issues
+
+| Issue | Possible cause | Solution |
+| --- | --- | --- |
+| "Invalid redirect URI" | Callback URL mismatch | Verify callback URL matches exactly in both Opik and IdP |
+| "Invalid client" | Wrong client ID | Verify client ID is copied correctly |
+| "Invalid client credentials" | Wrong client secret | Verify client secret, regenerate if needed |
+| "Scope not allowed" | IdP scope restrictions | Ensure `openid`, `profile`, `email` scopes are allowed |
+| User not created | Missing email claim | Verify IdP returns email in user info response |
+
+### Troubleshooting checklist
+
+1. **Verify client credentials**: Double-check client ID and secret.
+2. **Check callback URL**: Must match exactly (including protocol, trailing slashes).
+3. **Validate endpoint URLs**: Ensure all URLs are correct and accessible.
+4. **Review IdP logs**: Check your identity provider's logs for errors.
+5. **Test well-known endpoint**: Verify `/.well-known/openid-configuration` returns valid JSON.
+6. **Check scopes**: Ensure required scopes are configured and allowed.
+
+### Debugging with browser tools
+
+Use browser developer tools to inspect the authentication flow:
+
+1. Open **Network** tab before starting login.
+2. Look for requests to your IdP's authorization endpoint.
+3. Check for error parameters in the callback URL.
+4. Review any error responses from the token endpoint.
+
+## Security considerations
+
+### Client secret protection
+
+- Store the client secret securely in Opik's configuration.
+- Never expose the client secret in logs or client-side code.
+- Rotate the secret periodically per your security policies.
+
+### Callback URL validation
+
+- Only configure the exact callback URL provided by Opik.
+- Do not add additional redirect URIs unless necessary.
+- Review registered redirect URIs periodically.
+
+### Token handling
+
+Opik handles tokens securely:
+
+- Access tokens are used server-side only.
+- Tokens are not exposed to the browser.
+- Sessions are managed securely after authentication.
+
+## Next steps
+
+- [Configure SAML](/administration/authentication/saml) if you need workspace sync features.
+- [Set up JWT authentication](/administration/authentication/jwt) for programmatic access.
+- [Manage users](/administration/admin-dashboard/users) and workspace assignments.

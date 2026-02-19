@@ -15,4 +15,5 @@ export interface TraceUpdate {
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfo;
     threadId?: string;
+    ttft?: number;
 }

@@ -50,7 +50,12 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={disabled}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            className="font-normal"
+          >
             Add to
             <ChevronDown className="ml-2 size-4" />
           </Button>

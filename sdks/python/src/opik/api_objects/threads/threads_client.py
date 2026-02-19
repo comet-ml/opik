@@ -109,7 +109,9 @@ class ThreadsClient:
             >>>     max_results=10)
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_thread_filter.TraceThreadFilter
+            filter_string,
+            parsed_item_class=trace_thread_filter.TraceThreadFilter,
+            entity_type="threads",
         )
 
         project_name = project_name or self._opik_client.project_name
@@ -172,10 +174,25 @@ class ThreadsClient:
         """
         Closes a thread in a specific project.
 
+        .. deprecated::
+            This method is deprecated. Thread status (active/inactive) is no longer
+            required for adding feedback scores. Feedback scores can now be added
+            to threads at any time. This method is kept for backwards compatibility
+            but will be removed in a future version.
+
         Args:
             thread_id: The identifier of the thread to close.
             project_name: The name of the project to close the thread in.
         """
+        import warnings
+
+        warnings.warn(
+            "close_thread() is deprecated. Thread status is no longer required for "
+            "adding feedback scores. Feedback scores can now be added to threads at "
+            "any time. This method will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._opik_client.rest_client.traces.close_trace_thread(
             thread_id=thread_id, project_name=project_name
         )

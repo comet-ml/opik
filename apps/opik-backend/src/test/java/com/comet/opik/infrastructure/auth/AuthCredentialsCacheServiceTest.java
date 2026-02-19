@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -40,24 +41,27 @@ public class AuthCredentialsCacheServiceTest {
     @ParameterizedTest
     @MethodSource
     void testCacheAndRetrieveQuotas(List<Quota> quotas) {
-        String apiKey = RandomStringUtils.secure().nextAlphanumeric(10);
-        String workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-        String userName = RandomStringUtils.secure().nextAlphanumeric(10);
-        String workspaceId = RandomStringUtils.secure().nextAlphanumeric(10);
-        String resolvedWorkspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+        String resolvedWorkspaceName = getRandomId();
 
-        assertThat(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName).isEmpty())
+        List<String> requiredPermissions = List.of();
+        assertThat(cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, requiredPermissions)
+                .isEmpty())
                 .isTrue();
 
-        cacheService.cache(apiKey, workspaceName, userName, workspaceId, resolvedWorkspaceName, quotas);
+        cacheService.cache(apiKey, workspaceName, requiredPermissions, userName, workspaceId, resolvedWorkspaceName,
+                quotas);
 
         Optional<CacheService.AuthCredentials> credentials = cacheService
-                .resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName);
+                .resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, requiredPermissions);
 
         assertThat(credentials.isEmpty()).isFalse();
         assertThat(credentials.get().userName()).isEqualTo(userName);
         assertThat(credentials.get().workspaceId()).isEqualTo(workspaceId);
-        assertThat(credentials.get().workspaceName()).isEqualTo(resolvedWorkspaceName);
+        assertThat(credentials.get().workspaceName()).isEqualTo(workspaceName); // request workspace name (not stored in workspace metadata)
         assertThat(credentials.get().quotas()).isEqualTo(ListUtils.emptyIfNull(quotas));
     }
 
@@ -71,4 +75,83 @@ public class AuthCredentialsCacheServiceTest {
                         .used(24_999)
                         .build()))));
     }
+
+    @Test
+    void testMultiplePermissionsRequireAllPermissionKeysPresentInCache() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+        List<String> requiredPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
+                WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
+
+        cacheService.cache(apiKey, workspaceName, requiredPermissions, userName, workspaceId, workspaceName, null);
+
+        resolveAndAssertOnValidCache(apiKey, workspaceName, requiredPermissions, userName, workspaceId);
+    }
+
+    @Test
+    void testMultiplePermissionsMissWhenAnyPermissionKeyMissing() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+
+        List<String> cachedPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue());
+        List<String> resolvedPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
+                WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
+
+        cacheService.cache(apiKey, workspaceName, cachedPermissions, userName, workspaceId, workspaceName, null);
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
+                resolvedPermissions);
+
+        assertThat(resolved).isEmpty();
+    }
+
+    @Test
+    void testNoRequiredPermissions() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
+        assertThat(resolved).isEmpty();
+
+        cacheService.cache(apiKey, workspaceName, null, userName, workspaceId, workspaceName, null);
+
+        resolveAndAssertOnValidCache(apiKey, workspaceName, null, userName, workspaceId);
+    }
+
+    @Test
+    void multiplePermissionsWithSharedWorkspaceMetadataReturnsCachedCredentials() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String workspaceId = getRandomId();
+        String userName = getRandomId();
+        List<String> bothPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
+                WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
+
+        // apiKey is coupled with one userName; cache both permissions with same user
+        cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue()),
+                userName, workspaceId, workspaceName, null);
+        cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()),
+                userName, workspaceId, workspaceName, null);
+
+        resolveAndAssertOnValidCache(apiKey, workspaceName, bothPermissions, userName, workspaceId);
+    }
+
+    private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions,
+            String expectedUserName, String expectedWorkspaceId) {
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, bothPermissions);
+
+        assertThat(resolved).isPresent();
+        assertThat(resolved.get().userName()).isEqualTo(expectedUserName);
+        assertThat(resolved.get().workspaceId()).isEqualTo(expectedWorkspaceId);
+    }
+
+    private String getRandomId() {
+        return RandomStringUtils.secure().nextAlphanumeric(10);
+    }
+
 }

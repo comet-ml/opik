@@ -13,10 +13,16 @@ from . import (
     optimization,
     helpers,
     opik_query_language,
+    rest_helpers,
     search_helpers,
     span,
     trace,
 )
+from .annotation_queue import (
+    TracesAnnotationQueue,
+    ThreadsAnnotationQueue,
+)
+from .annotation_queue import rest_operations as annotation_queue_rest_operations
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
@@ -66,6 +72,7 @@ from ..types import (
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
 class Opik:
@@ -944,6 +951,7 @@ class Opik:
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        dataset_version_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -958,6 +966,7 @@ class Opik:
                 Defaults to "regular". "trial" and "mini-batch" are only relevant for prompt optimization experiments.
             optimization_id: Optional ID of the optimization associated with the experiment.
             tags: Optional list of tags to associate with the experiment.
+            dataset_version_id: Optional ID of the dataset version to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
@@ -983,6 +992,7 @@ class Opik:
             type=type,
             optimization_id=optimization_id,
             tags=tags,
+            dataset_version_id=dataset_version_id,
         )
 
         experiment_ = experiment.Experiment(
@@ -1210,7 +1220,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+            filter_string,
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
         )
 
         search_functor = functools.partial(
@@ -1304,7 +1316,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+            filter_string,
+            parsed_item_class=span_filter_public.SpanFilterPublic,
+            entity_type="spans",
         )
 
         search_functor = functools.partial(
@@ -1572,18 +1586,64 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a prompt
+            versions = client.get_prompt_history(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search and filtering
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1597,7 +1657,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a text prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1605,18 +1667,64 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "helpful assistant"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a chat prompt
+            versions = client.get_chat_prompt_history(name="my-chat-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant"
+            )
+
+            # Combine search and filtering
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1630,7 +1738,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a chat prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
@@ -1754,6 +1864,233 @@ class Opik:
             An instance of the ExperimentsClient initialized with a cached REST client.
         """
         return experiments_client.ExperimentsClient(self._rest_client)
+
+    def get_prompts_client(self) -> prompt_client.PromptClient:
+        """
+        Retrieves an instance of `PromptClient` for bulk prompt operations.
+
+        Use this client for operations like updating prompt version tags in batch.
+
+        Returns:
+            An instance of the PromptClient initialized with a cached REST client.
+
+        Example:
+            prompts_client = client.get_prompts_client()
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+        """
+        return prompt_client.PromptClient(self._rest_client)
+
+    def _create_annotation_queue(
+        self,
+        name: str,
+        queue_class: type[QueueT],
+        project_name: Optional[str],
+        description: Optional[str],
+        instructions: Optional[str],
+        comments_enabled: Optional[bool],
+        feedback_definition_names: Optional[List[str]],
+    ) -> QueueT:
+        """Helper method to create an annotation queue with the specified scope."""
+        if project_name is None:
+            project_name = self._project_name
+
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
+        queue_id = id_helpers.generate_id()
+
+        self._rest_client.annotation_queues.create_annotation_queue(
+            id=queue_id,
+            project_id=project_id,
+            name=name,
+            scope=queue_class.SCOPE,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+        common_kwargs = {
+            "id": queue_id,
+            "name": name,
+            "project_id": project_id,
+            "rest_client": self._rest_client,
+            "description": description,
+            "instructions": instructions,
+            "comments_enabled": comments_enabled,
+            "feedback_definition_names": list(feedback_definition_names)
+            if feedback_definition_names
+            else None,
+            "items_count": 0,
+        }
+
+        return queue_class(**common_kwargs)
+
+    def create_traces_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> TracesAnnotationQueue:
+        """
+        Create a new annotation queue for traces.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, uses the client's default project.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            TracesAnnotationQueue: The created traces annotation queue object.
+        """
+        return self._create_annotation_queue(
+            name=name,
+            queue_class=TracesAnnotationQueue,
+            project_name=project_name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+    def create_threads_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> ThreadsAnnotationQueue:
+        """
+        Create a new annotation queue for threads.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, uses the client's default project.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            ThreadsAnnotationQueue: The created threads annotation queue object.
+        """
+        return self._create_annotation_queue(
+            name=name,
+            queue_class=ThreadsAnnotationQueue,
+            project_name=project_name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+    def get_traces_annotation_queue(self, queue_id: str) -> TracesAnnotationQueue:
+        """
+        Get a traces annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            TracesAnnotationQueue: The traces annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a traces queue.
+        """
+        return annotation_queue_rest_operations.get_traces_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_threads_annotation_queue(self, queue_id: str) -> ThreadsAnnotationQueue:
+        """
+        Get a threads annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            ThreadsAnnotationQueue: The threads annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a threads queue.
+        """
+        return annotation_queue_rest_operations.get_threads_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_traces_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[TracesAnnotationQueue]:
+        """
+        Get all traces annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, uses the client's default project.
+            max_results: Maximum number of queues to return. Defaults to 1000.
+
+        Returns:
+            List[TracesAnnotationQueue]: A list of traces annotation queue objects.
+        """
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name or self._project_name
+        )
+
+        return annotation_queue_rest_operations.get_traces_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def get_threads_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[ThreadsAnnotationQueue]:
+        """
+        Get all threads annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, uses the client's default project.
+            max_results: Maximum number of queues to return. Defaults to 1000.
+
+        Returns:
+            List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
+        """
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name or self._project_name
+        )
+
+        return annotation_queue_rest_operations.get_threads_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def delete_annotation_queue(self, queue_id: str) -> None:
+        """
+        Delete an annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue to delete.
+        """
+        self._rest_client.annotation_queues.delete_annotation_queue_batch(
+            ids=[queue_id]
+        )
 
 
 @functools.lru_cache()

@@ -1,0 +1,90 @@
+---
+headline: Roles and Permissions | Opik Documentation
+og:description: Learn how to configure workspace roles and permissions in Opik for fine-grained access control.
+og:site_name: Opik Documentation
+og:title: 'Opik Roles and Permissions: Workspace Access Control'
+subtitle: Understanding and configuring workspace roles and the permission model
+title: Roles and Permissions
+---
+
+Opik uses a role-based access control (RBAC) system that allows you to define what users can do within workspaces. This guide explains how roles and permissions work, the default roles available, and how to create custom roles.
+
+## Organization roles vs. workspace roles
+
+Opik has two levels of roles that work together:
+
+| Level | Purpose | Scope | Examples |
+| --- | --- | --- | --- |
+| **Organization roles** | Control access to organization-wide features | Entire organization | Admin, Member, View-Only Member |
+| **Workspace roles** | Control what users can do within a workspace | Single workspace | Manage, Write, Annotator, Read |
+
+A user's effective access is determined by **both** their organization role and their workspace role:
+
+- Organization role sets the maximum level of access a user can have across all workspaces (e.g., View-Only Members are restricted to read-only access organization-wide).
+- Workspace role determines what they can do within each workspace they're a member of, up to the limit set by their organization role.
+
+## Organization roles
+
+Every user in your organization has exactly one organization role:
+
+| Role | Description |
+| --- | --- |
+| **Admin** | Full access to the [Admin Dashboard](/administration/admin-dashboard/overview) and all workspaces in the organization. |
+| **Member** | Can have full access to any workspace they are added to. No access to the Admin Dashboard. |
+| **View-Only Member** | Read-only access to workspaces they are added to. Cannot be granted write permissions in any workspace. |
+
+New users are assigned the **Member** role by default. Organization admins can change a user's role from the [Users](/administration/admin-dashboard/users) page in the Admin Dashboard.
+
+## Workspace roles
+
+Workspace roles control what users can do within a specific workspace. Users can have different roles in different workspaces.
+
+### Default roles
+
+These roles are available in all Opik organizations and serve as the basis for custom roles:
+
+| Role | Description |
+| --- | --- |
+| **Manage** | Full admin access. Manage members, settings, and all resources. |
+| **Write** | Read-write access. Create projects, log traces, run experiments. |
+| **Annotate** | Annotation access. View data and add annotations/feedback. |
+| **Read** | Read-only access. View all data but cannot make changes. |
+
+### Permissions by role
+
+The table below shows the default permissions for each role. Custom roles can combine these permissions differently.
+
+| Group | Permission | Manage | Write | Annotate | Read |
+| --- | --- | --- | --- | --- | --- |
+| Admin | Invite users to workspace | Yes | Yes | No | No |
+| Admin | Update user role | Yes | No | No | No |
+| Admin | Delete workspaces | Yes | No | No | No |
+| Experiment management | Change project settings | Yes | No | No | No |
+| Experiment management | Approve and manage models | Yes | No | No | No |
+| Observability | View project data | Yes | Yes | Yes | Yes |
+| Observability | Log trace, span, or thread | Yes | Yes | No | No |
+
+### Custom roles
+
+<Note>
+Custom roles are available on Enterprise plans. [Reach out](https://www.comet.com/site/about-us/contact-us/) to enable this feature.
+</Note>
+
+To create a custom role:
+
+1. Go to **Admin Dashboard** > **Roles & Permissions**.
+2. Click **Create Role** and configure permissions.
+3. Inherit from an existing role as a starting point.
+
+## Assigning roles
+
+Roles can be updated in different places depending on the role type:
+
+- **Organization roles** can be updated by organization admins in **Admin Dashboard** > **[Users](/administration/admin-dashboard/users)**.
+- **Workspace roles** can be updated in **Configuration** > **[Members](/administration/workspace-settings/workspace_members)** by any user with the Manage workspace role.
+
+## Next steps
+
+- [Configure authentication](/administration/authentication/overview) with role mapping.
+- [Manage users](/administration/admin-dashboard/users) and assign roles.
+- [Create service accounts](/administration/admin-dashboard/service_accounts) with appropriate workspace access.

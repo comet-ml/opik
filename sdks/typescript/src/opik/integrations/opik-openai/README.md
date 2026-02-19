@@ -30,8 +30,8 @@ pnpm add opik-openai
 ### Requirements
 
 - Node.js ≥ 18
-- OpenAI SDK (`openai` ≥ 4.0.0)
-- Opik SDK (automatically installed as a dependency)
+- OpenAI SDK (`openai` ≥ 6.0.1)
+- Opik SDK (`opik` peer dependency)
 
 ## Usage
 
@@ -55,7 +55,7 @@ const trackedOpenAI = trackOpenAI(openai, {
 // Use the tracked client just like the original
 async function main() {
   const completion = await trackedOpenAI.chat.completions.create({
-    model: "gpt-4",
+    model: "gpt-5",
     messages: [{ role: "user", content: "Hello world" }],
   });
 

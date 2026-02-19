@@ -12,6 +12,7 @@ export type { DatasetItemStreamRequest } from "./DatasetItemStreamRequest.js";
 export type { DatasetItemsDelete } from "./DatasetItemsDelete.js";
 export type { DatasetUpdate } from "./DatasetUpdate.js";
 export type { DatasetVersionRestorePublic } from "./DatasetVersionRestorePublic.js";
+export type { DatasetVersionRetrieveRequestPublic } from "./DatasetVersionRetrieveRequestPublic.js";
 export type { DatasetVersionTag } from "./DatasetVersionTag.js";
 export type { DatasetVersionUpdatePublic } from "./DatasetVersionUpdatePublic.js";
 export type { DatasetWrite } from "./DatasetWrite.js";

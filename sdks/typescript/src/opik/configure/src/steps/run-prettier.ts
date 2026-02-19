@@ -18,7 +18,7 @@ export async function runPrettierStep({
   }
 
   const changedOrUntrackedFiles = getUncommittedOrUntrackedFiles()
-    .map((filename) => {
+    .map((filename: string) => {
       return filename.startsWith('- ') ? filename.slice(2) : filename;
     })
     .join(' ');

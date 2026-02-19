@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
@@ -31,13 +30,19 @@ public record DatasetItemChanges(
 
         @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Item IDs to delete from the dataset") Set<UUID> deletedIds,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @NotNull @Schema(description = "Version ID the client is editing (for conflict detection)", required = true) UUID baseVersion,
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Version ID the client is editing (for conflict detection). Null when creating the first version of a new dataset.") UUID baseVersion,
 
         @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional list of tags for this version", example = "[\"baseline\", \"v1.0\"]") List<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Each tag must be at most 100 characters") String> tags,
 
         @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Optional description of changes in this version", example = "Updated training data with corrections") String changeDescription,
 
-        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Optional user-defined metadata") Map<String, String> metadata) {
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "Optional user-defined metadata") Map<String, String> metadata,
+
+        @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional default evaluators for items in this version") List<@Valid EvaluatorItem> evaluators,
+
+        @JsonView(DatasetItemChanges.View.Write.class) @Valid @Schema(description = "Optional default execution policy for items in this version") ExecutionPolicy executionPolicy,
+
+        @JsonView(DatasetItemChanges.View.Write.class) @Schema(description = "When true, clears the version-level execution policy (removes inherited policy from base version)") Boolean clearExecutionPolicy) {
 
     public static class View {
         public static class Write {

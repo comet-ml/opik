@@ -23,6 +23,6 @@ def tiny_dataset() -> Dataset:
 def multi_prompt_agent() -> MultiPromptTestAgent:
     """Shared agent for running multi-prompt optimizer e2e tests."""
     return MultiPromptTestAgent(
-        model="openai/gpt-4o-mini",
+        model="openai/gpt-5-nano",
         model_parameters={"temperature": 0.7},
     )

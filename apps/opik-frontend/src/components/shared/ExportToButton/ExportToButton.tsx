@@ -104,17 +104,17 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
 
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-      {disabled && tooltipContent ? (
-        <TooltipWrapper content={tooltipContent}>
-          <DropdownMenuTrigger asChild>
+      <TooltipWrapper content={disabled ? tooltipContent : "Export"}>
+        <DropdownMenuTrigger asChild>
+          {disabled && tooltipContent ? (
             <span className="inline-block cursor-not-allowed">
               {buttonElement}
             </span>
-          </DropdownMenuTrigger>
-        </TooltipWrapper>
-      ) : (
-        <DropdownMenuTrigger asChild>{buttonElement}</DropdownMenuTrigger>
-      )}
+          ) : (
+            buttonElement
+          )}
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem
           onClick={exportCSVHandler}

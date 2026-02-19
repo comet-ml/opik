@@ -23,7 +23,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import Loader from "@/components/shared/Loader/Loader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -43,8 +43,6 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
 
@@ -164,7 +162,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       projectId,
       page: page as number,
@@ -295,39 +293,11 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     [setEditRuleId, setCloneRuleId],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
-
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoRulesPage
-          openModal={handleNewRuleClick}
-          Wrapper={NoDataPage}
-          height={188}
-          className="px-6"
-        />
-        <AddEditRuleDialog
-          key={resetDialogKeyRef.current}
-          open={isDialogOpen}
-          projectId={projectId}
-          setOpen={handleCloseDialog}
-          rule={dialogRule}
-          mode={dialogMode}
-        />
-      </>
-    );
-  }
+  const showEmptyState =
+    !isPending && noData && rows.length === 0 && page === 1;
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -357,33 +327,40 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           </Button>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
+      <DataTableStateHandler
+        isLoading={isPending}
+        isEmpty={showEmptyState}
+        emptyState={<NoRulesPage Wrapper={NoDataPage} className="px-6" />}
       >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        ></DataTablePagination>
-      </PageBodyStickyContainer>
+        <DataTable
+          columns={columns}
+          data={rows}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+          ></DataTablePagination>
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}

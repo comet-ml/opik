@@ -235,7 +235,7 @@ describe("processInputData", () => {
       "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7": "gif", // minimal GIF
       "Qk1GAwAAAAgAAAA//8AAwAAA": "bmp", // minimal BMP
       "SUkqAGkAAAD/AAEAAAABAAEAAAABAAEAAAD/": "tiff", // minimal TIFF
-      "UklGRgAAAABXRU5ErkJggg==": "webp", // minimal WebP
+      UklGRgAAAABXRUJQVlA4: "webp", // minimal WebP (RIFF + WEBP header)
     };
 
     for (const [prefix, format] of Object.entries(prefixes)) {
@@ -579,5 +579,304 @@ describe("Duplicate media detection", () => {
     expect(result.media).toHaveLength(1);
     expect(result.media[0].url).toBe(base64Image);
     expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+  });
+});
+
+describe("SVG data URI extraction", () => {
+  it("should extract SVG data URI images", () => {
+    // Simple SVG: red circle on white background
+    const svgDataURI =
+      "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0MCIgZmlsbD0icmVkIi8+PC9zdmc+";
+    const input = { text: `Check this SVG: ${svgDataURI}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(svgDataURI);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+    expect(result.formattedData).toEqual({
+      text: "Check this SVG: [image_0]",
+    });
+  });
+
+  it("should extract SVG in complex nested object", () => {
+    const svgDataURI = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: `Here is an SVG: ${svgDataURI}` }],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(svgDataURI);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+  });
+
+  it("should extract multiple SVG data URIs", () => {
+    const svg1 = "data:image/svg+xml;base64,PHN2ZyBpZD0iMSI+PC9zdmc+";
+    const svg2 = "data:image/svg+xml;base64,PHN2ZyBpZD0iMiI+PC9zdmc+";
+    const input = { text: `SVG 1: ${svg1} and SVG 2: ${svg2}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(2);
+    expect(result.media[0].url).toBe(svg1);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
+    expect(result.media[1].url).toBe(svg2);
+    expect(result.media[1].name).toBe("Base64: [image_1]");
+  });
+
+  it("should extract SVG alongside other image formats", () => {
+    const svgDataURI = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
+    const pngDataURI = "data:image/png;base64,iVBORw0KGgo";
+    const jpegDataURI = "data:image/jpeg;base64,/9j/";
+    const input = {
+      text: `SVG: ${svgDataURI}, PNG: ${pngDataURI}, JPEG: ${jpegDataURI}`,
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(3);
+
+    // All should be extracted as images
+    expect(result.media.every((m) => m.type === ATTACHMENT_TYPE.IMAGE)).toBe(
+      true,
+    );
+
+    // Verify each URL is present
+    expect(result.media.some((m) => m.url === svgDataURI)).toBe(true);
+    expect(result.media.some((m) => m.url === pngDataURI)).toBe(true);
+    expect(result.media.some((m) => m.url === jpegDataURI)).toBe(true);
+  });
+});
+
+describe("Audio content extraction", () => {
+  it("should extract audio from input_audio content type", () => {
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you an audio sample.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/wav;base64,");
+  });
+
+  it("should extract multiple audio samples from input_audio", () => {
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you two identical audio samples.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_1]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(
+      result.media.filter((m) => m.type === ATTACHMENT_TYPE.AUDIO),
+    ).toHaveLength(2);
+  });
+
+  it("should extract audio from message-level audio field", () => {
+    const input = {
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          audio: {
+            id: "audio_123",
+            data: "[output-audio.wav]",
+            expires_at: 1768566966,
+            transcript: "This is the transcript.",
+          },
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/");
+  });
+
+  it("should handle audio_url content type", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "audio_url",
+              audio_url: {
+                url: "https://example.com/audio.mp3",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://example.com/audio.mp3");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should extract base64 audio from data URI", () => {
+    const base64Audio = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAA";
+    const input = { text: `Listen to this: ${base64Audio}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(base64Audio);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should handle audio file content type", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "file",
+              file: {
+                file_id: "file_123",
+                format: "audio/mpeg",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+  });
+
+  it("should not misidentify audio placeholders as images", () => {
+    // This is the key test case from the bug report
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "I'm sending you two identical audio samples. Please confirm you received them.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_0]",
+                format: "wav",
+              },
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: "[audio_1]",
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Should have 2 audio items, not images
+    const audioItems = result.media.filter(
+      (m) => m.type === ATTACHMENT_TYPE.AUDIO,
+    );
+    const imageItems = result.media.filter(
+      (m) => m.type === ATTACHMENT_TYPE.IMAGE,
+    );
+
+    expect(audioItems).toHaveLength(2);
+    expect(imageItems).toHaveLength(0);
+  });
+
+  it("should not misidentify WAV audio base64 as WebP images", () => {
+    // WAV files start with RIFF (UklGR in base64) just like WebP
+    // But WAV has "WAVE" at bytes 8-11, WebP has "WEBP"
+    const wavBase64 = "UklGRqxYAQBXQVZFZm10IBAAAA"; // Real WAV file header
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_audio",
+              input_audio: {
+                data: wavBase64,
+                format: "wav",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Should detect as audio, not image
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.AUDIO);
+    expect(result.media[0].url).toContain("data:audio/wav");
+  });
+
+  it("should still detect WebP images correctly", () => {
+    // WebP files also start with RIFF but have "WEBP" at bytes 8-11
+    const webpBase64 = "UklGRgAAAABXRUJQVlA4"; // WebP header
+    const input = {
+      text: `Image: ${webpBase64}`,
+    };
+
+    const result = processInputData(input);
+
+    // Should detect as image
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+    expect(result.media[0].url).toContain("data:image/webp");
   });
 });

@@ -35,6 +35,7 @@ import {
   durationYTickFormatter,
   tokenYTickFormatter,
 } from "./utils";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 
 const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -265,6 +266,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            renderValue={renderScoreTooltipValue}
             chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />

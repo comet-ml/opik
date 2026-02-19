@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/use-toast";
 import Loader from "@/components/shared/Loader/Loader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import RemoveDatasetItemsDialog from "@/components/pages/DatasetItemsPage/RemoveDatasetItemsDialog";
 import { useDatasetItemDeletePreference } from "@/components/pages/DatasetItemsPage/hooks/useDatasetItemDeletePreference";
 import { useDatasetItemEditorContext } from "./DatasetItemEditorContext";

@@ -1,5 +1,5 @@
 import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { REASONING_MODELS } from "@/constants/llm";
+import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
 
@@ -59,6 +59,24 @@ export const supportsVertexAIThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
   return model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+};
+
+/**
+ * Checks if an Anthropic model supports thinking effort parameter
+ * Currently only Claude Opus 4.6 supports adaptive thinking with effort levels
+ *
+ * @param model - The model type to check
+ * @returns true if the model supports thinking effort, false otherwise
+ */
+export const supportsAnthropicThinkingEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => {
+  return Boolean(
+    model &&
+      (ANTHROPIC_THINKING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
+        model as PROVIDER_MODEL_TYPE,
+      ),
+  );
 };
 
 /**

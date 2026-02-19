@@ -60,7 +60,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "description",
   "last_updated_at",
-  "created_at",
 ];
 
 const DashboardsPage: React.FunctionComponent = () => {
@@ -143,7 +142,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const { data, isPending } = useDashboardsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
     {
       workspaceName,
       sorting: sortedColumns,
@@ -305,6 +304,7 @@ const DashboardsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

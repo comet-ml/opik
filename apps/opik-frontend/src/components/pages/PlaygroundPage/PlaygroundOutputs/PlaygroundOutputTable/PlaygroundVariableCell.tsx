@@ -6,7 +6,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import JsonView from "react18-json-view";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 
 interface CustomMeta {
   showIndex: boolean;

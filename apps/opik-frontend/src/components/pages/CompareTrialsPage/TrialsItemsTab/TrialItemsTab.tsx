@@ -60,7 +60,6 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-
 const getRowId = (d: ExperimentsCompare) => d.id;
 
 const calculateVerticalAlignment = (count: number) =>
@@ -125,7 +124,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   experiments,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
   });
@@ -215,21 +213,22 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      truncate: truncationEnabled,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
     useCompareExperimentsColumns(
@@ -341,14 +340,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
 
-    // Generate color map for consistent colors
     const colorMap =
       objectiveName && sortedScoreNames.length > 0
         ? generateDistinctColorMap(
             objectiveName,
             sortedScoreNames.filter((name) => name !== objectiveName),
           )
-        : {};
+        : undefined;
 
     // Get score value from the first experiment (same as CompareTrialsDetails)
     const firstExperiment = experiments?.[0];
@@ -362,7 +360,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       cell: CompareExperimentsFeedbackScoreCell as never,
       customMeta: {
         experimentsIds,
-        feedbackKey: scoreName,
+        scoreName,
         colorMap,
         scoreValue: firstExperiment?.feedback_scores?.find(
           (s) => s.name === scoreName,
@@ -610,6 +608,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

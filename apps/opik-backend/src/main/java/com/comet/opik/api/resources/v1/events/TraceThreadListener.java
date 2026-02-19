@@ -116,9 +116,18 @@ public class TraceThreadListener {
     }
 
     /**
-     * Handles the ThreadsReopened event by deleting manual scores for the specified threads.
-     * This is triggered when threads are reopened, and it ensures that any manual scores
-     * associated with those threads are removed.
+     * Handles the ThreadsReopened event by deleting all scores for the specified threads.
+     * This is triggered in two scenarios:
+     * 1. When new traces are added to an existing thread (thread is "reopened" for activity)
+     * 2. When the explicit PUT /threads/open API endpoint is called
+     *
+     * The handler ensures that all scores (manual UI, SDK, and online scoring) are removed
+     * so the thread can be re-evaluated after the cooling period expires.
+     *
+     * Note: While the active/inactive thread status concept has been hidden from the UI,
+     * the status still exists internally. This cleanup behavior is preserved to maintain
+     * data consistency. The thread will be re-evaluated using its original sampling decision
+     * after the cooling period expires.
      *
      * @param event the ThreadsReopened event containing the thread model IDs and project ID
      */
@@ -127,14 +136,13 @@ public class TraceThreadListener {
         log.info("Received ThreadsReopened event for workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
                 event.workspaceId(), event.projectId(), event.threadModelIds());
 
-        feedbackScoreService.deleteThreadManualScores(event.threadModelIds(), event.projectId())
+        feedbackScoreService.deleteAllThreadScores(event.threadModelIds(), event.projectId())
                 .doOnError(error -> {
-                    log.info(
-                            "Failed to delete manual scores for threads in workspace: '{}', projectId: '{}'",
-                            event.workspaceId(), event.projectId());
-                    log.error("Error deleting manual scores for threads", error);
+                    log.error(
+                            "Error deleting all scores for threads in workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
+                            event.workspaceId(), event.projectId(), event.threadModelIds(), error);
                 })
-                .doOnSuccess(unused -> log.info("Deleted manual scores for threads in workspace: '{}', projectId: '{}'",
+                .doOnSuccess(unused -> log.info("Deleted all scores for threads in workspace: '{}', projectId: '{}'",
                         event.workspaceId(), event.projectId()))
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
                         .put(RequestContext.USER_NAME, event.userName()))

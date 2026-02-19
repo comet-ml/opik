@@ -53,7 +53,7 @@ const WorkspacePreferencesTab: React.FC = () => {
   const data = useMemo(
     () => [
       {
-        name: "Thread timeout",
+        name: "Thread online scoring rule cooldown period",
         value: formatIso8601Duration(threadTimeoutValue) ?? "Not set",
         type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
       },
@@ -103,6 +103,7 @@ const WorkspacePreferencesTab: React.FC = () => {
             updates.truncation_on_tables !== undefined
               ? updates.truncation_on_tables
               : workspaceConfig?.truncation_on_tables ?? null,
+          color_map: workspaceConfig?.color_map ?? null,
         },
       });
     },
@@ -110,6 +111,7 @@ const WorkspacePreferencesTab: React.FC = () => {
       updateWorkspaceConfig,
       workspaceConfig?.timeout_to_mark_thread_as_inactive,
       workspaceConfig?.truncation_on_tables,
+      workspaceConfig?.color_map,
     ],
   );
 

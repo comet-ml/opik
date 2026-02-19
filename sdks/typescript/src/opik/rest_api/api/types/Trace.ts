@@ -29,10 +29,13 @@ export interface Trace {
     spanCount?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
+    /** Time to first token in milliseconds */
+    ttft?: number;
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
     llmSpanCount?: number;
     hasToolSpans?: boolean;
     /** List of unique provider names from all spans in this trace, sorted alphabetically */
     providers?: string[];
+    experiment?: OpikApi.ExperimentItemReference;
 }

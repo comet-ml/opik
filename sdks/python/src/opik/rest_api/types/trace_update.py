@@ -28,6 +28,7 @@ class TraceUpdate(UniversalBaseModel):
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfo] = None
     thread_id: typing.Optional[str] = None
+    ttft: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

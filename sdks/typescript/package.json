@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "1.10.4",
+  "version": "1.10.17",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",
@@ -50,8 +50,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
     "test": "vitest run --exclude 'tests/integration/**/*.test.ts'",
-    "test:integration": "vitest run tests/integration",
-    "test:ci": "vitest run tests/integration --exclude 'tests/integration/evaluation/evaluateImage.test.ts'"
+    "test:integration": "vitest run tests/integration"
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",

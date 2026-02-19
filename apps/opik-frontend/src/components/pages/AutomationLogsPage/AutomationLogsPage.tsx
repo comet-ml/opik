@@ -63,14 +63,15 @@ const AutomationLogsPage = () => {
     defaultValue: {},
   });
 
-  const { data, isPending, refetch } = useRulesLogsList(
-    {
-      ruleId: rule_id!,
-    },
-    {
-      enabled: Boolean(rule_id),
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useRulesLogsList(
+      {
+        ruleId: rule_id!,
+      },
+      {
+        enabled: Boolean(rule_id),
+      },
+    );
 
   const { rows, markerKeys } = useMemo(() => {
     const rawRows =
@@ -209,6 +210,7 @@ const AutomationLogsPage = () => {
           getRowId={(row) => row.id}
           stickyHeader
           resizeConfig={resizeConfig}
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
       </PageBodyScrollContainer>
     </div>

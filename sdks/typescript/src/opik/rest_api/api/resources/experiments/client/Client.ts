@@ -688,12 +688,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupResponse>> {
-        const { groups, types, name, projectId, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
             project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -776,12 +777,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsAggregationsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupAggregationsResponse>> {
-        const { groups, types, name, projectId, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
             project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

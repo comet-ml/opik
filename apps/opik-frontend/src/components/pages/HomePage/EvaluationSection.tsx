@@ -24,7 +24,7 @@ import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import { transformExperimentScores } from "@/lib/feedback-scores";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 

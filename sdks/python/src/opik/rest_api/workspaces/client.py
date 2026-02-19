@@ -106,6 +106,7 @@ class WorkspacesClient:
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
         truncation_on_tables: typing.Optional[bool] = OMIT,
+        color_map: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceConfiguration:
         """
@@ -118,6 +119,9 @@ class WorkspacesClient:
 
         truncation_on_tables : typing.Optional[bool]
             Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
+
+        color_map : typing.Optional[typing.Dict[str, str]]
+            Workspace-level color map. Maps label names to hex color values (e.g. #FF0000). Max 10000 entries.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -136,6 +140,7 @@ class WorkspacesClient:
         _response = self._raw_client.upsert_workspace_configuration(
             timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive,
             truncation_on_tables=truncation_on_tables,
+            color_map=color_map,
             request_options=request_options,
         )
         return _response.data
@@ -398,6 +403,7 @@ class AsyncWorkspacesClient:
         *,
         timeout_to_mark_thread_as_inactive: typing.Optional[str] = OMIT,
         truncation_on_tables: typing.Optional[bool] = OMIT,
+        color_map: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WorkspaceConfiguration:
         """
@@ -410,6 +416,9 @@ class AsyncWorkspacesClient:
 
         truncation_on_tables : typing.Optional[bool]
             Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
+
+        color_map : typing.Optional[typing.Dict[str, str]]
+            Workspace-level color map. Maps label names to hex color values (e.g. #FF0000). Max 10000 entries.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -431,6 +440,7 @@ class AsyncWorkspacesClient:
         _response = await self._raw_client.upsert_workspace_configuration(
             timeout_to_mark_thread_as_inactive=timeout_to_mark_thread_as_inactive,
             truncation_on_tables=truncation_on_tables,
+            color_map=color_map,
             request_options=request_options,
         )
         return _response.data

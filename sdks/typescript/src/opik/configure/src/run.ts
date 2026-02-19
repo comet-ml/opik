@@ -113,16 +113,11 @@ export async function runWizard(argv: Args) {
   }
 }
 async function detectIntegration(): Promise<Integration | undefined> {
-  const integrationConfigs = Object.entries(INTEGRATION_CONFIG).sort(
-    ([a], [b]) =>
-      INTEGRATION_ORDER.indexOf(a as Integration) -
-      INTEGRATION_ORDER.indexOf(b as Integration),
-  );
-
-  for (const [integration, config] of integrationConfigs) {
+  for (const integration of INTEGRATION_ORDER) {
+    const config = INTEGRATION_CONFIG[integration];
     const detected = await config.detect();
     if (detected) {
-      return integration as Integration;
+      return integration;
     }
   }
 }

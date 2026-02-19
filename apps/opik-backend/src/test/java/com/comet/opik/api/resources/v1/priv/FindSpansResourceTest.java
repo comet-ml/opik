@@ -450,6 +450,20 @@ class FindSpansResourceTest {
                             arg.get()[1], arg.get()[2])));
         }
 
+        private Stream<Arguments> getTtftArgs() {
+            Stream<Arguments> arguments = Stream.of(
+                    arguments(Operator.EQUAL, 100.0),
+                    arguments(Operator.GREATER_THAN, 50.0),
+                    arguments(Operator.GREATER_THAN_EQUAL, 100.0),
+                    arguments(Operator.LESS_THAN, 150.0),
+                    arguments(Operator.LESS_THAN_EQUAL, 100.0));
+
+            return arguments.flatMap(arg -> Stream.of(
+                    arguments("/spans/stats", statsTestAssertion, arg.get()[0], arg.get()[1]),
+                    arguments("/spans", spansTestAssertion, arg.get()[0], arg.get()[1]),
+                    arguments("/spans/search", spanStreamTestAssertion, arg.get()[0], arg.get()[1])));
+        }
+
         private String getValidValue(Field field) {
             return switch (field.getType()) {
                 case STRING, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
@@ -3498,6 +3512,61 @@ class FindSpansResourceTest {
                     values.all(), filters, Map.of());
         }
 
+        @ParameterizedTest
+        @MethodSource("getTtftArgs")
+        void whenFilterByTtft__thenReturnSpansFiltered(String endpoint, SpanPageTestAssertion testAssertion,
+                Operator operator, double ttftValue) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .ttft(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
+                                    ? (double) randomNumber(200, 500)
+                                    : (double) randomNumber(0, 50))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            spans.set(0, spans.getFirst().toBuilder()
+                    .ttft(100.0)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+
+            var unexpectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class).stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.TTFT)
+                            .operator(operator)
+                            .value(String.valueOf(ttftValue))
+                            .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
         Stream<Arguments> whenFilterByIsEmpty__thenReturnSpansFiltered() {
             return Stream.of(
                     arguments(
@@ -3841,6 +3910,14 @@ class FindSpansResourceTest {
                             Comparator.comparing(Span::duration).reversed()
                                     .thenComparing(Comparator.comparing(Span::id).reversed()),
                             SortingField.builder().field(SortableFields.DURATION).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Span::ttft)
+                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.TTFT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(Span::ttft).reversed()
+                                    .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.TTFT).direction(Direction.DESC).build()),
                     Arguments.of(errorInfoComparator,
                             SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
                     Arguments.of(errorInfoComparator.reversed(),

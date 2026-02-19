@@ -12,7 +12,8 @@ import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
-import { useProcessedInputData } from "@/hooks/useProcessedInputData";
+import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
+import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -50,7 +51,9 @@ const TraceDataViewer: React.FC = () => {
 
   const displayTrace = fullTrace || trace;
 
-  const { media } = useProcessedInputData(displayTrace?.input);
+  // Use unified media hook to fetch all media and get transformed data
+  const { media, transformedInput, transformedOutput } =
+    useUnifiedMedia(displayTrace);
 
   // Handlers for scroll position changes
   const handleInputScrollChange = useCallback(
@@ -82,63 +85,65 @@ const TraceDataViewer: React.FC = () => {
           <Loader2 className="size-4 animate-spin text-slate-400" />
         </div>
       )}
-      <Accordion
-        type="multiple"
-        className="w-full"
-        defaultValue={["attachments", "input", "output"]}
-      >
-        {displayTrace && <AttachmentsList data={displayTrace} media={media} />}
-        <AccordionItem className="group" value="input">
-          <AccordionTrigger>Input</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
-          >
-            <SyntaxHighlighter
-              data={displayTrace?.input || {}}
-              prettifyConfig={{ fieldType: "input" }}
-              preserveKey="syntax-highlighter-annotation-input"
-              withSearch
-              scrollPosition={state.input.scrollTop}
-              onScrollPositionChange={handleInputScrollChange}
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
+      <MediaProvider media={media}>
+        <Accordion
+          type="multiple"
+          className="w-full"
+          defaultValue={["attachments", "input", "output"]}
+        >
+          {displayTrace && <AttachmentsList media={media} />}
+          <AccordionItem className="group" value="input">
+            <AccordionTrigger>Input</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={transformedInput}
+                prettifyConfig={{ fieldType: "input" }}
+                preserveKey="syntax-highlighter-annotation-input"
+                withSearch
+                scrollPosition={state.input.scrollTop}
+                onScrollPositionChange={handleInputScrollChange}
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem className="group" value="output">
-          <AccordionTrigger>Output</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
-          >
-            <SyntaxHighlighter
-              data={displayTrace?.output || {}}
-              prettifyConfig={{ fieldType: "output" }}
-              preserveKey="syntax-highlighter-annotation-output"
-              withSearch
-              scrollPosition={state.output.scrollTop}
-              onScrollPositionChange={handleOutputScrollChange}
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
+          <AccordionItem className="group" value="output">
+            <AccordionTrigger>Output</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={transformedOutput}
+                prettifyConfig={{ fieldType: "output" }}
+                preserveKey="syntax-highlighter-annotation-output"
+                withSearch
+                scrollPosition={state.output.scrollTop}
+                onScrollPositionChange={handleOutputScrollChange}
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
 
-        <AccordionItem className="group" value="metadata">
-          <AccordionTrigger>Metadata</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
-          >
-            <SyntaxHighlighter
-              data={displayTrace?.metadata || {}}
-              preserveKey="syntax-highlighter-annotation-metadata"
-              withSearch
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+          <AccordionItem className="group" value="metadata">
+            <AccordionTrigger>Metadata</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={displayTrace?.metadata || {}}
+                preserveKey="syntax-highlighter-annotation-metadata"
+                withSearch
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </MediaProvider>
     </div>
   );
 };

@@ -1,82 +1,37 @@
 import React, { useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
-import { Span, Trace } from "@/types/traces";
-import useAttachmentsList from "@/api/attachments/useAttachmentsList";
-import { isObjectSpan } from "@/lib/traces";
+import uniqBy from "lodash/uniqBy";
+import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import AttachmentThumbnail from "@/components/pages-shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
-import {
-  ATTACHMENT_TYPE,
-  AttachmentPreviewData,
-  AttachmentWithType,
-  ParsedMediaData,
-} from "@/types/attachments";
-import {
-  ATTACHMENT_ORDER_MAP,
-  MINE_TYPE_TO_ATTACHMENT_TYPE_MAP,
-} from "@/constants/attachments";
+import AttachmentThumbnail from "@/components/shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
+import AttachmentPreviewDialog from "@/components/shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
+import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
+import { ATTACHMENT_ORDER_MAP } from "@/constants/attachments";
 
 type AttachmentsListProps = {
-  data: Trace | Span;
-  media: ParsedMediaData[];
+  media: UnifiedMediaItem[];
 };
 
-const AttachmentsList: React.FC<AttachmentsListProps> = ({ data, media }) => {
-  const isSpan = isObjectSpan(data);
+const AttachmentsList: React.FC<AttachmentsListProps> = ({ media }) => {
   const [previewData, setPreviewData] = useState<AttachmentPreviewData | null>(
     null,
   );
 
-  const { data: attachmentsData } = useAttachmentsList(
-    {
-      projectId: data.project_id,
-      id: data.id,
-      type: isSpan ? "span" : "trace",
-      page: 1,
-      size: 1000,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const attachments: AttachmentWithType[] = useMemo(
-    () =>
-      (attachmentsData?.content ?? [])
-        .map((attachment) => {
-          return {
-            ...attachment,
-            type:
-              MINE_TYPE_TO_ATTACHMENT_TYPE_MAP[attachment.mime_type] ??
-              ATTACHMENT_TYPE.OTHER,
-          };
-        })
-        .sort(
-          (a1, a2) =>
-            ATTACHMENT_ORDER_MAP[a1.type] - ATTACHMENT_ORDER_MAP[a2.type],
-        ),
-    [attachmentsData?.content],
-  );
-
+  // Deduplicate by URL and sort media by type for consistent display
   const previewDataArray = useMemo(() => {
-    return [
-      ...attachments.map((attachment) => ({
-        name: attachment.file_name,
-        url: attachment.link,
-        type: attachment.type,
-      })),
-      ...media.map((media) => ({
-        name: media.name,
-        url: media.url,
-        type: media.type,
-      })),
-    ];
-  }, [attachments, media]);
+    return uniqBy(media, "url")
+      .map((item) => ({
+        name: item.name,
+        url: item.url,
+        type: item.type,
+      }))
+      .sort(
+        (a, b) => ATTACHMENT_ORDER_MAP[a.type] - ATTACHMENT_ORDER_MAP[b.type],
+      );
+  }, [media]);
 
   const hasAttachments = previewDataArray.length > 0;
   return hasAttachments ? (

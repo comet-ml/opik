@@ -415,8 +415,10 @@ class PromptServiceImpl implements PromptService {
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             promptVersionDAO.save(workspaceId, promptVersion);
+            promptDAO.updateLastUpdatedAt(promptVersion.promptId(), workspaceId, promptVersion.createdBy());
 
             return null;
         });

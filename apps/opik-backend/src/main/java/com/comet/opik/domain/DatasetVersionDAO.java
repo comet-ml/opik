@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.infrastructure.db.EvaluatorItemListColumnMapper;
+import com.comet.opik.infrastructure.db.ExecutionPolicyColumnMapper;
 import com.comet.opik.infrastructure.db.MapFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.SequencedSetColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -21,22 +23,49 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(MapFlatArgumentFactory.class)
+@RegisterArgumentFactory(EvaluatorItemListColumnMapper.class)
+@RegisterArgumentFactory(ExecutionPolicyColumnMapper.class)
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 @RegisterColumnMapper(SequencedSetColumnMapper.class)
+@RegisterColumnMapper(EvaluatorItemListColumnMapper.class)
+@RegisterColumnMapper(ExecutionPolicyColumnMapper.class)
 @RegisterConstructorMapper(DatasetVersion.class)
 public interface DatasetVersionDAO {
 
     @SqlUpdate("""
             INSERT INTO dataset_versions (
                 id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
-                change_description, metadata, created_by, last_updated_by, workspace_id
+                change_description, metadata, evaluators, execution_policy,
+                created_by, last_updated_by, workspace_id
             ) VALUES (
                 :version.id, :version.datasetId, :version.versionHash,
                 :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
-                :version.changeDescription, :version.metadata, :version.createdBy, :version.lastUpdatedBy, :workspace_id
+                :version.changeDescription, :version.metadata, :version.evaluators, :version.executionPolicy,
+                :version.createdBy, :version.lastUpdatedBy, :workspace_id
             )
             """)
     void insert(@BindMethods("version") DatasetVersion version, @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("""
+            INSERT INTO dataset_versions (
+                id, dataset_id, version_hash, items_total, items_added, items_modified, items_deleted,
+                change_description, metadata, evaluators, execution_policy,
+                created_by, last_updated_by, workspace_id
+            )
+            SELECT
+                :version.id, :version.datasetId, :version.versionHash,
+                :version.itemsTotal, :version.itemsAdded, :version.itemsModified, :version.itemsDeleted,
+                :version.changeDescription, :version.metadata,
+                COALESCE(:version.evaluators, base.evaluators),
+                IF(:clear_execution_policy, NULL, COALESCE(:version.executionPolicy, base.execution_policy)),
+                :version.createdBy, :version.lastUpdatedBy, :workspace_id
+            FROM (SELECT 1) AS dummy
+            LEFT JOIN dataset_versions base ON base.id = :base_version_id AND base.workspace_id = :workspace_id
+            """)
+    void insertWithBaseVersion(@BindMethods("version") DatasetVersion version,
+            @Bind("base_version_id") UUID baseVersionId,
+            @Bind("clear_execution_policy") boolean clearExecutionPolicy,
+            @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
             WITH target_dataset AS (
@@ -63,6 +92,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -100,6 +131,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -141,6 +174,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -181,6 +216,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -244,6 +281,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -264,6 +303,49 @@ public interface DatasetVersionDAO {
                 AND dv.workspace_id = :workspace_id
             """)
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
+            @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
+            )
+            SELECT
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', vs.seq_num) AS version_name,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+            FROM dataset_versions AS dv
+            INNER JOIN version_sequences vs ON dv.id = vs.id
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
+            WHERE dv.dataset_id = :dataset_id
+                AND dv.workspace_id = :workspace_id
+                AND CONCAT('v', vs.seq_num) = :version_name
+            """)
+    Optional<DatasetVersion> findByVersionName(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_name") String versionName,
             @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
@@ -294,6 +376,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,
@@ -340,6 +424,8 @@ public interface DatasetVersionDAO {
                 dv.items_deleted,
                 dv.change_description,
                 dv.metadata,
+                dv.evaluators,
+                dv.execution_policy,
                 dv.created_at,
                 dv.created_by,
                 dv.last_updated_at,

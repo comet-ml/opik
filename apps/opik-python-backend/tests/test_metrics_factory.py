@@ -382,6 +382,226 @@ def my_metric(dataset_item, llm_output):
         assert "BaseMetric" in str(exc_info.value)
 
 
+class TestGEvalTemplateInterpolation:
+    """Tests for GEval metric template interpolation with dataset item fields."""
+
+    def test_geval_with_none_params_uses_defaults(self):
+        """Test that GEval handles explicit None params without crashing."""
+        # Callers may explicitly pass None for optional fields
+        params = {
+            "task_introduction": None,
+            "evaluation_criteria": None
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+
+    def test_geval_with_missing_params_uses_defaults(self):
+        """Test that GEval handles missing params using defaults."""
+        params = {}
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+
+    def test_geval_with_placeholders_handles_none_dataset_item(self):
+        """Test that GEval with placeholders handles None dataset_item without crashing."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "Evaluate the {{topic}} response",
+            "evaluation_criteria": "Check if output matches {{answer}}"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify interpolation with None returns template unchanged (placeholders preserved)
+        result = _interpolate_template(params["evaluation_criteria"], {})
+        assert result == "Check if output matches {{answer}}"
+
+    def test_geval_without_placeholders_creates_single_instance(self):
+        """Test that GEval without placeholders creates a single reusable instance."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "Evaluate the response quality",
+            "evaluation_criteria": "Is the response helpful and accurate?"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify no interpolation changes static text
+        dataset_item = {"answer": "42"}
+        assert _interpolate_template(params["task_introduction"], dataset_item) == "Evaluate the response quality"
+        assert _interpolate_template(params["evaluation_criteria"], dataset_item) == "Is the response helpful and accurate?"
+
+    def test_geval_with_placeholders_in_criteria(self):
+        """Test that GEval with {{field}} placeholders in criteria works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "Evaluate the response",
+            "evaluation_criteria": "Check if the output matches the expected answer: {{answer}}"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify placeholder interpolation in criteria
+        dataset_item = {"answer": "42"}
+        result = _interpolate_template(params["evaluation_criteria"], dataset_item)
+        assert result == "Check if the output matches the expected answer: 42"
+
+    def test_geval_with_placeholders_in_task_introduction(self):
+        """Test that GEval with {{field}} placeholders in task_introduction works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "You are evaluating a {{topic}} question",
+            "evaluation_criteria": "Is the response accurate?"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify placeholder interpolation in task_introduction
+        dataset_item = {"topic": "math"}
+        result = _interpolate_template(params["task_introduction"], dataset_item)
+        assert result == "You are evaluating a math question"
+
+    def test_geval_with_multiple_placeholders(self):
+        """Test that GEval with multiple {{field}} placeholders works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "Evaluate the {{task_type}} response for {{domain}}",
+            "evaluation_criteria": "Expected answer is {{answer}}. Context: {{context}}"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify multiple placeholder interpolation
+        dataset_item = {
+            "task_type": "homework",
+            "domain": "algebra", 
+            "answer": "x=5",
+            "context": "solving equations"
+        }
+        intro_result = _interpolate_template(params["task_introduction"], dataset_item)
+        criteria_result = _interpolate_template(params["evaluation_criteria"], dataset_item)
+        
+        assert intro_result == "Evaluate the homework response for algebra"
+        assert criteria_result == "Expected answer is x=5. Context: solving equations"
+
+
+class TestGEvalInterpolationHelpers:
+    """Tests for GEval template interpolation helper functions."""
+
+    def test_interpolate_template_single_field(self):
+        """Test interpolating a single field."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Expected: {{answer}}"
+        dataset_item = {"answer": "42"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Expected: 42"
+
+    def test_interpolate_template_multiple_fields(self):
+        """Test interpolating multiple fields."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Question: {{question}}, Expected: {{answer}}"
+        dataset_item = {"question": "What is 6*7?", "answer": "42"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Question: What is 6*7?, Expected: 42"
+
+    def test_interpolate_template_missing_field_unchanged(self):
+        """Test that missing fields leave placeholder unchanged."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Expected: {{missing_field}}"
+        dataset_item = {"answer": "42"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Expected: {{missing_field}}"
+
+    def test_interpolate_template_no_placeholders(self):
+        """Test template without placeholders returns unchanged."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "No placeholders here"
+        dataset_item = {"answer": "42"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "No placeholders here"
+
+    def test_interpolate_template_non_string_values(self):
+        """Test that non-string values are converted to strings."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Count: {{count}}, Active: {{active}}"
+        dataset_item = {"count": 123, "active": True}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Count: 123, Active: True"
+
+    def test_interpolate_template_dotted_keys(self):
+        """Test interpolating keys with dots (e.g., user.name)."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "User: {{user.name}}, ID: {{user.id}}"
+        dataset_item = {"user.name": "Alice", "user.id": "12345"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "User: Alice, ID: 12345"
+
+    def test_interpolate_template_hyphenated_keys(self):
+        """Test interpolating keys with hyphens (e.g., answer-key)."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Answer: {{answer-key}}, Type: {{response-type}}"
+        dataset_item = {"answer-key": "correct", "response-type": "multiple-choice"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Answer: correct, Type: multiple-choice"
+
+    def test_interpolate_template_mixed_special_chars(self):
+        """Test interpolating keys with mixed dots, hyphens, and underscores."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Value: {{var_with-special.chars}}"
+        dataset_item = {"var_with-special.chars": "complex_value"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Value: complex_value"
+
+    def test_has_template_placeholders_true(self):
+        """Test detecting placeholders in text."""
+        from opik_backend.studio.metrics import _has_template_placeholders
+        
+        assert _has_template_placeholders("Contains {{field}}") is True
+        assert _has_template_placeholders("Multiple {{a}} and {{b}}") is True
+
+    def test_has_template_placeholders_false(self):
+        """Test detecting no placeholders in text."""
+        from opik_backend.studio.metrics import _has_template_placeholders
+        
+        assert _has_template_placeholders("No placeholders") is False
+        assert _has_template_placeholders("Single braces {field}") is False
+        assert _has_template_placeholders("") is False
+
+
 class TestTemplateSyntaxConversion:
     """Tests for template syntax conversion from {{var}} to {var}."""
 

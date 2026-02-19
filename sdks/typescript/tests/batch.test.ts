@@ -148,4 +148,57 @@ describe("Opik client batching", () => {
       errorMessage
     );
   });
+
+  it("should merge multiple trace updates after flush", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush(); // Flush create
+
+    trace.update({ output: "result" });
+    trace.end(); // Calls update({ endTime })
+    await client.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+
+    // Verify the update call contains both output AND endTime
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("output", "result");
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should merge multiple span updates after flush", async () => {
+    const trace = client.trace({ name: "test" });
+    const span = trace.span({ name: "test-span", type: "llm" });
+    await client.flush();
+
+    span.update({ output: "span-result" });
+    span.end();
+    await client.flush();
+
+    expect(updateSpansSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateSpansSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("output", "span-result");
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should preserve all data in rapid successive updates", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush();
+
+    trace.update({ input: "input-data" });
+    trace.update({ output: "output-data" });
+    trace.update({ metadata: { key: "value" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("input", "input-data");
+    expect(updateCall[1].body).toHaveProperty("output", "output-data");
+    expect(updateCall[1].body.metadata).toEqual({ key: "value" });
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
 });

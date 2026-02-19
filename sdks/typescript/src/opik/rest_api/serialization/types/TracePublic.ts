@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { ErrorInfoPublic } from "./ErrorInfoPublic.js";
+import { ExperimentItemReferencePublic } from "./ExperimentItemReferencePublic.js";
 import { FeedbackScorePublic } from "./FeedbackScorePublic.js";
 import { GuardrailsValidationPublic } from "./GuardrailsValidationPublic.js";
 import { JsonListStringPublic } from "./JsonListStringPublic.js";
@@ -43,11 +44,13 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
         spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
         duration: core.serialization.number().optional(),
+        ttft: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         visibilityMode: core.serialization.property("visibility_mode", TracePublicVisibilityMode.optional()),
         llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
         hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
         providers: core.serialization.list(core.serialization.string()).optional(),
+        experiment: ExperimentItemReferencePublic.optional(),
     });
 
 export declare namespace TracePublic {
@@ -74,10 +77,12 @@ export declare namespace TracePublic {
         total_estimated_cost?: number | null;
         span_count?: number | null;
         duration?: number | null;
+        ttft?: number | null;
         thread_id?: string | null;
         visibility_mode?: TracePublicVisibilityMode.Raw | null;
         llm_span_count?: number | null;
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
+        experiment?: ExperimentItemReferencePublic.Raw | null;
     }
 }

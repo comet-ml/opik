@@ -1,12 +1,20 @@
 #!/bin/bash
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-INFRA_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-redis-1" "opik-minio-1" "opik-zookeeper-1")
-BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
-OPIK_CONTAINERS=("opik-frontend-1")
-GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
-LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
-LOCAL_BE_FE_CONTAINERS=("opik-python-backend-1")
+# Source shared worktree utilities
+WORKTREE_UTILS_ROOT="$script_dir"
+source "$script_dir/scripts/worktree-utils.sh"
+init_worktree_ports
+
+# Container names are derived from COMPOSE_PROJECT_NAME
+INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME}-mysql-1" "${COMPOSE_PROJECT_NAME}-redis-1" "${COMPOSE_PROJECT_NAME}-minio-1" "${COMPOSE_PROJECT_NAME}-zookeeper-1")
+BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
+OPIK_CONTAINERS=("${COMPOSE_PROJECT_NAME}-frontend-1")
+GUARDRAILS_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-1")
+OPIK_AI_BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-opik-ai-backend-1")
+LOCAL_BE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-frontend-1")
+LOCAL_BE_FE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1")
+LOCAL_AI_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
@@ -20,6 +28,8 @@ set_containers_for_profile() {
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_CONTAINERS[@]}")
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_BE_FE_CONTAINERS[@]}")
+  elif [[ "$LOCAL_AI" == "true" ]]; then
+    CONTAINERS=("${INFRA_CONTAINERS[@]}" "${LOCAL_AI_CONTAINERS[@]}")
   else
     # Full Opik (default)
     CONTAINERS=("${INFRA_CONTAINERS[@]}" "${BACKEND_CONTAINERS[@]}" "${OPIK_CONTAINERS[@]}")
@@ -28,6 +38,11 @@ set_containers_for_profile() {
   # Add guardrails containers if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
+  fi
+  
+  # Add opik-ai-backend containers if enabled
+  if [[ "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+    CONTAINERS+=("${OPIK_AI_BACKEND_CONTAINERS[@]}")
   fi
 }
 
@@ -41,9 +56,14 @@ get_verify_cmd() {
     cmd="$cmd --local-be"
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
     cmd="$cmd --local-be-fe"
+  elif [[ "$LOCAL_AI" == "true" ]]; then
+    cmd="$cmd --local-ai"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
+  fi
+  if [[ "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+    cmd="$cmd --opik-ai"
   fi
   echo "$cmd --verify"
 }
@@ -67,9 +87,14 @@ get_start_cmd() {
     cmd="$cmd --local-be"
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
     cmd="$cmd --local-be-fe"
+  elif [[ "$LOCAL_AI" == "true" ]]; then
+    cmd="$cmd --local-ai"
   fi
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --guardrails"
+  fi
+  if [[ "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+    cmd="$cmd --opik-ai"
   fi
   echo "$cmd"
 }
@@ -86,8 +111,25 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+# Log worktree configuration (called after DEBUG_MODE is set)
+log_worktree_config() {
+  debugLog "[DEBUG] Worktree Configuration:"
+  debugLog "[DEBUG]   Worktree ID: ${WORKTREE_ID}"
+  debugLog "[DEBUG]   Port Offset: ${PORT_OFFSET}"
+  debugLog "[DEBUG]   Project Name: ${COMPOSE_PROJECT_NAME}"
+  debugLog "[DEBUG]   Backend Port: ${OPIK_BACKEND_PORT}"
+  debugLog "[DEBUG]   MySQL Port: ${MYSQL_PORT}"
+  debugLog "[DEBUG]   Redis Port: ${REDIS_PORT}"
+  debugLog "[DEBUG]   ClickHouse HTTP Port: ${CLICKHOUSE_HTTP_PORT}"
+}
+
 setup_buildx_bake() {
   if [[ "${BUILD_MODE}" = "true" ]]; then
+    if [[ "${COMPOSE_BAKE:-}" = "false" ]]; then
+      echo "ℹ️ COMPOSE_BAKE is explicitly disabled. Skipping Bake-enabled builds"
+      return
+    fi
+
     if docker buildx bake --help >/dev/null 2>&1; then
       echo "ℹ️ Bake is available on Docker Buildx. Exporting COMPOSE_BAKE=true"
       export COMPOSE_BAKE=true
@@ -150,7 +192,8 @@ get_system_info() {
 }
 
 get_docker_compose_cmd() {
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  # Use explicit project name for worktree isolation
+  local cmd="docker compose -p ${COMPOSE_PROJECT_NAME} -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
@@ -167,22 +210,30 @@ get_docker_compose_cmd() {
   elif [[ "$LOCAL_BE_FE" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-be-fe.yaml"
     cmd="$cmd --profile local-be-fe"
+  elif [[ "$LOCAL_AI" == "true" ]]; then
+    cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.local-ai.yaml"
+    cmd="$cmd --profile local-ai"
   else
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
   fi
-  
+
   # Always add guardrails profile if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
   
+  # Always add opik-ai-backend profile if enabled
+  if [[ "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+    cmd="$cmd --profile opik-ai-backend"
+  fi
+
   echo "$cmd"
 }
 
 get_ui_url() {
-  local frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
-  echo "http://localhost:${frontend_port:-5173}"
+  local frontend_port="${NGINX_PORT:-${OPIK_FRONTEND_PORT:-5173}}"
+  echo "http://localhost:${frontend_port}"
 }
 
 create_opik_config_if_missing() {
@@ -221,7 +272,9 @@ print_usage() {
   echo "  --backend       Start only infrastructure + backend services (Backend, Python Backend etc.)"
   echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --local-be-fe   Start only infrastructure + Python backend (for local backend + frontend development)"
+  echo "  --local-ai      Start infrastructure + backend + Python backend (for local Opik AI backend + frontend development)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
+  echo "  --opik-ai       Enable Opik AI backend trace analyzer (can be combined with other flags)"
   echo "  --help          Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
@@ -416,7 +469,7 @@ create_demo_data() {
   fi
   
   # Wait for the container to finish and check its exit code
-  if wait_for_container_completion "opik-demo-data-generator-1"; then
+  if wait_for_container_completion "${COMPOSE_PROJECT_NAME}-demo-data-generator-1"; then
     echo "✅ Demo data created successfully!"
     return 0
   else
@@ -438,6 +491,9 @@ print_banner() {
   echo "║                                                                 ║"
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     echo "║  ✅ Guardrails services started successfully!                   ║"
+  fi
+  if [[ "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+    echo "║  ✅ Opik AI backend trace analyzer started successfully!        ║"
   fi
   if [[ "$INFRA" == "true" ]]; then
     echo "║  ✅ Infrastructure services started successfully!               ║"
@@ -467,6 +523,17 @@ print_banner() {
     echo "║                                                                 ║"
     echo "║  📊 Access the UI (start backend first):                        ║"
     echo "║     $ui_url                                       ║"
+    echo "║                                                                 ║"
+  elif [[ "$LOCAL_AI" == "true" ]]; then
+    echo "║  ✅ Local AI backend mode services started!                     ║"
+    echo "║                                                                 ║"
+    echo "║  ⚙️  Configuration:                                              ║"
+    echo "║     Opik AI backend is NOT running in Docker                    ║"
+    echo "║     Frontend is NOT running in Docker                           ║"
+    echo "║     Port mapping: ENABLED (required for local processes)        ║"
+    echo "║                                                                 ║"
+    echo "║  📊 Access the UI (start AI backend + frontend first):          ║"
+    echo "║     http://localhost:5174                                       ║"
     echo "║                                                                 ║"
   else
     echo "║  ✅ All services started successfully!                          ║"
@@ -595,12 +662,15 @@ PORT_MAPPING=false
 # Default: no guardrails
 GUARDRAILS_ENABLED=false
 export TOGGLE_GUARDRAILS_ENABLED=false
+OPIK_AI_BACKEND_ENABLED=false
+export TOGGLE_OPIK_AI_ENABLED=false
 export OPIK_FRONTEND_FLAVOR=default
 # Default: full opik (all profiles)
 INFRA=false
 BACKEND=false
 LOCAL_BE=false
 LOCAL_BE_FE=false
+LOCAL_AI=false
 
 if [[ "$*" == *"--build"* ]]; then
   BUILD_MODE=true
@@ -611,6 +681,7 @@ fi
 if [[ "$*" == *"--debug"* ]]; then
   DEBUG_MODE=true
   echo "🐞 Debug mode enabled."
+  log_worktree_config
   # Remove the flag from arguments
   set -- ${@/--debug/}
 fi
@@ -653,6 +724,14 @@ if [[ "$*" == *"--local-be"* ]]; then
   set -- ${@/--local-be/}
 fi
 
+if [[ "$*" == *"--local-ai"* ]]; then
+  LOCAL_AI=true
+  PORT_MAPPING=true  # Required for local processes to connect to infrastructure
+  export TOGGLE_OPIK_AI_ENABLED=true  # Enable OpikAI feature toggle for the backend
+  # Remove the flag from arguments
+  set -- ${@/--local-ai/}
+fi
+
 # Check for guardrails flag
 if [[ "$*" == *"--guardrails"* ]]; then
   GUARDRAILS_ENABLED=true
@@ -665,21 +744,41 @@ if [[ "$*" == *"--guardrails"* ]]; then
   set -- ${@/--guardrails/}
 fi
 
+if [[ "$*" == *"--opik-ai"* ]]; then
+  OPIK_AI_BACKEND_ENABLED=true
+  # Set frontend flavor to opik-ai-backend if not already set
+  if [[ "$OPIK_FRONTEND_FLAVOR" == "default" ]]; then
+    export OPIK_FRONTEND_FLAVOR=opik-ai-backend
+  fi
+  export TOGGLE_OPIK_AI_ENABLED=true
+  # Remove the flag from arguments
+  set -- ${@/--opik-ai/}
+fi
+
+# Validate mutually exclusive flags
+if [[ "$GUARDRAILS_ENABLED" == "true" && "$OPIK_AI_BACKEND_ENABLED" == "true" ]]; then
+  echo "❌ Error: --guardrails and --opik-ai cannot be used together."
+  echo "   Each requires a different nginx configuration. Please use only one at a time."
+  exit 1
+fi
+
 # Count active partial profiles
 PROFILE_COUNT=0
 [[ "$INFRA" == "true" ]] && ((PROFILE_COUNT++))
 [[ "$BACKEND" == "true" ]] && ((PROFILE_COUNT++))
 [[ "$LOCAL_BE" == "true" ]] && ((PROFILE_COUNT++))
 [[ "$LOCAL_BE_FE" == "true" ]] && ((PROFILE_COUNT++))
+[[ "$LOCAL_AI" == "true" ]] && ((PROFILE_COUNT++))
 
 # Validate mutually exclusive profile flags
 if [[ $PROFILE_COUNT -gt 1 ]]; then
-  echo "❌ Error: --infra, --backend, --local-be, and --local-be-fe flags are mutually exclusive."
+  echo "❌ Error: --infra, --backend, --local-be, --local-be-fe, and --local-ai flags are mutually exclusive."
   echo "   Choose one of the following:"
   echo "   • ./opik.sh --infra        (infrastructure services only)"
   echo "   • ./opik.sh --backend      (infrastructure + backend services)"
   echo "   • ./opik.sh --local-be     (all services except backend - for local backend development)"
   echo "   • ./opik.sh --local-be-fe  (infrastructure + Python backend - for local BE+FE development)"
+  echo "   • ./opik.sh --local-ai     (infrastructure + backend + Python backend - for local AI+FE development)"
   echo "   • ./opik.sh                (full Opik suite - default)"
   exit 1
 fi

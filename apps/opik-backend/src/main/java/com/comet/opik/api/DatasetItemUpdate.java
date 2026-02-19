@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -22,5 +24,8 @@ public record DatasetItemUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item expected output") String expectedOutput,
         @Schema(description = "Dataset item metadata", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> metadata,
         @Schema(description = "Dataset item data", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
-        @Schema(description = "Tags") Set<String> tags) {
+        @Schema(description = "Tags") Set<String> tags,
+        @Schema(description = "Evaluators") List<@Valid EvaluatorItem> evaluators,
+        @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy,
+        @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
 }

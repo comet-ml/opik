@@ -400,7 +400,7 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper showLoadingOverlay={showLoadingOverlay}>
+    <TableWrapper>
       <DataTableTooltipContext>
         <Table
           ref={tableRef}
@@ -470,6 +470,7 @@ const DataTable = <TData, TValue>({
             table={table}
             renderRow={renderRow}
             renderNoData={renderNoData}
+            showLoadingOverlay={showLoadingOverlay}
           />
         </Table>
       </DataTableTooltipContext>

@@ -57,7 +57,7 @@ class Prompt(base_prompt.BasePrompt):
         self._id = id
         self._description = description
         self._change_description = change_description
-        self._tags = tags
+        self._tags = copy.copy(tags) if tags else []
 
         self._sync_with_backend()
 
@@ -104,6 +104,12 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
+    def version_id(self) -> str:
+        """The unique identifier of the prompt version."""
+        return self.__internal_api__version_id__
+
+    @property
+    @override
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
@@ -136,7 +142,7 @@ class Prompt(base_prompt.BasePrompt):
     @override
     def tags(self) -> Optional[List[str]]:
         """The list of tags associated with the prompt."""
-        return copy.deepcopy(self._tags) if self._tags is not None else None
+        return copy.copy(self._tags) if self._tags else []
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -178,6 +184,7 @@ class Prompt(base_prompt.BasePrompt):
         """
         info_dict: Dict[str, Any] = {
             "name": self.name,
+            "template_structure": "text",
             "version": {
                 "template": self.prompt,
             },
@@ -191,6 +198,9 @@ class Prompt(base_prompt.BasePrompt):
 
         if self.__internal_api__version_id__ is not None:
             info_dict["version"]["id"] = self.__internal_api__version_id__
+
+        if self._metadata is not None:
+            info_dict["version"]["metadata"] = self._metadata
 
         return info_dict
 
@@ -220,5 +230,5 @@ class Prompt(base_prompt.BasePrompt):
             None  # description is stored at prompt level, not version level
         )
         prompt._change_description = prompt_version.change_description
-        prompt._tags = prompt_version.tags
+        prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
         return prompt

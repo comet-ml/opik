@@ -6,9 +6,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -25,7 +27,13 @@ public record DatasetItemEdit(
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "New data to merge with existing item data") Map<String, JsonNode> data,
 
-        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New tags to replace existing item tags") Set<String> tags) {
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New tags to replace existing item tags") Set<String> tags,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New evaluators to replace existing item evaluators") List<@Valid EvaluatorItem> evaluators,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New execution policy to replace existing item execution policy") @Valid ExecutionPolicy executionPolicy,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
 
     public static class View {
         public static class Write {

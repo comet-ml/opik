@@ -1429,8 +1429,8 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("When scoring batch of threads with threads that are open, then return 409")
-        void scoreBatchOfThreads_withThreadsAreOpen_thenReturns409() {
+        @DisplayName("When scoring batch of threads with threads that are open, then scores are persisted")
+        void scoreBatchOfThreads_withThreadsAreOpen_thenScoresArePersisted() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1439,7 +1439,7 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils
                     .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class).stream()
@@ -1461,17 +1461,17 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            // When
+            // When - Threads can now be scored regardless of status
             try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
 
-                // Then
-                assertOpenThreadScoreConflict(scores, response);
+                // Then - Scores are successfully created even for active threads
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
         }
 
         @Test
-        @DisplayName("When scoring batch of threads with threads that dont exist, then return 409")
-        void scoreBatchOfThreads_withThreadsDontExist_thenReturns409() {
+        @DisplayName("When scoring batch of threads with threads that don't exist, then threads are created and scores are persisted")
+        void scoreBatchOfThreads_withThreadsDontExist_thenThreadsCreatedAndScoresPersisted() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -1480,41 +1480,32 @@ class TracesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            projectResourceClient.createProject(projectName, apiKey, workspaceName);
+            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            String threadId = UUID.randomUUID().toString();
 
             List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils
                     .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class).stream()
                     .map(item -> item.toBuilder()
-                            .threadId(UUID.randomUUID().toString())
+                            .threadId(threadId)
                             .projectName(projectName)
                             .projectId(null) // Project ID is not required for thread scores
                             .source(ScoreSource.SDK)
                             .build())
                     .collect(Collectors.toList());
 
-            // When
+            // When - Threads don't exist yet, but will be created automatically
             try (var response = traceResourceClient.callThreadFeedbackScores(scores, apiKey, workspaceName)) {
 
-                // Then
-                assertOpenThreadScoreConflict(scores, response);
+                // Then - Thread ID mapping is created and scores are successfully persisted
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
-        }
 
-        private static void assertOpenThreadScoreConflict(List<FeedbackScoreBatchItemThread> scores,
-                Response response) {
-            String threadIds = scores.stream()
-                    .map(FeedbackScoreItem::threadId)
-                    .sorted()
-                    .collect(Collectors.joining(", "));
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            assertThat(response.hasEntity()).isTrue();
-
-            var errorMessage = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-            assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-            assertThat(errorMessage.getMessage())
-                    .isEqualTo("Threads must be closed before scoring. Thread IDs are active: '[%s]'"
-                            .formatted(threadIds));
+            // Note: Threads created via getOrCreateThreadId only create the thread ID mapping.
+            // The full thread entity is created when traces are logged with that thread_id.
+            // Since no traces exist for this thread, it won't appear in the thread list.
+            // This is expected behavior - the scores are persisted and will be associated
+            // with the thread once traces are logged.
         }
 
         Stream<Arguments> threadFeedbackScoreTestCases() {
@@ -3167,6 +3158,7 @@ class TracesResourceTest {
                     .createdAt(Instant.now())
                     .errorInfo(traceUpdate.errorInfo())
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
@@ -3204,6 +3196,7 @@ class TracesResourceTest {
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                             newTrace.startTime(), traceUpdate.endTime()))
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3275,6 +3268,7 @@ class TracesResourceTest {
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                             trace.startTime(), traceUpdate.endTime()))
                     .threadId(traceUpdate.threadId())
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3477,6 +3471,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
                             traceUpdate.endTime()))
+                    .ttft(traceUpdate.ttft())
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
@@ -3691,6 +3686,71 @@ class TracesResourceTest {
                 var updatedTrace3 = traceResourceClient.getById(id3, TEST_WORKSPACE, API_KEY);
                 assertThat(updatedTrace3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
             }
+        }
+
+        @Test
+        @DisplayName("Success: batch update all fields simultaneously")
+        void batchUpdate__updateAllFields__success() {
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .feedbackScores(null)
+                    .build();
+
+            var id1 = traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+            var id2 = traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+
+            Instant newEndTime = Instant.now();
+            JsonNode newInput = JsonUtils.readTree(Map.of("prompt", "updated prompt"));
+            JsonNode newOutput = JsonUtils.readTree(Map.of("response", "updated response"));
+            JsonNode newMetadata = JsonUtils.readTree(Map.of("environment", "production", "key1", "value1"));
+            var newErrorInfo = ErrorInfo.builder()
+                    .exceptionType("ValidationError")
+                    .message("Invalid input")
+                    .traceback("Stack trace here")
+                    .build();
+            Double newTtft = 123.45;
+
+            var batchUpdate = TraceBatchUpdate.builder()
+                    .ids(Set.of(id1, id2))
+                    .update(TraceUpdate.builder()
+                            .projectName(DEFAULT_PROJECT)
+                            .name("updated-name")
+                            .endTime(newEndTime)
+                            .input(newInput)
+                            .output(newOutput)
+                            .metadata(newMetadata)
+                            .tags(Set.of("new-tag"))
+                            .errorInfo(newErrorInfo)
+                            .ttft(newTtft)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+
+            traceResourceClient.batchUpdateTraces(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            var updatedTrace1 = traceResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
+            assertTraceFieldsUpdated(updatedTrace1, newEndTime);
+
+            var updatedTrace2 = traceResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
+            assertTraceFieldsUpdated(updatedTrace2, newEndTime);
+        }
+
+        private void assertTraceFieldsUpdated(Trace trace, Instant expectedEndTime) {
+            assertThat(trace.name()).isEqualTo("updated-name");
+            assertThat(trace.endTime().toEpochMilli()).isEqualTo(expectedEndTime.toEpochMilli());
+            assertThat(trace.input().get("prompt").asText()).isEqualTo("updated prompt");
+            assertThat(trace.output().get("response").asText()).isEqualTo("updated response");
+            assertThat(trace.metadata().get("environment").asText()).isEqualTo("production");
+            assertThat(trace.metadata().get("key1").asText()).isEqualTo("value1");
+            assertThat(trace.tags()).containsExactly("new-tag");
+            assertThat(trace.errorInfo()).isNotNull();
+            assertThat(trace.errorInfo().exceptionType()).isEqualTo("ValidationError");
+            assertThat(trace.errorInfo().message()).isEqualTo("Invalid input");
+            assertThat(trace.ttft()).isEqualTo(123.45);
         }
 
         @Test
@@ -6037,8 +6097,8 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("When thread is closed, manually scored, and reopened, then only manual scores are deleted (not automatic scores)")
-        void whenThreadIsClosedWithMixedScores_andReopened_thenOnlyManualScoresAreDeleted() {
+        @DisplayName("When thread is closed with mixed scores and reopened, then all scores are deleted")
+        void whenThreadIsClosedWithMixedScores_andReopened_thenAllScoresAreDeleted() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -6069,7 +6129,7 @@ class TracesResourceTest {
 
             // Wait for thread to be closed
 
-            // Add mixed scores to the closed thread (manual and automatic)
+            // Add mixed scores to the closed thread (manual, SDK, and online scoring)
             List<FeedbackScoreBatchItemThread> mixedScores = PodamFactoryUtils
                     .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
@@ -6085,7 +6145,11 @@ class TracesResourceTest {
                     .source(ScoreSource.ONLINE_SCORING)
                     .build());
 
-            Instant createdAt = Instant.now();
+            mixedScores.set(1, mixedScores.get(1)
+                    .toBuilder()
+                    .source(ScoreSource.UI)
+                    .build());
+
             traceResourceClient.threadFeedbackScores(mixedScores, apiKey, workspaceName);
 
             // Create new traces to reopen the thread
@@ -6098,7 +6162,7 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
 
-            // Wait for thread to be reopened and manual scores to be deleted
+            // Wait for thread to be reopened and ALL scores to be deleted
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
@@ -6108,11 +6172,11 @@ class TracesResourceTest {
 
                         List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
 
+                        // Expect no scores - all scores (UI, SDK, ONLINE_SCORING) should be deleted
                         var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
-                                TraceThreadStatus.ACTIVE,
-                                List.of(createExpectedFeedbackScore(mixedScores.getFirst(), createdAt)));
+                                TraceThreadStatus.ACTIVE);
 
-                        // Verify manual scores have been deleted, but automatic scores remain
+                        // Verify all scores have been deleted (manual, SDK, and online scoring)
                         TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
                     });
         }

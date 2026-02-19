@@ -16,7 +16,7 @@ on:
 jobs:
     run-backend-tests:
         runs-on: ubuntu-latest
-        timeout-minutes: 40
+        timeout-minutes: 45
         defaults:
           run:
             working-directory: apps/opik-backend/

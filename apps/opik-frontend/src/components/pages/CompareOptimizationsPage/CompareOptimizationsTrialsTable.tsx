@@ -42,6 +42,7 @@ interface CompareOptimizationsTrialsTableProps {
   columnsWidth: Record<string, number>;
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
   highlightedTrialId?: string;
+  showLoadingOverlay?: boolean;
 }
 
 const CompareOptimizationsTrialsTable: React.FC<
@@ -57,6 +58,7 @@ const CompareOptimizationsTrialsTable: React.FC<
   columnsWidth,
   onColumnsWidthChange,
   highlightedTrialId,
+  showLoadingOverlay,
 }) => {
   const getRowClassName = useCallback(
     (row: Row<Experiment>) => {
@@ -91,6 +93,7 @@ const CompareOptimizationsTrialsTable: React.FC<
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={StickyTableWrapperWithBorder}
         stickyHeader
+        showLoadingOverlay={showLoadingOverlay}
       />
     </Card>
   );

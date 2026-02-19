@@ -55,8 +55,6 @@ import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -82,6 +80,8 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -91,6 +91,7 @@ import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/Tra
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -114,6 +115,8 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -179,6 +182,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: "tags",
@@ -221,6 +225,9 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
 ];
 
@@ -240,24 +247,28 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   USER_FEEDBACK_COLUMN_ID,
 ];
 
-const SELECTED_COLUMNS_KEY = "traces-selected-columns";
-const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
-const COLUMNS_WIDTH_KEY = "traces-columns-width";
-const COLUMNS_ORDER_KEY = "traces-columns-order";
-const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
-const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
-const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
-const PAGINATION_SIZE_KEY = "traces-pagination-size";
-const ROW_HEIGHT_KEY = "traces-row-height";
+const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
+const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
+const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
+const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
+const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
+const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
+const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
+const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
+const ROW_HEIGHT_KEY_SUFFIX = "row-height";
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
   projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   type,
+  logsType,
+  onLogsTypeChange,
   projectId,
   projectName,
 }) => {
@@ -271,9 +282,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     minDate,
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage();
-  const [search = "", setSearch] = useQueryParam("search", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [search = "", setSearch] = useQueryParam(
+    `${type}_search`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -294,7 +309,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
-    localStorageKey: PAGINATION_SIZE_KEY,
+    localStorageKey: `${type}-${PAGINATION_SIZE_KEY_SUFFIX}`,
     queryKey: "size",
     defaultValue: 100,
     queryParamConfig: NumberParam,
@@ -312,7 +327,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
   >({
-    localStorageKey: ROW_HEIGHT_KEY,
+    localStorageKey: `${type}-${ROW_HEIGHT_KEY_SUFFIX}`,
     queryKey: "height",
     defaultValue: ROW_HEIGHT.small,
     queryParamConfig: StringParam,
@@ -333,7 +348,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
-    localStorageKey: `${type}${COLUMNS_SORT_KEY_SUFFIX}`,
+    localStorageKey: `${type}-${COLUMNS_SORT_KEY_SUFFIX}`,
     queryKey: `${type}_sorting`,
     defaultValue: [],
     queryParamConfig: JsonParam,
@@ -461,10 +476,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    `${type}-${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
+        `${type}-${SELECTED_COLUMNS_KEY_SUFFIX}`,
         DEFAULT_TRACES_PAGE_COLUMNS,
         [COLUMN_ID_ID, "start_time"],
       ),
@@ -494,26 +509,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useTracesOrSpansList(
-    {
-      projectId,
-      type: type as TRACE_DATA_TYPE,
-      sorting: sortedColumns,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search as string,
-      truncate: truncationEnabled,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-      exclude: excludeFields,
-    },
-    {
-      enabled: isTableDataEnabled,
-      refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: false,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useTracesOrSpansList(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        sorting: sortedColumns,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search as string,
+        truncate: truncationEnabled,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        exclude: excludeFields,
+      },
+      {
+        enabled: isTableDataEnabled,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useTracesOrSpansList(
     {
@@ -575,6 +591,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const isTableLoading =
+    isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;
+
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
@@ -584,6 +603,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     () => data?.content ?? [],
     [data?.content],
   );
+
+  const showEmptyState =
+    !isTableLoading && noData && rows.length === 0 && page === 1;
 
   // Extract metadata paths directly from loaded traces/spans data
   const metadataPaths = useMemo(() => {
@@ -607,7 +629,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
     {
       defaultValue: [],
     },
@@ -615,23 +637,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
     string[]
-  >(COLUMNS_SCORES_ORDER_KEY, {
+  >(`${type}-${COLUMNS_SCORES_ORDER_KEY_SUFFIX}`, {
     defaultValue: [],
   });
 
   const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
     string[]
-  >("traces-metadata-columns-order", {
+  >(`${type}-metadata-columns-order`, {
     defaultValue: [],
   });
   const [metadataMainColumnOrder, setMetadataMainColumnOrder] =
-    useLocalStorageState<string[]>("traces-metadata-main-column-order", {
+    useLocalStorageState<string[]>(`${type}-metadata-main-column-order`, {
       defaultValue: [COLUMN_METADATA_ID],
     });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >(COLUMNS_WIDTH_KEY, {
+  >(`${type}-${COLUMNS_WIDTH_KEY_SUFFIX}`, {
     defaultValue: {},
   });
 
@@ -674,7 +696,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   useDynamicColumnsCache({
-    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsKey: `${type}-${DYNAMIC_COLUMNS_KEY_SUFFIX}`,
     dynamicColumnsIds,
     setSelectedColumns,
   });
@@ -706,6 +728,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
         }) as ColumnData<BaseTraceData>,
     );
 
@@ -726,6 +749,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 (f) => f.name === scoreName,
               ),
             statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
+            statisticDataFormater: formatScoreDisplay,
           } as ColumnData<BaseTraceData>;
         },
       );
@@ -1184,26 +1208,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  if (isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending) {
-    return <Loader />;
-  }
-
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...(type === TRACE_DATA_TYPE.traces
-            ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
-            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_spans])}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
@@ -1272,47 +1285,48 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 ? (
-        <NoTracesPage />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            columnsStatistic={columnsStatistic}
-            data={rows}
-            onRowClick={handleRowClick}
-            activeRowId={activeRowId ?? ""}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            rowHeight={height as ROW_HEIGHT}
-            columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-            TableWrapper={PageBodyStickyTableWrapper}
-            stickyHeader
-            meta={meta}
+      <DataTableStateHandler
+        isLoading={isTableLoading}
+        isEmpty={showEmptyState}
+        emptyState={<NoTracesPage type={type} />}
+      >
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          onRowClick={handleRowClick}
+          activeRowId={activeRowId ?? ""}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          meta={meta}
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            supportsTruncation
+            truncationEnabled={truncationEnabled}
           />
-          <PageBodyStickyContainer
-            className="py-4"
-            direction="horizontal"
-            limitWidth
-          >
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-              supportsTruncation
-              truncationEnabled={truncationEnabled}
-            />
-          </PageBodyStickyContainer>
-        </>
-      )}
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

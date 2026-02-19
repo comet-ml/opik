@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import List, Optional, Any, Dict, Iterator
+from typing import List, Optional, Any, Dict, Iterator, Union
 
 import opik.logging_messages as logging_messages
 import opik.opik_context as opik_context
@@ -30,7 +30,7 @@ EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the 
 
 
 def _calculate_total_items(
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     nb_samples: Optional[int],
     dataset_item_ids: Optional[List[str]],
 ) -> Optional[int]:
@@ -321,7 +321,7 @@ class EvaluationEngine:
 
     def evaluate_llm_task_on_dataset(
         self,
-        dataset_: dataset.Dataset,
+        dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
         task: LLMTask,
         nb_samples: Optional[int],
         dataset_item_ids: Optional[List[str]],

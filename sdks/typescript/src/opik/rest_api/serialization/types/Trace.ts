@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Comment } from "./Comment.js";
 import { ErrorInfo } from "./ErrorInfo.js";
+import { ExperimentItemReference } from "./ExperimentItemReference.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { GuardrailsValidation } from "./GuardrailsValidation.js";
 import { JsonListString } from "./JsonListString.js";
@@ -40,11 +41,13 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
+    ttft: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     visibilityMode: core.serialization.property("visibility_mode", TraceVisibilityMode.optional()),
     llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
     hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
     providers: core.serialization.list(core.serialization.string()).optional(),
+    experiment: ExperimentItemReference.optional(),
 });
 
 export declare namespace Trace {
@@ -72,10 +75,12 @@ export declare namespace Trace {
         total_estimated_cost?: number | null;
         span_count?: number | null;
         duration?: number | null;
+        ttft?: number | null;
         thread_id?: string | null;
         visibility_mode?: TraceVisibilityMode.Raw | null;
         llm_span_count?: number | null;
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
+        experiment?: ExperimentItemReference.Raw | null;
     }
 }

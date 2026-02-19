@@ -37,6 +37,71 @@ analyze traces.
     </Tip>
 
     </Tab>
+    <Tab title="VS Code">
+    
+    To integrate Opik with VS Code (GitHub Copilot), you need to add the MCP server
+    configuration to your workspace or user settings.
+
+    1. Create or open the `.vscode/mcp.json` file in your workspace (or run the
+       **MCP: Open User Configuration** command to add it globally).
+
+    2. Add the Opik MCP server configuration:
+
+    ```json wordWrap title=".vscode/mcp.json"
+    {
+        "inputs": [
+            {
+                "type": "promptString",
+                "id": "opik-api-key",
+                "description": "Opik API Key",
+                "password": true
+            }
+        ],
+        "servers": {
+            "opik-mcp": {
+                "type": "stdio",
+                "command": "npx",
+                "args": [
+                    "-y",
+                    "opik-mcp",
+                    "--apiKey",
+                    "${input:opik-api-key}"
+                ]
+            }
+        }
+    }
+    ```
+
+    3. When you start the MCP server for the first time, VS Code will prompt you
+       to enter your Opik API key. The value is securely stored for subsequent use.
+
+    <Tip>
+    If you are using a self-hosted version of Opik, add the `--apiBaseUrl` argument
+    and remove the `--apiKey` argument:
+
+    ```json wordWrap title=".vscode/mcp.json"
+    {
+        "servers": {
+            "opik-mcp": {
+                "type": "stdio",
+                "command": "npx",
+                "args": [
+                    "-y",
+                    "opik-mcp",
+                    "--apiBaseUrl",
+                    "http://localhost:5173/api"
+                ]
+            }
+        },
+        "inputs": []
+    }
+    ```
+    </Tip>
+
+    Once the MCP server is available, you can test it by asking Copilot:
+    `What is the latest trace available in Opik?`
+
+    </Tab>
     <Tab title="Windsurf">
     To install the Opik MCP server, you will need to navigate to the Windsurf settings
     page and in the MCP servers section, click on the `Add server` button. Here

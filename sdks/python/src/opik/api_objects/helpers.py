@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Literal
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
@@ -17,6 +17,7 @@ from ..types import BatchFeedbackScoreDict
 generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
+
 
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
@@ -105,18 +106,17 @@ def add_usage_to_metadata(
 def parse_filter_expressions(
     filter_string: Optional[str],
     parsed_item_class: Type[FilterParsedItemT],
+    entity_type: Literal["traces", "threads", "spans"],
 ) -> OptionalFilterParsedItemList:
     """
     Parses filter expressions from a filter string using a specified class for parsed items.
 
-    This function takes a filter string and a class type for parsed items, parses the
-    filter string into filter expressions using the OpikQueryLanguage, and then converts
-    those filter expressions into a list of parsed items of the specified class. If the
-    filter string does not contain any valid expressions, the function may return None.
-
     Args:
         filter_string: A string representing the filter expressions to be parsed.
         parsed_item_class: The class type to which the parsed filter expressions are mapped.
+        entity_type: The entity type to determine which OQL config to use.
+            Use "traces" for trace filtering, "spans" for span filtering,
+            "threads" for trace thread filtering.
 
     Returns:
         Optional[List[T]]: A list of objects of type T created from the parsed filter
@@ -125,9 +125,14 @@ def parse_filter_expressions(
     if filter_string is None:
         return None
 
-    filter_expressions = opik_query_language.OpikQueryLanguage.for_traces(
-        filter_string
-    ).get_filter_expressions()
+    if entity_type == "spans":
+        oql = opik_query_language.OpikQueryLanguage.for_spans(filter_string)
+    elif entity_type == "threads":
+        oql = opik_query_language.OpikQueryLanguage.for_threads(filter_string)
+    else:
+        oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string)
+
+    filter_expressions = oql.get_filter_expressions()
 
     return parse_search_expressions(
         filter_expressions, parsed_item_class=parsed_item_class

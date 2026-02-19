@@ -13,11 +13,16 @@ export const WorkspaceConfiguration: core.serialization.ObjectSchema<
         core.serialization.string().optional(),
     ),
     truncationOnTables: core.serialization.property("truncation_on_tables", core.serialization.boolean().optional()),
+    colorMap: core.serialization.property(
+        "color_map",
+        core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace WorkspaceConfiguration {
     export interface Raw {
         timeout_to_mark_thread_as_inactive?: string | null;
         truncation_on_tables?: boolean | null;
+        color_map?: Record<string, string> | null;
     }
 }

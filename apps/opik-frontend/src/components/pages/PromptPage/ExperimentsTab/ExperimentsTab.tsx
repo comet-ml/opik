@@ -32,7 +32,7 @@ import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import useAppStore from "@/store/AppStore";
-import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import { transformExperimentScores } from "@/lib/feedback-scores";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -341,18 +341,19 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  const { data, isPending, isPlaceholderData } = useGroupedExperimentsList({
-    workspaceName,
-    groupLimit,
-    promptId,
-    filters,
-    sorting: sortedColumns,
-    groups,
-    search: search!,
-    page: page!,
-    size: size!,
-    expandedMap: expandingConfig.expanded as Record<string, boolean>,
-  });
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useGroupedExperimentsList({
+      workspaceName,
+      groupLimit,
+      promptId,
+      filters,
+      sorting: sortedColumns,
+      groups,
+      search: search!,
+      page: page!,
+      size: size!,
+      expandedMap: expandingConfig.expanded as Record<string, boolean>,
+    });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
 
@@ -502,6 +503,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

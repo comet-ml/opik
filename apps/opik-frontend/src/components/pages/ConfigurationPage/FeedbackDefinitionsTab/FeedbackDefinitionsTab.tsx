@@ -115,18 +115,19 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useFeedbackDefinitionsList(
-    {
-      workspaceName,
-      search,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useFeedbackDefinitionsList(
+      {
+        workspaceName,
+        search,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
 
   const feedbackDefinitions = useMemo(
     () => data?.content ?? [],
@@ -254,6 +255,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

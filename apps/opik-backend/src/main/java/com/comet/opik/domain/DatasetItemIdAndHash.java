@@ -20,5 +20,7 @@ import java.util.UUID;
 public record DatasetItemIdAndHash(
         @NonNull UUID itemId,
         long dataHash,
-        Set<String> tags) {
+        Set<String> tags,
+        long evaluatorsHash,
+        long executionPolicyHash) {
 }

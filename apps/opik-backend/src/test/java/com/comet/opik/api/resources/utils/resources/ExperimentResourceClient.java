@@ -265,6 +265,13 @@ public class ExperimentResourceClient {
     public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
             List<? extends ExperimentFilter> filters, String name, UUID projectId, String apiKey,
             String workspaceName, int expectedStatus) {
+        return findGroupsAggregations(groups, types, filters, name, projectId, false, apiKey, workspaceName,
+                expectedStatus);
+    }
+
+    public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, UUID projectId, boolean projectDeleted,
+            String apiKey, String workspaceName, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("groups")
                 .path("aggregations")
@@ -284,6 +291,10 @@ public class ExperimentResourceClient {
 
         if (projectId != null) {
             webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        if (projectDeleted) {
+            webTarget = webTarget.queryParam("project_deleted", projectDeleted);
         }
 
         try (Response response = webTarget

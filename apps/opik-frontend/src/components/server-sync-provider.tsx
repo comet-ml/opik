@@ -1,4 +1,14 @@
-import { createContext, useContext, useMemo } from "react";
+import {
+  createContext,
+  Dispatch,
+  SetStateAction,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import noop from "lodash/noop";
+
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
 import useAppStore from "@/store/AppStore";
 import { WorkspaceConfig } from "@/types/workspaces";
@@ -11,12 +21,18 @@ type ServerSyncState = {
   config: WorkspaceConfig | null;
   truncationEnabled: boolean;
   threadTimeout: string | null;
+  colorMap: Record<string, string> | null;
+  previewColor: Record<string, string>;
+  setPreviewColor: Dispatch<SetStateAction<Record<string, string>>>;
 };
 
 const initialState: ServerSyncState = {
   config: null,
   truncationEnabled: true,
   threadTimeout: null,
+  colorMap: null,
+  previewColor: {},
+  setPreviewColor: noop,
 };
 
 const ServerSyncProviderContext = createContext<ServerSyncState>(initialState);
@@ -39,17 +55,30 @@ const ServerSyncProviderContext = createContext<ServerSyncState>(initialState);
 export function ServerSyncProvider({ children }: ServerSyncProviderProps) {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: config } = useWorkspaceConfig({ workspaceName });
+  const [previewColor, setPreviewColor] = useState<Record<string, string>>({});
+
+  // Clear preview overrides once the server config refreshes,
+  // so the merged colorMap switches from preview → actual server data without a blink.
+  useEffect(() => setPreviewColor({}), [config]);
 
   const value = useMemo(() => {
     const truncationEnabled = config?.truncation_on_tables ?? true;
     const threadTimeout = config?.timeout_to_mark_thread_as_inactive ?? null;
+    const serverMap = config?.color_map ?? null;
+    const hasOverrides = Object.keys(previewColor).length > 0;
+    const colorMap = hasOverrides
+      ? { ...(serverMap ?? {}), ...previewColor }
+      : serverMap;
 
     return {
       config: config ?? null,
       truncationEnabled,
       threadTimeout,
+      colorMap,
+      previewColor,
+      setPreviewColor,
     };
-  }, [config]);
+  }, [config, previewColor]);
 
   return (
     <ServerSyncProviderContext.Provider value={value}>

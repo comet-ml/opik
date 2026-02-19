@@ -1,6 +1,8 @@
 import { logger } from "@/utils/logger";
 import { Opik } from "opik";
 import path from "path";
+import os from "os";
+import fs from "fs";
 import { describe, expect, MockInstance } from "vitest";
 import { mockAPIFunction } from "@tests/mockUtils";
 
@@ -90,6 +92,51 @@ describe("Opik client config", () => {
     expect(() => {
       new Opik();
     }).toThrow("OPIK_API_KEY is not set");
+  });
+
+  it("should expand tilde in OPIK_CONFIG_PATH", async () => {
+    const mockHomedir = "/mock/home/user";
+    const mockConfigPath = `${mockHomedir}/custom/.opik.config`;
+    const mockConfigContent = `[opik]
+api_key = "test-tilde"
+url_override = "https://www.comet.com/api"
+project_name = "test-tilde"
+workspace = "test-tilde"`;
+
+    const existsSyncSpy = vi.spyOn(fs, "existsSync");
+    const readFileSyncSpy = vi.spyOn(fs, "readFileSync");
+    const homedirSpy = vi.spyOn(os, "homedir");
+
+    homedirSpy.mockReturnValue(mockHomedir);
+    existsSyncSpy.mockImplementation((filePath) => {
+      return String(filePath) === mockConfigPath;
+    });
+    readFileSyncSpy.mockImplementation((filePath) => {
+      if (String(filePath) === mockConfigPath) {
+        return mockConfigContent;
+      }
+      throw new Error(`File not found: ${filePath}`);
+    });
+
+    try {
+      process.env.OPIK_CONFIG_PATH = "~/custom/.opik.config";
+      delete process.env.OPIK_API_KEY;
+      delete process.env.OPIK_URL_OVERRIDE;
+
+      const opik = new Opik();
+
+      expect(homedirSpy).toHaveBeenCalled();
+      expect(existsSyncSpy).toHaveBeenCalledWith(mockConfigPath);
+      expect(readFileSyncSpy).toHaveBeenCalledWith(mockConfigPath, "utf8");
+      expect(opik.config.apiUrl).toBe("https://www.comet.com/api");
+      expect(opik.config.apiKey).toBe("test-tilde");
+      expect(opik.config.workspaceName).toBe("test-tilde");
+      expect(opik.config.projectName).toBe("test-tilde");
+    } finally {
+      existsSyncSpy.mockRestore();
+      readFileSyncSpy.mockRestore();
+      homedirSpy.mockRestore();
+    }
   });
 });
 

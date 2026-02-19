@@ -69,6 +69,7 @@ const MetricConfigs = ({
         <GEvalMetricConfigs
           configs={configs as Partial<GEvalMetricParameters>}
           onChange={onChange}
+          datasetVariables={datasetVariables}
         />
       );
     }

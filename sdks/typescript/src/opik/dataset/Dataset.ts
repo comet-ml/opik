@@ -1,16 +1,20 @@
 import { generateId } from "@/utils/generateId";
 import { DatasetItem, DatasetItemData } from "./DatasetItem";
+import { DatasetVersion } from "./DatasetVersion";
+import { getDatasetItems } from "./getDatasetItems";
 import { OpikClient } from "@/client/Client";
-import { DatasetItemPublic, DatasetItemWrite } from "@/rest_api/api";
-import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { DatasetItemWrite, DatasetVersionPublic } from "@/rest_api/api";
+import { splitIntoBatches } from "@/utils/stream";
 import { logger } from "@/utils/logger";
-import { DatasetItemMissingIdError } from "@/errors";
+import {
+  DatasetItemMissingIdError,
+  DatasetVersionNotFoundError,
+} from "@/errors";
 import {
   JsonItemNotObjectError,
   JsonNotArrayError,
   JsonParseError,
 } from "@/errors/common/errors";
-import { serialization } from "@/rest_api";
 import { OpikApiError } from "@/rest_api/errors";
 import stringify from "fast-json-stable-stringify";
 
@@ -160,33 +164,13 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * @returns A list of objects representing the dataset items
    */
   public async getItems(nbSamples?: number, lastRetrievedId?: string) {
-    const datasetItems = await this.getItemsAsDataclasses(
-      nbSamples,
-      lastRetrievedId
-    );
-
-    return datasetItems.map((item) => item.getContent(true));
-  }
-
-  private async getItemsAsDataclasses(
-    nbSamples?: number,
-    lastRetrievedId?: string
-  ): Promise<DatasetItem<T>[]> {
-    const streamLimit = nbSamples ? Math.min(nbSamples, 2000) : 2000; // API max is 2000
-
-    const streamResponse = await this.opik.api.datasets.streamDatasetItems({
+    const datasetItems = await getDatasetItems<T>(this.opik, {
       datasetName: this.name,
+      nbSamples,
       lastRetrievedId,
-      steamLimit: streamLimit,
     });
 
-    const rawItems = await parseNdjsonStreamToArray<DatasetItemPublic>(
-      streamResponse,
-      serialization.DatasetItemPublic,
-      nbSamples
-    );
-
-    return rawItems.map((item) => DatasetItem.fromApiModel(item));
+    return datasetItems.map((item) => item.getContent(true));
   }
 
   /**
@@ -257,13 +241,11 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     const mappedItems: Record<string, unknown>[] = items.map((item) => {
       const itemCopy = { ...item } as Record<string, unknown>;
 
-      if (Object.keys(keysMapping).length > 0) {
-        for (const [key, value] of Object.entries(keysMapping)) {
-          if (key in itemCopy) {
-            const content = itemCopy[key];
-            delete itemCopy[key];
-            itemCopy[value] = content;
-          }
+      for (const [key, value] of Object.entries(keysMapping)) {
+        if (key in itemCopy) {
+          const content = itemCopy[key];
+          delete itemCopy[key];
+          itemCopy[value] = content;
         }
       }
 
@@ -313,7 +295,9 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     logger.debug("Syncing dataset hashes with backend", { datasetId: this.id });
 
     try {
-      const allItems = await this.getItemsAsDataclasses();
+      const allItems = await getDatasetItems<T>(this.opik, {
+        datasetName: this.name,
+      });
 
       this.clearHashState();
 
@@ -334,6 +318,82 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
         });
         this.clearHashState();
         return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Get a read-only view of a specific dataset version.
+   *
+   * @param versionName The version name to retrieve (e.g., "v1", "v2")
+   * @returns A DatasetVersion object for the specified version
+   * @throws DatasetVersionNotFoundError if the version doesn't exist
+   */
+  public async getVersionView(versionName: string): Promise<DatasetVersion<T>> {
+    const versionInfo = await this.findVersionByName(versionName);
+
+    if (!versionInfo) {
+      throw new DatasetVersionNotFoundError(versionName, this.name);
+    }
+
+    return new DatasetVersion<T>(this.name, this.id, versionInfo, this.opik);
+  }
+
+  /**
+   * Get the current (latest) version name.
+   *
+   * @returns The version name (e.g., "v1") or undefined if no versions exist
+   */
+  public async getCurrentVersionName(): Promise<string | undefined> {
+    const versionInfo = await this.getVersionInfo();
+    return versionInfo?.versionName;
+  }
+
+  /**
+   * Get the current (latest) version info.
+   *
+   * @returns The DatasetVersionPublic object or undefined if no versions exist
+   */
+  public async getVersionInfo(): Promise<DatasetVersionPublic | undefined> {
+    try {
+      const response = await this.opik.api.datasets.listDatasetVersions(
+        this.id,
+        { page: 1, size: 1 }
+      );
+
+      const versions = response.content ?? [];
+      if (versions.length === 0) {
+        return undefined;
+      }
+
+      return versions[0];
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Find a version by its name (e.g., "v1", "v2").
+   *
+   * @param versionName The version name to find
+   * @returns The DatasetVersionPublic or undefined if not found
+   */
+  private async findVersionByName(
+    versionName: string
+  ): Promise<DatasetVersionPublic | undefined> {
+    try {
+      const response =
+        await this.opik.api.datasets.retrieveDatasetVersion(this.id, {
+          versionName,
+        });
+      return response;
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
       }
       throw error;
     }

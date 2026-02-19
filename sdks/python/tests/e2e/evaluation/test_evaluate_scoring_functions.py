@@ -1,6 +1,7 @@
 from typing import Dict, Any
 
 import opik
+from opik import synchronization
 from opik.api_objects.experiment import experiment_item
 from opik.evaluation import metrics
 from opik.evaluation.metrics import score_result
@@ -9,6 +10,16 @@ from opik.types import FeedbackScoreDict
 
 from .. import verifiers
 from ...testlib import assert_equal, ANY_BUT_NONE
+
+
+def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> None:
+    """Wait for dataset to have the expected version, fail if not reached."""
+    success = synchronization.until(
+        lambda: dataset.get_current_version_name() == expected_version,
+        max_try_seconds=timeout,
+    )
+    assert success, f"Expected version '{expected_version}' was not created in time"
+
 
 DATASET_ITEMS = [
     {
@@ -83,6 +94,10 @@ def test_evaluate__scoring_functions__happy_flow(
     # Tests that ordinary scoring functions work correctly.
     dataset = opik_client.create_dataset(dataset_name)
     dataset.insert(DATASET_ITEMS)
+    _wait_for_version(dataset, "v1")
+
+    # Get the version ID to verify it's passed to the experiment
+    version_info = dataset.get_version_info()
 
     evaluation_result = opik.evaluate(
         dataset=dataset,
@@ -104,6 +119,7 @@ def test_evaluate__scoring_functions__happy_flow(
         traces_amount=1,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=None,
+        dataset_version_id=version_info.id,
     )
 
     assert evaluation_result.dataset_id == dataset.id

@@ -1,31 +1,33 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import { PromptLibraryMetadata } from "@/types/playground";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import get from "lodash/get";
-import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
-import { Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
+import { FileTerminal, GitCommitVertical } from "lucide-react";
 import useAppStore from "@/store/AppStore";
-import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import PromptContentView, {
+  CustomUseInPlaygroundButton,
+} from "./PromptContentView";
 
-type RawPromptData = {
-  id: string;
-  name: string;
-  version: {
-    commit: string;
-    id: string;
-    template: string;
-    metadata?: object;
-  };
+// Helper to ensure template is always a string for PromptVersion
+// The template from trace metadata can be either a string (legacy) or parsed JSON object (new format)
+const normalizeTemplate = (template: unknown): string => {
+  if (typeof template === "string") {
+    return template;
+  }
+  if (template !== null && template !== undefined) {
+    return JSON.stringify(template, null, 2);
+  }
+  return "";
 };
 
 type PromptsTabProps = {
@@ -34,15 +36,20 @@ type PromptsTabProps = {
 };
 
 const convertRawPromptToPromptWithLatestVersion = (
-  rawPrompt: RawPromptData,
+  rawPrompt: PromptLibraryMetadata,
 ): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
+  // Use existing metadata if available, otherwise use empty object
+  // Empty object causes isMessagesJsonFormat() to return false, so the template
+  // is treated as plain text (correct for SDK text prompts without metadata)
+  const metadata = rawPrompt.version.metadata ?? {};
+
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
-    template: rawPrompt.version.template,
-    metadata: rawPrompt.version.metadata ?? {},
-    commit: rawPrompt.version.commit,
+    template: normalizeTemplate(rawPrompt.version.template),
+    metadata,
+    commit: rawPrompt.version.commit ?? "",
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
   };
@@ -55,33 +62,9 @@ const convertRawPromptToPromptWithLatestVersion = (
     created_at: date, // We don't have this in raw data
     version_count: 1, // Assuming single version
     tags: [], // We don't have this in raw data
+    template_structure: rawPrompt.template_structure,
     latest_version: promptVersion,
   };
-};
-
-// Custom Button component that matches the "Use in Playground" styling
-const CustomUseInPlaygroundButton: React.FC<{
-  variant?: string;
-  size?: string;
-  disabled?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-  className?: string;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-}> = ({ onClick, disabled, size, variant, ...props }) => {
-  return (
-    <Button
-      variant="ghost"
-      onClick={onClick}
-      size="sm"
-      disabled={disabled}
-      className="inline-flex items-center gap-1"
-      {...props}
-    >
-      Use in Playground
-      <ExternalLink className="size-3.5 shrink-0" />
-    </Button>
-  );
 };
 
 const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
@@ -92,7 +75,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     data.metadata as Record<string, unknown>,
     "opik_prompts",
     null,
-  ) as RawPromptData[] | null;
+  ) as PromptLibraryMetadata[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const showOptimizerPrompts = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
@@ -101,7 +84,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   const prompts = useMemo(() => {
     if (!showOptimizerPrompts) return [];
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
-      return (rawPrompts as RawPromptData[]).map(
+      return (rawPrompts as PromptLibraryMetadata[]).map(
         convertRawPromptToPromptWithLatestVersion,
       );
     }
@@ -109,11 +92,11 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   }, [rawPrompts, showOptimizerPrompts]);
 
   const renderPrompts = () => {
-    if (!prompts || prompts.length === 0) return null;
+    if (!prompts || prompts.length === 0 || !rawPrompts) return null;
 
     return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
       const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      const promptContent = promptInfo?.latest_version?.template || promptInfo;
+      const rawTemplate = rawPrompts[index]?.version?.template;
       const commitHash = promptInfo?.latest_version?.commit;
       const promptId = promptInfo?.id;
 
@@ -137,31 +120,21 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
               </div>
             </div>
           </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-x-1 space-y-2">
-              <SyntaxHighlighter
-                withSearch
-                data={promptContent as object}
-                search={search}
-              />
-              <div className="flex items-center justify-between text-xs text-muted-slate">
-                {promptId && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      to="/$workspaceName/prompts/$promptId"
-                      params={{ workspaceName, promptId }}
-                      className="inline-flex items-center"
-                    >
-                      View in Prompt library
-                    </Link>
-                  </Button>
-                )}
+          <AccordionContent className="px-3">
+            <PromptContentView
+              template={rawTemplate ?? promptInfo?.latest_version?.template}
+              promptId={promptId}
+              activeVersionId={rawPrompts[index]?.version?.id}
+              workspaceName={workspaceName}
+              search={search}
+              templateStructure={rawPrompts[index]?.template_structure}
+              playgroundButton={
                 <TryInPlaygroundButton
                   prompt={promptInfo}
                   ButtonComponent={CustomUseInPlaygroundButton}
                 />
-              </div>
-            </div>
+              }
+            />
           </AccordionContent>
         </AccordionItem>
       );

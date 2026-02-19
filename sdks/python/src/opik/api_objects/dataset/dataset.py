@@ -1,7 +1,8 @@
-import json
+import abc
+import datetime
 import logging
 import functools
-import time
+import sys
 from typing import (
     Optional,
     Any,
@@ -10,25 +11,27 @@ from typing import (
     Sequence,
     Set,
     TYPE_CHECKING,
-    Callable,
     Iterator,
 )
 
-from opik.api_objects import opik_query_language, rest_stream_parser
+from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
+from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
-    dataset_item as rest_dataset_item_read,
+    dataset_version_public,
 )
-from opik.rest_api.core.api_error import ApiError
 from opik.message_processing.batching import sequence_splitter
-from opik.rate_limit import rate_limit
 from opik import id_helpers
 import opik.exceptions as exceptions
 import opik.config as config
-from opik.rest_client_configurator import retry_decorator
 from .. import constants
-from . import dataset_item, converters
+from . import dataset_item, converters, rest_operations
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -36,55 +39,250 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def _ensure_rest_api_call_respecting_rate_limit(
-    rest_callable: Callable[[], Any],
-) -> Any:
+class DatasetExportOperations(abc.ABC):
     """
-    Execute a REST API call with automatic retry on rate limit (429) errors.
+    Abstract base class providing export operations for dataset items.
 
-    This function handles HTTP 429 rate limit errors by waiting for the duration
-    specified in the response headers and retrying the request. Regular retries
-    for other errors are handled by the underlying rest client.
-
-    Args:
-        rest_callable: A callable that performs the REST API call.
-
-    Returns:
-        The result of the successful REST API call.
-
-    Raises:
-        ApiError: If the error is not a 429 rate limit error.
+    This class defines the common interface for exporting dataset items,
+    shared by both Dataset (current state) and DatasetVersion (specific version).
     """
-    while True:
-        try:
-            result = rest_callable()
-            return result
-        except ApiError as exception:
-            if exception.status_code == 429:
-                # Parse rate limit headers to get retry delay
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        retry_after = rate_limiter.retry_after()
-                        LOGGER.info(
-                            "Rate limited (HTTP 429), retrying in %s seconds",
-                            retry_after,
-                        )
-                        time.sleep(retry_after)
-                        continue
 
-                # Fallback: wait 1 second if no header available
-                LOGGER.info(
-                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
-                )
-                time.sleep(1)
-                continue
+    @abc.abstractmethod
+    def __internal_api__stream_items_as_dataclasses__(
+        self,
+        nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """
+        Stream dataset items as DatasetItem objects.
 
-            # Re-raise if not a 429 error
-            raise
+        Args:
+            nb_samples: Maximum number of items to retrieve.
+            batch_size: Maximum number of items to fetch per batch.
+            dataset_item_ids: Optional list of specific item IDs to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            DatasetItem objects one at a time.
+        """
+        raise NotImplementedError
+
+    def to_pandas(self) -> "pd.DataFrame":
+        """
+        Convert the dataset items to a pandas DataFrame.
+
+        Requires the `pandas` library to be installed.
+
+        Returns:
+            A pandas DataFrame containing all items.
+        """
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
+        return converters.to_pandas(dataset_items, keys_mapping={})
+
+    def to_json(self) -> str:
+        """
+        Convert the dataset items to a JSON string.
+
+        Returns:
+            A JSON string representation of all items.
+        """
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
+        return converters.to_json(dataset_items, keys_mapping={})
+
+    def get_items(
+        self,
+        nb_samples: Optional[int] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve dataset items as a list of dictionaries.
+
+        Args:
+            nb_samples: Maximum number of items to retrieve. If not set, all items are returned.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Supports filtering by tags, data fields, metadata, etc.
+
+                Supported columns include:
+                - `id`, `source`, `trace_id`, `span_id`: String fields
+                - `data`: Dictionary field (use dot notation, e.g., "data.category")
+                - `tags`: List field (use "contains" operator)
+                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+                - `created_by`, `last_updated_by`: String fields
+
+                Examples:
+                - `tags contains "failed"` - Items with 'failed' tag
+                - `data.category = "test"` - Items with specific data field value
+                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
+
+        Returns:
+            A list of dictionaries representing the dataset items.
+        """
+        dataset_items_as_dicts = [
+            {"id": item.id, **item.get_content()}
+            for item in self.__internal_api__stream_items_as_dataclasses__(
+                nb_samples=nb_samples, filter_string=filter_string
+            )
+        ]
+        return dataset_items_as_dicts
+
+    @abc.abstractmethod
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for experiment association.
+
+        Returns:
+            DatasetVersionPublic containing version metadata (id, version_name, etc.).
+            For Dataset, returns info about the current/latest version, or None if no version exists.
+            For DatasetVersion, returns info about this specific version.
+        """
+        raise NotImplementedError
 
 
-class Dataset:
+class DatasetVersion(DatasetExportOperations):
+    """
+    A read-only view of a specific dataset version.
+
+    This class provides access to dataset items at a specific version point in time.
+    It supports reading version metadata and retrieving items, but does not allow
+    mutations to the dataset.
+
+    This object should not be created directly. Use :meth:`Dataset.get_dataset_version`
+    to obtain an instance.
+    """
+
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_id: str,
+        rest_client: rest_api_client.OpikApi,
+        version_info: dataset_version_public.DatasetVersionPublic,
+    ) -> None:
+        self._dataset_name = dataset_name
+        self._dataset_id = dataset_id
+        self._rest_client = rest_client
+        self._version_info = version_info
+
+    @property
+    def dataset_name(self) -> str:
+        """The name of the dataset this version belongs to."""
+        return self._dataset_name
+
+    @property
+    def name(self) -> str:
+        """The name of the dataset this version belongs to (alias for dataset_name)."""
+        return self._dataset_name
+
+    @property
+    def dataset_id(self) -> str:
+        """The unique identifier of the dataset this version belongs to."""
+        return self._dataset_id
+
+    @property
+    def id(self) -> str:
+        """The unique identifier of the dataset this version belongs to (alias for dataset_id)."""
+        return self._dataset_id
+
+    @property
+    def version_id(self) -> Optional[str]:
+        """The unique identifier of this specific version."""
+        return self._version_info.id
+
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """Total number of items in this version (alias for items_total)."""
+        return self._version_info.items_total
+
+    @property
+    def version_hash(self) -> Optional[str]:
+        """The unique hash identifier of this version."""
+        return self._version_info.version_hash
+
+    @property
+    def version_name(self) -> Optional[str]:
+        """The sequential version name (e.g., 'v1', 'v2')."""
+        return self._version_info.version_name
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        """Tags associated with this version."""
+        return self._version_info.tags
+
+    @property
+    def is_latest(self) -> Optional[bool]:
+        """Whether this is the latest version of the dataset."""
+        return self._version_info.is_latest
+
+    @property
+    def items_total(self) -> Optional[int]:
+        """Total number of items in this version."""
+        return self._version_info.items_total
+
+    @property
+    def items_added(self) -> Optional[int]:
+        """Number of items added since the previous version."""
+        return self._version_info.items_added
+
+    @property
+    def items_modified(self) -> Optional[int]:
+        """Number of items modified since the previous version."""
+        return self._version_info.items_modified
+
+    @property
+    def items_deleted(self) -> Optional[int]:
+        """Number of items deleted since the previous version."""
+        return self._version_info.items_deleted
+
+    @property
+    def change_description(self) -> Optional[str]:
+        """Description of changes in this version."""
+        return self._version_info.change_description
+
+    @property
+    def created_at(self) -> Optional[datetime.datetime]:
+        """Timestamp when this version was created."""
+        return self._version_info.created_at
+
+    @property
+    def created_by(self) -> Optional[str]:
+        """User who created this version."""
+        return self._version_info.created_by
+
+    @override
+    def __internal_api__stream_items_as_dataclasses__(
+        self,
+        nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        return rest_operations.stream_dataset_items(
+            rest_client=self._rest_client,
+            dataset_name=self._dataset_name,
+            nb_samples=nb_samples,
+            batch_size=batch_size,
+            dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=self._version_info.version_hash,
+        )
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for this specific dataset version.
+
+        Returns:
+            DatasetVersionPublic containing this version's metadata.
+        """
+        return self._version_info
+
+
+class Dataset(DatasetExportOperations):
     def __init__(
         self,
         name: str,
@@ -134,6 +332,48 @@ class Dataset:
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
 
+    def get_current_version_name(self) -> Optional[str]:
+        """
+        Get the current version name of the dataset.
+
+        The version name is fetched from the backend and reflects the latest
+        committed version after any mutation operations (insert, update, delete).
+
+        Returns:
+            The current version name (e.g., 'v1', 'v2'), or None if no version exists.
+        """
+        version_info = self.get_version_info()
+        return version_info.version_name if version_info else None
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for the current (latest) dataset version.
+
+        Returns:
+            DatasetVersionPublic containing the current version's metadata,
+            or None if no version exists yet.
+        """
+        versions_response = None
+        try:
+            versions_response = self._rest_client.datasets.list_dataset_versions(
+                id=self.id,
+                page=1,
+                size=1,
+            )
+        except ApiError as e:
+            if e.status_code == 403:
+                LOGGER.debug(
+                    "Versioning is not enabled for datasets get version info returning None"
+                )
+            else:
+                raise
+        if not versions_response or not versions_response.content:
+            return None
+        return versions_response.content[0]
+
     def _insert_batch_with_retry(
         self,
         batch: List[rest_dataset_item.DatasetItemWrite],
@@ -147,7 +387,7 @@ class Dataset:
                 user operation together. All batches sent as part of one insert/update
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch, batch_group_id=batch_group_id
             )
@@ -258,7 +498,7 @@ class Dataset:
                 user operation together. All batches sent as part of one delete
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.delete_dataset_items(
                 item_ids=batch, batch_group_id=batch_group_id
             )
@@ -303,67 +543,7 @@ class Dataset:
 
         self.delete(item_ids)
 
-    def to_pandas(self) -> "pd.DataFrame":
-        """
-        Requires: `pandas` library to be installed.
-
-        Convert the dataset to a pandas DataFrame.
-
-        Returns:
-            A pandas DataFrame containing all items in the dataset.
-        """
-        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
-
-        return converters.to_pandas(dataset_items, keys_mapping={})
-
-    def to_json(self) -> str:
-        """
-        Convert the dataset to a JSON string.
-
-        Returns:
-            A JSON string representation of all items in the dataset.
-        """
-        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
-
-        return converters.to_json(dataset_items, keys_mapping={})
-
-    def get_items(
-        self,
-        nb_samples: Optional[int] = None,
-        filter_string: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve a fixed set number of dataset items dictionaries.
-
-        Args:
-            nb_samples: The number of samples to retrieve. If not set - all items are returned.
-            filter_string: Optional OQL filter string to filter dataset items.
-                Supports filtering by tags, data fields, metadata, etc.
-
-                Supported columns include:
-                - `id`, `source`, `trace_id`, `span_id`: String fields
-                - `data`: Dictionary field (use dot notation, e.g., "data.category")
-                - `tags`: List field (use "contains" operator)
-                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
-                - `created_by`, `last_updated_by`: String fields
-
-                Examples:
-                - `tags contains "failed"` - Items with 'failed' tag
-                - `data.category = "test"` - Items with specific data field value
-                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
-
-        Returns:
-            A list of dictionaries objects representing the samples.
-        """
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(
-                nb_samples=nb_samples, filter_string=filter_string
-            )
-        ]
-
-        return dataset_items_as_dicts
-
+    @override
     def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
@@ -389,84 +569,15 @@ class Dataset:
         Yields:
             DatasetItem objects one at a time
         """
-        if batch_size is None:
-            batch_size = constants.DATASET_STREAM_BATCH_SIZE
-
-        last_retrieved_id: Optional[str] = None
-        should_retrieve_more_items = True
-        items_yielded = 0
-        dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
-
-        # Parse filter_string if provided
-        filters: Optional[str] = None
-        if filter_string:
-            oql = opik_query_language.OpikQueryLanguage.for_dataset_items(filter_string)
-            filter_expressions = oql.get_filter_expressions()
-            if filter_expressions:
-                filters = json.dumps(filter_expressions)
-
-        while should_retrieve_more_items:
-            # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
-            @retry_decorator.opik_rest_retry
-            def _fetch_batch() -> List[rest_dataset_item_read.DatasetItem]:
-                return rest_stream_parser.read_and_parse_stream(
-                    stream=self._rest_client.datasets.stream_dataset_items(
-                        dataset_name=self._name,
-                        last_retrieved_id=last_retrieved_id,
-                        steam_limit=batch_size,
-                        filters=filters,
-                    ),
-                    item_class=rest_dataset_item_read.DatasetItem,
-                    nb_samples=nb_samples,
-                )
-
-            dataset_items = _fetch_batch()
-
-            if len(dataset_items) == 0:
-                should_retrieve_more_items = False
-                break
-
-            for item in dataset_items:
-                dataset_item_id = item.id
-                last_retrieved_id = dataset_item_id
-
-                # Filter by dataset_item_ids if provided
-                if dataset_items_ids_left is not None:
-                    if dataset_item_id not in dataset_items_ids_left:
-                        continue
-                    else:
-                        dataset_items_ids_left.remove(dataset_item_id)
-
-                reconstructed_item = dataset_item.DatasetItem(
-                    id=item.id,
-                    trace_id=item.trace_id,
-                    span_id=item.span_id,
-                    source=item.source,
-                    **item.data,
-                )
-
-                yield reconstructed_item
-                items_yielded += 1
-
-                # Stop retrieving if we have enough samples
-                if nb_samples is not None and items_yielded >= nb_samples:
-                    should_retrieve_more_items = False
-                    break
-
-                # Stop retrieving if we found all filtered dataset items
-                if (
-                    dataset_items_ids_left is not None
-                    and len(dataset_items_ids_left) == 0
-                ):
-                    should_retrieve_more_items = False
-                    break
-
-        # Warn if some requested items were not found
-        if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
-            LOGGER.warning(
-                "The following dataset items were not found in the dataset: %s",
-                dataset_items_ids_left,
-            )
+        return rest_operations.stream_dataset_items(
+            rest_client=self._rest_client,
+            dataset_name=self._name,
+            nb_samples=nb_samples,
+            batch_size=batch_size,
+            dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=None,
+        )
 
     def insert_from_json(
         self,
@@ -535,3 +646,43 @@ class Dataset:
         new_items = converters.from_pandas(dataframe, keys_mapping, ignore_keys)
 
         self.insert(new_items)
+
+    def get_version_view(self, version_name: str) -> DatasetVersion:
+        """
+        Get a read-only view of a specific dataset version.
+
+        The returned DatasetVersion object allows reading version metadata and
+        retrieving items via :meth:`DatasetVersion.get_items`, but does not support
+        mutations.
+
+        Args:
+            version_name: The version name (e.g., 'v1', 'v2').
+
+        Returns:
+            A read-only DatasetVersion object for accessing the specified version.
+
+        Raises:
+            opik.exceptions.DatasetVersionNotFound: If the specified version does not exist.
+
+        Example:
+            >>> dataset = client.get_dataset("my_dataset")
+            >>> version = dataset.get_version_view("v1")
+            >>> items = version.get_items()
+        """
+        version_info = rest_operations.find_version_by_name(
+            rest_client=self._rest_client,
+            dataset_id=self.id,
+            version_name=version_name,
+        )
+
+        if version_info is None:
+            raise exceptions.DatasetVersionNotFound(
+                f"Dataset version '{version_name}' not found in dataset '{self._name}'"
+            )
+
+        return DatasetVersion(
+            dataset_name=self._name,
+            dataset_id=self.id,
+            rest_client=self._rest_client,
+            version_info=version_info,
+        )

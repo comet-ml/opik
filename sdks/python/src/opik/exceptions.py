@@ -106,6 +106,12 @@ class DatasetNotFound(OpikException):
     pass
 
 
+class DatasetVersionNotFound(OpikException):
+    """Exception raised when a dataset version is not found."""
+
+    pass
+
+
 class GuardrailValidationFailed(OpikException):
     """Exception raised when a guardrail validation fails."""
 

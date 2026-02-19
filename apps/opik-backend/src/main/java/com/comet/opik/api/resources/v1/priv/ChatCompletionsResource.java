@@ -74,7 +74,8 @@ public class ChatCompletionsResource {
             log.info("Creating and streaming chat completions, workspaceId '{}', model '{}', actualModel '{}'",
                     workspaceId, request.model(), resolvedModelInfo.actualModel());
             type = MediaType.SERVER_SENT_EVENTS;
-            var chunkedOutput = new ChunkedOutput<String>(String.class, "\r\n");
+            // Use "\n\n" separator for SSE format (each event ends with double newline)
+            var chunkedOutput = new ChunkedOutput<String>(String.class, "\n\n");
             chatCompletionService.createAndStreamResponse(request, workspaceId,
                     new ChunkedOutputHandlers(chunkedOutput));
             entity = chunkedOutput;

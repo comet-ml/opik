@@ -19,7 +19,7 @@ The function accepts a single `options` parameter of type `EvaluateOptions`, whi
 
 | Parameter           | Type                      | Required | Description                                                                                |
 | ------------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `dataset`           | `Dataset`                 | Yes      | The dataset to evaluate against, containing inputs and expected outputs                    |
+| `dataset`           | `Dataset \| DatasetVersion` | Yes    | The dataset or dataset version to evaluate against. Use `DatasetVersion` for reproducible evaluations pinned to a specific snapshot. |
 | `task`              | `EvaluationTask`          | Yes      | The specific LLM task to perform                                                           |
 | `scoringMetrics`    | `BaseMetric[]`            | No       | Optional array of metrics to evaluate model performance (e.g., accuracy, F1 score)         |
 | `experimentName`    | `string`                  | No       | Optional name for this evaluation experiment for tracking and reporting                    |
@@ -70,7 +70,7 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
   const { input } = datasetItem;
 
   const response = await openai.responses.create({
-    model: "gpt-4o",
+    model: "gpt-5-nano",
     instructions: "You are a coding assistant",
     input,
   });
@@ -95,6 +95,24 @@ async function runEvaluation() {
     },
   });
 }
+```
+
+### Evaluating a Specific Version
+
+For reproducible evaluations, use a `DatasetVersion` instead of `Dataset`:
+
+```typescript
+// Get a specific version for reproducible evaluation
+const dataset = await opik.getOrCreateDataset<DatasetItem>("example-dataset");
+const v2 = await dataset.getVersionView("v2");
+
+const result = await evaluate({
+  dataset: v2,
+  task: llmTask,
+  scoringMetrics: [new ExactMatch()],
+  experimentName: "Pinned to v2",
+});
+// Experiment is linked to version v2, not latest
 ```
 
 ## Notes

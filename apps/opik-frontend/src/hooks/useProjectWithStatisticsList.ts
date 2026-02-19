@@ -19,13 +19,20 @@ type UseProjectWithStatisticsResponse = {
     total: number;
   };
   isPending: boolean;
+  isPlaceholderData: boolean;
+  isFetching: boolean;
 };
 
 export default function useProjectWithStatisticsList(
   params: UseProjectWithStatisticsParams,
   config: Omit<UseQueryOptions, "queryKey" | "queryFn">,
 ) {
-  const { data: projectsData, isPending } = useProjectsList(params, {
+  const {
+    data: projectsData,
+    isPending,
+    isPlaceholderData,
+    isFetching,
+  } = useProjectsList(params, {
     ...config,
     placeholderData: keepPreviousData,
   } as never);
@@ -73,5 +80,7 @@ export default function useProjectWithStatisticsList(
   return {
     data,
     isPending,
+    isPlaceholderData,
+    isFetching,
   } as UseProjectWithStatisticsResponse;
 }

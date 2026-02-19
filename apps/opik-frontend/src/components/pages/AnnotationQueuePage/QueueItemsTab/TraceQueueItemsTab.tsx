@@ -63,6 +63,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
@@ -70,6 +71,7 @@ import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/Queu
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
@@ -131,6 +133,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: COLUMN_METADATA_ID,
@@ -182,6 +185,9 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "llm_span_count",
@@ -342,7 +348,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useTracesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -440,6 +446,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
             statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+            statisticDataFormater: formatScoreDisplay,
           }) as ColumnData<Trace>,
       ),
     ];
@@ -624,6 +631,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

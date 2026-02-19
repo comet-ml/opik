@@ -8,6 +8,7 @@ import {
   useSensors,
   MouseSensor,
 } from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
   arrayMove,
   SortableContext,
@@ -120,6 +121,7 @@ const GroupsContent = <TColumnData,>({
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis]}
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={groups} strategy={verticalListSortingStrategy}>

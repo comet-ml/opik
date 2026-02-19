@@ -3,6 +3,7 @@ import React, {
   useState,
   useImperativeHandle,
   forwardRef,
+  useCallback,
 } from "react";
 import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
@@ -20,22 +21,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
-
-import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
 import {
-  mustachePlugin,
-  codeMirrorPromptTheme,
-} from "@/constants/codeMirrorPlugins";
-import { DropdownOption } from "@/types/shared";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
+  JsonTreePopover,
+  JsonObject,
+  JsonValue,
+} from "@/components/shared/JsonTreePopover";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
-import { useMessageContent } from "@/hooks/useMessageContent";
+
+import { cn } from "@/lib/utils";
 import {
   getTextFromMessageContent,
   hasAudiosInContent,
@@ -43,6 +41,18 @@ import {
   hasVideosInContent,
   isMediaAllowedForRole,
 } from "@/lib/llm";
+import { useMessageContent } from "@/hooks/useMessageContent";
+import { useJsonPopover } from "./useJsonPopover";
+
+import isEmpty from "lodash/isEmpty";
+
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { DropdownOption } from "@/types/shared";
+import {
+  mustachePlugin,
+  codeMirrorPromptTheme,
+} from "@/constants/codeMirrorPlugins";
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -85,6 +95,8 @@ interface LLMPromptMessageProps {
   promptVariables?: string[];
   improvePromptConfig?: ImprovePromptConfig;
   disabled?: boolean;
+  jsonTreeData?: JsonObject | null;
+  onJsonPathSelect?: (path: string, value: JsonValue) => void;
 }
 
 const LLMPromptMessage = forwardRef<
@@ -110,6 +122,8 @@ const LLMPromptMessage = forwardRef<
       promptVariables,
       improvePromptConfig,
       disabled = false,
+      jsonTreeData,
+      onJsonPathSelect,
     },
     ref,
   ) => {
@@ -121,8 +135,9 @@ const LLMPromptMessage = forwardRef<
       useSortable({ id });
 
     const editorViewRef = useRef<EditorView | null>(null);
+    const popoverTriggerRef = useRef<HTMLSpanElement | null>(null);
     const style = {
-      transform: CSS.Transform.toString(transform),
+      transform: CSS.Translate.toString(transform),
       transition,
     };
 
@@ -140,19 +155,38 @@ const LLMPromptMessage = forwardRef<
       onChangeContent: (newContent) => onChangeMessage({ content: newContent }),
     });
 
+    const insertTextAtCursor = useCallback((text: string) => {
+      const view = editorViewRef.current;
+      if (view) {
+        const cursorPos = view.state.selection.main.head;
+        view.dispatch({
+          changes: { from: cursorPos, insert: text },
+          selection: { anchor: cursorPos + text.length },
+        });
+        view.focus();
+      }
+    }, []);
+
     useImperativeHandle(ref, () => ({
-      insertAtCursor: (text: string) => {
-        const view = editorViewRef.current;
-        if (view) {
-          const cursorPos = view.state.selection.main.head;
-          view.dispatch({
-            changes: { from: cursorPos, insert: text },
-            selection: { anchor: cursorPos + text.length },
-          });
-          view.focus();
-        }
-      },
+      insertAtCursor: insertTextAtCursor,
     }));
+
+    const hasJsonData = !isEmpty(jsonTreeData);
+
+    const {
+      isJsonPopoverOpen,
+      jsonSearchQuery,
+      popoverPosition,
+      handleJsonPathSelect,
+      handlePopoverOpenChange,
+      handleEditorUpdate,
+      braceKeyExtension,
+    } = useJsonPopover({
+      editorViewRef,
+      hasJsonData,
+      insertTextAtCursor,
+      onJsonPathSelect,
+    });
 
     const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
       if (
@@ -274,24 +308,54 @@ const LLMPromptMessage = forwardRef<
               <Loader className="min-h-32" />
             ) : (
               <>
-                <CodeMirror
-                  onCreateEditor={(view) => {
-                    editorViewRef.current = view;
-                  }}
-                  onFocus={onFocus}
-                  theme={codeMirrorPromptTheme}
-                  value={localText}
-                  onChange={handleContentChange}
-                  placeholder="Type your message"
-                  editable={!disabled}
-                  basicSetup={{
-                    foldGutter: false,
-                    allowMultipleSelections: false,
-                    lineNumbers: false,
-                    highlightActiveLine: false,
-                  }}
-                  extensions={[EditorView.lineWrapping, mustachePlugin]}
-                />
+                <div className="relative">
+                  <CodeMirror
+                    onCreateEditor={(view) => {
+                      editorViewRef.current = view;
+                    }}
+                    onFocus={onFocus}
+                    onUpdate={handleEditorUpdate}
+                    theme={codeMirrorPromptTheme}
+                    value={localText}
+                    onChange={handleContentChange}
+                    placeholder="Type your message"
+                    editable={!disabled}
+                    basicSetup={{
+                      foldGutter: false,
+                      allowMultipleSelections: false,
+                      lineNumbers: false,
+                      highlightActiveLine: false,
+                    }}
+                    extensions={[
+                      EditorView.lineWrapping,
+                      mustachePlugin,
+                      ...(braceKeyExtension ? [braceKeyExtension] : []),
+                    ]}
+                  />
+                  {hasJsonData && (
+                    <JsonTreePopover
+                      data={jsonTreeData || {}}
+                      onSelect={handleJsonPathSelect}
+                      open={isJsonPopoverOpen}
+                      onOpenChange={handlePopoverOpenChange}
+                      searchQuery={jsonSearchQuery}
+                      trigger={
+                        <span
+                          ref={popoverTriggerRef}
+                          className="pointer-events-none"
+                          aria-hidden="true"
+                          style={{
+                            position: "absolute",
+                            top: popoverPosition.top,
+                            left: popoverPosition.left,
+                            width: 1,
+                            height: 1,
+                          }}
+                        />
+                      }
+                    />
+                  )}
+                </div>
                 {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
                   <PromptMessageMediaSection
                     images={images}

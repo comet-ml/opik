@@ -1,0 +1,52 @@
+---
+headline: Workspace Settings Overview | Opik Documentation
+og:description: Configure workspace-level settings including feedback definitions, AI providers, preferences, and member management in Opik.
+og:site_name: Opik Documentation
+og:title: 'Opik Workspace Settings: Configure Your Workspace'
+subtitle: Understanding workspace-level configuration options in Opik
+title: Overview
+---
+
+Workspace settings allow you to configure options that apply to your entire workspace. These settings are managed separately from organization-level administration features.
+
+## Accessing Workspace Settings
+
+1. Navigate to your workspace in Opik
+2. Click on **Configuration** in the left sidebar
+3. Select the appropriate tab for the setting you want to configure
+
+<Frame>
+  <img src="/img/administration/workspace_configuration.png" alt="Workspace Configuration" />
+</Frame>
+
+## Who can access Workspace Settings?
+
+- **Workspace owners** can access all settings including member management and preferences
+- **Workspace members** with appropriate roles can access feedback definitions and AI providers
+
+<Note>
+Workspace Members is available on Opik Cloud and Enterprise plans. This feature is not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable this feature for your Opik deployment.
+</Note>
+
+## Available Settings
+
+<CardGroup cols={2}>
+  <Card title="Feedback Definitions" href="/administration/workspace-settings/feedback_definitions">
+    Create custom labels for evaluating LLM outputs with structured feedback types.
+  </Card>
+  <Card title="AI Providers" href="/administration/workspace-settings/ai_providers">
+    Configure connections to LLM providers for the Playground and Online Evaluation.
+  </Card>
+  <Card title="Workspace Preferences" href="/administration/workspace-settings/workspace_preferences">
+    Configure workspace-wide preferences like thread timeout and data truncation.
+  </Card>
+  <Card title="Workspace Members" href="/administration/workspace-settings/workspace_members">
+    Manage workspace members and their access (Cloud/Enterprise only).
+  </Card>
+</CardGroup>
+
+## Next steps
+
+- To create custom feedback types, see [Feedback Definitions](/administration/workspace-settings/feedback_definitions)
+- To connect LLM providers, see [AI Providers](/administration/workspace-settings/ai_providers)
+- To manage workspace members (Cloud/Enterprise), see [Workspace Members](/administration/workspace-settings/workspace_members)

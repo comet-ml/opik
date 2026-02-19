@@ -192,21 +192,22 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
 
   const navigate = useNavigate();
 
-  const { data, isPending } = usePromptVersionsById(
-    {
-      promptId: prompt?.id || "",
-      page,
-      size,
-      sorting: sortedColumns,
-      filters,
-      search: searchText || undefined,
-    },
-    {
-      enabled: !!prompt?.id,
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    usePromptVersionsById(
+      {
+        promptId: prompt?.id || "",
+        page,
+        size,
+        sorting: sortedColumns,
+        filters,
+        search: searchText || undefined,
+      },
+      {
+        enabled: !!prompt?.id,
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
 
   const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const noDataText = "There are no commits yet";
@@ -356,6 +357,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

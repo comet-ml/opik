@@ -271,6 +271,7 @@ class ExperimentItemMessage(BaseMessage):
     experiment_id: str
     trace_id: str
     dataset_item_id: str
+    project_name: Optional[str] = None
 
 
 @dataclasses.dataclass
