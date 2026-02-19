@@ -737,6 +737,7 @@ clickhouse:
     serviceTemplate: clickhouse-cluster-svc-template
   templates:
     podTemplate: clickhouse-cluster-pod-template
+    clusterServiceTemplate: clickhouse-cluster-svc-template
     replicaServiceTemplate: clickhouse-replica-svc-template
     serviceTemplate: clickhouse-cluster-svc-template
     volumeClaimTemplate: storage-vc-template
