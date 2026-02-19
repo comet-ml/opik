@@ -4304,4 +4304,141 @@ class DatasetVersionResourceTest {
             assertThat(version1.tags()).contains("initial", DatasetVersionService.LATEST_TAG);
         }
     }
+
+    @Nested
+    @DisplayName("Description Field:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class DescriptionField {
+
+        @Test
+        @DisplayName("Success: Create items with description, then read them back")
+        void createItems__whenDescription__thenFieldReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var description = "This is a test case description for " + UUID.randomUUID();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .description(description)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Read back
+            var returnedItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "latest", API_KEY, TEST_WORKSPACE).content();
+            assertThat(returnedItems).hasSize(1);
+
+            var returnedItem = returnedItems.getFirst();
+            var expectedItem = items.getFirst().toBuilder()
+                    .id(returnedItem.id())
+                    .build();
+            assertThat(returnedItem)
+                    .usingRecursiveComparison()
+                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .isEqualTo(expectedItem);
+        }
+
+        @Test
+        @DisplayName("Success: Editing only description bumps dataset version as modified")
+        void applyChanges__whenOnlyDescriptionChanged__thenItemIsModified() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var originalDescription = "Original description " + UUID.randomUUID();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .description(originalDescription)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+            assertThat(v1Items.getFirst().description()).isEqualTo(originalDescription);
+
+            // Edit only description — data stays the same
+            var newDescription = "Updated description " + UUID.randomUUID();
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .description(newDescription)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the description was actually updated
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items.getFirst().description()).isEqualTo(newDescription);
+        }
+
+        @Test
+        @DisplayName("Success: Batch update description on items")
+        void batchUpdate__whenDescription__thenFieldUpdated() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            var newDescription = "Batch updated description " + UUID.randomUUID();
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(v1Items.getFirst().id()))
+                    .update(DatasetItemUpdate.builder()
+                            .description(newDescription)
+                            .build())
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(1);
+
+            var updatedItem = latestItems.getFirst();
+            assertThat(updatedItem.description()).isEqualTo(newDescription);
+        }
+    }
 }

@@ -150,6 +150,7 @@ class DatasetItemResultMapper {
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .data(data)
+                    .description(getDescription(row, rowMetadata))
                     .source(Optional.ofNullable(row.get("source", String.class))
                             .map(DatasetItemSource::fromString)
                             .orElse(null))
@@ -191,6 +192,15 @@ class DatasetItemResultMapper {
         return Optional.ofNullable(row.get("evaluators", String.class))
                 .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
                 .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .orElse(null);
+    }
+
+    private static String getDescription(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("description")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("description", String.class))
+                .filter(s -> !s.isBlank())
                 .orElse(null);
     }
 
