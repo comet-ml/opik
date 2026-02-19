@@ -67,15 +67,13 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
     annotationQueue?.feedback_definition_names,
   ]);
 
-  const annotationQueueSearch = useMemo(
-    () => ({
-      type: `${annotationQueue?.scope}s`,
+  const annotationQueueSearch = useMemo(() => {
+    return {
       [`${annotationQueue?.scope}s_filters`]: generateAnnotationQueueIdFilter(
         annotationQueue?.id,
       ),
-    }),
-    [annotationQueue?.scope, annotationQueue?.id],
-  );
+    };
+  }, [annotationQueue?.scope, annotationQueue?.id]);
 
   return (
     <PageBodyScrollContainer>

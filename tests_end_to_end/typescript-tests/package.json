@@ -31,7 +31,7 @@
     "testing"
   ],
   "devDependencies": {
-    "@playwright/test": "^1.48.0",
+    "@playwright/test": "^1.58.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "allure-commandline": "^2.25.0",

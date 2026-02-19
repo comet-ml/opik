@@ -307,6 +307,49 @@ class SpanFilterEvaluationServiceTest {
     }
 
     @Nested
+    @DisplayName("TTFT Field Filtering")
+    class TtftFieldFiltering {
+
+        @Test
+        void matchesFilterWithTtft() {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .ttft(150.0)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.TTFT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("100")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenTtftIsNull() {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .ttft(null)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.TTFT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("Tags Field Filtering")
     class TagsFieldFiltering {
 

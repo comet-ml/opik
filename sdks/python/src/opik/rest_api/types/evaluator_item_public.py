@@ -9,6 +9,10 @@ from .json_node_public import JsonNodePublic
 
 
 class EvaluatorItemPublic(UniversalBaseModel):
+    """
+    Default evaluators for items in this version
+    """
+
     name: str
     type: EvaluatorItemPublicType
     config: JsonNodePublic

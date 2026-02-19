@@ -1,7 +1,7 @@
 {
   "name": "opik-vercel",
   "description": "Opik TypeScript and JavaScript SDK integration with Vercel AI SDK",
-  "version": "1.10.13",
+  "version": "1.10.16",
   "engines": {
     "node": ">=18"
   },

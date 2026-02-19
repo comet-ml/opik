@@ -17,6 +17,8 @@ public interface DatasetVersionMapper {
     @Mapping(target = "id", source = "versionId")
     @Mapping(target = "changeDescription", source = "request.changeDescription")
     @Mapping(target = "metadata", source = "request.metadata")
+    @Mapping(target = "evaluators", source = "request.evaluators")
+    @Mapping(target = "executionPolicy", source = "request.executionPolicy")
     @Mapping(target = "createdBy", source = "userName")
     @Mapping(target = "lastUpdatedBy", source = "userName")
     @Mapping(target = "isLatest", ignore = true)

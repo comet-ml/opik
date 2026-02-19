@@ -1185,7 +1185,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.span_id,
                 <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
                 <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
+                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -1250,7 +1250,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.span_id,
                 <if(tags)> :tags <else> src.tags <endif> as tags,
                 <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
+                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -2401,7 +2401,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (edit.evaluators() != null) {
                         template.add("evaluators", true);
                     }
-                    if (edit.executionPolicy() != null) {
+                    if (Boolean.TRUE.equals(edit.clearExecutionPolicy())) {
+                        template.add("clear_execution_policy", true);
+                    } else if (edit.executionPolicy() != null) {
                         template.add("execution_policy", true);
                     }
 
@@ -2428,7 +2430,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (edit.evaluators() != null) {
                         statement.bind("evaluators", serializeEvaluators(edit.evaluators()));
                     }
-                    if (edit.executionPolicy() != null) {
+                    if (!Boolean.TRUE.equals(edit.clearExecutionPolicy()) && edit.executionPolicy() != null) {
                         statement.bind("execution_policy",
                                 serializeExecutionPolicy(edit.executionPolicy()));
                     }
@@ -2537,7 +2539,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().evaluators() != null) {
                     template.add("evaluators", true);
                 }
-                if (batchUpdate.update().executionPolicy() != null) {
+                if (Boolean.TRUE.equals(batchUpdate.update().clearExecutionPolicy())) {
+                    template.add("clear_execution_policy", true);
+                } else if (batchUpdate.update().executionPolicy() != null) {
                     template.add("execution_policy", true);
                 }
 
@@ -2592,7 +2596,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().evaluators() != null) {
                     statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
                 }
-                if (batchUpdate.update().executionPolicy() != null) {
+                if (!Boolean.TRUE.equals(batchUpdate.update().clearExecutionPolicy())
+                        && batchUpdate.update().executionPolicy() != null) {
                     statement.bind("execution_policy",
                             serializeExecutionPolicy(batchUpdate.update().executionPolicy()));
                 }

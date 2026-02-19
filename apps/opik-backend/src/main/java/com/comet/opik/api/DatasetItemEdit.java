@@ -33,7 +33,9 @@ public record DatasetItemEdit(
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New evaluators to replace existing item evaluators") List<@Valid EvaluatorItem> evaluators,
 
-        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New execution policy to replace existing item execution policy") @Valid ExecutionPolicy executionPolicy) {
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New execution policy to replace existing item execution policy") @Valid ExecutionPolicy executionPolicy,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
 
     public static class View {
         public static class Write {
