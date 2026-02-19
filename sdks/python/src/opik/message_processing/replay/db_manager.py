@@ -439,6 +439,10 @@ class DBManager:
         Returns:
             int: The total count of successfully replayed messages.
         """
+        if self.closed:
+            LOGGER.debug("DBManager already closed")
+            return 0
+
         if not self.initialized:
             LOGGER.debug("Not initialized - messages replay ignored")
             return 0
