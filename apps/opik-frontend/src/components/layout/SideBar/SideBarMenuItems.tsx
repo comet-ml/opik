@@ -16,6 +16,7 @@ import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 import getMenuItems from "@/components/layout/SideBar/helpers/getMenuItems";
+import { WithPermissionsProps } from "@/types/permissions";
 
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
@@ -23,13 +24,8 @@ export interface SideBarMenuItemsProps {
   expanded: boolean;
 }
 
-interface SideBarMenuItemsPermissionProps {
-  canViewExperiments: boolean;
-  canViewDashboards: boolean;
-}
-
 const SideBarMenuItems: React.FC<
-  SideBarMenuItemsProps & SideBarMenuItemsPermissionProps
+  SideBarMenuItemsProps & WithPermissionsProps
 > = ({ expanded, canViewExperiments, canViewDashboards }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
 

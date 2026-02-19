@@ -1,7 +1,4 @@
 import SideBarMenuItems from "@/components/layout/SideBar/SideBarMenuItems";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
-import { withDashboardsViewPermission } from "./withDashboardsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(
-  withDashboardsViewPermission(SideBarMenuItems),
-);
+export default withPermissions(SideBarMenuItems);

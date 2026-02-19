@@ -1,12 +1,13 @@
 import React from "react";
 import { MousePointer } from "lucide-react";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export interface RunExperimentButtonProps {
   openNewExperimentDialog: () => void;
 }
 
 const RunExperimentButton: React.FC<
-  RunExperimentButtonProps & { canViewExperiments: boolean }
+  RunExperimentButtonProps & WithPermissionsProps
 > = ({ canViewExperiments, openNewExperimentDialog }) => {
   if (!canViewExperiments) {
     return null;

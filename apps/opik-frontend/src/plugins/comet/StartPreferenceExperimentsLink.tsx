@@ -1,4 +1,4 @@
 import ExperimentsLink from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
-import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withExperimentsViewPermission(ExperimentsLink);
+export default withPermissions(ExperimentsLink);

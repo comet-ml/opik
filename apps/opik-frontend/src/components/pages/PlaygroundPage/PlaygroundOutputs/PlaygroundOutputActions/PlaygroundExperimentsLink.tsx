@@ -1,6 +1,7 @@
 import React from "react";
 import NavigationTag from "@/components/shared/NavigationTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export interface PlaygroundExperimentsLinkProps {
   plainDatasetId: string;
@@ -9,7 +10,7 @@ export interface PlaygroundExperimentsLinkProps {
 }
 
 const PlaygroundExperimentsLink: React.FC<
-  PlaygroundExperimentsLinkProps & { canViewExperiments: boolean }
+  PlaygroundExperimentsLinkProps & WithPermissionsProps
 > = ({
   plainDatasetId,
   isSingleExperiment,

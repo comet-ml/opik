@@ -8,6 +8,7 @@ import {
   DashboardWidget,
   WIDGET_TYPE,
 } from "@/types/dashboard";
+import { WithPermissionsProps } from "@/types/permissions";
 import {
   GRID_COLUMNS,
   ROW_HEIGHT,
@@ -34,7 +35,7 @@ export interface DashboardWidgetGridProps {
 }
 
 const DashboardWidgetGrid: React.FunctionComponent<
-  DashboardWidgetGridProps & { canViewExperiments: boolean }
+  DashboardWidgetGridProps & WithPermissionsProps
 > = ({ sectionId, widgets, layout, canViewExperiments }) => {
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,

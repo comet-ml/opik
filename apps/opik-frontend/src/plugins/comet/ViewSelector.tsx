@@ -1,4 +1,4 @@
 import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { withDashboardsViewPermission } from "./withDashboardsViewPermission";
+import { withPermissions } from "./withPermissions";
 
-export default withDashboardsViewPermission(ViewSelector);
+export default withPermissions(ViewSelector);

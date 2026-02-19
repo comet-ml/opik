@@ -6,6 +6,7 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export enum VIEW_TYPE {
   DETAILS = "details",
@@ -17,9 +18,11 @@ export interface ViewSelectorProps {
   onChange: (value: VIEW_TYPE) => void;
 }
 
-const ViewSelector: React.FC<
-  ViewSelectorProps & { canViewDashboards: boolean }
-> = ({ value, onChange, canViewDashboards }) => {
+const ViewSelector: React.FC<ViewSelectorProps & WithPermissionsProps> = ({
+  value,
+  onChange,
+  canViewDashboards,
+}) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
 
   const disabled =
