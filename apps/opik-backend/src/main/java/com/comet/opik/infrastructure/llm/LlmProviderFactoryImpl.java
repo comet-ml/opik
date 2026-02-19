@@ -105,7 +105,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         if (isModelBelongToProvider(model, GeminiModelName.class, GeminiModelName::toString)) {
             return LlmProvider.GEMINI;
         }
-        if (isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
+        if (model.startsWith("openrouter/")
+                || isModelBelongToProvider(model, OpenRouterModelName.class, OpenRouterModelName::toString)) {
             return LlmProvider.OPEN_ROUTER;
         }
 

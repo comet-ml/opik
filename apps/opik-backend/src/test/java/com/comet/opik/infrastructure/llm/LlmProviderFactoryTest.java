@@ -408,4 +408,20 @@ class LlmProviderFactoryTest {
         assertThat(result.actualModel()).isEqualTo(openaiModel);
         assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI.getValue());
     }
+
+    @SneakyThrows
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getLlmProvider returns OPEN_ROUTER for openrouter route slugs")
+    void testGetLlmProvider_returnsOpenRouter_forOpenRouterRouteSlug() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+
+        // When
+        LlmProvider result = llmProviderFactory.getLlmProvider("openrouter/some-future-router");
+
+        // Then
+        assertThat(result).isEqualTo(LlmProvider.OPEN_ROUTER);
+    }
 }

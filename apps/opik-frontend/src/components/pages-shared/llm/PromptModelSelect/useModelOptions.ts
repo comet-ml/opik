@@ -36,6 +36,29 @@ interface UseModelOptionsResult {
   >;
 }
 
+export const sortProviderModels = (
+  composedProviderType: COMPOSED_PROVIDER_TYPE,
+  providerModels: ModelOption[],
+): ModelOption[] => {
+  if (composedProviderType !== PROVIDER_TYPE.OPEN_ROUTER) {
+    return providerModels;
+  }
+
+  const sorted = [...providerModels];
+  sorted.sort((a, b) => {
+    const aIsOpenRouterRoute = a.value.startsWith("openrouter/");
+    const bIsOpenRouterRoute = b.value.startsWith("openrouter/");
+
+    if (aIsOpenRouterRoute !== bIsOpenRouterRoute) {
+      return aIsOpenRouterRoute ? -1 : 1;
+    }
+
+    return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+  });
+
+  return sorted;
+};
+
 export function useModelOptions(
   configuredProvidersList: ProviderObject[],
   getProviderModels: () => Record<string, ModelOption[]>,
@@ -92,7 +115,10 @@ export function useModelOptions(
           (p) => p.ui_composed_provider === composedProviderType,
         )!;
 
-        const options = providerModels.map((providerModel) => ({
+        const options = sortProviderModels(
+          composedProviderType,
+          providerModels,
+        ).map((providerModel) => ({
           label: providerModel.label,
           value: providerModel.value,
         }));
