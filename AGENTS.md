@@ -73,3 +73,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - Keep secrets and API keys out of source control; use local `.env` or shell variables.
 - For local self-hosted testing, ensure dependencies are configured (MySQL, ClickHouse, Redis) before running backend tests.
 - Prefer `opik configure --use_local` when running SDK examples against your local deployment.
+
+## Generated Files
+- `apps/opik-backend/src/main/resources/model_prices_and_context_window.json` and `apps/opik-frontend/src/data/model_prices_and_context_window.json` are generated artifacts.
+- Do not edit these files directly; updates should come from the repository updater automation.
