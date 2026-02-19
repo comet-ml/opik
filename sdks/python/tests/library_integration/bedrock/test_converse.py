@@ -251,7 +251,14 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
 def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
     fake_backend, model_id
 ):
-    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    region_name_by_model_id = {
+        "us.mistral.pixtral-large-2502-v1:0": "us-east-2",
+    }
+
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name=region_name_by_model_id.get(model_id, "us-east-1"),
+    )
     tracked_client = track_bedrock(client)
 
     messages = [{"role": "user", "content": [{"text": "Hello, tell me a story"}]}]
