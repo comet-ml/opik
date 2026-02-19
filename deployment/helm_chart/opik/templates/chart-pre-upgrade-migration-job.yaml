@@ -109,111 +109,87 @@ spec:
             - -c
             - |
               set -e
-              
+
               echo "=== Pre-Upgrade Chart Migration ==="
               NAMESPACE="{{ .Release.Namespace }}"
-              BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
-              
-              # Track if any Bitnami components were removed
               COMPONENTS_REMOVED=0
-              
-              echo ""
-              
-              {{- if .Values.mysql.enabled }}
-              # Delete MySQL StatefulSet (if exists and uses Bitnami image)
-              MYSQL_STS="{{ .Values.mysql.fullnameOverride | default "opik-mysql" }}"
-              echo "Checking MySQL StatefulSet: $MYSQL_STS"
-              if kubectl get statefulset $MYSQL_STS -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"; then
-                echo "MySQL StatefulSet $MYSQL_STS is using Bitnami image, deleting..."
-                kubectl delete statefulset $MYSQL_STS -n $NAMESPACE --cascade=orphan --wait=true
-                echo "MySQL StatefulSet $MYSQL_STS deleted (PVCs are preserved)"
-                COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
-              else
-                echo "MySQL StatefulSet $MYSQL_STS not found or not using Bitnami image, skipping"
-              fi
-              echo ""
-              {{- end }}
-              
-              {{- if .Values.zookeeper.enabled }}
-              # Delete Zookeeper StatefulSet (if exists and uses Bitnami image)
-              ZOOKEEPER_STS="{{ .Values.zookeeper.fullnameOverride | default "opik-zookeeper" }}"
-              echo "Checking Zookeeper StatefulSet: $ZOOKEEPER_STS"
-              SHOULD_DELETE=0
-              
-              # Check if uses Bitnami image
-              if kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"; then
-                echo "Zookeeper StatefulSet $ZOOKEEPER_STS is using Bitnami image"
-                SHOULD_DELETE=1
-              fi
-              
-              # Check if has selector matchLabel app.kubernetes.io/name=zookeeper (but not zookeeper-opik)
-              if [ $SHOULD_DELETE -eq 0 ]; then
-                ZOOKEEPER_SELECTOR=$(kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE -o jsonpath='{.spec.selector.matchLabels.app\.kubernetes\.io/name}' 2>/dev/null || echo "")
-                if [ "$ZOOKEEPER_SELECTOR" = "zookeeper" ] && [ "$ZOOKEEPER_STS" != "zookeeper-opik" ]; then
-                  echo "Zookeeper StatefulSet $ZOOKEEPER_STS has selector matchLabel app.kubernetes.io/name=zookeeper"
-                  SHOULD_DELETE=1
-                fi
-              fi
-              
-              # Delete if needed
-              if [ $SHOULD_DELETE -eq 1 ]; then
-                echo "Deleting Zookeeper StatefulSet $ZOOKEEPER_STS..."
-                kubectl delete statefulset $ZOOKEEPER_STS -n $NAMESPACE --cascade=orphan --wait=true
-                echo "Zookeeper StatefulSet $ZOOKEEPER_STS deleted (PVCs are preserved)"
-                COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
-              else
-                echo "Zookeeper StatefulSet $ZOOKEEPER_STS does not meet deletion criteria, skipping"
-              fi
-              echo ""
-              {{- end }}
-              
-              {{- if .Values.redis.enabled }}
-              # Delete Redis StatefulSet if it needs recreation
-              REDIS_STS="{{ .Values.redis.fullnameOverride | default "opik-redis-master" }}"
-              echo "Checking Redis StatefulSet: $REDIS_STS"
-              REDIS_SHOULD_DELETE=0
 
-              # Check if uses Bitnami image
-              if kubectl get statefulset $REDIS_STS -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"; then
-                echo "Redis StatefulSet $REDIS_STS is using Bitnami image"
-                REDIS_SHOULD_DELETE=1
-              fi
+              # --- Helper functions ---
+              is_bitnami() {
+                kubectl get statefulset "$1" -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[*].image}' 2>/dev/null | grep -q "bitnami"
+              }
 
-              # Check if VolumeClaimTemplate is missing labels (needs recreation for cloudpirates chart update)
-              if [ $REDIS_SHOULD_DELETE -eq 0 ]; then
-                VCT_LABELS=$(kubectl get statefulset $REDIS_STS -n $NAMESPACE -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.labels}' 2>/dev/null || echo "")
-                if kubectl get statefulset $REDIS_STS -n $NAMESPACE 2>/dev/null && [ -z "$VCT_LABELS" ]; then
-                  echo "Redis StatefulSet $REDIS_STS has VolumeClaimTemplate without labels, needs recreation"
-                  REDIS_SHOULD_DELETE=1
-                fi
-              fi
+              has_wrong_zk_selector() {
+                local SEL=$(kubectl get statefulset "$1" -n $NAMESPACE -o jsonpath='{.spec.selector.matchLabels.app\.kubernetes\.io/name}' 2>/dev/null || echo "")
+                [ "$SEL" = "zookeeper" ] && [ "$1" != "$2" ]
+              }
 
-              if [ $REDIS_SHOULD_DELETE -eq 1 ]; then
-                echo "Deleting Redis StatefulSet $REDIS_STS..."
-                kubectl delete statefulset $REDIS_STS -n $NAMESPACE --cascade=orphan --wait=true
-                echo "Redis StatefulSet $REDIS_STS deleted (pods and PVCs are preserved)"
+              has_missing_vct_labels() {
+                local LABELS=$(kubectl get statefulset "$1" -n $NAMESPACE -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.labels}' 2>/dev/null || echo "")
+                kubectl get statefulset "$1" -n $NAMESPACE 2>/dev/null && [ -z "$LABELS" ]
+              }
+
+              delete_sts() {
+                echo "Deleting StatefulSet $1..."
+                kubectl delete statefulset "$1" -n $NAMESPACE --wait=true
+                echo "StatefulSet $1 deleted"
                 COMPONENTS_REMOVED=$((COMPONENTS_REMOVED + 1))
-              else
-                echo "Redis StatefulSet $REDIS_STS does not meet deletion criteria, skipping"
-              fi
-              echo ""
-              {{- end }}
-              
-              # Delete opik-backend deployment only if at least one Bitnami component was removed
-              echo "Checking backend deployment: $BACKEND_DEPLOYMENT"
-              if [ $COMPONENTS_REMOVED -gt 0 ]; then
-                if kubectl get deployment $BACKEND_DEPLOYMENT -n $NAMESPACE 2>/dev/null; then
-                  echo "At least one Bitnami component was removed ($COMPONENTS_REMOVED), deleting backend deployment: $BACKEND_DEPLOYMENT"
-                  kubectl delete deployment $BACKEND_DEPLOYMENT -n $NAMESPACE --wait=true
-                  echo "Backend deployment $BACKEND_DEPLOYMENT deleted"
+              }
+
+              delete_deployment() {
+                if kubectl get deployment "$1" -n $NAMESPACE 2>/dev/null; then
+                  echo "Deleting deployment $1..."
+                  kubectl delete deployment "$1" -n $NAMESPACE --wait=true
+                  echo "Deployment $1 deleted"
                 else
-                  echo "Backend deployment $BACKEND_DEPLOYMENT not found, skipping"
+                  echo "Deployment $1 not found, skipping"
                 fi
+              }
+
+              # --- MySQL ---
+              {{- if .Values.mysql.enabled }}
+              MYSQL_STS="{{ .Values.mysql.fullnameOverride | default "opik-mysql" }}"
+              echo "Checking MySQL: $MYSQL_STS"
+              if is_bitnami "$MYSQL_STS"; then
+                delete_sts "$MYSQL_STS"
               else
-                echo "No Bitnami components were removed, skipping backend deployment deletion"
+                echo "Skipping $MYSQL_STS"
               fi
               echo ""
-              
+              {{- end }}
+
+              # --- Zookeeper ---
+              {{- if .Values.zookeeper.enabled }}
+              ZK_STS="{{ .Values.zookeeper.fullnameOverride | default "opik-zookeeper" }}"
+              echo "Checking Zookeeper: $ZK_STS"
+              if is_bitnami "$ZK_STS" || has_wrong_zk_selector "$ZK_STS" "zookeeper-opik"; then
+                delete_sts "$ZK_STS"
+              else
+                echo "Skipping $ZK_STS"
+              fi
+              echo ""
+              {{- end }}
+
+              # --- Redis ---
+              {{- if .Values.redis.enabled }}
+              REDIS_STS="{{ .Values.redis.fullnameOverride | default "opik-redis-master" }}"
+              echo "Checking Redis: $REDIS_STS"
+              if is_bitnami "$REDIS_STS" || has_missing_vct_labels "$REDIS_STS"; then
+                delete_sts "$REDIS_STS"
+              else
+                echo "Skipping $REDIS_STS"
+              fi
+              echo ""
+              {{- end }}
+
+              # --- Delete backend deployment if any components were removed ---
+              if [ $COMPONENTS_REMOVED -gt 0 ]; then
+                echo "Components removed: $COMPONENTS_REMOVED. Deleting backend deployment..."
+                delete_deployment "{{ include "opik.name" . }}-backend"
+              else
+                echo "No components removed, skipping backend deployment deletion"
+              fi
+
               echo "=== Migration Completed Successfully ==="
 
 {{- end }}
