@@ -22,6 +22,29 @@ hallucination_metric = Hallucination(
 )
 ```
 
+## Using an OpenAI-compatible provider
+
+If your model provider exposes an OpenAI-compatible API (e.g. Silicon Flow, Together AI, Anyscale, or a local server like Ollama), you can use it without writing a custom model class. Set two environment variables and prefix the model name with `openai/`:
+
+```python
+import os
+from opik.evaluation.metrics import Hallucination
+
+os.environ["OPENAI_API_KEY"] = "your-provider-api-key"
+os.environ["OPENAI_BASE_URL"] = "https://api.siliconflow.cn/v1"
+
+metric = Hallucination(model="openai/deepseek-ai/DeepSeek-V3")
+
+score = metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris, a city known for its iconic Eiffel Tower.",
+    context=["Paris is the capital and most populous city of France."],
+)
+print(score.value, score.reason)
+```
+
+The `openai/` prefix tells LiteLLM to route the request through the OpenAI-compatible API at `OPENAI_BASE_URL`. Replace the model name after the prefix with whatever model identifier your provider expects.
+
 ## Using a model supported by LiteLLM
 
 In order to use many models supported by LiteLLM, you also need to pass additional parameters. For this, you can use the [LiteLLMChatModel](https://www.comet.com/docs/opik/python-sdk-reference/Objects/LiteLLMChatModel.html) class and passing it to the metric:

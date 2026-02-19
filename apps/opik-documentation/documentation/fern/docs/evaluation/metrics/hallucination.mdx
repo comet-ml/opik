@@ -74,7 +74,7 @@ Asynchronous scoring is also supported with the `ascore` method in Python and `s
 
 ## Hallucination Prompt
 
-Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt template that is used to generate the prompt for the LLM. By default, the `gpt-4o` model is used to detect hallucinations but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section.
+Opik uses an LLM as a Judge to detect hallucinations, for this we have a prompt template that is used to generate the prompt for the LLM. By default, the `gpt-4o` model is used to detect hallucinations but you can change this to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers) by setting the `model` parameter. You can learn more about customizing models in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) section, including how to [use OpenAI-compatible providers](/evaluation/metrics/custom_model#using-an-openai-compatible-provider) such as Silicon Flow, Together AI, or local servers.
 
 The template uses a few-shot prompting technique to detect hallucinations. The template is as follows:
 
