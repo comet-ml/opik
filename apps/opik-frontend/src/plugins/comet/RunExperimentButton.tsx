@@ -1,18 +1,4 @@
-import React from "react";
-import RunExperimentButtonComponent, {
-  RunExperimentButtonProps,
-} from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
-import useUserPermission from "./useUserPermission";
+import RunExperimentButton from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-const RunExperimentButton: React.FC<RunExperimentButtonProps> = (props) => {
-  const { canViewExperiments } = useUserPermission();
-
-  return (
-    <RunExperimentButtonComponent
-      {...props}
-      canViewExperiments={canViewExperiments}
-    />
-  );
-};
-
-export default RunExperimentButton;
+export default withExperimentsViewPermission(RunExperimentButton);

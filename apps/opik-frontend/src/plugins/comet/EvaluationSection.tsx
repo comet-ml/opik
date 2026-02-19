@@ -1,10 +1,4 @@
-import useUserPermission from "@/plugins/comet/useUserPermission";
-import EvaluationSectionContent from "@/components/pages/HomePage/EvaluationSection/EvaluationSection";
+import EvaluationSection from "@/components/pages/HomePage/EvaluationSection/EvaluationSection";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-const EvaluationSection = () => {
-  const { canViewExperiments } = useUserPermission();
-
-  return <EvaluationSectionContent canViewExperiments={canViewExperiments} />;
-};
-
-export default EvaluationSection;
+export default withExperimentsViewPermission(EvaluationSection);

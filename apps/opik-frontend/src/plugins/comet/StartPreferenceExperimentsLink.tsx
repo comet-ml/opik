@@ -1,15 +1,4 @@
-import React from "react";
-import ExperimentsLink, {
-  ExperimentsLinkProps,
-} from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
-import useUserPermission from "./useUserPermission";
+import ExperimentsLink from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
+import { withExperimentsViewPermission } from "./withExperimentsViewPermission";
 
-const StartPreferenceExperimentsLink: React.FC<ExperimentsLinkProps> = (
-  props,
-) => {
-  const { canViewExperiments } = useUserPermission();
-
-  return <ExperimentsLink {...props} canViewExperiments={canViewExperiments} />;
-};
-
-export default StartPreferenceExperimentsLink;
+export default withExperimentsViewPermission(ExperimentsLink);
