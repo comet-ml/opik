@@ -1,4 +1,10 @@
+import base64
+import dataclasses
 import datetime
+from threading import Lock
+from typing import Optional
+
+import numpy as np
 
 from opik.message_processing import messages
 from opik.message_processing.replay import message_serialization
@@ -891,3 +897,171 @@ class TestSubclassInheritance:
         assert item.source == "api"
         assert item.reason is None
         assert item.category_name is None
+
+
+class TestNonJsonSerializableTypesInMessageFields:
+    """
+    Tests that non-JSON-serializable types placed in input/output/metadata fields
+    are handled correctly through the serialize_message -> deserialize_message
+    round-trip, matching the encoding behaviour exercised by test_jsonable_encoder.py.
+
+    After round-trip:
+      bytes         -> base64-encoded string
+      set/tuple     -> list
+      np.ndarray    -> list
+      datetime.date -> "YYYY-MM-DD" string
+      datetime      (key NOT in DATETIME_FIELD_NAMES) -> ISO string (stays string)
+      Lock / custom class -> str() representation
+      cyclic object -> "<Cyclic reference to ...>" marker string, no crash
+      repeated refs -> no false cycle marker
+    """
+
+    def _make_trace(
+        self,
+        input_data=None,
+        output_data=None,
+        metadata=None,
+    ) -> messages.CreateTraceMessage:
+        return messages.CreateTraceMessage(
+            trace_id="trace-1",
+            project_name="test-project",
+            name="test-trace",
+            start_time=datetime.datetime(
+                2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+            ),
+            end_time=None,
+            input=input_data,
+            output=output_data,
+            metadata=metadata,
+            tags=[],
+            error_info=None,
+            thread_id=None,
+            last_updated_at=None,
+        )
+
+    def _round_trip(
+        self, msg: messages.CreateTraceMessage
+    ) -> messages.CreateTraceMessage:
+        json_str = message_serialization.serialize_message(msg)
+        return message_serialization.deserialize_message(
+            message_class=messages.CreateTraceMessage,
+            json_str=json_str,
+        )
+
+    def test_bytes_in_input__serialized_as_base64_string(self):
+        """bytes values in input are base64-encoded strings after a round-trip."""
+        original = self._make_trace(input_data={"data": b"deadbeef"})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["data"], str)
+        assert deserialized.input["data"] == base64.b64encode(b"deadbeef").decode(
+            "utf-8"
+        )
+
+    def test_set_in_input__serialized_as_list(self):
+        """set values in input are converted to a list after a round-trip."""
+        original = self._make_trace(input_data={"items": {1, 2, 3}})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["items"], list)
+        assert sorted(deserialized.input["items"]) == [1, 2, 3]
+
+    def test_tuple_in_input__serialized_as_list(self):
+        """tuple values in input are converted to a list after a round-trip."""
+        original = self._make_trace(input_data={"coords": (10, 20, 30)})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["coords"], list)
+        assert deserialized.input["coords"] == [10, 20, 30]
+
+    def test_numpy_array_in_input__serialized_as_list(self):
+        """numpy arrays in input are converted to a list after a round-trip."""
+        original = self._make_trace(input_data={"embedding": np.array([1.0, 2.0, 3.0])})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["embedding"], list)
+        assert deserialized.input["embedding"] == [1.0, 2.0, 3.0]
+
+    def test_date_in_input__serialized_as_date_string(self):
+        """datetime.date values in input become 'YYYY-MM-DD' strings after a round-trip."""
+        original = self._make_trace(
+            input_data={"event_date": datetime.date(2024, 1, 15)}
+        )
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["event_date"], str)
+        assert deserialized.input["event_date"] == "2024-01-15"
+
+    def test_datetime_with_unknown_key_in_input__serialized_as_iso_string(self):
+        """
+        datetime objects in input whose key is NOT in DATETIME_FIELD_NAMES are
+        serialized to an ISO string and stay as a string after a round-trip
+        (the datetime_object_hook only converts the known set of field names).
+        """
+        dt = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
+        original = self._make_trace(input_data={"event_timestamp": dt})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["event_timestamp"], str)
+        assert deserialized.input["event_timestamp"] == "2024-01-15T10:30:00Z"
+
+    def test_non_serializable_lock_in_input__serialized_as_string(self):
+        """Lock objects in input become their str() representation after a round-trip."""
+        original = self._make_trace(input_data={"lock": Lock()})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["lock"], str)
+        assert "<unlocked _thread.lock object at 0x" in deserialized.input["lock"]
+
+    def test_non_serializable_class_in_input__serialized_as_string(self):
+        """Arbitrary non-serializable class instances in input become str() after a round-trip."""
+
+        class SomeObject:
+            value = 42
+
+        original = self._make_trace(input_data={"obj": SomeObject()})
+        deserialized = self._round_trip(original)
+        assert isinstance(deserialized.input["obj"], str)
+        assert "SomeObject" in deserialized.input["obj"]
+
+    def test_cyclic_reference_in_input__serialized_with_cycle_marker(self):
+        """
+        Cyclic object references in input do not crash serialization.
+        The cycle is replaced with a '<Cyclic reference to ...>' marker string.
+        """
+
+        @dataclasses.dataclass
+        class Node:
+            value: int
+            child: Optional["Node"] = None
+
+        node_a = Node(value=1)
+        node_b = Node(value=2)
+        node_a.child = node_b
+        node_b.child = node_a
+
+        original = self._make_trace(input_data={"graph": node_a})
+        deserialized = self._round_trip(original)
+
+        graph = deserialized.input["graph"]
+        assert isinstance(graph, dict)
+        assert graph["value"] == 1
+        assert isinstance(graph["child"], dict)
+        assert graph["child"]["value"] == 2
+        # node_b.child points back to node_a — must be a cycle marker, not a full object
+        assert isinstance(graph["child"]["child"], str)
+        assert "<Cyclic reference to " in graph["child"]["child"]
+
+    def test_repeated_objects_in_input__no_cycle_marker(self):
+        """
+        The same object referenced multiple times (but without a real cycle) is
+        encoded without any '<Cyclic reference>' marker.
+        """
+
+        @dataclasses.dataclass
+        class Item:
+            value: int
+
+        item = Item(value=42)
+        original = self._make_trace(input_data={"items": [item, item, item]})
+        deserialized = self._round_trip(original)
+
+        assert isinstance(deserialized.input["items"], list)
+        assert len(deserialized.input["items"]) == 3
+        for entry in deserialized.input["items"]:
+            assert isinstance(entry, dict)
+            assert entry["value"] == 42
+            assert "Cyclic reference" not in str(entry)

@@ -41,8 +41,10 @@ def serialize_message(message: messages.BaseMessage) -> str:
 
     This function converts a given message object, which must be a subclass
     of `messages.BaseMessage`, into a dictionary format suitable for database
-    storage. The resulting dictionary is then serialized into a JSON string
-    using the `MessageJSONEncoder` for custom encoding.
+    storage. The dictionary is first encoded via `jsonable_encoder.encode`
+    (which converts datetime objects to ISO 8601 strings including timezone
+    info via `datetime_utils.serialize_datetime`) and then serialized to a
+    JSON string using the standard `json.dumps`.
 
     Args:
         message: The message object to be serialized.
