@@ -1,11 +1,13 @@
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union, cast
 
 from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
+from ..api_objects.dataset import dataset_item
 from ..api_objects.experiment import helpers as experiment_helpers
+from ..api_objects.dataset import execution_policy as dataset_execution_policy
 from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
 from . import (
@@ -27,6 +29,67 @@ LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
+
+EVALUATION_STREAM_DATASET_BATCH_SIZE = 200
+
+
+def _calculate_total_items(
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+) -> Optional[int]:
+    """Calculate the total number of items that will be evaluated."""
+    if dataset_item_ids is not None:
+        return len(dataset_item_ids)
+
+    if nb_samples is not None:
+        if dataset_.dataset_items_count is not None:
+            return min(nb_samples, dataset_.dataset_items_count)
+        return nb_samples
+
+    return dataset_.dataset_items_count
+
+
+def _resolve_dataset_items(
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
+    nb_samples: Optional[int],
+    dataset_item_ids: Optional[List[str]],
+    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+    dataset_filter_string: Optional[str],
+) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int]]:
+    """
+    Resolve dataset items for evaluation.
+
+    Handles streaming vs sampling, and calculates total item count.
+
+    Returns:
+        Tuple of (items iterator, total item count or None).
+    """
+    if dataset_sampler is None:
+        items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=dataset_filter_string,
+        )
+        total = _calculate_total_items(
+            dataset_=dataset_,
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+        )
+        return items_iter, total
+
+    LOGGER.info("Dataset streaming disabled due to sampler")
+    items_list = list(
+        dataset_.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=nb_samples,
+            dataset_item_ids=dataset_item_ids,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=dataset_filter_string,
+        )
+    )
+    items_list = dataset_sampler.sample(items_list)
+    return iter(items_list), len(items_list)
 
 
 def _try_notifying_about_experiment_completion(
@@ -227,6 +290,89 @@ def evaluate(
     )
 
 
+def evaluate_suite(
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    *,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 1,
+    task_threads: int = 16,
+    evaluator_model: Optional[str] = None,
+) -> evaluation_result.EvaluationResult:
+    """
+    Run evaluation on a dataset configured as an evaluation suite.
+
+    This function is designed for evaluation suites where evaluators and execution
+    policies are stored in the dataset itself. Unlike the general `evaluate` function,
+    this function:
+    - Does not accept scoring_metrics (they come from the dataset)
+    - Does not accept trial_count (it comes from the dataset's execution_policy)
+    - Does not accept dataset_sampler or nb_samples (suites evaluate all items)
+
+    The dataset should be created via `opik_client.create_evaluation_suite()` which
+    sets up the evaluators and execution policy on the dataset object.
+
+    Args:
+        dataset: A Dataset instance configured as an evaluation suite.
+
+        task: A callable that takes a dict (the item's data) and returns
+            a dict with "input" and "output" keys for the evaluators.
+
+        experiment_name_prefix: Optional prefix for auto-generated experiment name.
+
+        experiment_name: Optional explicit name for the experiment.
+
+        project_name: Optional project name for tracking.
+
+        experiment_config: Optional configuration dict for the experiment.
+
+        prompts: Optional list of Prompt objects to associate with the experiment.
+
+        experiment_tags: Optional list of tags to associate with the experiment.
+
+        verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
+
+        task_threads: Number of threads for parallel task execution.
+
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
+            If not provided, uses the default model.
+
+    Returns:
+        EvaluationResult containing test results for building suite results.
+    """
+    client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
+
+    experiment_ = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        tags=experiment_tags,
+        dataset_version_id=None,
+    )
+
+    return _evaluate_suite_task(
+        client=client,
+        experiment=experiment_,
+        dataset=dataset,
+        task=task,
+        project_name=project_name,
+        verbose=verbose,
+        task_threads=task_threads,
+        evaluator_model=evaluator_model,
+    )
+
+
 def _evaluate_task(
     *,
     client: opik_client.Opik,
@@ -243,28 +389,38 @@ def _evaluate_task(
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
-    dataset_filter_string: Optional[str] = None,
+    dataset_filter_string: Optional[str],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        evaluation_engine = engine.EvaluationEngine(
-            client=client,
-            project_name=project_name,
-            scoring_metrics=scoring_metrics,
-            workers=task_threads,
-            verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
-        )
-        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
+        items_iter, total = _resolve_dataset_items(
             dataset_=dataset,
-            task=task,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
-            trial_count=trial_count,
-            experiment_=experiment,
             dataset_filter_string=dataset_filter_string,
+        )
+        policy = dataset_execution_policy.ExecutionPolicy(
+            runs_per_item=trial_count,
+            pass_threshold=trial_count,
+        )
+
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            workers=task_threads,
+            verbose=verbose,
+        )
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
+            task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=None,
+            experiment_=experiment,
+            default_execution_policy=policy,
+            total_items=total,
         )
 
     total_time = time.time() - start_time
@@ -304,6 +460,84 @@ def _evaluate_task(
         experiment_url=experiment_url,
         trial_count=trial_count,
         experiment_scores=computed_experiment_scores,
+    )
+
+    if verbose >= 2:
+        report.display_evaluation_scores_statistics(
+            dataset_name=dataset.name,
+            evaluation_results=evaluation_result_,
+        )
+
+    return evaluation_result_
+
+
+def _evaluate_suite_task(
+    *,
+    client: opik_client.Opik,
+    experiment: experiment.Experiment,
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    project_name: Optional[str],
+    verbose: int,
+    task_threads: int,
+    evaluator_model: Optional[str],
+) -> evaluation_result.EvaluationResult:
+    start_time = time.time()
+
+    with asyncio_support.async_http_connections_expire_immediately():
+        scoring_metrics = dataset.get_evaluators(evaluator_model)
+        execution_policy = dataset.get_execution_policy()
+        items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
+            nb_samples=None,
+            dataset_item_ids=None,
+            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            filter_string=None,
+        )
+        total = dataset.dataset_items_count
+
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            workers=task_threads,
+            verbose=verbose,
+        )
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
+            task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=None,
+            evaluator_model=evaluator_model,
+            experiment_=experiment,
+            default_execution_policy=execution_policy,
+            total_items=total,
+            show_scores_in_progress_bar=False,
+        )
+
+    total_time = time.time() - start_time
+
+    if verbose >= 1:
+        report.display_experiment_results(dataset.name, total_time, test_results, [])
+
+    experiment_url = url_helpers.get_experiment_url_by_id(
+        experiment_id=experiment.id,
+        dataset_id=dataset.id,
+        url_override=client.config.url_override,
+    )
+
+    report.display_experiment_link(experiment_url=experiment_url)
+
+    client.flush()
+
+    _try_notifying_about_experiment_completion(experiment)
+
+    evaluation_result_ = evaluation_result.EvaluationResult(
+        dataset_id=dataset.id,
+        experiment_id=experiment.id,
+        experiment_name=experiment.name,
+        test_results=test_results,
+        experiment_url=experiment_url,
+        trial_count=1,
+        experiment_scores=[],
     )
 
     if verbose >= 2:
@@ -399,13 +633,13 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
         )
-        test_results = evaluation_engine.evaluate_test_cases(
+        test_results = evaluation_engine.score_test_cases(
             test_cases=test_cases,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
         )
 
     total_time = time.time() - start_time
@@ -650,23 +884,33 @@ def evaluate_prompt(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        evaluation_engine = engine.EvaluationEngine(
-            client=client,
-            project_name=project_name,
-            scoring_metrics=scoring_metrics,
-            workers=task_threads,
-            verbose=verbose,
-            scoring_key_mapping=None,
-        )
-        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
+        items_iter, total = _resolve_dataset_items(
             dataset_=dataset,
-            task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
-            trial_count=trial_count,
-            experiment_=experiment,
             dataset_filter_string=dataset_filter_string,
+        )
+        policy = dataset_execution_policy.ExecutionPolicy(
+            runs_per_item=trial_count,
+            pass_threshold=trial_count,
+        )
+
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            workers=task_threads,
+            verbose=verbose,
+        )
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=items_iter,
+            task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=None,
+            evaluator_model=None,
+            experiment_=experiment,
+            default_execution_policy=policy,
+            total_items=total,
         )
 
     total_time = time.time() - start_time
@@ -972,21 +1216,30 @@ def evaluate_on_dict_items(
 
     client = opik_client.get_client_cached()
 
-    # Create evaluation engine
     with asyncio_support.async_http_connections_expire_immediately():
+        dataset_items = [
+            dataset_item.DatasetItem(id=f"temp_item_{i}", **item)
+            for i, item in enumerate(items)
+        ]
+        policy = dataset_execution_policy.ExecutionPolicy(
+            runs_per_item=1, pass_threshold=1
+        )
+
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
-            scoring_key_mapping=scoring_key_mapping,
         )
-
-        # Use the new evaluate_items method
-        test_results = evaluation_engine.evaluate_llm_task_on_dict_items(
-            items=items,
+        test_results = evaluation_engine.run_and_score(
+            dataset_items=iter(dataset_items),
             task=task,
+            scoring_metrics=scoring_metrics,
+            scoring_key_mapping=scoring_key_mapping,
+            evaluator_model=None,
+            experiment_=None,
+            default_execution_policy=policy,
+            total_items=len(dataset_items),
         )
 
     return evaluation_result.EvaluationResultOnDictItems(

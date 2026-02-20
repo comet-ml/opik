@@ -610,23 +610,20 @@ def put(self, message: BaseMessage) -> None:
       if self._drain:
          return
 
-      # Route based on message type and capabilities
-      if (
-              self._batch_manager is not None
-              and self._batch_manager.message_supports_batching(message)
-      ):
-         # Route to batching
-         self._batch_manager.process_message(message)
+      # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
+      preprocessed_message = self._attachments_preprocessor.preprocess(
+        message
+      )
 
-      elif base_upload_manager.message_supports_upload(message):
-         # Route to file upload
-         self._upload_preprocessor.upload(message)
+      # do batching pre-processing third
+      preprocessed_message = self._batch_preprocessor.preprocess(
+        preprocessed_message
+      )
 
-      else:
-         # Route to queue
-         if not self._message_queue.accept_put_without_discarding():
-            LOGGER.warning("Queue full, discarding oldest message")
-         self._message_queue.put(message)
+      # Route to queue
+      if not self._message_queue.accept_put_without_discarding():
+         LOGGER.warning("Queue full, discarding oldest message")
+      self._message_queue.put(preprocessed_message)
 ```
 
 **Decision Tree**:
