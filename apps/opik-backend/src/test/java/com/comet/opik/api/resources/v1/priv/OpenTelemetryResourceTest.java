@@ -291,7 +291,7 @@ class OpenTelemetryResourceTest {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var payload = Entity.entity(new byte[] {1, 2, 3}, "application/x-protobuf");
+            var payload = Entity.entity(new byte[]{1, 2, 3}, "application/x-protobuf");
             sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, 501,
                     "OpenTelemetry metrics ingestion is not yet supported", errorMessage, METRICS_URL_TEMPLATE);
         }
@@ -341,7 +341,7 @@ class OpenTelemetryResourceTest {
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
                     assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
-                        .isEqualTo(errorMessage);
+                            .isEqualTo(errorMessage);
                 }
             }
         }
