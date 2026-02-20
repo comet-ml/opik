@@ -120,7 +120,7 @@ class ExperimentAggregatesIntegrationTest {
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
 
-    private ExperimentDAO experimentDAO;
+    private ExperimentService experimentService;
     private ExperimentAggregatesService experimentAggregatesService;
 
     @BeforeAll
@@ -137,7 +137,7 @@ class ExperimentAggregatesIntegrationTest {
         spanResourceClient = new SpanResourceClient(client, baseUrl);
 
         // Get injected dependencies
-        experimentDAO = injector.getInstance(ExperimentDAO.class);
+        experimentService = injector.getInstance(ExperimentService.class);
         experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
     }
 
@@ -219,7 +219,8 @@ class ExperimentAggregatesIntegrationTest {
         var criteria = criteriaBuilder.apply(testData);
 
         // When: Count using both methods
-        var countFromRaw = experimentDAO.countTotal(criteria, Set.of())
+        var countFromRaw = experimentService.find(1, 10, criteria)
+                .map(Experiment.ExperimentPage::total)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, USER)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -393,7 +394,7 @@ class ExperimentAggregatesIntegrationTest {
                 .build();
 
         // When: Query BEFORE aggregation (calculates from raw data)
-        var beforeAggregation = experimentDAO.find(1, 10, searchCriteria)
+        var beforeAggregation = experimentService.find(1, 10, searchCriteria)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, USER)
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))

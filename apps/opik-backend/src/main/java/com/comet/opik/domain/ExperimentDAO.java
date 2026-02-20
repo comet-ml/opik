@@ -1437,8 +1437,6 @@ class ExperimentDAO {
     Mono<ExperimentPage> find(
             int page, int size, @NonNull ExperimentSearchCriteria experimentSearchCriteria) {
         return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
             // First, get the target project IDs to reduce traces, spans, and feedback_scores table scans
             return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(experimentSearchCriteria))
                     .flatMap(targetProjectIds -> countTotal(experimentSearchCriteria, targetProjectIds)
@@ -1499,7 +1497,7 @@ class ExperimentDAO {
         });
     }
 
-    Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> targetProjectIds) {
+    private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> targetProjectIds) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> countTotal(experimentSearchCriteria, connection, targetProjectIds))
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
