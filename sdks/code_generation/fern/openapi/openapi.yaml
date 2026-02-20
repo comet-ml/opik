@@ -7235,6 +7235,12 @@ components:
           format: int32
         custom_parameters:
           $ref: "#/components/schemas/JsonNode"
+        throttling:
+          type: number
+          format: double
+        max_concurrent_requests:
+          type: integer
+          format: int32
     LlmAsJudgeOutputSchema:
       required:
       - description
