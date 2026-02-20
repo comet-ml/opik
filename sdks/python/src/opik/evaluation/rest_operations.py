@@ -83,14 +83,18 @@ def log_test_result_feedback_scores(
     all_trace_scores: List[BatchFeedbackScoreDict] = []
 
     for score_result_ in score_results:
-        if score_result_.scoring_failed:
-            continue
+        scoring_failed = bool(score_result_.scoring_failed)
+        reason = None if scoring_failed else score_result_.reason
+        error_reason = score_result_.reason if scoring_failed else None
 
         trace_score = BatchFeedbackScoreDict(
             id=trace_id,
             name=score_result_.name,
             value=score_result_.value,
-            reason=score_result_.reason,
+            reason=reason,
+            metadata=score_result_.metadata,
+            error=1 if scoring_failed else 0,
+            error_reason=error_reason,
         )
         all_trace_scores.append(trace_score)
 

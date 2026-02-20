@@ -173,6 +173,9 @@ def parse_feedback_score_messages(
             project_name=score_dict.get("project_name") or project_name,
             reason=score_dict.get("reason"),
             category_name=score_dict.get("category_name"),
+            metadata=score_dict.get("metadata"),
+            error=int(score_dict.get("error", 0)),
+            error_reason=score_dict.get("error_reason"),
         )
         for score_dict in valid_scores
     ]

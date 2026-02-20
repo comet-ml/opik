@@ -178,6 +178,9 @@ class FeedbackScoreMessage(BaseMessage):
     source: str
     reason: Optional[str] = None
     category_name: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    error: int = 0
+    error_reason: Optional[str] = None
 
 
 @dataclasses.dataclass

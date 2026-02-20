@@ -16,3 +16,18 @@ def test_g_eval__parse_model_output_string__score_out_of_range__MetricComputatio
             content=invalid_model_output,
             metric_name="g_eval",
         )
+
+
+def test_g_eval__parse_model_output_string__non_finite_score__MetricComputationErrorRaised():
+    invalid_model_output = (
+        '{"score": NaN, "reason": "Non-finite score should fail parsing."}'
+    )
+
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match=logging_messages.GEVAL_SCORE_CALC_FAILED,
+    ):
+        parser.parse_model_output_string(
+            content=invalid_model_output,
+            metric_name="g_eval",
+        )
