@@ -4,7 +4,6 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
-import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -89,7 +88,7 @@ public class OpenTelemetryMappingUtils {
             @NonNull String key, @NonNull AnyValue value) {
         // usage might appear as single int or string values as well as a JSON object
         if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.getRule().length());
+            var actualKey = extractUsageMapKey(rule, key);
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else if (value.hasStringValue()) {
             boolean extracted = tryExtractUsageFromString(usage, rule, key, value.getStringValue());
@@ -170,7 +169,7 @@ public class OpenTelemetryMappingUtils {
             String key, String stringValue) {
         try {
             int intValue = Integer.parseInt(stringValue);
-            var actualKey = key.substring(rule.getRule().length());
+            var actualKey = extractUsageMapKey(rule, key);
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), intValue);
             return true;
         } catch (NumberFormatException e) {
@@ -185,7 +184,6 @@ public class OpenTelemetryMappingUtils {
      * @param usage       the usage map to update
      * @param key         the original attribute key (for error logging)
      * @param stringValue the JSON string to parse
-     * @throws BadRequestException if JSON parsing fails critically
      */
     private static void tryExtractUsageFromJsonObject(Map<String, Integer> usage, String key, String stringValue) {
         try {
@@ -214,8 +212,14 @@ public class OpenTelemetryMappingUtils {
         } catch (UncheckedIOException ex) {
             log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
                     ex.getMessage());
-            throw new BadRequestException(
-                    "Failed to parse JSON string for usage field " + key + ": " + ex.getMessage());
         }
+    }
+
+    private static String extractUsageMapKey(OpenTelemetryMappingRule rule, String key) {
+        if (key.equals(rule.getRule()) && key.startsWith("gen_ai.usage.")) {
+            return key.substring("gen_ai.usage.".length());
+        }
+
+        return key.substring(rule.getRule().length());
     }
 }
