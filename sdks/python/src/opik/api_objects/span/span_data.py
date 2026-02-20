@@ -83,6 +83,8 @@ class SpanData(ObservationData):
             "trace_id": self.trace_id,
         }
 
+        if self.parent_span_id is not None:
+            start_parameters["parent_span_id"] = self.parent_span_id
         if self.name is not None:
             start_parameters["name"] = self.name
         if self.input is not None:
