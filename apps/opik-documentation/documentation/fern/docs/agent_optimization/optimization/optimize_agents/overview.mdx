@@ -8,25 +8,27 @@ og:title: Optimize Agents with Opik
 title: Optimize agents
 ---
 
-The Opik Agent Optimizer can optimize both simple prompts and complex agent workflows. For most use cases, you can optimize prompts directly using `ChatPrompt`. When you need multi-prompt workflows, agent orchestration, or custom execution logic, you'll use `OptimizableAgent` to create a custom agent class.
+The Opik Agent Optimizer can optimize both simple prompts and complex agent workflows. For most use cases, you can optimize prompts directly using `ChatPrompt` without creating a custom agent. When you need multi-prompt workflows, agent framework integration, or custom execution logic, you'll create a custom `OptimizableAgent` subclass.
 
 ## When to use OptimizableAgent vs ChatPrompt
 
 **Use `ChatPrompt` directly** (default approach):
 - Single-prompt optimization - optimizing one prompt template
-- Most common use case
+- Most common use case - the optimizer uses a default `LiteLLMAgent` internally
 - No custom execution logic needed
+- No agent framework integration required
 
-**Use `OptimizableAgent`** when you need:
+**Use custom `OptimizableAgent`** when you need:
 - Multi-prompt workflows - orchestrating multiple prompts in sequence
 - Agent framework integration - connecting to ADK, LangGraph, CrewAI, etc.
-- Custom execution logic - special tool handling, async workflows, etc.
+- Custom execution logic - special tool handling, async workflows, retrieval pipelines
+- State management across prompt invocations
 
-Optimizers work seamlessly with both approaches. The optimizer calls your agent's `invoke_agent()` method repeatedly during optimization, passing different prompt candidates to evaluate.
+The optimizer calls your agent's `invoke_agent()` method repeatedly during optimization, passing different prompt candidates to evaluate performance.
 
 ## Single-prompt optimization
 
-For most optimization tasks, you can use `ChatPrompt` directly without creating a custom agent. The optimizer uses a default LiteLLM-based agent under the hood.
+For most optimization tasks, use `ChatPrompt` directly. The optimizer automatically uses a `LiteLLMAgent` under the hood, which handles model calls, tool execution, and tracing.
 
 ```python
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
@@ -37,7 +39,7 @@ dataset = hotpot(count=300)
 
 def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
+        reference=dataset_item["answer"],
         output=llm_output
     )
 
@@ -59,158 +61,20 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
-### Custom agent for framework integration
+**What happens internally:**
+- The optimizer creates a `LiteLLMAgent` instance automatically
+- For each trial, the agent receives a candidate prompt
+- The agent calls `prompt.get_messages(dataset_item)` to format messages
+- The agent invokes LiteLLM with the formatted messages
+- The optimizer scores the output and generates improved candidates
 
-When integrating with specific agent frameworks (Google ADK, LangGraph, CrewAI, etc.), you'll create a custom `OptimizableAgent` subclass. This allows the optimizer to work with your framework's execution model.
+## Creating custom agents
 
-Here's an example for Google ADK:
+When you need custom behavior beyond simple LLM calls, subclass `OptimizableAgent` and implement the `invoke_agent()` method.
 
-```python
-from typing import Any, TYPE_CHECKING
-from opik_optimizer import OptimizableAgent
+### The invoke_agent() method
 
-if TYPE_CHECKING:
-    from opik_optimizer.api_objects import chat_prompt
-
-class ADKAgent(OptimizableAgent):
-    project_name = "adk-agent"
-
-    def invoke_agent(
-        self,
-        prompts: dict[str, chat_prompt.ChatPrompt],
-        dataset_item: dict[str, Any],
-        allow_tool_use: bool = False,
-        seed: int | None = None,
-    ) -> str:
-        # Single-prompt agents extract the prompt from the dict
-        if len(prompts) > 1:
-            raise ValueError("ADKAgent only supports single-prompt optimization.")
-        
-        prompt = list(prompts.values())[0]
-        messages = prompt.get_messages(dataset_item)
-        
-        # Your framework-specific execution logic here
-        # ... create ADK agent, run it, return response ...
-        
-        return response
-```
-
-The key points:
-- Extract the single prompt from `prompts` dict: `prompt = list(prompts.values())[0]`
-- Get formatted messages: `messages = prompt.get_messages(dataset_item)`
-- Execute using your framework and return the response string
-
-<Tip>
-  See `sdks/opik_optimizer/scripts/llm_frameworks/` for working examples of framework integrations (ADK, LangGraph, CrewAI, etc.). Each script doubles as both documentation and regression tests.
-</Tip>
-
-## Multi-prompt optimization
-
-For multi-step agent workflows, you **must** use `OptimizableAgent` because `ChatPrompt` only handles a single prompt. Multi-prompt optimization allows you to optimize multiple prompts that work together in a pipeline.
-
-### When to use multi-prompt optimization
-
-- Sequential reasoning workflows (analyze → respond)
-- Multi-hop retrieval pipelines
-- Agent orchestration with multiple steps
-- Any workflow where one prompt's output feeds into another
-
-### Implementing a multi-prompt agent
-
-Here's a simple example of a two-step workflow that analyzes input and then generates a response:
-
-```python
-from typing import Any
-from opik_optimizer import ChatPrompt, OptimizableAgent
-from openai import OpenAI
-
-class AnalyzeRespondAgent(OptimizableAgent):
-    """Two-step agent: analyze input, then respond based on analysis."""
-    
-    def __init__(self, model: str = "gpt-4o-mini"):
-        super().__init__()
-        self.model = model
-        self.client = OpenAI()
-
-    def invoke_agent(
-        self,
-        prompts: dict[str, ChatPrompt],
-        dataset_item: dict[str, Any],
-        allow_tool_use: bool = False,
-        seed: int | None = None,
-    ) -> str:
-        # Step 1: Analyze the input
-        analyze_prompt = prompts["analyze"]
-        analyze_messages = analyze_prompt.get_messages(dataset_item)
-        
-        analyze_response = self.client.chat.completions.create(
-            model=self.model,
-            messages=analyze_messages,
-            seed=seed,
-        )
-        analysis = analyze_response.choices[0].message.content
-
-        # Step 2: Generate response based on analysis
-        respond_prompt = prompts["respond"]
-        # Pass analysis result to the respond prompt
-        respond_context = {**dataset_item, "analysis": analysis}
-        respond_messages = respond_prompt.get_messages(respond_context)
-        
-        respond_response = self.client.chat.completions.create(
-            model=self.model,
-            messages=respond_messages,
-            seed=seed,
-        )
-        
-        return respond_response.choices[0].message.content
-```
-
-### Using the multi-prompt agent
-
-When optimizing, pass a dictionary of prompts instead of a single prompt:
-
-```python
-from opik_optimizer import ChatPrompt, MetaPromptOptimizer
-from opik.evaluation.metrics import LevenshteinRatio
-
-# Define both prompts in the workflow
-prompts = {
-    "analyze": ChatPrompt(
-        system="You are an analysis assistant. Extract key information from the input.",
-        user="{text}",
-        model="gpt-4o-mini"
-    ),
-    "respond": ChatPrompt(
-        system="You are a response assistant. Generate a helpful response based on the analysis.",
-        user="Analysis: {analysis}\n\nOriginal question: {text}",
-        model="gpt-4o-mini"
-    ),
-}
-
-optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
-result = optimizer.optimize_prompt(
-    prompt=prompts,  # Pass dict of prompts
-    agent_class=AnalyzeRespondAgent,  # Use your custom agent
-    dataset=dataset,
-    metric=levenshtein_ratio,
-    max_trials=5,
-    n_samples=50
-)
-
-result.display()
-```
-
-The optimizer will optimize both prompts in the dictionary, trying different combinations to improve performance.
-
-<Note>
-  The prompts dict keys (like "analyze" and "respond") are used to identify which prompt to optimize. The optimizer can optimize all prompts or specific ones based on the `optimize_prompt` parameter.
-</Note>
-
-## Key implementation details
-
-### invoke_agent() method signature
-
-All `OptimizableAgent` subclasses must implement `invoke_agent()`:
+All custom agents must implement this method signature:
 
 ```python
 def invoke_agent(
@@ -226,52 +90,61 @@ def invoke_agent(
 
 **Parameters:**
 - `prompts`: Dictionary mapping prompt names to `ChatPrompt` objects
-- `dataset_item`: Dataset row used to format prompt messages
+  - For single-prompt optimization: `{"default": ChatPrompt(...)}`
+  - For multi-prompt: `{"step1": ChatPrompt(...), "step2": ChatPrompt(...)}`
+- `dataset_item`: Dataset row as a dictionary (e.g., `{"question": "...", "answer": "..."}`)
 - `allow_tool_use`: Whether tools may be executed (for tool-calling prompts)
 - `seed`: Optional random seed for reproducibility
 
-**Returns:** A single string output that will be scored by your metric function
+**Returns:**
+- A single string output that will be scored by your metric function
 
-### Extracting messages from prompts
+### Agent framework integration
 
-Use `ChatPrompt.get_messages()` to format the prompt with dataset values:
+When integrating with agent frameworks like Google ADK, LangGraph, or CrewAI, create a custom agent that bridges between the optimizer and your framework.
+
+**Example: Google ADK integration**
 
 ```python
-messages = prompt.get_messages(dataset_item)
-# Returns list of message dicts: [{"role": "system", "content": "..."}, ...]
+from typing import Any
+from opik_optimizer import OptimizableAgent
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+
+class ADKAgent(OptimizableAgent):
+    """Integrate Google ADK agents with Opik optimizer."""
+
+    def invoke_agent(
+        self,
+        prompts: dict[str, ChatPrompt],
+        dataset_item: dict[str, Any],
+        allow_tool_use: bool = False,
+        seed: int | None = None,
+    ) -> str:
+        # Extract the single prompt (ADK agents use one prompt at a time)
+        if len(prompts) > 1:
+            raise ValueError("ADKAgent only supports single-prompt optimization.")
+
+        prompt = list(prompts.values())[0]
+        messages = prompt.get_messages(dataset_item)
+
+        # Create and run ADK agent with your framework's API
+        agent = LlmAgent(
+            model=LiteLlm(model=prompt.model or "openai/gpt-4o-mini"),
+            name="my_agent",
+            instruction=messages[0]["content"] if messages else "",
+            tools=[...] if allow_tool_use else None,
+        )
+
+        # Execute your framework's logic
+        # ... (framework-specific code)
+
+        return response
 ```
 
-For multi-prompt workflows, pass additional context when calling `get_messages()`:
-
+**Usage:**
 ```python
-# Pass intermediate results to subsequent prompts
-context = {**dataset_item, "intermediate_result": some_value}
-messages = prompt.get_messages(context)
-```
-
-### Best practices
-
-- **Error handling**: Return meaningful error messages if execution fails
-- **Model parameters**: Respect `prompt.model` and `prompt.model_kwargs` for consistency
-- **Reproducibility**: Use the `seed` parameter when making LLM calls
-- **Opik tracing**: The base class handles tracing automatically, but you can add custom metadata via `self.trace_metadata`
-
-## Complete examples
-
-### Single-prompt with ChatPrompt (default)
-
-```python
-from opik_optimizer import ChatPrompt, EvolutionaryOptimizer
-from opik_optimizer.datasets import hotpot
-from opik.evaluation.metrics import LevenshteinRatio
-
-dataset = hotpot(count=300)
-
-def metric(dataset_item, llm_output):
-    return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
-        output=llm_output
-    )
+from opik_optimizer import ChatPrompt, GepaOptimizer
 
 prompt = ChatPrompt(
     system="You are a helpful assistant.",
@@ -279,32 +152,47 @@ prompt = ChatPrompt(
     model="openai/gpt-4o-mini"
 )
 
-optimizer = EvolutionaryOptimizer(
-    model="openai/gpt-4o-mini",
-    population_size=5,
-    num_generations=3
-)
+# Instantiate your custom agent
+agent = ADKAgent()
 
+optimizer = GepaOptimizer(model="openai/gpt-4o-mini")
 result = optimizer.optimize_prompt(
     prompt=prompt,
+    agent=agent,  # Pass the instantiated agent
     dataset=dataset,
-    metric=metric,
-    n_samples=50
+    metric=levenshtein_ratio,
+    max_trials=8,
+    n_samples=10
 )
-
-result.display()
 ```
 
-### Multi-prompt workflow
+<Tip>
+  See `sdks/opik_optimizer/scripts/llm_frameworks/` for complete framework integration examples (ADK, LangGraph, CrewAI, PydanticAI, etc.).
+</Tip>
+
+## Multi-prompt optimization
+
+Multi-prompt optimization allows you to optimize multiple prompts that work together in a pipeline. This is useful for complex agent workflows with multiple reasoning steps.
+
+### When to use multi-prompt optimization
+
+- Sequential reasoning workflows (analyze → respond)
+- Multi-hop retrieval pipelines (query → search → summarize → answer)
+- Agent orchestration with multiple steps
+- Any workflow where one prompt's output feeds into another
+
+### Implementing a multi-prompt agent
+
+Create an agent that orchestrates multiple prompts in sequence:
 
 ```python
 from typing import Any
-from opik_optimizer import ChatPrompt, OptimizableAgent, HRPO
-from opik.evaluation.metrics import LevenshteinRatio
-from opik_optimizer.datasets import hotpot
+from opik_optimizer import ChatPrompt, OptimizableAgent
 from openai import OpenAI
 
-class TwoStepAgent(OptimizableAgent):
+class TwoStepReasoningAgent(OptimizableAgent):
+    """Two-step reasoning: analyze input, then generate response."""
+
     def __init__(self, model: str = "gpt-4o-mini"):
         super().__init__()
         self.model = model
@@ -317,38 +205,57 @@ class TwoStepAgent(OptimizableAgent):
         allow_tool_use: bool = False,
         seed: int | None = None,
     ) -> str:
-        # First step
-        step1_prompt = prompts["step1"]
-        step1_messages = step1_prompt.get_messages(dataset_item)
-        step1_response = self.client.chat.completions.create(
+        # Step 1: Analyze the input using the "analyze" prompt
+        analyze_prompt = prompts["analyze"]
+        analyze_messages = analyze_prompt.get_messages(dataset_item)
+
+        analyze_response = self.client.chat.completions.create(
             model=self.model,
-            messages=step1_messages,
+            messages=analyze_messages,
             seed=seed,
         )
-        step1_result = step1_response.choices[0].message.content
+        analysis = analyze_response.choices[0].message.content
 
-        # Second step uses result from first step
-        step2_prompt = prompts["step2"]
-        step2_context = {**dataset_item, "step1_result": step1_result}
-        step2_messages = step2_prompt.get_messages(step2_context)
-        step2_response = self.client.chat.completions.create(
+        # Step 2: Generate response using the "respond" prompt
+        # Pass the analysis result to the respond prompt as context
+        respond_prompt = prompts["respond"]
+        respond_context = {**dataset_item, "analysis": analysis}
+        respond_messages = respond_prompt.get_messages(respond_context)
+
+        respond_response = self.client.chat.completions.create(
             model=self.model,
-            messages=step2_messages,
+            messages=respond_messages,
             seed=seed,
         )
-        
-        return step2_response.choices[0].message.content
 
-# Define multi-prompt workflow
+        return respond_response.choices[0].message.content
+```
+
+**Key points:**
+1. Accept a dictionary of prompts (one for each step)
+2. Execute prompts in sequence
+3. Pass intermediate results between steps using `dataset_item` updates
+4. Return the final output
+
+### Using multi-prompt agents
+
+Pass a dictionary of prompts and an instantiated agent to the optimizer:
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer.datasets import hotpot
+
+# Define all prompts in the workflow
 prompts = {
-    "step1": ChatPrompt(
-        system="Analyze the question and identify key information.",
-        user="{question}",
+    "analyze": ChatPrompt(
+        system="Analyze the question and identify key information needed.",
+        user="Question: {question}",
         model="gpt-4o-mini"
     ),
-    "step2": ChatPrompt(
+    "respond": ChatPrompt(
         system="Answer the question based on the analysis.",
-        user="Question: {question}\n\nAnalysis: {step1_result}",
+        user="Question: {question}\n\nAnalysis: {analysis}\n\nProvide a direct answer.",
         model="gpt-4o-mini"
     ),
 }
@@ -357,19 +264,17 @@ dataset = hotpot(count=300)
 
 def metric(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
+        reference=dataset_item["answer"],
         output=llm_output
     )
 
-optimizer = HRPO(
-    model="openai/gpt-4o-mini",
-    n_threads=2,
-    max_parallel_batches=3
-)
+# Instantiate the agent
+agent = TwoStepReasoningAgent()
 
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
 result = optimizer.optimize_prompt(
-    prompt=prompts,
-    agent_class=TwoStepAgent,
+    prompt=prompts,  # Pass dict of prompts
+    agent=agent,  # Pass instantiated agent
     dataset=dataset,
     metric=metric,
     max_trials=5,
@@ -379,12 +284,235 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
+The optimizer will:
+1. Generate candidate versions of both prompts
+2. Pass them to your agent's `invoke_agent()` method
+3. Score the final output
+4. Iteratively improve both prompts based on performance
+
+<Note>
+  The prompt dict keys (like "analyze" and "respond") identify which prompt to optimize. The optimizer can optimize all prompts or specific ones via the `optimize_prompt` parameter.
+</Note>
+
+## Advanced example: Multi-hop retrieval agent
+
+This example shows a complex multi-prompt agent with external tool calls (Wikipedia search) and structured outputs:
+
+```python
+from typing import Any
+from opik_optimizer import ChatPrompt, OptimizableAgent
+from pydantic import BaseModel
+
+class SummaryObject(BaseModel):
+    summary: str
+    gaps: list[str]
+
+class MultiHopAgent(OptimizableAgent):
+    """Multi-hop retrieval: query → search → refine → search → answer."""
+
+    def __init__(self, search_function, model: str = "gpt-4o-mini"):
+        super().__init__()
+        self.search = search_function
+        self.model = model
+
+    def invoke_agent(
+        self,
+        prompts: dict[str, ChatPrompt],
+        dataset_item: dict[str, Any],
+        allow_tool_use: bool = True,
+        seed: int | None = None,
+    ) -> str:
+        # Step 1: Generate search query
+        query1_messages = prompts["create_query_1"].get_messages(dataset_item)
+        query1 = self.call_llm(query1_messages)
+
+        # Step 2: Search and get passages
+        passages1 = self.search(query1, n=5)
+
+        # Step 3: Summarize and identify gaps
+        summary1_messages = prompts["summarize_1"].get_messages({
+            **dataset_item,
+            "passages": "\n\n".join(passages1)
+        })
+        summary_obj = self.call_llm(
+            summary1_messages,
+            response_model=SummaryObject
+        )
+
+        # Step 4: Generate refined query
+        query2_messages = prompts["create_query_2"].get_messages({
+            **dataset_item,
+            "summary": summary_obj.summary,
+            "gaps": "\n".join(summary_obj.gaps)
+        })
+        query2 = self.call_llm(query2_messages)
+
+        # Step 5: Second search
+        passages2 = self.search(query2, n=5)
+
+        # Step 6: Generate final answer
+        answer_messages = prompts["final_answer"].get_messages({
+            **dataset_item,
+            "evidence": summary_obj.summary,
+            "additional_passages": "\n\n".join(passages2)
+        })
+
+        return self.call_llm(answer_messages)
+```
+
 <Info>
-  For advanced multi-prompt examples, see `sdks/opik_optimizer/benchmarks/agents/hotpot_multihop_agent.py` which implements a complex multi-hop retrieval pipeline with Wikipedia search.
+  For a complete multi-hop retrieval implementation, see `sdks/opik_optimizer/benchmarks/agents/hotpot_multihop_agent.py`.
 </Info>
+
+## Best practices
+
+### 1. Message formatting
+
+Always use `ChatPrompt.get_messages()` to format messages:
+
+```python
+prompt = prompts["step1"]
+messages = prompt.get_messages(dataset_item)
+# Returns: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+```
+
+For subsequent steps, pass intermediate results via updated dataset items:
+
+```python
+# Pass step1 output to step2
+context = {**dataset_item, "step1_result": step1_output}
+messages = prompts["step2"].get_messages(context)
+```
+
+### 2. Agent initialization
+
+**Do NOT** pass `prompt` or `project_name` to `__init__`:
+```python
+# ❌ Wrong - legacy API pattern
+class MyAgent(OptimizableAgent):
+    def __init__(self, prompt, project_name):
+        super().__init__(prompt=prompt, project_name=project_name)
+
+# ✅ Correct - modern API pattern
+class MyAgent(OptimizableAgent):
+    def __init__(self, model: str = "gpt-4o-mini"):
+        super().__init__()  # No arguments
+        self.model = model
+```
+
+The optimizer provides prompts via `invoke_agent()`, not during initialization.
+
+### 3. Model configuration
+
+Respect the model settings from the prompt:
+
+```python
+def invoke_agent(self, prompts, dataset_item, allow_tool_use, seed):
+    prompt = list(prompts.values())[0]
+
+    # Use the model from the prompt (optimizer may override it)
+    model = prompt.model or self.model or "gpt-4o-mini"
+    model_kwargs = prompt.model_kwargs or {}
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=prompt.get_messages(dataset_item),
+        seed=seed,  # Always pass seed for reproducibility
+        **model_kwargs
+    )
+```
+
+### 4. Error handling
+
+Return meaningful error messages rather than raising exceptions:
+
+```python
+def invoke_agent(self, prompts, dataset_item, allow_tool_use, seed):
+    try:
+        # ... your logic ...
+        return response
+    except Exception as e:
+        return f"Agent execution failed: {str(e)}"
+```
+
+### 5. Tool execution
+
+Check `allow_tool_use` before executing tools:
+
+```python
+def invoke_agent(self, prompts, dataset_item, allow_tool_use, seed):
+    prompt = list(prompts.values())[0]
+
+    tools = prompt.tools if allow_tool_use else None
+
+    response = client.chat.completions.create(
+        model=prompt.model,
+        messages=prompt.get_messages(dataset_item),
+        tools=tools,  # Only pass tools if allowed
+        seed=seed
+    )
+```
+
+## Troubleshooting
+
+### "TypeError: missing 'self' argument"
+
+This error occurs when you pass a class instead of an instance:
+
+```python
+# ❌ Wrong
+result = optimizer.optimize_prompt(
+    agent_class=MyAgent,  # This parameter doesn't exist!
+    ...
+)
+
+# ✅ Correct
+agent = MyAgent()  # Instantiate first
+result = optimizer.optimize_prompt(
+    agent=agent,  # Pass instance
+    ...
+)
+```
+
+### "Multiple prompts not supported"
+
+Your agent needs to handle multi-prompt workflows:
+
+```python
+def invoke_agent(self, prompts, dataset_item, allow_tool_use, seed):
+    # For single-prompt agents
+    if len(prompts) > 1:
+        raise ValueError("This agent only supports single-prompt optimization.")
+
+    # For multi-prompt agents, implement full pipeline
+    step1_output = self.execute_step1(prompts["step1"], dataset_item)
+    step2_output = self.execute_step2(prompts["step2"], dataset_item, step1_output)
+    return step2_output
+```
+
+### Agent state persistence
+
+If your agent needs to maintain state between invocations, store it as instance attributes:
+
+```python
+class StatefulAgent(OptimizableAgent):
+    def __init__(self):
+        super().__init__()
+        self.cache = {}  # State persists across invocations
+
+    def invoke_agent(self, prompts, dataset_item, allow_tool_use, seed):
+        # Access and update state
+        if dataset_item["id"] in self.cache:
+            return self.cache[dataset_item["id"]]
+
+        result = self.process(prompts, dataset_item)
+        self.cache[dataset_item["id"]] = result
+        return result
+```
 
 ## Next steps
 
 - Explore [optimization algorithms](/agent_optimization/algorithms/overview) to choose the right optimizer
 - Learn about [defining datasets](/agent_optimization/optimization/define_datasets) and [metrics](/agent_optimization/optimization/define_metrics)
 - Check framework-specific examples in `sdks/opik_optimizer/scripts/llm_frameworks/`
+- Review the multi-hop retrieval example in `sdks/opik_optimizer/benchmarks/agents/hotpot_multihop_agent.py`
