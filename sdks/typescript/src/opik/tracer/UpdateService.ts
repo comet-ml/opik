@@ -109,6 +109,16 @@ export class UpdateService {
     const { prompts, ...restUpdates } = updates;
 
     if (!prompts || prompts.length === 0) {
+      // Even without prompts, merge existing metadata with new metadata
+      // so that trace.update({ metadata: {...} }) preserves prior metadata
+      if (restUpdates.metadata && existingMetadata) {
+        const existingObj = this.normalizeMetadata(existingMetadata);
+        const newObj = this.normalizeMetadata(restUpdates.metadata);
+        return {
+          ...restUpdates,
+          metadata: { ...existingObj, ...newObj },
+        };
+      }
       return restUpdates;
     }
 
@@ -142,6 +152,16 @@ export class UpdateService {
     const { prompts, ...restUpdates } = updates;
 
     if (!prompts || prompts.length === 0) {
+      // Even without prompts, merge existing metadata with new metadata
+      // so that span.update({ metadata: {...} }) preserves prior metadata
+      if (restUpdates.metadata && existingMetadata) {
+        const existingObj = this.normalizeMetadata(existingMetadata);
+        const newObj = this.normalizeMetadata(restUpdates.metadata);
+        return {
+          ...restUpdates,
+          metadata: { ...existingObj, ...newObj },
+        };
+      }
       return restUpdates;
     }
 
