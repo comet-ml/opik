@@ -658,8 +658,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             boolean evaluatorsChanged = fromItem.evaluatorsHash() != toItem.evaluatorsHash();
             boolean executionPolicyChanged = fromItem.executionPolicyHash() != toItem.executionPolicyHash();
+            boolean descriptionChanged = fromItem.descriptionHash() != toItem.descriptionHash();
 
-            if (dataChanged || tagsChanged || evaluatorsChanged || executionPolicyChanged) {
+            if (dataChanged || tagsChanged || evaluatorsChanged || executionPolicyChanged || descriptionChanged) {
                 modified++;
             } else {
                 unchanged++;

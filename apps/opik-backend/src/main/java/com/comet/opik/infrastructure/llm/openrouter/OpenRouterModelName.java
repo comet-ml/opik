@@ -277,6 +277,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     OPENAI_O4_MINI_HIGH("openai/o4-mini-high"),
     OPENGVLAB_INTERNVL3_78B("opengvlab/internvl3-78b"),
     OPENROUTER_AUTO("openrouter/auto"),
+    OPENROUTER_FREE("openrouter/free"),
     PERPLEXITY_SONAR("perplexity/sonar"),
     PERPLEXITY_SONAR_DEEP_RESEARCH("perplexity/sonar-deep-research"),
     PERPLEXITY_SONAR_PRO("perplexity/sonar-pro"),

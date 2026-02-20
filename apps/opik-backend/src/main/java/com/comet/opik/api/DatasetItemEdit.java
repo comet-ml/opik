@@ -8,12 +8,15 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 /**
  * DTO for editing an existing dataset item with partial data.
@@ -26,6 +29,8 @@ public record DatasetItemEdit(
         @JsonView(DatasetItemEdit.View.Write.class) @NotNull @Schema(description = "Row ID of the item to edit (from API response)", required = true) UUID id,
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "New data to merge with existing item data") Map<String, JsonNode> data,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "New description for the item") String description,
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New tags to replace existing item tags") Set<String> tags,
 
