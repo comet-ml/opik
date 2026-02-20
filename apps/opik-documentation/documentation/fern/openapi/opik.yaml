@@ -9092,6 +9092,10 @@ components:
           $ref: "#/components/schemas/JsonNode"
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item description
         tags:
           uniqueItems: true
           type: array
@@ -9334,6 +9338,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9592,6 +9599,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9936,6 +9946,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -10425,6 +10438,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array

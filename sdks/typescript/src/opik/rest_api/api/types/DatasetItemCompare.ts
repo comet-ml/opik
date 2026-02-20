@@ -9,6 +9,7 @@ export interface DatasetItemCompare {
     spanId?: string;
     source: OpikApi.DatasetItemCompareSource;
     data: OpikApi.JsonNode;
+    description?: string;
     tags?: string[];
     evaluators?: OpikApi.EvaluatorItemCompare[];
     executionPolicy?: OpikApi.ExecutionPolicyCompare;
