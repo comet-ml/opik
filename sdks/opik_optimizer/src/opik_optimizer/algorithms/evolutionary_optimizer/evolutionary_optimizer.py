@@ -35,6 +35,9 @@ creator = cast(Any, _creator)  # type: ignore[assignment]
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
@@ -422,6 +425,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         optimizable_prompts = context.prompts
         experiment_config = context.experiment_config
         max_trials = context.max_trials
+        self._optimize_tools = context.extra_params.get("optimize_tools")
+        self._tool_names = context.extra_params.get("tool_names")
+        self._evaluation_metric = context.metric
 
         # Initialize progress tracking for display
         self._current_round = 0

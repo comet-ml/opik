@@ -1,16 +1,16 @@
 ---
 description: Learn how to optimize prompts that leverage MCP (Model Context Protocol)
-  tools and function calling capabilities using the MetaPrompt Optimizer.
+  tools and function calling capabilities across supported optimizers.
 headline: Tool Optimization | Opik Documentation
 og:description: Learn to enhance your prompts using Opik's Tool Optimization feature
-  for MCP tools and structured tool definitions in Beta.
+  for MCP tools and structured tool definitions.
 og:site_name: Opik Documentation
 og:title: Optimize Prompts with Opik - Tool Optimization
 subtitle: Optimize prompts that use external tools and function calls
 title: Tool Optimization (MCP & Function Calling)
 ---
 
-Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is currently **exclusively supported by the MetaPrompt Optimizer**.
+Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer`, `ParameterOptimizer`, and `GepaOptimizer`.
 
 ## What is Tool Optimization?
 
@@ -20,11 +20,15 @@ Tool optimization extends traditional prompt optimization to handle prompts that
 - **Tool schemas** - Structured tool definitions and parameters
 - **Multi-step workflows** - Complex agent workflows involving multiple tools
 
+Tool optimization **does not** change tool names or schemas. It updates:
+- Tool **descriptions**
+- Tool **parameter descriptions**
+
 <Note>
   **Important Distinction:** Many optimizers (including GEPA, MetaPrompt, etc.) can optimize **agents that use tools** -
   this means optimizing prompts for agents that have access to function calling or external tools. However, **true tool
-  optimization** (optimizing the tools themselves, their schemas, or MCP integrations) is currently only available
-  through the MetaPrompt Optimizer.
+  optimization** (optimizing the tool descriptions and parameter descriptions) is a separate capability you can enable
+  with `optimize_tools=True` across supported optimizers.
 </Note>
 
 <Note>
@@ -80,7 +84,7 @@ prompt = ChatPrompt(
 )
 
 # GEPA optimizes the agent's prompt, not the tools themselves
-optimizer = GepaOptimizer(model="gpt-4o-mini")
+optimizer = GepaOptimizer(model="gpt-5-nano")
 result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
 ```
 
@@ -91,33 +95,31 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 
 ### 2. MCP (Model Context Protocol) Tools
 
-**True tool optimization** is currently only available for MCP tools through the MetaPrompt Optimizer. MCP tools provide standardized interfaces for external integrations:
+**True tool optimization** is available for MCP tools and function-calling tools across supported optimizers. MCP tools provide standardized interfaces for external integrations:
 
 ```python
 # MCP tool optimization example
-# See scripts/archive/litellm_metaprompt_context7_mcp_example.py for working examples
+# See scripts/litellm_metaprompt_context7_remote_example.py for a working example
 
 from opik_optimizer import MetaPromptOptimizer
 
-# MCP tools are configured through mcp.json manifests
-# The MetaPrompt Optimizer can optimize MCP tool descriptions and usage
-optimizer = MetaPromptOptimizer(model="gpt-4")
+# MCP tools are configured as OpenAI-style entries (local or remote)
+optimizer = MetaPromptOptimizer(model="gpt-5-nano")
 
-# Check the scripts/ directory for working examples
+# Any supported optimizer works here (e.g., HRPO, Evolutionary, MetaPrompt).
 ```
 
 <Note>
 MCP Tool Optimization:
 
-    - Only supported by **MetaPrompt Optimizer**
-    - See [PR#3341](https://github.com/comet-ml/opik/pull/3341) for implementation details
-    - Working examples available in `scripts/archive/litellm_metaprompt_context7_mcp_example.py`
+    - Supported by all optimizers **except** FewShotBayesianOptimizer, ParameterOptimizer, and GepaOptimizer
+    - Working examples available in `scripts/litellm_metaprompt_context7_remote_example.py`
 
 </Note>
 
 ## How Tool Optimization Works
 
-The MetaPrompt Optimizer handles tool-enabled prompts through a specialized optimization process:
+Supported optimizers handle tool-enabled prompts through a specialized optimization process:
 
 ### 1. Tool-Aware Analysis
 
@@ -205,8 +207,8 @@ Always cite your sources and be thorough in your research."""
 
 # Initialize the optimizer
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4",
-    reasoning_model="openai/gpt-4-turbo"
+    model="openai/gpt-5-nano",
+    reasoning_model="openai/gpt-5.2"
 )
 
 # Define evaluation metric
@@ -256,7 +258,7 @@ print(result.prompt)
 
 ### Current Limitations
 
-- **MetaPrompt Only** - Tool optimization is currently only available with the MetaPrompt Optimizer
+- **Optimizer coverage** - Tool optimization is not available in `FewShotBayesianOptimizer` or `ParameterOptimizer`
 - **Tool Complexity** - Very complex tool workflows may require manual optimization
 - **Tool Availability** - Optimization assumes tools are available during evaluation
 - **Schema Changes** - Tool schema modifications may require re-optimization
@@ -271,7 +273,6 @@ print(result.prompt)
 
 Tool optimization is an active area of development. Planned improvements include:
 
-- **Multi-optimizer support** - Extending tool optimization to other optimizers
 - **Tool-specific metrics** - Specialized evaluation metrics for tool usage
 - **Automated tool discovery** - Automatic detection and optimization of tool patterns
 - **Tool performance optimization** - Optimizing not just prompts but tool usage efficiency
@@ -280,7 +281,7 @@ Tool optimization is an active area of development. Planned improvements include
 
 To start optimizing tool-enabled prompts:
 
-1. **Choose MetaPrompt Optimizer** - Currently the only optimizer supporting tool optimization
+1. **Choose a supported optimizer** - Any optimizer except FewShotBayesianOptimizer and ParameterOptimizer
 2. **Define your tools** - Create clear tool schemas with comprehensive descriptions
 3. **Structure your prompt** - Include clear instructions for tool usage
 4. **Prepare evaluation data** - Ensure your dataset includes tool usage scenarios
@@ -289,13 +290,14 @@ To start optimizing tool-enabled prompts:
 <Info>
 **Need Help?**
 
-For questions about tool optimization or to request support for additional optimizers, please reach out
-on [GitHub](https://github.com/comet-ml/opik/issues) or check the [MetaPrompt Optimizer
-documentation](/agent_optimization/algorithms/metaprompt_optimizer) for detailed configuration options.
+For questions about tool optimization, please reach out on
+[GitHub](https://github.com/comet-ml/opik/issues) or check the
+[MetaPrompt Optimizer documentation](/agent_optimization/algorithms/metaprompt_optimizer) for detailed configuration options.
 
 </Info>
 
 ## References
 
 - [MetaPrompt Optimizer Documentation](/agent_optimization/algorithms/metaprompt_optimizer)
+- [Optimize tools (MCP)](/agent_optimization/optimization/optimize_tools)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)

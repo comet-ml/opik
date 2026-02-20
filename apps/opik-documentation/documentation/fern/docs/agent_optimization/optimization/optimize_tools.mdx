@@ -1,0 +1,262 @@
+---
+title: Optimize tools (MCP)
+description: Improve MCP tool and parameter descriptions without changing prompt text.
+---
+
+Use this guide when you want to optimize **tool signatures** (descriptions + parameter descriptions) separately from prompt text or agent logic.
+
+## What this covers
+
+- Optimize MCP tool descriptions without touching prompt content.
+- Keep system/assistant/user messages fixed while improving tool calling behavior.
+- Target only specific tools when a server exposes many tools.
+
+<Callout title="Separate from prompt or agent optimization">
+Tool optimization updates tool signatures. Prompt optimization updates system/user/assistant content.
+Agent optimization focuses on multi-step agent logic. Keep these runs separate to isolate changes.
+</Callout>
+
+## Quickstart: tool-only optimization
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+
+prompt = ChatPrompt(
+    system="Use tools when needed.",
+    user="{user_query}",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["resolve-library-id", "query-docs"],
+        }
+    ],
+)
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o-mini")
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    optimize_prompts=False,  # keep prompt text fixed
+    optimize_tools=True,     # optimize tool + parameter descriptions
+)
+```
+
+Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer`,
+`ParameterOptimizer`, and `GepaOptimizer` (for now).
+
+## Tool calling + MCP formats
+
+You can define tools in one of the supported formats. Tool optimization will normalize them to
+function-calling tools while preserving the original MCP config for reproducibility.
+
+### Supported formats
+
+| Format | When to use | Example |
+| --- | --- | --- |
+| OpenAI MCP tool entry (local) | Run MCP tool servers locally | `{"type": "mcp", "server_label": "...", "command": "...", "args": [...]}` |
+| OpenAI MCP tool entry (remote) | Call remote MCP servers | `{"type": "mcp", "server_label": "...", "server_url": "...", "headers": {...}}` |
+| Cursor MCP config | Convert from a Cursor `mcpServers` JSON | `cursor_mcp_config_to_tools(cursor_config)` |
+| Function tools | Non-MCP tools in OpenAI function format | `{"type": "function", "function": {...}}` |
+
+### OpenAI MCP tool entries (local/remote)
+
+```python
+prompt = ChatPrompt(
+    system="Use tools when needed.",
+    user="{user_query}",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "local_docs",
+            "command": "npx",
+            "args": ["-y", "@upstash/context7-mcp"],
+            "env": {},
+            "allowed_tools": ["resolve-library-id", "query-docs"],
+        },
+        {
+            "type": "mcp",
+            "server_label": "remote_docs",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+            "allowed_tools": ["query-docs"],
+        },
+    ],
+)
+```
+
+### Cursor MCP config (JSON) → tools
+
+```python
+from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
+
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    }
+}
+
+prompt = ChatPrompt(
+    system="Use tools when needed.",
+    user="{user_query}",
+    tools=cursor_mcp_config_to_tools(cursor_config),
+)
+```
+
+### Cursor vs OpenAI ChatPrompt styles
+
+`ChatPrompt.tools` accepts OpenAI-style MCP entries directly. Cursor configs use a different
+shape (`mcpServers`) and must be converted first:
+
+```python
+# OpenAI-style MCP tool entry (directly supported by ChatPrompt.tools)
+openai_tools = [
+    {
+        "type": "mcp",
+        "server_label": "context7",
+        "server_url": "https://mcp.context7.com/mcp",
+        "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        "allowed_tools": ["resolve-library-id", "query-docs"],
+    }
+]
+
+# Cursor-style config (convert before assigning to ChatPrompt.tools)
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    }
+}
+```
+
+After normalization, both styles execute the same way during evaluation and optimization.
+
+### Mixed function + MCP tools
+
+```python
+prompt = ChatPrompt(
+    system="Use tools when needed.",
+    user="{user_query}",
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "Search Wikipedia abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["query-docs"],
+        },
+    ],
+)
+```
+
+## Target only specific tools
+
+When a server exposes many tools, pass a dict to select the subset you want:
+
+```python
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    optimize_prompts=False,
+    optimize_tools={
+        "context7.resolve-library-id": True,
+        "context7.query-docs": False,
+    },
+)
+```
+
+## Tool optimization limits
+
+To keep runs manageable, `optimize_tools=True` is limited by
+`DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE` (default: 3). If you need more, pass a dict
+to select a smaller subset of tools.
+
+## Disable tool use while optimizing tools
+
+If you want to optimize tool descriptions without executing tools during evaluation, set
+`allow_tool_use=False`:
+
+```python
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    optimize_prompts=False,
+    optimize_tools=True,
+    allow_tool_use=False,  # do not execute tools during evaluation
+)
+```
+
+## What changes
+
+- Tool **descriptions** are updated.
+- Tool **parameter descriptions** are updated.
+- Prompt text stays unchanged when `optimize_prompts=False`.
+
+<Accordion title="Where the optimized tool signature is stored">
+  The optimized tools are returned in `result.prompt.tools`. History entries include both the resolved tools and the original MCP config for reproducibility.
+</Accordion>
+
+## When to use tool optimization
+
+| Scenario | Use tool optimization? | Why |
+| --- | --- | --- |
+| MCP client injects assistant instructions | Yes | Keep assistant text fixed and improve tool usage. |
+| Prompt wording needs improvement | No | Use `optimize_prompts` instead. |
+| Multi-agent workflows | Maybe | Optimize tools separately before agent-level changes. |
+
+## Limitations
+
+- Tool optimization only supports **single prompts**.
+- Not supported in `FewShotBayesianOptimizer`, `ParameterOptimizer`, or `GepaOptimizer`.
+
+## Troubleshooting
+
+### See tool-calling debug logs
+Set the optimizer log level to surface tool calls:
+
+```bash
+export OPIK_OPTIMIZER_LOG_LEVEL=DEBUG
+```
+
+You’ll see tool call lines like:
+```
+tool: event=tool_call call=query-docs({...})
+```
+
+### I get “MCP remote server missing url”
+Make sure your tool entry includes `server_url` (OpenAI MCP format) or `url` (Cursor config).
+
+### Tools are not showing up
+- Verify the MCP server is reachable.
+- If using `allowed_tools`, confirm the names match the server’s tool list.
+- For remote servers, confirm auth headers are correct.
+
+### Tool calls are slow or failing during evaluation
+- Set `allow_tool_use=False` to optimize descriptions without running tools.
+- Reduce dataset size while iterating on tool descriptions.
+
+## Next steps
+
+- [Optimize prompts](/agent_optimization/optimization/optimize_prompts)
+- [Optimize agents](/agent_optimization/optimization/optimize_agents)
+- [Tool optimization algorithm](/agent_optimization/algorithms/tool_optimization)

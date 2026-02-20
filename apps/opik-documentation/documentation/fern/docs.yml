@@ -776,6 +776,10 @@ navigation:
             icon: fa-regular fa-wand-magic-sparkles
             path: docs/agent_optimization/optimization/optimize_prompts.mdx
             slug: optimize_prompts
+          - page: Optimize tools (MCP)
+            icon: fa-regular fa-wand-magic-sparkles
+            path: docs/agent_optimization/optimization/optimize_tools.mdx
+            slug: optimize_tools
           - page: Optimize agents
             icon: fa-regular fa-diagram-project
             path: docs/agent_optimization/optimization/optimize_agents/overview.mdx

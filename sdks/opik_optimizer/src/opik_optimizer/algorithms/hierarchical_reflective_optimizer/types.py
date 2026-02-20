@@ -5,6 +5,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, create_model, ConfigDict
 
 from ...api_objects import types
+from ...utils.toolcalling.ops.toolcalling import (
+    ToolDescriptionUpdate,
+    ToolParameterUpdate,
+)
 
 
 @dataclass
@@ -54,6 +58,8 @@ class ImprovedPrompt(BaseModel):
 
     reasoning: str
     messages: list[types.Message]
+    tool_descriptions: list[ToolDescriptionUpdate] | None = None
+    parameter_descriptions: list[ToolParameterUpdate] | None = None
 
 
 def _fix_schema_for_openai(schema: dict[str, Any]) -> None:

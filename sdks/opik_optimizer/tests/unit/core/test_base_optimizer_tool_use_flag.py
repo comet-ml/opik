@@ -75,3 +75,19 @@ class TestToolUseFlag:
             allow_tool_use=False,
         )
         assert context.allow_tool_use is False
+
+    def test_setup_optimization_allows_none_optimize_prompts(
+        self, mock_opik_client
+    ) -> None:
+        mock_opik_client()
+        optimizer = ConcreteOptimizer(model="gpt-4")
+        dataset = make_mock_dataset()
+        prompt = ChatPrompt(system="Test", user="Query")
+        context = optimizer._setup_optimization(
+            prompt=prompt,
+            dataset=dataset,
+            metric=lambda *_: 1.0,
+            optimize_prompts=None,
+            optimize_tools=None,
+        )
+        assert context.extra_params.get("optimizable_roles") == {"system"}

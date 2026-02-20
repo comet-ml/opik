@@ -31,6 +31,9 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
 class MetaPromptOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     Meta-Prompt Optimizer that uses LLM-based meta-reasoning to iteratively improve prompts.
 
@@ -78,6 +81,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         "pattern_extraction_system": meta_prompts.PATTERN_EXTRACTION_SYSTEM_PROMPT_TEMPLATE,
         "pattern_extraction_user": meta_prompts.PATTERN_EXTRACTION_USER_PROMPT_TEMPLATE,
         "synthesis": meta_prompts.SYNTHESIS_PROMPT_TEMPLATE,
+        "tool_description_system": meta_prompts.TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE,
+        "tool_description_user": meta_prompts.TOOL_DESCRIPTION_USER_PROMPT_TEMPLATE,
     }
 
     def __init__(
@@ -206,6 +211,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             "prompts_per_round": self.prompts_per_round,
             "n_samples": context.n_samples,
             "auto_continue": context.extra_params.get("auto_continue", False),
+            "optimize_tools": context.extra_params.get("optimize_tools"),
+            "tool_names": context.extra_params.get("tool_names"),
             "validation_dataset": getattr(context.validation_dataset, "name", None)
             if context.validation_dataset is not None
             else None,
@@ -235,6 +242,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         metric = context.metric
         max_trials = context.max_trials
         auto_continue = context.extra_params.get("auto_continue", False)
+        optimize_tools = context.extra_params.get("optimize_tools")
+        tool_names = context.extra_params.get("tool_names")
         is_single_prompt_optimization = context.is_single_prompt_optimization
         optimization_id = context.optimization_id
 
@@ -271,31 +280,100 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 # Check if we should extract patterns from hall of fame
-                halloffame_ops.maybe_extract_hof_patterns(
-                    optimizer=self,
-                    current_trial=context.trials_completed,
-                    metric_name=metric.__name__,
-                )
+                if not optimize_tools:
+                    halloffame_ops.maybe_extract_hof_patterns(
+                        optimizer=self,
+                        current_trial=context.trials_completed,
+                        metric_name=metric.__name__,
+                    )
 
                 prompts_this_round = min(
                     self.prompts_per_round, max_trials - context.trials_completed
                 )
 
-                candidate_prompts = candidate_ops.generate_round_candidates(
-                    optimizer=self,
-                    best_prompts=best_prompts,
-                    best_score=best_score,
-                    round_num=round_num,
-                    previous_rounds=self.get_history_rounds(),
-                    metric=metric,
-                    prompts_this_round=prompts_this_round,
-                    build_history_context_fn=self._build_history_context,
-                    get_task_context_fn=self._get_task_context,
-                    optimization_id=optimization_id,
-                    project_name=self.project_name,
-                    is_single_prompt_optimization=is_single_prompt_optimization,
-                    winning_patterns=halloffame_ops.get_patterns_for_injection(self),
-                )
+                if optimize_tools:
+                    from ...utils.toolcalling.ops import (
+                        toolcalling as toolcalling_utils,
+                    )
+                    from ...utils.display import display_tool_description
+
+                    if not is_single_prompt_optimization:
+                        raise ValueError(
+                            "Tool description optimization only supports single prompts."
+                        )
+                    reporter = None
+                    if self.verbose >= 1:
+                        import json as _json
+                        import rich.text as _rich_text
+
+                        def _reporter(
+                            description: str, name: str, metadata: dict[str, Any]
+                        ) -> None:
+                            text = _rich_text.Text()
+                            text.append(description)
+                            raw_tool = metadata.get("raw_tool") or {}
+                            parameters = (
+                                raw_tool.get("function", {}).get("parameters")
+                                if isinstance(raw_tool, dict)
+                                else None
+                            )
+                            if parameters:
+                                text.append(
+                                    "\n\nTool parameters (reference only):\n",
+                                    style="dim",
+                                )
+                                text.append(
+                                    _json.dumps(
+                                        parameters,
+                                        indent=2,
+                                        sort_keys=True,
+                                        default=str,
+                                    ),
+                                    style="dim",
+                                )
+                            display_tool_description(
+                                text, title=f"tool: {name}", style="cyan"
+                            )
+
+                        reporter = _reporter
+                    single_candidates = (
+                        toolcalling_utils.generate_tool_description_candidates(
+                            optimizer=self,
+                            current_prompt=list(best_prompts.values())[0],
+                            best_score=best_score,
+                            round_num=round_num,
+                            previous_rounds=self.get_history_rounds(),
+                            metric=metric,
+                            optimization_id=optimization_id,
+                            project_name=self.project_name,
+                            build_history_context_fn=self._build_history_context,
+                            tool_names=tool_names,
+                            tool_description_reporter=reporter,
+                        )
+                    )
+                    prompt_key = next(iter(best_prompts.keys()))
+                    candidate_prompts = [
+                        {prompt_key: prompt}
+                        for prompt in single_candidates[:prompts_this_round]
+                    ]
+                else:
+                    candidate_prompts = candidate_ops.generate_round_candidates(
+                        optimizer=self,
+                        best_prompts=best_prompts,
+                        best_score=best_score,
+                        round_num=round_num,
+                        previous_rounds=self.get_history_rounds(),
+                        metric=metric,
+                        prompts_this_round=prompts_this_round,
+                        build_history_context_fn=self._build_history_context,
+                        get_task_context_fn=self._get_task_context,
+                        optimization_id=optimization_id,
+                        project_name=self.project_name,
+                        is_single_prompt_optimization=is_single_prompt_optimization,
+                        winning_patterns=halloffame_ops.get_patterns_for_injection(
+                            self
+                        ),
+                    )
                 if not candidate_prompts:
                     logger.warning(
                         "No candidate prompts generated in round %s", round_num
@@ -327,15 +405,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_score=best_score,
                 )
 
-                add_best_candidate_to_hof(
-                    optimizer=self,
-                    best_candidate_this_round=best_candidate_this_round,
-                    best_cand_score_avg=best_cand_score_avg,
-                    initial_score=initial_score,
-                    current_trial=context.trials_completed,
-                    metric_name=metric.__name__,
-                    is_bundle=is_bundle,
-                )
+                if not optimize_tools:
+                    add_best_candidate_to_hof(
+                        optimizer=self,
+                        best_candidate_this_round=best_candidate_this_round,
+                        best_cand_score_avg=best_cand_score_avg,
+                        initial_score=initial_score,
+                        current_trial=context.trials_completed,
+                        metric_name=metric.__name__,
+                        is_bundle=is_bundle,
+                    )
 
                 history_ops.record_round_history(
                     optimizer=self,

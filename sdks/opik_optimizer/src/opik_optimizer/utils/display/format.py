@@ -98,6 +98,31 @@ def format_prompt_messages(
     return json.dumps(messages, indent=2)
 
 
+def format_prompt_payload(payload: Any, *, pretty: bool = True) -> str:
+    """Format prompt payloads that may include tools or bundled prompts."""
+    if isinstance(payload, list):
+        return format_prompt_messages(payload, pretty=pretty)
+    if isinstance(payload, dict):
+        if "messages" in payload and isinstance(payload.get("messages"), list):
+            text = format_prompt_messages(payload["messages"], pretty=pretty)
+            tools = payload.get("tools")
+            if tools:
+                if isinstance(tools, list) and tools and isinstance(tools[0], dict):
+                    lines = [f"- {format_tool_summary(tool)}" for tool in tools]
+                    tool_line = "\n  ".join(lines)
+                    text = f"{text}\n  [TOOLS]:\n  {tool_line}"
+                else:
+                    tool_line = ", ".join(map(str, tools))
+                    text = f"{text}\n  [TOOLS]: {tool_line}"
+            return text
+        parts: list[str] = []
+        for name, value in payload.items():
+            formatted = format_prompt_payload(value, pretty=pretty)
+            parts.append(f"{name}:\n{formatted}")
+        return "\n".join(parts)
+    return str(payload)
+
+
 def redact_prompt_payload(prompt_or_payload: Any) -> Any:
     """Summarize prompt payloads for safe display/history."""
     if isinstance(prompt_or_payload, dict):
@@ -198,9 +223,28 @@ def summarize_selection_policy(
 def format_tool_summary(tool: dict[str, Any]) -> str:
     """Format a concise tool summary showing only name and description."""
     function_block = tool.get("function", {})
-    name = function_block.get("name") or tool.get("name", "unknown_tool")
-    description = function_block.get("description", "No description")
-    return f"{name}: {description}"
+    function_name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description") or tool.get("description")
+    if not description:
+        description = "No description"
+
+    display_name = function_name
+    mcp_block = tool.get("mcp")
+    if isinstance(mcp_block, dict):
+        server_label = mcp_block.get("server_label")
+        tool_block = mcp_block.get("tool")
+        tool_name = None
+        if isinstance(tool_block, dict):
+            tool_name = tool_block.get("name")
+        tool_name = tool_name or mcp_block.get("name")
+        if server_label and tool_name:
+            display_name = f"{server_label}.{tool_name}"
+            if function_name and function_name != tool_name:
+                display_name = f"{display_name} (function {function_name})"
+        elif server_label and function_name:
+            display_name = f"{server_label}.{function_name}"
+
+    return f"{display_name}: {description}"
 
 
 def build_plaintext_summary(
