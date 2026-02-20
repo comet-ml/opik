@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Any, TypeAlias, cast
+import warnings
 
 from opik.evaluation.metrics import base_metric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -13,7 +14,16 @@ ReasonBuilder: TypeAlias = Callable[[list[ScoreResult], list[float], float], str
 
 
 class MultiMetricObjective:
-    """Combine multiple metrics into a single weighted composite score."""
+    """Combine multiple metrics into a single weighted composite score.
+
+    Metrics are ideally normalized to a common bounded scale (typically [0, 1]).
+    This keeps weighted aggregation stable and makes weight tuning interpretable.
+    If a metric returns values outside [0, 1], a runtime warning is emitted.
+
+    For span-based efficiency metrics (for example cost/duration), prefer using
+    target-based normalized metrics and explicit direction controls such as
+    `invert=True` so the composite can always maximize "higher is better" scores.
+    """
 
     def __init__(
         self,
@@ -31,6 +41,11 @@ class MultiMetricObjective:
             name: Name for the aggregated ScoreResult.
             reason: Optional static reason string override.
             reason_builder: Optional callback to build a reason from subscores.
+
+        Note:
+            For best results, inputs should be normalized to a common scale
+            (preferably [0, 1]). If metrics are not normalized, use explicit
+            scaling in metric implementations (for example via `target=` params).
         """
         if not metrics:
             raise ValueError("MultiMetricObjective requires at least one metric.")
@@ -46,6 +61,7 @@ class MultiMetricObjective:
         self.__name__ = name
         self._reason = reason
         self._reason_builder = reason_builder
+        self._normalization_warning_emitted = False
 
     def __call__(
         self,
@@ -72,6 +88,8 @@ class MultiMetricObjective:
             weighted_score_value += score_result.value * weight
             scoring_failed = scoring_failed or score_result.scoring_failed
             raw_score_results.append(score_result)
+
+        self._warn_if_non_normalized(raw_score_results)
 
         aggregated_reason = self._build_reason(
             raw_score_results,
@@ -168,6 +186,29 @@ class MultiMetricObjective:
             return metric_result
 
         return ScoreResult(name=self._metric_name(metric), value=float(metric_result))
+
+    def _warn_if_non_normalized(self, raw_score_results: list[ScoreResult]) -> None:
+        """Warn once if any successful metric value falls outside [0, 1]."""
+        if self._normalization_warning_emitted:
+            return
+
+        offenders = [
+            f"{result.name}={result.value:.6f}"
+            for result in raw_score_results
+            if not result.scoring_failed and (result.value < 0.0 or result.value > 1.0)
+        ]
+        if not offenders:
+            return
+
+        warnings.warn(
+            "MultiMetricObjective received non-normalized metric values outside [0, 1]: "
+            + ", ".join(offenders)
+            + ". Consider normalizing inputs (for example with target-based metrics) "
+            + "to make weights comparable.",
+            UserWarning,
+            stacklevel=2,
+        )
+        self._normalization_warning_emitted = True
 
     @staticmethod
     def _metric_name(metric: MetricLike) -> str:

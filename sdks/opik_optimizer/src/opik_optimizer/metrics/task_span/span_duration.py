@@ -9,28 +9,87 @@ class SpanDuration(base_metric.BaseMetric):
     """
     A metric that calculates the total duration of a span in seconds.
 
+    Requires a complete span with both `start_time` and `end_time` set.
+    If `task_span` is missing, scoring returns a soft-failed `ScoreResult`.
+    If either timestamp is missing, scoring raises
+    `opik.exceptions.MetricComputationError`.
+
     Args:
-        name: The name of the metric. Defaults to "total_span_duration".
+        name: The name of the metric. Defaults to "span_duration".
+        target: Optional target duration (seconds) used to normalize output into
+            a score in (0, 1], where higher is better. This is the recommended mode
+            for `MultiMetricObjective`, where duration should be on a bounded scale.
+            When None, returns raw seconds.
+        invert: Controls optimization direction when `target` is provided.
+            - True (default): lower duration -> higher score.
+            - False: higher duration -> higher score.
         track: Whether to track the metric. Defaults to True.
         project_name: The name of the project to track the metric in. Defaults to None.
     """
 
     def __init__(
         self,
-        name: str = "total_span_duration",
+        name: str = "span_duration",
         track: bool = True,
         project_name: str | None = None,
+        *,
+        target: float | None = None,
+        invert: bool = True,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
+        if target is not None and float(target) <= 0:
+            raise ValueError("SpanDuration `target` must be > 0 when provided.")
+
+        self.target_duration_seconds = None if target is None else float(target)
+        self.invert = bool(invert)
 
     def score(
-        self, task_span: emulation_models.SpanModel, **_: Any
+        self, task_span: emulation_models.SpanModel | None = None, **_: Any
     ) -> score_result.ScoreResult:
+        if task_span is None:
+            return score_result.ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=(
+                    "SpanDuration could not compute because `task_span` was not provided "
+                    "by the evaluation runtime."
+                ),
+                scoring_failed=True,
+            )
+
         if task_span.end_time is None or task_span.start_time is None:
+            missing_fields = []
+            if task_span.start_time is None:
+                missing_fields.append("start_time")
+            if task_span.end_time is None:
+                missing_fields.append("end_time")
             raise opik.exceptions.MetricComputationError(
-                "Span end time or start time is not set"
+                "SpanDuration cannot compute duration because "
+                f"{', '.join(missing_fields)} is missing "
+                f"(span_id={task_span.id}, span_name={task_span.name})."
             )
 
         duration = (task_span.end_time - task_span.start_time).total_seconds()
+        if self.target_duration_seconds is None:
+            return score_result.ScoreResult(value=duration, name=self.name)
 
-        return score_result.ScoreResult(value=duration, name=self.name)
+        normalized = duration / self.target_duration_seconds
+        if self.invert:
+            value = 1.0 / (1.0 + normalized)
+        else:
+            value = normalized / (1.0 + normalized)
+
+        direction = "lower-is-better" if self.invert else "higher-is-better"
+        return score_result.ScoreResult(
+            name=self.name,
+            value=value,
+            reason=(
+                f"Total span duration={duration:.2f}s -> score={value:.3f} "
+                f"(target={self.target_duration_seconds:.2f}s, direction={direction})"
+            ),
+            metadata={
+                "_raw_span_duration_seconds": duration,
+                "_target_duration_seconds": self.target_duration_seconds,
+                "_invert": self.invert,
+            },
+        )

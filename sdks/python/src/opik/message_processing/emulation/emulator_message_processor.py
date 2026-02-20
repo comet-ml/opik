@@ -104,9 +104,13 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         with self._rlock:
             # call to connect all spans
             self._build_spans_tree()
+            missing_trace_ids: set[str] = set()
 
             for span_id, trace_id in self._span_to_trace.items():
                 if trace_id is None:
+                    continue
+                if trace_id not in self._trace_observations:
+                    missing_trace_ids.add(trace_id)
                     continue
 
                 trace = self._trace_observations[trace_id]
@@ -116,6 +120,13 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                     span = self._span_observations[span_id]
                     trace.spans.append(span)
                     trace.spans.sort(key=lambda x: x.start_time)
+
+            if missing_trace_ids:
+                LOGGER.warning(
+                    "Skipping %d orphan span-to-trace link(s) with missing trace observation(s): %s",
+                    len(missing_trace_ids),
+                    ", ".join(sorted(missing_trace_ids)[:5]),
+                )
 
             for trace in self._trace_trees:
                 trace.feedback_scores = self._trace_to_feedback_scores[trace.id]

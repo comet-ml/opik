@@ -132,7 +132,7 @@ def _build_result_metadata(accumulator: _CostAccumulator) -> dict:
     }
 
 
-class TotalSpanCost(base_metric.BaseMetric):
+class SpanCost(base_metric.BaseMetric):
     """
     A metric that calculates the total cost of a span tree based on token usage.
 
@@ -142,34 +142,61 @@ class TotalSpanCost(base_metric.BaseMetric):
     span's model, prompt_tokens, and completion_tokens.
 
     Args:
-        name: The name of the metric. Defaults to "total_span_cost".
+        name: The name of the metric. Defaults to "span_cost".
+        target: Optional target cost (USD) used to normalize output into
+            a score in (0, 1], where higher is better. This is the recommended mode
+            for `MultiMetricObjective`, where cost should be on a bounded scale.
+            When None, returns raw USD cost.
+        invert: Controls optimization direction when `target` is provided.
+            - True (default): lower cost -> higher score.
+            - False: higher cost -> higher score.
+        target_cost_usd: Backward-compatible alias for `target`.
         track: Whether to track the metric. Defaults to True.
         project_name: Optional project name to track the metric in for the cases when
             there is no parent span/trace to inherit project name from.
 
     Example:
-        >>> from opik.evaluation.metrics.task_span import TotalSpanCost
-        >>> cost_metric = TotalSpanCost()
+        >>> from opik.evaluation.metrics.task_span import SpanCost
+        >>> cost_metric = SpanCost(target=1.0)
         >>> result = cost_metric.score(task_span)
         >>> print(result.value)  # Total cost calculated from usage across span tree
-        >>> print(result.reason)  # Detailed breakdown
+        >>> print(result.reason)  # Detailed breakdown (set when target is provided)
 
     Note:
         - Prioritizes existing `total_cost` from spans over calculated costs
         - Uses LiteLLM's built-in cost calculation for spans without `total_cost`
         - Supports a wide range of models and providers with up-to-date pricing
         - Spans without usage data or without a recognized model will be skipped
+        - Returns a soft-failed score when `task_span` is missing
     """
 
     def __init__(
         self,
-        name: str = "total_span_cost",
+        name: str = "span_cost",
         track: bool = True,
         project_name: str | None = None,
+        *,
+        target: float | None = None,
+        invert: bool = True,
+        target_cost_usd: float | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
+        if target is not None and target_cost_usd is not None:
+            raise ValueError(
+                "Received both `target` and `target_cost_usd`; use only `target`."
+            )
+        resolved_target = target if target is not None else target_cost_usd
+        if resolved_target is not None and float(resolved_target) <= 0:
+            raise ValueError("SpanCost `target` must be > 0 when provided.")
 
-    def score(self, task_span: models.SpanModel, **_: Any) -> score_result.ScoreResult:
+        self.target_cost_usd = (
+            None if resolved_target is None else float(resolved_target)
+        )
+        self.invert = bool(invert)
+
+    def score(
+        self, task_span: models.SpanModel | None = None, **_: Any
+    ) -> score_result.ScoreResult:
         """
         Calculate the total cost based on the span's token usage, recursively traversing the span tree.
 
@@ -184,6 +211,17 @@ class TotalSpanCost(base_metric.BaseMetric):
             MetricComputationError: If all spans with usage data failed cost calculation,
                 indicating a critical error in the metric computation.
         """
+        if task_span is None:
+            return score_result.ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=(
+                    "SpanCost could not compute because `task_span` was not provided "
+                    "by the evaluation runtime."
+                ),
+                scoring_failed=True,
+            )
+
         accumulator = _CostAccumulator()
         _traverse_span_tree(task_span, accumulator)
 
@@ -192,11 +230,35 @@ class TotalSpanCost(base_metric.BaseMetric):
             raise opik.exceptions.MetricComputationError(
                 f"Failed to calculate cost for all {accumulator.failed_span_count} span(s) "
                 f"with usage data. Check that model names are recognized by LiteLLM "
-                f"and that the litellm package is properly installed."
+                f"and that the litellm package is properly installed. "
+                f"(metric={self.name})"
             )
 
+        if self.target_cost_usd is None:
+            return score_result.ScoreResult(
+                value=accumulator.total_cost,
+                name=self.name,
+                metadata=_build_result_metadata(accumulator),
+            )
+
+        raw_cost = float(accumulator.total_cost)
+        normalized = raw_cost / self.target_cost_usd
+        if self.invert:
+            value = 1.0 / (1.0 + normalized)
+        else:
+            value = normalized / (1.0 + normalized)
+
+        direction = "lower-is-better" if self.invert else "higher-is-better"
         return score_result.ScoreResult(
-            value=accumulator.total_cost,
             name=self.name,
-            metadata=_build_result_metadata(accumulator),
+            value=value,
+            reason=(
+                f"Total span cost={raw_cost:.6f} USD -> score={value:.3f} "
+                f"(target={self.target_cost_usd:.6f}, direction={direction})"
+            ),
+            metadata={
+                "_raw_span_cost_usd": raw_cost,
+                "_target_cost_usd": self.target_cost_usd,
+                "_invert": self.invert,
+            },
         )
