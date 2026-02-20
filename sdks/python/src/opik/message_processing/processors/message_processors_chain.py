@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from opik.file_upload import base_upload_manager
 from opik.rest_api import client as rest_api_client
 
 from . import (
@@ -8,6 +9,7 @@ from . import (
     online_message_processor,
 )
 from ..emulation import local_emulator_message_processor
+from ..replay import replay_manager
 
 
 LOGGER = logging.getLogger(__name__)
@@ -15,6 +17,8 @@ LOGGER = logging.getLogger(__name__)
 
 def create_message_processors_chain(
     rest_client: rest_api_client.OpikApi,
+    file_upload_manager: base_upload_manager.BaseFileUploadManager,
+    fallback_replay_manager: replay_manager.ReplayManager,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -29,11 +33,19 @@ def create_message_processors_chain(
     Args:
         rest_client: REST API client instance used to configure the online message
             processor.
+        file_upload_manager: File upload manager instance used to configure the online message
+            processor.
+        fallback_replay_manager: Replay manager instance used to configure the online message
+            processor.
 
     Returns:
         A chained message processor containing the online and local emulator processors.
     """
-    online = online_message_processor.OpikMessageProcessor(rest_client=rest_client)
+    online = online_message_processor.OpikMessageProcessor(
+        rest_client=rest_client,
+        file_upload_manager=file_upload_manager,
+        fallback_replay_manager=fallback_replay_manager,
+    )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
 
