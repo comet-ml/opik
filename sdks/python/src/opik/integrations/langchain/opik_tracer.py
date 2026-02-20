@@ -272,6 +272,7 @@ class OpikTracer(BaseTracer):
         self._created_traces.append(trace_)
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.pop_trace_data(ensure_id=trace_data.id)
+            self._opik_context_storage.clear_async_context_bridge()
 
     def _ensure_no_hanging_opik_tracer_spans(self) -> None:
         root_run_external_parent_span_id = self._root_run_external_parent_span_id.get()
@@ -281,9 +282,13 @@ class OpikTracer(BaseTracer):
 
         if there_were_no_external_spans_before_chain_invocation:
             self._opik_context_storage.clear_spans()
+            self._opik_context_storage.clear_async_context_bridge()
         else:
             assert root_run_external_parent_span_id is not None
             self._opik_context_storage.trim_span_data_stack_to_certain_span(
+                root_run_external_parent_span_id
+            )
+            self._opik_context_storage.trim_async_context_bridge_to_span(
                 root_run_external_parent_span_id
             )
 
@@ -398,6 +403,10 @@ class OpikTracer(BaseTracer):
                 self._opik_context_storage.set_trace_data(
                     root_run_result.new_trace_data
                 )
+                self._opik_context_storage.set_async_context_bridge(
+                    span_data=None,
+                    trace_data=root_run_result.new_trace_data,
+                )
 
             if (
                 self._opik_client.config.log_start_trace_span
@@ -433,6 +442,10 @@ class OpikTracer(BaseTracer):
 
             if not self._opik_context_read_only_mode:
                 self._opik_context_storage.add_span_data(root_run_result.new_span_data)
+                self._opik_context_storage.set_async_context_bridge(
+                    span_data=root_run_result.new_span_data,
+                    trace_data=None,
+                )
 
             if (
                 self._opik_client.config.log_start_trace_span
@@ -483,6 +496,10 @@ class OpikTracer(BaseTracer):
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
+            self._opik_context_storage.set_async_context_bridge(
+                span_data=new_span_data,
+                trace_data=None,
+            )
 
         if (
             self._opik_client.config.log_start_trace_span
@@ -569,6 +586,10 @@ class OpikTracer(BaseTracer):
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
+            self._opik_context_storage.set_async_context_bridge(
+                span_data=new_span_data,
+                trace_data=None,
+            )
 
         if (
             self._opik_client.config.log_start_trace_span
@@ -635,6 +656,12 @@ class OpikTracer(BaseTracer):
                     span_id=span_data.id
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+                self._opik_context_storage.trim_async_context_bridge_to_span(
+                    span_id=span_data.id
+                )
+                self._opik_context_storage.pop_async_context_bridge_span(
+                    ensure_id=span_data.id
+                )
 
     def _should_skip_error(self, error_str: str) -> bool:
         if self._skip_error_callback is None:
@@ -690,6 +717,12 @@ class OpikTracer(BaseTracer):
                     span_id=span_data.id
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
+                self._opik_context_storage.trim_async_context_bridge_to_span(
+                    span_id=span_data.id
+                )
+                self._opik_context_storage.pop_async_context_bridge_span(
+                    ensure_id=span_data.id
+                )
 
     def _save_span_trace_data_to_local_maps(
         self,
