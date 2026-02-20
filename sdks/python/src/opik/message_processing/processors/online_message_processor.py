@@ -58,6 +58,9 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateAttachmentMessage: self._process_create_attachment,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
+        # list of messages to be ignored for replay because not used for communications with server
+        # the AttachmentSupportingMessage is just marker container-message that later used to extract
+        # the CreateAttachmentMessage and preprocessed original message
         self._ignored_message_types_for_replay = [messages.AttachmentSupportingMessage]
 
     def is_active(self) -> bool:
