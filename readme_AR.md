@@ -47,6 +47,7 @@
 
 [![لقطة شاشة لمنصة Opik (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
+<a id="-what-is-opik"></a>
 ## 🚀 ما هو أوبيك؟
 
 Opik (تم إنشاؤه بواسطة [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)) عبارة عن منصة مفتوحة المصدر مصممة لتبسيط دورة الحياة الكاملة لتطبيقات LLM. إنه يمكّن المطورين من تقييم واختبار ومراقبة وتحسين نماذجهم وأنظمتهم الوكيلة. تشمل العروض الرئيسية ما يلي:
@@ -83,6 +84,7 @@ Opik (تم إنشاؤه بواسطة [Comet](https://www.comet.com?from=llm&utm_
 
 <br>
 
+<a id="%EF%B8%8F-opik-server-installation"></a>
 ## 🛠️ تثبيت خادم Opik
 
 احصل على خادم Opik الخاص بك قيد التشغيل خلال دقائق. اختر الخيار الذي يناسب احتياجاتك:
@@ -157,6 +159,7 @@ powershell -ExecutionPolicy ByPass -c ".\\opik.ps1"
 > [!IMPORTANT]
 > ** تغييرات الإصدار 1.7.0 **: يرجى مراجعة [سجل التغيير](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) للحصول على التحديثات المهمة والتغييرات العاجلة.
 
+<a id="-opik-client-sdk"></a>
 ## 💻 عميل Opik SDK
 
 توفر Opik مجموعة من مكتبات العملاء وREST API للتفاعل مع خادم Opik. يتضمن ذلك حزم SDK لـ Python وTypeScript وRuby (عبر OpenTelemetry)، مما يسمح بالتكامل السلس في سير العمل لديك. للحصول على مراجع تفصيلية لواجهة برمجة التطبيقات (API) وSDK، راجع [الوثائق المرجعية لعميل Opik](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
@@ -186,6 +189,7 @@ opik configure
 
 أنت الآن جاهز لبدء تسجيل التتبعات باستخدام [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik).
 
+<a id="-logging-traces-with-integrations"></a>
 ### 📝 تسجيل الآثار بالتكاملات
 
 أسهل طريقة لتسجيل التتبعات هي استخدام إحدى عمليات التكامل المباشرة لدينا. يدعم Opik مجموعة واسعة من أطر العمل، بما في ذلك الإضافات الحديثة مثل **Google ADK** و **Autogen** و **AG2** و **Flowise AI**:
@@ -272,6 +276,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]
 > يمكن استخدام مصمم المسار جنبًا إلى جنب مع أي من عمليات التكامل لدينا ويمكن استخدامه أيضًا لتتبع استدعاءات الوظائف المتداخلة.
 
+<a id="-llm-as-a-judge-metrics"></a>
 ### 🧑‍⚖️ LLM كمقاييس القاضي
 
 يتضمن Python Opik SDK عددًا من LLM كمقاييس تحكيمية لمساعدتك في تقييم تطبيق LLM الخاص بك. تعرف على المزيد حول هذا الموضوع في [وثائق المقاييس](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik).
@@ -292,16 +297,19 @@ print(score)
 
 يتضمن Opik أيضًا عددًا من المقاييس الإرشادية المعدة مسبقًا بالإضافة إلى القدرة على إنشاء المقاييس الخاصة بك. تعرف على المزيد حول ذلك في [وثائق المقاييس](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik).
 
+<a id="-evaluating-your-llm-application"></a>
 ### 🔍 تقييم طلبات الحصول على ماجستير إدارة الأعمال
 
 يتيح لك Opik تقييم تطبيق LLM الخاص بك أثناء التطوير من خلال [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) و [التجارب](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik). توفر لوحة معلومات Opik مخططات محسنة للتجارب ومعالجة أفضل للآثار الكبيرة. يمكنك أيضًا إجراء التقييمات كجزء من مسار CI/CD الخاص بك باستخدام [تكامل PyTest](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik).
 
+<a id="-star-us-on-github"></a>
 ## ⭐ قم بتمييزنا على GitHub
 
 إذا وجدت Opik مفيدًا، فيرجى التفكير في منحنا نجمة! يساعدنا دعمك على تنمية مجتمعنا ومواصلة تحسين المنتج.
 
 [![مخطط تاريخ النجوم](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
+<a id="-contributing"></a>
 ## 🤝 المساهمة
 
 هناك طرق عديدة للمساهمة في Opik:
