@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import logging
+import time
 from typing import Any, Dict, List, Optional, TypeVar
 
 import opik.api_objects.attachment as attachment
@@ -11,6 +12,11 @@ from . import data_helpers
 LOGGER = logging.getLogger(__name__)
 
 ObservationDataT = TypeVar("ObservationDataT", bound="ObservationData")
+
+
+def _perf_counter_ns() -> int:
+    """Return current performance counter in nanoseconds for high-precision TTFT timing."""
+    return time.perf_counter_ns()
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -27,6 +33,9 @@ class ObservationData:
         default_factory=datetime_helpers.local_timestamp
     )
     end_time: Optional[datetime.datetime] = None
+    _created_at_perf_counter_ns: int = dataclasses.field(
+        default_factory=_perf_counter_ns
+    )
     metadata: Optional[Dict[str, Any]] = None
     input: Optional[Dict[str, Any]] = None
     output: Optional[Dict[str, Any]] = None

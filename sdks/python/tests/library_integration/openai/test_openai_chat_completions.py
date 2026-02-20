@@ -381,6 +381,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -397,6 +398,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -472,6 +474,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider="openai",
+                        ttft=ANY_BUT_NONE,
                     )
                 ],
             )
@@ -669,6 +672,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -684,6 +688,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -734,6 +739,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -749,6 +755,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -806,6 +813,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -821,6 +829,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -834,6 +843,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -849,6 +859,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -903,6 +914,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -918,6 +930,7 @@ def test_openai_chat_completion_stream__get_final_completion_called__generator_t
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -969,6 +982,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -984,6 +998,7 @@ def test_openai_chat_completion_stream__get_final_completion_called_after_stream
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -1037,6 +1052,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1052,6 +1068,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -1118,6 +1135,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        ttft=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1133,6 +1151,7 @@ def test_async_openai_chat_completion_stream__get_final_completion_called_twice_
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                ttft=ANY_BUT_NONE,
             )
         ],
     )
@@ -1219,3 +1238,232 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
 
     llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+# Maximum reasonable time-to-first-token in milliseconds for test assertions
+MAX_REASONABLE_TTFT_MS = 60000
+
+
+def test_openai_client_chat_completions_create__stream_mode__ttft_tracked_in_span_and_trace(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked in both span and trace for streaming."""
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    stream = wrapped_client.chat.completions.create(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    for _ in stream:
+        pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for streaming"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+    assert trace_tree.ttft is not None, "Trace should have ttft field set for streaming"
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
+
+def test_openai_client_chat_completions_create__async_stream_mode__ttft_tracked_in_span_and_trace(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for async streaming."""
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    async def async_stream():
+        client = openai.AsyncOpenAI()
+        wrapped_client = track_openai(client)
+        stream = await wrapped_client.chat.completions.create(
+            model=MODEL_FOR_TESTS,
+            messages=messages,
+            max_tokens=10,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+        async for _ in stream:
+            pass
+
+    asyncio.run(async_stream())
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for async streaming"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for async streaming"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
+
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
+def test_openai_chat_completion_stream__context_manager__ttft_tracked_in_span_and_trace(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for stream context manager."""
+    client = openai.OpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+        model=MODEL_FOR_TESTS,
+        messages=messages,
+        max_tokens=10,
+        stream_options={"include_usage": True},
+    )
+    with chat_completion_stream_manager as stream:
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for stream context manager"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for stream context manager"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
+
+@pytest.mark.skipif(OPENAI_OLDER_THAN_1_92_0, reason="OpenAI version is too old")
+def test_openai_chat_completion_stream__async_context_manager__ttft_tracked_in_span_and_trace(
+    fake_backend,
+):
+    """Test that time-to-first-token is tracked for async stream context manager."""
+    client = openai.AsyncOpenAI()
+    wrapped_client = track_openai(client)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Tell a short fact"},
+    ]
+
+    async def async_stream():
+        chat_completion_stream_manager = wrapped_client.chat.completions.stream(
+            model=MODEL_FOR_TESTS,
+            messages=messages,
+            max_tokens=10,
+            stream_options={"include_usage": True},
+        )
+        async with chat_completion_stream_manager as stream:
+            async for _ in stream:
+                pass
+
+    asyncio.run(async_stream())
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
+    assert len(llm_spans) == 1, "Expected exactly one LLM span"
+
+    llm_span = llm_spans[0]
+    assert llm_span.ttft is not None, (
+        "LLM span should have ttft field set for async stream context manager"
+    )
+    assert isinstance(llm_span.ttft, (int, float)), (
+        f"ttft should be a number, got {type(llm_span.ttft)}"
+    )
+    assert llm_span.ttft >= 0, f"ttft should be non-negative, got {llm_span.ttft}"
+    assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
+    )
+
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for async stream context manager"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, (
+        f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    )
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )

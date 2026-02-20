@@ -53,6 +53,7 @@ class LocalEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
         last_updated_at: Optional[datetime.datetime] = None,
+        ttft: Optional[float] = None,
     ) -> models.TraceModel:
         if spans is None:
             spans = []
@@ -74,6 +75,7 @@ class LocalEmulatorMessageProcessor(
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            ttft=ttft,
         )
 
     def create_span_model(
@@ -96,6 +98,7 @@ class LocalEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        ttft: Optional[float] = None,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -121,6 +124,7 @@ class LocalEmulatorMessageProcessor(
             error_info=error_info,
             total_cost=total_cost,
             last_updated_at=last_updated_at,
+            ttft=ttft,
         )
 
     def create_feedback_score_model(

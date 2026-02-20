@@ -57,6 +57,7 @@ def test_trace_data__as_parameters__expected_parameters_are_set():
         "error_info": ANY_BUT_NONE,
         "thread_id": ANY_BUT_NONE,
         "attachments": ANY_BUT_NONE,
+        "ttft": None,
     }
 
     assert_equal(expected_parameters, trace_data.as_parameters)

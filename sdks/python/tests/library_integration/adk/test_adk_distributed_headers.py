@@ -7,6 +7,7 @@ from opik.integrations.adk import OpikTracer
 from opik.integrations.adk import helpers as opik_adk_helpers
 from . import constants, helpers
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
@@ -110,6 +111,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY,
                                     )
                                 ],
                             ),
@@ -137,6 +139,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY,
                                     )
                                 ],
                             ),
@@ -256,6 +259,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY,
                                     )
                                 ],
                             ),
@@ -283,6 +287,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        ttft=ANY,
                                     )
                                 ],
                             ),

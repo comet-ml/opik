@@ -106,6 +106,7 @@ class SpanModel:
     total_cost: Optional[float] = None
     last_updated_at: Optional[datetime.datetime] = None
     attachments: Optional[List[AttachmentModel]] = None
+    ttft: Optional[float] = None
 
 
 @dataclasses.dataclass
@@ -181,3 +182,4 @@ class TraceModel:
     thread_id: Optional[str] = None
     last_updated_at: Optional[datetime.datetime] = None
     attachments: Optional[List[AttachmentModel]] = None
+    ttft: Optional[float] = None

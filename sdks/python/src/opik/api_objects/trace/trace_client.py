@@ -128,6 +128,7 @@ class Trace:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[attachment.Attachment]] = None,
+        ttft: Optional[float] = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -179,6 +180,7 @@ class Trace:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            ttft=ttft,
         )
 
     def log_feedback_score(
