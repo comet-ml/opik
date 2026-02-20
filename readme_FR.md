@@ -11,7 +11,7 @@
 <img alt="Logo Comet Opik" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
 </image></a>
 <br>
-Opique
+Opik
 </div>
 </h1>
 <h2 align="center" style="border-bottom: none">Observabilité, évaluation et optimisation de l'IA open source</h2>
