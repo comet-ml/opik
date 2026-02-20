@@ -48,6 +48,24 @@ public class OpenTelemetryResource {
         return handleOtelTraceRequest(request);
     }
 
+    @Path("/metrics")
+    @POST
+    @Consumes("application/x-protobuf")
+    public Response receiveProtobufMetrics() {
+        return Response.status(Response.Status.NOT_IMPLEMENTED)
+                .entity("OpenTelemetry metrics ingestion is not yet supported")
+                .build();
+    }
+
+    @Path("/metrics")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response receiveJsonMetrics() {
+        return Response.status(Response.Status.NOT_IMPLEMENTED)
+                .entity("OpenTelemetry metrics ingestion is not yet supported")
+                .build();
+    }
+
     private Response handleOtelTraceRequest(ExportTraceServiceRequest traceRequest) {
         var projectName = requestContext.get().getHeaders()
                 .getOrDefault(RequestContext.PROJECT_NAME, List.of(ProjectService.DEFAULT_PROJECT))
