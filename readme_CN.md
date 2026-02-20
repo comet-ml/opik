@@ -305,7 +305,7 @@ Opik 还提供多种预构建启发式指标，并支持创建自定义指标。
 
 [![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
-<a id="-贡献指南"></a>
+<a id="🤝-贡献指南"></a>
 ## 🤝 贡献指南
 
 贡献 Opik 的方式有很多：

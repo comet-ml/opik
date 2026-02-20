@@ -186,7 +186,7 @@ opik configure
 
 이제 [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik)로 trace 로깅을 시작할 준비가 되었습니다.
 
-<a id="-통합을 통한-trace-로깅"></a>
+<a id="-통합을-통한-trace-로깅"></a>
 ### 📝 통합을 통한 Trace 로깅
 
 trace를 로깅하는 가장 쉬운 방법은 직접 통합(integration)을 사용하는 것입니다. Opik은 **Google ADK**, **Autogen**, **AG2**, **Flowise AI** 등 최신 추가 항목을 포함한 다양한 프레임워크를 지원합니다:
