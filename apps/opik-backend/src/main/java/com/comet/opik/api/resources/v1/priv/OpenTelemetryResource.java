@@ -6,6 +6,7 @@ import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -52,17 +53,21 @@ public class OpenTelemetryResource {
     @POST
     @Consumes("application/x-protobuf")
     public Response receiveProtobufMetrics() {
-        return Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity("OpenTelemetry metrics ingestion is not yet supported")
-                .build();
+        return notImplementedMetricsResponse();
     }
 
     @Path("/metrics")
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     public Response receiveJsonMetrics() {
+        return notImplementedMetricsResponse();
+    }
+
+    private Response notImplementedMetricsResponse() {
         return Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity("OpenTelemetry metrics ingestion is not yet supported")
+                .type(MediaType.APPLICATION_JSON)
+                .entity(new ErrorMessage(Response.Status.NOT_IMPLEMENTED.getStatusCode(),
+                        "OpenTelemetry metrics ingestion is not yet supported"))
                 .build();
     }
 

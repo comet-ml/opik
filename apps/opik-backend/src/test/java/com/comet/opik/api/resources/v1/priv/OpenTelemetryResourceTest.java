@@ -153,15 +153,28 @@ class OpenTelemetryResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {
 
-        private final String fakeApikey = UUID.randomUUID().toString();
-        private final String okApikey = UUID.randomUUID().toString();
+        private static final String fakeApikey = UUID.randomUUID().toString();
+        private static final String okApikey = UUID.randomUUID().toString();
 
-        Stream<Arguments> credentials() {
+        static Stream<Arguments> credentials() {
             return Stream.of(
                     arguments(okApikey, null, true, null),
                     arguments(okApikey, "Demo Project", true, null),
                     arguments(fakeApikey, null, false, UNAUTHORIZED_RESPONSE),
                     arguments("", null, false, NO_API_KEY_RESPONSE));
+        }
+
+        static Stream<Arguments> otelMetricsPayloads() {
+            return Stream.of(
+                    arguments("application/x-protobuf", Entity.entity(new byte[]{1, 2, 3}, "application/x-protobuf")),
+                    arguments("application/json", Entity.json("{}")));
+        }
+
+        static Stream<Arguments> otelMetricsRequests() {
+            return credentials()
+                    .flatMap(credentials -> otelMetricsPayloads().map(metricsPayload -> arguments(credentials.get()[0],
+                            credentials.get()[1], credentials.get()[2], credentials.get()[3],
+                            metricsPayload.get()[0], metricsPayload.get()[1])));
         }
 
         @BeforeEach
@@ -283,43 +296,27 @@ class OpenTelemetryResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("ingest otel metrics via protobuf")
-        void testOtelProtobufMetrics(String apiKey, String projectName, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
+        @MethodSource("otelMetricsRequests")
+        @DisplayName("ingest otel metrics")
+        void ingestOtelMetrics(String apiKey, String projectName, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage, String mediaType, Entity<?> payload) {
             String workspaceName = UUID.randomUUID().toString();
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
-
-            var payload = Entity.entity(new byte[]{1, 2, 3}, "application/x-protobuf");
-            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, 501,
-                    "OpenTelemetry metrics ingestion is not yet supported", errorMessage, METRICS_URL_TEMPLATE);
-        }
-
-        @ParameterizedTest
-        @MethodSource("credentials")
-        @DisplayName("ingest otel metrics via json")
-        void testOtelJsonMetrics(String apiKey, String projectName, boolean expected,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
-
-            String workspaceName = UUID.randomUUID().toString();
-            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
-
-            Entity<String> payload = Entity.json("{}");
-            sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, 501,
-                    "OpenTelemetry metrics ingestion is not yet supported", errorMessage, METRICS_URL_TEMPLATE);
+            sendBatch(payload, mediaType, projectName, workspaceName, apiKey, expected, 501,
+                    new ErrorMessage(501, "OpenTelemetry metrics ingestion is not yet supported"),
+                    errorMessage, METRICS_URL_TEMPLATE);
         }
 
         void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
                 boolean expected, ErrorMessage errorMessage) {
 
-            sendBatch(payload, mediaType, projectName, workspaceName, apiKey, expected, 200, null, errorMessage,
-                    URL_TEMPLATE);
+            sendBatch(payload, mediaType, projectName, workspaceName, apiKey, expected, 200, null,
+                    errorMessage, URL_TEMPLATE);
         }
 
         void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
-                boolean expected, int expectedSuccessStatus, String expectedSuccessMessage,
-                io.dropwizard.jersey.errors.ErrorMessage errorMessage, String endpointTemplate) {
+                boolean expected, int expectedSuccessStatus, ErrorMessage expectedSuccessError,
+                ErrorMessage errorMessage, String endpointTemplate) {
 
             var requestBuilder = client.target(endpointTemplate.formatted(baseURI))
                     .request(mediaType)
@@ -334,8 +331,9 @@ class OpenTelemetryResourceTest {
 
                 if (expected) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedSuccessStatus);
-                    if (expectedSuccessMessage != null) {
-                        assertThat(actualResponse.readEntity(String.class)).isEqualTo(expectedSuccessMessage);
+                    if (expectedSuccessError != null) {
+                        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                                .isEqualTo(expectedSuccessError);
                     }
 
                 } else {
