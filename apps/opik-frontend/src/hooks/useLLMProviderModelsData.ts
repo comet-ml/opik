@@ -29,6 +29,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
   ],
   [PROVIDER_TYPE.OPEN_AI]: [
+    // GPT-5.3 Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_3_CODEX,
+      label: "GPT 5.3 Codex",
+    },
     // GPT-5.2 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_5_2,
@@ -1072,6 +1077,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX_MINI,
       label: "openai/gpt-5.1-codex-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_3_CODEX,
+      label: "openai/gpt-5.3-codex",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2,

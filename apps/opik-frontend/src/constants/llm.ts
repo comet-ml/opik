@@ -95,6 +95,8 @@ export const ANTHROPIC_THINKING_MODELS = [
 // These models do not support temperature = 0 and will fail if used
 // Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
 export const REASONING_MODELS = [
+  // GPT-5.3 family
+  PROVIDER_MODEL_TYPE.GPT_5_3_CODEX,
   // GPT-5.2 family (chat models only - GPT-5.2 Pro uses Responses API)
   PROVIDER_MODEL_TYPE.GPT_5_2,
   PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
