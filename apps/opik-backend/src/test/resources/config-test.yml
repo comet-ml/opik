@@ -8,6 +8,7 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
+    com.clickhouse.client.http.ClickHouseHttpClient: DEBUG
     com.comet.opik.infrastructure.llm: INFO
 
 # Description: state database configuration
@@ -403,6 +404,11 @@ workspaceSettings:
   # This count-based limit is used because experiment_items has fixed-size columns (UUIDs only)
   # and query performance scales with row count, not data size.
   maxExperimentItemsToAllowSorting: -1
+
+# Experiment Aggregates Configuration
+experimentAggregates:
+  # Batch size for processing experiment items when calculating aggregates
+  batchSize: 100
 
 # Configuration AWS S3
 s3Config:

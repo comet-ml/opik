@@ -221,6 +221,12 @@ batchOperations:
     # Description: The batch size for processing CSV files. Dataset items are saved to the database in batches of this size.
     csvBatchSize: ${BATCH_OPERATIONS_CSV_BATCH_SIZE:-1000}
 
+# Configuration for experiment aggregates population
+experimentAggregates:
+  # Default: 1000
+  # Description: The batch size for processing experiment items when populating experiment_item_aggregates table
+  batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items

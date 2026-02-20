@@ -702,6 +702,30 @@ public class FilterQueryBuilder {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
 
+    private static String toAnalyticsDbOperator(@NonNull Filter filter, @NonNull FilterStrategy filterStrategy) {
+        // For aggregated feedback scores, use map access patterns instead of groupArray patterns
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
+                filter.field().getType() == FieldType.FEEDBACK_SCORES_NUMBER) {
+            return getAggregatedFeedbackScoresTemplate(filter.operator());
+        }
+
+        return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
+    }
+
+    private static String getAggregatedFeedbackScoresTemplate(Operator operator) {
+        return switch (operator) {
+            case EQUAL -> "%1$s[lower(:filterKey%2$d)] = toDecimal64(:filter%2$d, 9)";
+            case NOT_EQUAL -> "%1$s[lower(:filterKey%2$d)] != toDecimal64(:filter%2$d, 9)";
+            case GREATER_THAN -> "%1$s[lower(:filterKey%2$d)] > toDecimal64(:filter%2$d, 9)";
+            case GREATER_THAN_EQUAL -> "%1$s[lower(:filterKey%2$d)] >= toDecimal64(:filter%2$d, 9)";
+            case LESS_THAN -> "%1$s[lower(:filterKey%2$d)] < toDecimal64(:filter%2$d, 9)";
+            case LESS_THAN_EQUAL -> "%1$s[lower(:filterKey%2$d)] <= toDecimal64(:filter%2$d, 9)";
+            case IS_NOT_EMPTY -> "mapContains(%1$s, lower(:filterKey%2$d))";
+            default -> throw new IllegalArgumentException(
+                    "Unsupported operator for aggregated feedback scores: '%s'".formatted(operator));
+        };
+    }
+
     public static Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
         return filters.stream()
                 .filter(filter -> filter.field() == TraceField.GUARDRAILS)
@@ -745,6 +769,12 @@ public class FilterQueryBuilder {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES));
         }
 
+        // For aggregated feedback scores, use the EXPERIMENT filter fields
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED ||
+                filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT));
+        }
+
         if (isNotEmptyScoresFilter(filterStrategy, filter)) {
             return Optional.empty();
         }
@@ -768,7 +798,7 @@ public class FilterQueryBuilder {
     }
 
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
-        var template = toAnalyticsDbOperator(filter);
+        var template = toAnalyticsDbOperator(filter, filterStrategy);
         var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
         return "(%s)".formatted(formattedTemplate);
     }
@@ -785,6 +815,17 @@ public class FilterQueryBuilder {
 
         if (filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
             return EXPERIMENT_SCORE_COUNT_DB;
+        }
+
+        // For aggregated feedback scores, use the pre-computed average map
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
+                field == ExperimentField.FEEDBACK_SCORES) {
+            return "feedback_scores_avg";
+        }
+
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
+                field == ExperimentField.EXPERIMENT_SCORES) {
+            return "experiment_scores";
         }
 
         return switch (field) {

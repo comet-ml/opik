@@ -1499,7 +1499,7 @@ class ExperimentDAO {
         });
     }
 
-    private Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> targetProjectIds) {
+    Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria, Set<UUID> targetProjectIds) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> countTotal(experimentSearchCriteria, connection, targetProjectIds))
                 .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
