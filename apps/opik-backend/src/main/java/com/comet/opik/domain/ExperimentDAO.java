@@ -1148,28 +1148,26 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                """ + TagOperations.tagUpdateFragment("tags")
-            + """
-                    as tags,
-                                   created_by,
-                                   :user_name as last_updated_by,
-                                   prompt_version_id,
-                                   prompt_id,
-                                   prompt_versions,
-                                   <if(type)> :type <else> type <endif> as type,
-                                   optimization_id,
-                                   <if(status)> :status <else> status <endif> as status,
-                                   <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
-                                   created_at,
-                                   now64(9) as last_updated_at
-                               FROM experiments
-                               WHERE id IN (:ids)
-                               AND workspace_id = :workspace_id
-                               ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                               LIMIT 1 BY id
-                               SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
-                               ;
-                               """;
+                """ + TagOperations.tagUpdateFragment("tags") + """
+                as tags,
+                created_by,
+                :user_name as last_updated_by,
+                prompt_version_id,
+                prompt_id,
+                prompt_versions,
+                <if(type)> :type <else> type <endif> as type,
+                optimization_id,
+                <if(status)> :status <else> status <endif> as status,
+                <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
+                created_at,
+                now64(9) as last_updated_at
+            FROM experiments
+            WHERE id IN (:ids)
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
+            """;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;

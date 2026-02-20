@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Tag } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
 
@@ -218,15 +219,16 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {commonTags.map((tag) =>
               tagsToRemove.has(tag) ? (
-                <Tag
-                  key={tag}
-                  size="md"
-                  variant={generateTagVariant(tag)}
-                  className="group/removed cursor-pointer line-through opacity-40 outline outline-1 outline-current"
-                  onClick={() => handleRestoreTag(tag)}
-                >
-                  {tag}
-                </Tag>
+                <TooltipWrapper key={tag} content={tag}>
+                  <Tag
+                    size="md"
+                    variant={generateTagVariant(tag)}
+                    className="max-w-40 cursor-pointer line-through opacity-40 outline outline-1 outline-current"
+                    onClick={() => handleRestoreTag(tag)}
+                  >
+                    <span className="block truncate">{tag}</span>
+                  </Tag>
+                </TooltipWrapper>
               ) : (
                 <RemovableTag
                   key={tag}

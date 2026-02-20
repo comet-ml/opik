@@ -851,18 +851,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
-                """ + TagOperations.tagUpdateFragment("s.tags")
-            + """
-                    as tags
-                               FROM dataset_items AS s
-                               WHERE s.workspace_id = :workspace_id
-                               <if(ids)> AND s.id IN :ids <endif>
-                               <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
-                               <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
-                               ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
-                               LIMIT 1 BY s.id
-                               SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
-                               """;
+                """ + TagOperations.tagUpdateFragment("s.tags") + """
+                as tags
+            FROM dataset_items AS s
+            WHERE s.workspace_id = :workspace_id
+            <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
+            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
+            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
+            """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
             WITH experiment_items_filtered AS (

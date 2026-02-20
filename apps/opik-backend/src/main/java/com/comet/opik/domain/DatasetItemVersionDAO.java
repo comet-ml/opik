@@ -1184,36 +1184,37 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                """ + TagOperations.tagUpdateFragment("src.tags") + """
-            as tags,
-                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            SETTINGS short_circuit_function_evaluation = 'force_enable'
-            """;
+                """ + TagOperations.tagUpdateFragment("src.tags")
+            + """
+                        as tags,
+                        <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                        <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
+                        src.item_created_at,
+                        now64(9) as item_last_updated_at,
+                        src.item_created_by,
+                        :userName as item_last_updated_by,
+                        now64(9) as created_at,
+                        now64(9) as last_updated_at,
+                        :userName as created_by,
+                        :userName as last_updated_by,
+                        src.workspace_id
+                    FROM (
+                        SELECT *
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND dataset_version_id = :baseVersionId
+                        <if(item_ids)>
+                        AND dataset_item_id IN :itemIds
+                        <endif>
+                        <if(dataset_item_filters)>
+                        AND <dataset_item_filters>
+                        <endif>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY dataset_item_id
+                    ) AS src
+                    SETTINGS short_circuit_function_evaluation = 'force_enable'
+                    """;
 
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
             INSERT INTO dataset_item_versions (

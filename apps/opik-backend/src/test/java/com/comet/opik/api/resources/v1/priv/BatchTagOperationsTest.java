@@ -231,6 +231,55 @@ class BatchTagOperationsTest {
                     .containsExactlyInAnyOrder("existing", "merged");
         }
 
+        @Test
+        @DisplayName("Should replace all tags when using tags with mergeTags=false")
+        void batchUpdateWhenUsingTagsWithMergeTagsFalse() {
+            var experiment = createExperiment(Set.of("old-1", "old-2", "old-3"));
+
+            batchUpdateRequest()
+                    .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
+                            .ids(Set.of(experiment.id()))
+                            .update(ExperimentUpdate.builder().tags(Set.of("replaced")).build())
+                            .mergeTags(false)
+                            .build()));
+
+            assertThat(getExperiment(experiment.id()).tags())
+                    .containsExactly("replaced");
+        }
+
+        @Test
+        @DisplayName("Should prioritize tagsToAdd over tags when both are provided")
+        void batchUpdateWhenTagsToAddAndTagsBothPresent() {
+            var experiment = createExperiment(Set.of("existing"));
+
+            batchUpdateRequest()
+                    .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
+                            .ids(Set.of(experiment.id()))
+                            .update(ExperimentUpdate.builder()
+                                    .tags(Set.of("should-be-ignored"))
+                                    .tagsToAdd(Set.of("added"))
+                                    .build())
+                            .build()));
+
+            assertThat(getExperiment(experiment.id()).tags())
+                    .containsExactlyInAnyOrder("existing", "added");
+        }
+
+        @Test
+        @DisplayName("Should preserve existing tags when no tag fields are provided")
+        void batchUpdateWhenNoTagFieldsProvided() {
+            var experiment = createExperiment(Set.of("tag1", "tag2"));
+
+            batchUpdateRequest()
+                    .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
+                            .ids(Set.of(experiment.id()))
+                            .update(ExperimentUpdate.builder().build())
+                            .build()));
+
+            assertThat(getExperiment(experiment.id()).tags())
+                    .containsExactlyInAnyOrder("tag1", "tag2");
+        }
+
         Experiment createExperiment(Set<String> tags) {
             var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .tags(tags)

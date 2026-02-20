@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  RenderOptions,
+} from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import ManageTagsDialog from "./ManageTagsDialog";
 import { EntityWithTags } from "./ManageTagsDialog";
 
@@ -7,6 +14,12 @@ const mockToast = vi.fn();
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: mockToast }),
 }));
+
+const renderWithTooltip = (ui: React.ReactElement, options?: RenderOptions) =>
+  render(ui, {
+    wrapper: ({ children }) => <TooltipProvider>{children}</TooltipProvider>,
+    ...options,
+  });
 
 describe("ManageTagsDialog", () => {
   const mockSetOpen = vi.fn();
@@ -24,7 +37,7 @@ describe("ManageTagsDialog", () => {
 
   describe("Rendering", () => {
     it("should render dialog when open", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -38,7 +51,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should not render dialog when closed", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={false}
@@ -51,7 +64,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should display correct item count in button", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -66,7 +79,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should display totalCount when isAllItemsSelected is true", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -83,7 +96,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should only display tags shared by all entities", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -100,7 +113,7 @@ describe("ManageTagsDialog", () => {
 
   describe("Tag Addition via inline input", () => {
     it("should show input when clicking + Add tag", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -116,7 +129,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should add a new tag on Enter", async () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -137,7 +150,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should revert to button on blur", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -155,7 +168,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should prevent duplicate tags in new tags list", async () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -192,7 +205,7 @@ describe("ManageTagsDialog", () => {
 
   describe("Tag Length Validation", () => {
     it("should enforce maxTagLength via input maxLength attribute", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -216,7 +229,7 @@ describe("ManageTagsDialog", () => {
         { id: "2", tags: existingTags },
       ];
 
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={entitiesWithManyTags}
           open={true}
@@ -269,7 +282,7 @@ describe("ManageTagsDialog", () => {
         tags: [],
       }));
 
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={manyEntities}
           open={true}
@@ -295,7 +308,7 @@ describe("ManageTagsDialog", () => {
         tags: [],
       }));
 
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={manyEntities}
           open={true}
@@ -312,7 +325,7 @@ describe("ManageTagsDialog", () => {
 
   describe("Update Operation", () => {
     it("should call onUpdate with correct parameters", async () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -341,7 +354,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should show success toast on successful update", async () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -375,7 +388,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should reset state after successful update", async () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -404,7 +417,7 @@ describe("ManageTagsDialog", () => {
     });
 
     it("should disable update button when no changes", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
@@ -427,7 +440,7 @@ describe("ManageTagsDialog", () => {
         { id: "2", tags: ["shared"] },
       ];
 
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={entities}
           open={true}
@@ -442,7 +455,7 @@ describe("ManageTagsDialog", () => {
 
   describe("Dialog Close", () => {
     it("should reset state when dialog is closed", () => {
-      render(
+      renderWithTooltip(
         <ManageTagsDialog
           entities={defaultEntities}
           open={true}
