@@ -19,7 +19,7 @@ Opik
 Opik vous aide à créer, tester et optimiser des applications d'IA générative qui fonctionnent mieux, du prototype à la production.  Des chatbots RAG aux assistants de code en passant par les systèmes agentiques complexes, Opik fournit un traçage complet, une évaluation ainsi qu'une optimisation automatique des invites et des outils pour éliminer les incertitudes liées au développement de l'IA.
 </p>
 
-<div align="centre">
+<div align="center">
 
 [![SDK Python](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![Licence](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
