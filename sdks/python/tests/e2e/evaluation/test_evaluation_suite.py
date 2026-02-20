@@ -698,8 +698,7 @@ def test_evaluation_suite__delete_items__items_removed(
     items = suite.get_items()
     assert len(items) == 3
 
-    dataset_items = suite.dataset.get_items()
-    item_id_to_delete = dataset_items[0]["id"]
+    item_id_to_delete = items[0]["id"]
 
     suite.delete_items([item_id_to_delete])
 
@@ -794,6 +793,7 @@ def test_evaluation_suite__get_items__returns_items_with_evaluators(
 
     items = suite.get_items()
     assert len(items) == 2
+    assert all("id" in item for item in items)
 
     items_with_evaluators = [i for i in items if len(i["evaluators"]) > 0]
     items_without_evaluators = [i for i in items if len(i["evaluators"]) == 0]

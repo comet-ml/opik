@@ -113,6 +113,7 @@ class EvaluationSuite:
         Retrieve suite items as a list of dictionaries.
 
         Each item dict has keys:
+        - "id": the dataset item ID (str)
         - "data": the test case data (dict)
         - "evaluators": list of LLMJudge instances (or empty list)
         - "execution_policy": ExecutionPolicyItem or None
@@ -143,6 +144,7 @@ class EvaluationSuite:
 
             result.append(
                 {
+                    "id": item.id,
                     "data": item.get_content(),
                     "evaluators": evaluator_objects,
                     "execution_policy": item.execution_policy,
