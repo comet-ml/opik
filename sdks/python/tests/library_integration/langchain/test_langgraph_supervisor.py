@@ -1,4 +1,4 @@
-import importlib
+import importlib.metadata
 
 import pytest
 
@@ -19,13 +19,13 @@ from ...testlib import (
 
 LANGCHAIN_VERSION_OLDER_THAN_1_0_0 = (
     semantic_version.SemanticVersion.parse(importlib.metadata.version("langchain"))
-    >= "0.3.35"
+    <= "1.0.0"
 )
 
 
 @pytest.mark.skipif(
     LANGCHAIN_VERSION_OLDER_THAN_1_0_0,
-    reason="Only applies to langchain >= 1.0.0",
+    reason="Only applies to langchain > 1.0.0",
 )
 def test_langgraph__supervisor_multi_agent__parent_command_not_logged_as_error(
     fake_backend,
