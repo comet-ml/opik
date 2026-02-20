@@ -38,6 +38,10 @@ import {
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { Span } from "@/types/traces";
+import useAppStore from "@/store/AppStore";
+import useProviderKeys from "@/api/provider-keys/useProviderKeys";
+import { PROVIDER_TYPE } from "@/types/providers";
+import SetupProviderDialog from "@/components/pages-shared/llm/SetupProviderDialog/SetupProviderDialog";
 
 interface TraceAIViewerProps {
   traceId: string;
@@ -52,6 +56,8 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   setActiveSection,
   spans,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [chat, setChat] = useState<{
     value: string;
     messages: TraceAnalyzerLLMMessage[];
@@ -69,6 +75,19 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   const [pendingToolCallCount, setPendingToolCallCount] = useState(0);
   const abortControllerRef = useRef<AbortController>();
   const { toast } = useToast();
+
+  const { data: providerKeysData, isPending: isPendingProviderKeys } =
+    useProviderKeys({
+      workspaceName,
+    });
+
+  const isOpenAIConfigured = useMemo(() => {
+    return (
+      providerKeysData?.content?.some(
+        (provider) => provider.provider === PROVIDER_TYPE.OPEN_AI,
+      ) ?? false
+    );
+  }, [providerKeysData]);
 
   // Derived state: thinking when stream is active but nothing visible is happening
   const isThinking =
@@ -472,6 +491,23 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     }
   }, [isRunning, stopStreaming, chat.value, sendMessage]);
 
+  const renderSetupState = () => {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-3 py-2">
+        <div className="comet-title-m text-center text-foreground">
+          OpenAI API Key Required
+        </div>
+        <div className="comet-body-s mb-8 text-center text-muted-slate">
+          OpikAssist requires an OpenAI API key to analyze your traces.
+          Configure your API key to get started.
+        </div>
+        <Button variant="default" onClick={() => setSetupDialogOpen(true)}>
+          Configure OpenAI
+        </Button>
+      </div>
+    );
+  };
+
   const renderEmptyState = () => {
     return (
       <div className="flex min-h-full flex-col items-center justify-center gap-3 py-2">
@@ -528,10 +564,12 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
         {/* Central content area - takes remaining space */}
         <div className="flex flex-1 flex-col overflow-hidden border-t">
           <div className="flex-1 overflow-y-auto px-6" ref={scrollContainerRef}>
-            {isHistoryPending ? (
+            {isPendingProviderKeys || isHistoryPending ? (
               <div className="flex h-full items-center justify-center">
                 <Loader />
               </div>
+            ) : !isOpenAIConfigured ? (
+              renderSetupState()
             ) : noMessages ? (
               renderEmptyState()
             ) : (
@@ -572,19 +610,26 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
         </div>
 
         {/* Chat input area - up to 50% of container height */}
-        <div className="flex max-h-[50%] min-h-0 flex-col border-t bg-background">
-          <div className="flex-1 overflow-y-auto px-6 py-3">
-            <TraceChatInput
-              chat={chat}
-              isRunning={isRunning}
-              onUpdateChat={(changes) =>
-                setChat((prev) => ({ ...prev, ...changes }))
-              }
-              onButtonClick={handleButtonClick}
-            />
+        {isOpenAIConfigured && (
+          <div className="flex max-h-[50%] min-h-0 flex-col border-t bg-background">
+            <div className="flex-1 overflow-y-auto px-6 py-3">
+              <TraceChatInput
+                chat={chat}
+                isRunning={isRunning}
+                onUpdateChat={(changes) =>
+                  setChat((prev) => ({ ...prev, ...changes }))
+                }
+                onButtonClick={handleButtonClick}
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
+      <SetupProviderDialog
+        open={setupDialogOpen}
+        setOpen={setSetupDialogOpen}
+        allowedProviders={[PROVIDER_TYPE.OPEN_AI]}
+      />
       <ConfirmDialog
         open={showClearConfirm}
         setOpen={setShowClearConfirm}
