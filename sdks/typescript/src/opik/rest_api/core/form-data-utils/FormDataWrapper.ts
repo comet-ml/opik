@@ -107,9 +107,14 @@ async function streamToBuffer(stream: unknown): Promise<Buffer> {
 }
 
 async function convertToBlob(value: unknown, contentType?: string): Promise<Blob> {
+  const asBlobPart = (part: unknown): BlobPart =>
+    part as unknown as BlobPart;
+
     if (isStreamLike(value) || isReadableStream(value)) {
         const buffer = await streamToBuffer(value);
-        return new Blob([buffer], { type: contentType });
+        return new Blob([asBlobPart(Uint8Array.from(buffer))], {
+            type: contentType,
+        });
     }
 
     if (value instanceof Blob) {
@@ -117,15 +122,32 @@ async function convertToBlob(value: unknown, contentType?: string): Promise<Blob
     }
 
     if (isBuffer(value)) {
-        return new Blob([value], { type: contentType });
+        return new Blob([asBlobPart(Uint8Array.from(value))], {
+            type: contentType,
+        });
     }
 
     if (value instanceof ArrayBuffer) {
-        return new Blob([value], { type: contentType });
+        return new Blob([asBlobPart(Uint8Array.from(new Uint8Array(value)))], {
+            type: contentType,
+        });
     }
 
     if (isArrayBufferView(value)) {
-        return new Blob([value], { type: contentType });
+        return new Blob(
+            [
+                asBlobPart(
+                    Uint8Array.from(
+                        new Uint8Array(
+                            value.buffer,
+                            value.byteOffset,
+                            value.byteLength,
+                        ),
+                    ),
+                ),
+            ],
+            { type: contentType },
+        );
     }
 
     if (typeof value === "string") {
