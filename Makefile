@@ -6,11 +6,29 @@ CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
 HOOKS_DEST := .git/hooks
 
+define link_agent_config
+	@if [ ! -d "$(AI_DIR)" ]; then \
+		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
+		exit 1; \
+	fi
+	@if [ -e "$(1)" ] && [ ! -L "$(1)" ]; then \
+		echo "Error: $(1) exists and is not a symlink."; \
+		echo "Remove it manually if you want to use .agents/ as source."; \
+		exit 1; \
+	fi
+	@if [ -L "$(1)" ]; then \
+		echo "$(1) symlink already exists"; \
+	else \
+		echo "Creating symlink $(1) -> $(AI_DIR)..."; \
+		ln -s "$(AI_DIR)" "$(1)"; \
+	fi
+endef
+
 help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
-	@echo "  make codex         - Ensure .codex symlink points to .agents/"
+	@echo "  make codex         - Legacy fallback: ensure .codex symlink points to .agents/ (for non-Cursor tooling)"
 	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
 	@echo "  make clean-agents  - Remove synced files from .claude/ (preserves local customizations)"
 	@echo ""
@@ -26,39 +44,11 @@ help:
 
 # Sync to Cursor (symlink .cursor -> .agents)
 cursor:
-	@if [ ! -d "$(AI_DIR)" ]; then \
-		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
-		exit 1; \
-	fi
-	@if [ -d "$(CURSOR_DIR)" ] && [ ! -L "$(CURSOR_DIR)" ]; then \
-		echo "Error: $(CURSOR_DIR)/ exists and is not a symlink."; \
-		echo "Remove it manually if you want to use .agents/ as source."; \
-		exit 1; \
-	fi
-	@if [ -L "$(CURSOR_DIR)" ]; then \
-		echo "$(CURSOR_DIR) symlink already exists"; \
-	else \
-		echo "Creating symlink $(CURSOR_DIR) -> $(AI_DIR)..."; \
-		ln -s $(AI_DIR) $(CURSOR_DIR); \
-	fi
+	$(call link_agent_config,$(CURSOR_DIR))
 	@echo "Cursor ready!"
 
 codex:
-	@if [ ! -d "$(AI_DIR)" ]; then \
-		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
-		exit 1; \
-	fi
-	@if [ -d ".codex" ] && [ ! -L ".codex" ]; then \
-		echo "Error: .codex/ exists and is not a symlink."; \
-		echo "Remove it manually if you want to use .agents/ as source."; \
-		exit 1; \
-	fi
-	@if [ -L ".codex" ]; then \
-		echo ".codex symlink already exists"; \
-	else \
-		echo "Creating symlink .codex -> $(AI_DIR)..."; \
-		ln -s $(AI_DIR) .codex; \
-	fi
+	$(call link_agent_config,.codex)
 	@echo "Codex ready!"
 
 # Sync to Claude (preserve nested structure, convert frontmatter)
@@ -180,9 +170,15 @@ hooks-remove:
 # Run SDK pre-commit style checks (changed files only / explicit script checks)
 precommit-sdks:
 	@echo "Running SDK-level pre-commit checks on changed files..."
-	$(MAKE) -C sdks/python precommit
+	@cd sdks/python && \
+	if [ -n "$$(git diff --name-only --diff-filter=ACM)" ]; then \
+		echo "Python SDK files changed. Running pre-commit..."; \
+		git diff --name-only -z --diff-filter=ACM | xargs -0 pre-commit run --config .pre-commit-config.yaml --files --; \
+	else \
+		echo "No Python SDK files changed. Skipping."; \
+	fi
 	$(MAKE) -C sdks/opik_optimizer precommit
-	@cd sdks/typescript && npm run lint
+	@cd sdks/typescript && npm run lint && npm run typecheck
 
 # Run full all-file SDK checks
 precommit-sdks-all:

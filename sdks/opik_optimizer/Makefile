@@ -112,12 +112,13 @@ profile:
 
 precommit:
 	$(call warn_if_no_venv)
-	@files=$$(git diff --name-only --diff-filter=ACM | tr '\n' ' '); \
+	# Use null-delimited paths to avoid shell splitting and preserve special chars.
+	@files=$$(git diff --name-only --diff-filter=ACM); \
 	if [ -z "$$files" ]; then \
 		echo "No changed files found. Pre-commit skipped."; \
 		exit 0; \
 	fi; \
-	PYTHONPATH=src $(PRECOMMIT) run --files $$files
+	git diff --name-only -z --diff-filter=ACM | xargs -0 $(PRECOMMIT) run --files --
 
 precommit-all:
 	$(call warn_if_no_venv)
