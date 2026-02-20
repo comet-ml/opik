@@ -771,3 +771,79 @@ def verify_threads_annotation_queue(
     testlib.assert_equal(scope, queue.scope)
     testlib.assert_equal(description, queue.description)
     testlib.assert_equal(instructions, queue.instructions)
+
+
+def verify_evaluation_suite_result(
+    opik_client: opik.Opik,
+    suite_result: Any,
+    items_total: int = mock.ANY,  # type: ignore
+    items_passed: int = mock.ANY,  # type: ignore
+    experiment_items_count: int = mock.ANY,  # type: ignore
+    total_feedback_scores: int = mock.ANY,  # type: ignore
+    expected_score_names: Optional[Set[str]] = None,
+):
+    """
+    Verify an EvaluationSuiteResult — both in-memory properties and persisted
+    experiment data from the backend.
+
+    Args:
+        opik_client: The Opik client instance.
+        suite_result: The EvaluationSuiteResult returned by suite.run().
+        items_total: Expected total number of dataset items in the suite.
+        items_passed: Expected number of dataset items that passed.
+        experiment_items_count: Expected number of experiment items (traces)
+            persisted in the backend. For multi-run suites this is
+            dataset_items * runs_per_item.
+        total_feedback_scores: Expected total number of feedback scores
+            across all experiment items.
+        expected_score_names: If provided, the union of all score names
+            across all experiment items must equal this set.
+    """
+    if items_total is not mock.ANY:
+        assert suite_result.items_total == items_total, (
+            f"Expected items_total={items_total}, got {suite_result.items_total}"
+        )
+
+    if items_passed is not mock.ANY:
+        assert suite_result.items_passed == items_passed, (
+            f"Expected items_passed={items_passed}, got {suite_result.items_passed}"
+        )
+
+        expected_all_passed = items_passed == (
+            items_total if items_total is not mock.ANY else suite_result.items_total
+        )
+        assert suite_result.all_items_passed is expected_all_passed, (
+            f"Expected all_items_passed={expected_all_passed}, "
+            f"got {suite_result.all_items_passed}"
+        )
+
+    if experiment_items_count is mock.ANY:
+        return
+
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        suite_result.experiment_name
+    )
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == experiment_items_count, (
+        f"Expected {experiment_items_count} experiment items, "
+        f"got {len(experiment_items)}"
+    )
+
+    all_scores = []
+    all_score_names: Set[str] = set()
+    for exp_item in experiment_items:
+        if exp_item.feedback_scores:
+            all_scores.extend(exp_item.feedback_scores)
+            all_score_names.update(s["name"] for s in exp_item.feedback_scores)
+
+    if total_feedback_scores is not mock.ANY:
+        assert len(all_scores) == total_feedback_scores, (
+            f"Expected {total_feedback_scores} total feedback scores, "
+            f"got {len(all_scores)}"
+        )
+
+    if expected_score_names is not None:
+        assert expected_score_names == all_score_names, (
+            f"Expected score names {expected_score_names}, got {all_score_names}"
+        )
