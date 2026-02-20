@@ -294,6 +294,21 @@ Opik also includes a number of pre-built heuristic metrics as well as the abilit
 
 Opik allows you to evaluate your LLM application during development through [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) and [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik). The Opik Dashboard offers enhanced charts for experiments and better handling of large traces. You can also run evaluations as part of your CI/CD pipeline using our [PyTest integration](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik).
 
+### Example: WFGY long-horizon "tension crash test"
+
+Opik includes an example long-horizon evaluation under  
+[`sdks/python/examples/wfgy_long_horizon_tension_crash_test`](sdks/python/examples/wfgy_long_horizon_tension_crash_test/README.md).
+
+This example shows how to:
+
+- define a small dataset of hard long-horizon prompts,
+- register a runner prompt in the Opik prompt library, and
+- run an evaluation that logs full traces and LLM-as-a-judge metrics to the UI.
+
+The test cases are adapted from the open-source  
+[WFGY · Tension Universe](https://github.com/onestardao/WFGY/blob/main/TensionUniverse/EventHorizon/README.md) project and are intended as a template you can extend with your own long-horizon stress tests.
+
+
 ## ⭐ Star Us on GitHub
 
 If you find Opik useful, please consider giving us a star! Your support helps us grow our community and continue improving the product.
