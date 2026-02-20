@@ -161,6 +161,9 @@ navigation:
               - page: Log distributed traces
                 path: docs/tracing/log_distributed_traces.mdx
                 slug: log_distributed_traces
+              - page: Offline fallback and message replay
+                path: docs/tracing/offline_fallback.mdx
+                slug: offline_fallback
       - section: Evaluation
         slug: /evaluation
         contents:
