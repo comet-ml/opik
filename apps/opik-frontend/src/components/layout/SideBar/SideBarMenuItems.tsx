@@ -16,20 +16,19 @@ import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 import getMenuItems from "@/components/layout/SideBar/helpers/getMenuItems";
-import { WithPermissionsProps } from "@/types/permissions";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
-export interface SideBarMenuItemsProps {
+interface SideBarMenuItemsProps {
   expanded: boolean;
 }
 
-const SideBarMenuItems: React.FC<
-  SideBarMenuItemsProps & WithPermissionsProps
-> = ({ expanded, canViewExperiments }) => {
+const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
+  const { canViewExperiments } = usePermissions();
 
-  const menuItems = getMenuItems({ canViewExperiments });
+  const menuItems = getMenuItems({ canViewExperiments: !!canViewExperiments });
 
   const { data: projectData } = useProjectsList(
     {

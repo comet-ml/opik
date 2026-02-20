@@ -15,22 +15,13 @@ import { Separator } from "@/components/ui/separator";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import usePluginsStore from "@/store/PluginsStore";
-import {
-  PromptPageExperimentsTabTrigger,
-  PromptPageExperimentsTabContent,
-} from "@/components/pages/PromptPage/PromptPageExperimentsTab";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import ExperimentsTab from "./ExperimentsTab/ExperimentsTab";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
 
-  const ExperimentsTabTriggerComponent = usePluginsStore(
-    (state) => state.PromptPageExperimentsTabTrigger,
-  );
-
-  const ExperimentsTabContentComponent = usePluginsStore(
-    (state) => state.PromptPageExperimentsTabContent,
-  );
+  const { canViewExperiments } = usePermissions();
 
   const promptId = usePromptIdFromURL();
 
@@ -49,18 +40,6 @@ const PromptPage: React.FunctionComponent = () => {
       setTab("prompt", "replaceIn");
     }
   }, [tab, setTab]);
-
-  const experimentsTabTrigger = ExperimentsTabTriggerComponent ? (
-    <ExperimentsTabTriggerComponent />
-  ) : (
-    <PromptPageExperimentsTabTrigger canViewExperiments />
-  );
-
-  const experimentsTabContent = ExperimentsTabContentComponent ? (
-    <ExperimentsTabContentComponent promptId={promptId} />
-  ) : (
-    <PromptPageExperimentsTabContent promptId={promptId} canViewExperiments />
-  );
 
   return (
     <PageBodyScrollContainer>
@@ -109,7 +88,17 @@ const PromptPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="prompt">
               Prompt
             </TabsTrigger>
-            {experimentsTabTrigger}
+            {canViewExperiments && (
+              <TabsTrigger variant="underline" value="experiments">
+                Experiments
+                <ExplainerIcon
+                  className="ml-1"
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
+                  ]}
+                />
+              </TabsTrigger>
+            )}
             <TabsTrigger variant="underline" value="commits">
               Commits
               <ExplainerIcon
@@ -122,7 +111,11 @@ const PromptPage: React.FunctionComponent = () => {
         <TabsContent value="prompt">
           <PromptTab prompt={prompt} />
         </TabsContent>
-        {experimentsTabContent}
+        {canViewExperiments && (
+          <TabsContent value="experiments">
+            <ExperimentsTab promptId={promptId} />
+          </TabsContent>
+        )}
         <TabsContent value="commits">
           <CommitsTab prompt={prompt} />
         </TabsContent>

@@ -45,20 +45,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
-  const SideBarMenuItemsComponent = usePluginsStore(
-    (state) => state.SideBarMenuItems,
-  );
 
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
     <Logo expanded={expanded} />
-  );
-
-  const sideBarMenuItems = SideBarMenuItemsComponent ? (
-    <SideBarMenuItemsComponent expanded={expanded} />
-  ) : (
-    <SideBarMenuItems expanded={expanded} canViewExperiments />
   );
 
   const renderBottomItems = () => {
@@ -116,7 +107,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}
           <div className="flex min-h-0 grow flex-col justify-between overflow-auto px-3 py-4">
-            <ul className="flex flex-col gap-1 pb-2">{sideBarMenuItems}</ul>
+            <ul className="flex flex-col gap-1 pb-2">
+              <SideBarMenuItems expanded={expanded} />
+            </ul>
             <div className="flex flex-col gap-3">
               <Separator />
               <ul className="flex flex-col">

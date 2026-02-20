@@ -1,3 +1,7 @@
-export interface WithPermissionsProps {
-  canViewExperiments: boolean;
+export interface Permissions {
+  canViewExperiments: boolean | null;
 }
+
+export const DEFAULT_PERMISSIONS: Permissions = {
+  canViewExperiments: true,
+};
