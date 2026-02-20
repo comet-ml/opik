@@ -1,7 +1,7 @@
 import { trace } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { generateText, tool } from "ai";
+import { generateText, generateObject, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import type { LanguageModelV2ToolCall } from "@ai-sdk/provider";
 import { Opik } from "opik";
@@ -411,5 +411,59 @@ describe("Opik - Vercel AI SDK integration", () => {
 
     createTracesSpyWithThreadId.mockRestore();
     createSpansSpyWithThreadId.mockRestore();
+  });
+
+  it("generateObject", async () => {
+    const input = "Describe a weather forecast";
+    const objectOutput = { weather: "sunny", temperature: 72 };
+    const traceName = "trace-generate-object";
+
+    sdk.start();
+
+    const { object } = await generateObject({
+      model: new MockLanguageModelV3({
+        doGenerate: {
+          finishReason: { unified: "stop", raw: "stop" },
+          usage: {
+            inputTokens: { total: 15, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+            outputTokens: { total: 25, text: undefined, reasoning: undefined },
+          },
+          content: [{ type: "text", text: JSON.stringify(objectOutput) }],
+          warnings: [],
+        },
+      }),
+      schema: z.object({
+        weather: z.string(),
+        temperature: z.number(),
+      }),
+      prompt: input,
+      experimental_telemetry: OpikExporter.getSettings({
+        name: traceName,
+      }),
+    });
+
+    await sdk.shutdown();
+
+    expect(object).toEqual(objectOutput);
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(createSpansSpy).toHaveBeenCalledTimes(1);
+    expect(createTracesSpy.mock.calls[0][0]).toMatchObject({
+      traces: [
+        {
+          input: {
+            prompt: input,
+          },
+          metadata: {},
+          name: traceName,
+          output: { object: objectOutput },
+          projectName: "opik-sdk-typescript",
+          usage: {
+            completion_tokens: 25,
+            prompt_tokens: 15,
+            total_tokens: 40,
+          },
+        },
+      ],
+    });
   });
 });
