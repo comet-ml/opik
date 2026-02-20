@@ -205,7 +205,7 @@ export class OpikExporter implements SpanExporter {
 
   export: ExportFunction = async (allOtelSpans, resultCallback) => {
     const aiSDKOtelSpans = allOtelSpans.filter(
-      (span) => span.instrumentationScope.name === "ai"
+      (span) => getInstrumentationScopeName(span) === "ai"
     );
     const diffCount = allOtelSpans.length - aiSDKOtelSpans.length;
 
@@ -311,6 +311,18 @@ function groupAndSortOtelSpans(
   });
 
   return spanGroupsByTraceId;
+}
+
+
+// Get instrumentation scope name with fallback for OpenTelemetry v1 compatibility.
+// OTel v1 (used by @vercel/otel) uses `instrumentationLibrary` while
+// OTel v2 uses `instrumentationScope`.
+function getInstrumentationScopeName(span: ReadableSpan): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = span as any;
+  return (
+    s.instrumentationScope?.name ?? s.instrumentationLibrary?.name ?? undefined
+  );
 }
 
 // Convert hrTime ([seconds, nanoseconds]) to milliseconds
