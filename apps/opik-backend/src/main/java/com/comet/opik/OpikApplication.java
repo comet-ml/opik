@@ -30,6 +30,7 @@ import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
+import com.comet.opik.infrastructure.web.DatasetTypeParamConverter;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
@@ -143,5 +144,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(InstantParamConverter.class);
+        jersey.register(DatasetTypeParamConverter.class);
     }
 }
