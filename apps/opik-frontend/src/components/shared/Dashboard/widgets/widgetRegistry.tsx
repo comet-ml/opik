@@ -27,9 +27,13 @@ import ExperimentsLeaderboardWidget from "./ExperimentsLeaderboardWidget/Experim
 import ExperimentsLeaderboardWidgetEditor from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor";
 import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLeaderboardWidget/helpers";
 
-export const widgetResolver: WidgetResolver = (
-  type: string,
-): WidgetComponents => {
+export const DISABLED_EXPERIMENTS_TOOLTIP =
+  "You don't have permission to view experiments";
+
+export const widgetResolver: WidgetResolver = ({
+  type,
+  canViewExperiments = true,
+}): WidgetComponents => {
   switch (type) {
     case WIDGET_TYPES.PROJECT_METRICS:
       return {
@@ -92,7 +96,10 @@ export const widgetResolver: WidgetResolver = (
           icon: <FlaskConical className="size-4" />,
           category: WIDGET_CATEGORY.EVALUATION,
           iconColor: "text-[#9B59B6]",
-          disabled: false,
+          disabled: !canViewExperiments,
+          disabledTooltip: canViewExperiments
+            ? undefined
+            : DISABLED_EXPERIMENTS_TOOLTIP,
         },
       };
     case WIDGET_TYPES.EXPERIMENT_LEADERBOARD:
@@ -108,7 +115,10 @@ export const widgetResolver: WidgetResolver = (
           icon: <Trophy className="size-4" />,
           category: WIDGET_CATEGORY.EVALUATION,
           iconColor: "text-[#FFD700]",
-          disabled: false,
+          disabled: !canViewExperiments,
+          disabledTooltip: canViewExperiments
+            ? undefined
+            : DISABLED_EXPERIMENTS_TOOLTIP,
         },
       };
     default:

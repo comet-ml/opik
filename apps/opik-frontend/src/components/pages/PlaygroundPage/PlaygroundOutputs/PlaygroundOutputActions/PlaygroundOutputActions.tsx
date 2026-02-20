@@ -43,6 +43,7 @@ import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EMPTY_DATASETS: Dataset[] = [];
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -99,6 +100,8 @@ const PlaygroundOutputActions = ({
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
+
+  const { canViewExperiments } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
   const filtersColumnData = useMemo(() => {
@@ -425,24 +428,28 @@ const PlaygroundOutputActions = ({
       <div className="sticky flex items-center justify-between gap-2">
         {createdExperiments.length > 0 && plainDatasetId && (
           <div className="flex gap-2">
-            <div className="mt-2.5">
-              <NavigationTag
-                resource={RESOURCE_TYPE.experiment}
-                id={plainDatasetId}
-                name={
-                  createdExperiments.length === 1 ? "Experiment" : "Experiments"
-                }
-                className="h-8"
-                search={{
-                  experiments: createdExperiments.map((e) => e.id),
-                }}
-                tooltipContent={
-                  createdExperiments.length === 1
-                    ? "Your run was stored in this experiment. Explore your results to find insights."
-                    : "Your run was stored in experiments. Explore comparison results to get insights."
-                }
-              />
-            </div>
+            {canViewExperiments && (
+              <div className="mt-2.5">
+                <NavigationTag
+                  resource={RESOURCE_TYPE.experiment}
+                  id={plainDatasetId}
+                  name={
+                    createdExperiments.length === 1
+                      ? "Experiment"
+                      : "Experiments"
+                  }
+                  className="h-8"
+                  search={{
+                    experiments: createdExperiments.map((e) => e.id),
+                  }}
+                  tooltipContent={
+                    createdExperiments.length === 1
+                      ? "Your run was stored in this experiment. Explore your results to find insights."
+                      : "Your run was stored in experiments. Explore comparison results to get insights."
+                  }
+                />
+              </div>
+            )}
             {createdExperiments.length === 1 &&
               playgroundProject?.id &&
               createdExperiments[0]?.id && (

@@ -25,6 +25,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { transformExperimentScores } from "@/lib/feedback-scores";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -88,9 +89,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const EvaluationSection: React.FunctionComponent = () => {
+const EvaluationSection: React.FC = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { canViewExperiments } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -144,6 +146,10 @@ const EvaluationSection: React.FunctionComponent = () => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+
+  if (!canViewExperiments) {
+    return null;
+  }
 
   if (isPending) {
     return <Loader />;

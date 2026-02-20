@@ -30,7 +30,7 @@ export type MenuItem = {
 export type MenuItemGroup = {
   id: string;
   label?: string;
-  items: MenuItem[];
+  items: (MenuItem | null)[];
 };
 
 interface SidebarMenuItemProps {

@@ -11,6 +11,7 @@ import DashboardWidgetPreviewHeader from "./DashboardWidgetPreviewHeader";
 import DashboardWidgetEmptyState from "./DashboardWidgetEmptyState";
 import DashboardWidgetErrorState from "./DashboardWidgetErrorState";
 import DashboardWidgetDragHandle from "./DashboardWidgetDragHandle";
+import DashboardWidgetDisabledState from "./DashboardWidgetDisabledState";
 
 type DashboardWidgetRootProps = {
   children: React.ReactNode;
@@ -44,6 +45,7 @@ type DashboardWidgetComponents = typeof DashboardWidgetRoot & {
   EmptyState: typeof DashboardWidgetEmptyState;
   ErrorState: typeof DashboardWidgetErrorState;
   DragHandle: typeof DashboardWidgetDragHandle;
+  DisabledState: typeof DashboardWidgetDisabledState;
 };
 
 const DashboardWidget = DashboardWidgetRoot as DashboardWidgetComponents;
@@ -57,5 +59,6 @@ DashboardWidget.PreviewHeader = DashboardWidgetPreviewHeader;
 DashboardWidget.EmptyState = DashboardWidgetEmptyState;
 DashboardWidget.ErrorState = DashboardWidgetErrorState;
 DashboardWidget.DragHandle = DashboardWidgetDragHandle;
+DashboardWidget.DisabledState = DashboardWidgetDisabledState;
 
 export default DashboardWidget;

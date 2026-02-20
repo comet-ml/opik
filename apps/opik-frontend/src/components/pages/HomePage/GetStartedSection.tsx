@@ -5,15 +5,16 @@ import {
   InspectionPanel,
   MousePointer,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
 import SideDialog from "@/components/shared/SideDialog/SideDialog";
 import FrameworkIntegrations from "@/components/pages-shared/onboarding/FrameworkIntegrations/FrameworkIntegrations";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
-import { Link } from "@tanstack/react-router";
 import { SheetTitle } from "@/components/ui/sheet";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 
 const GetStartedSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -25,6 +26,8 @@ const GetStartedSection = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const { canViewExperiments } = usePermissions();
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);
@@ -45,15 +48,17 @@ const GetStartedSection = () => {
           </div>
           <div className="comet-body-s">Log a trace</div>
         </div>
-        <div
-          onClick={openNewExperimentDialog}
-          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"
-        >
-          <div className="flex size-[24px] items-center justify-center rounded bg-action-experiment-background">
-            <MousePointer className="size-3.5 text-action-experiment-text" />
+        {canViewExperiments && (
+          <div
+            onClick={openNewExperimentDialog}
+            className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"
+          >
+            <div className="flex size-[24px] items-center justify-center rounded bg-action-experiment-background">
+              <MousePointer className="size-3.5 text-action-experiment-text" />
+            </div>
+            <div className="comet-body-s">Run an experiment</div>
           </div>
-          <div className="comet-body-s">Run an experiment</div>
-        </div>
+        )}
         {isGuardrailsEnabled && (
           <div
             onClick={openGuardrailsDialog}

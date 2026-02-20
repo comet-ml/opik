@@ -1,15 +1,16 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
-import OnboardingStep from "../OnboardingStep";
 import useAppStore from "@/store/AppStore";
+import OnboardingStep from "@/components/shared/OnboardingOverlay/OnboardingStep";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const OPTIONS = {
   TRACE_APP: "Trace an app – Debug and analyze every AI interaction",
   TEST_PROMPTS:
     "Test prompts – Test prompts across models and providers approaches",
   RUN_EVALUATIONS:
-    "Run evaluations – Run experiments and and track performance across versions of your app",
+    "Run evaluations – Run experiments and track performance across versions of your app",
 } as const;
 
 const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
@@ -17,6 +18,8 @@ const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
 const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
+
+  const { canViewExperiments } = usePermissions();
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"
@@ -49,20 +52,25 @@ const StartPreference: React.FC = () => {
           <OnboardingStep.AnswerCard option={OPTIONS.TEST_PROMPTS} />
         </Link>
 
-        <Link
-          to="/$workspaceName/experiments"
-          params={{ workspaceName }}
-          search={
-            showEnhancedOnboarding
-              ? {
-                  new: { experiment: true, datasetName: "Opik Demo Questions" },
-                }
-              : undefined
-          }
-          className="w-full"
-        >
-          <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />
-        </Link>
+        {canViewExperiments && (
+          <Link
+            to="/$workspaceName/experiments"
+            params={{ workspaceName }}
+            search={
+              showEnhancedOnboarding
+                ? {
+                    new: {
+                      experiment: true,
+                      datasetName: "Opik Demo Questions",
+                    },
+                  }
+                : undefined
+            }
+            className="w-full"
+          >
+            <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />
+          </Link>
+        )}
       </OnboardingStep.AnswerList>
 
       {showEnhancedOnboarding ? (

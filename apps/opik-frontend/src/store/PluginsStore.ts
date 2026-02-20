@@ -13,6 +13,9 @@ type PluginStore = {
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
+  PermissionsProvider: React.ComponentType<{
+    children: React.ReactNode;
+  }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
@@ -34,9 +37,11 @@ const PLUGIN_NAMES = [
   "GetStartedPage",
   "GoogleColabCard",
   "WorkspacePreloader",
+  "PermissionsProvider",
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
+  "SideBarMenuItems",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
@@ -50,9 +55,11 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GetStartedPage: null,
   GoogleColabCard: null,
   WorkspacePreloader: null,
+  PermissionsProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
+  SideBarMenuItems: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
