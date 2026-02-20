@@ -224,7 +224,7 @@ batchOperations:
 # Configuration for experiment aggregates population
 experimentAggregates:
   # Default: 1000
-  # Description: The batch size for processing experiment items when populating experiment_item_aggregates table
+  # Description: Number of experiment items processed per batch when populating experiment_item_aggregates table. Higher values improve performance but increase memory usage. Recommended range: 100-5000.
   batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.

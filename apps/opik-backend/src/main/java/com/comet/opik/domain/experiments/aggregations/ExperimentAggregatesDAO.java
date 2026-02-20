@@ -105,6 +105,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FROM experiment_aggregates FINAL
             WHERE workspace_id = :workspace_id
             AND id = :experiment_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -148,9 +149,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 AND experiment_id = :experiment_id
             )
             SELECT DISTINCT project_id
-            FROM traces
+            FROM traces FINAL
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT trace_id FROM experiment_trace_items)
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -231,17 +234,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             SELECT
                 :experiment_id as experiment_id,
                 avgMap(usage) as usage_avg,
-                sum(total_estimated_cost) as total_estimated_cost_sum,
-                avg(total_estimated_cost) as total_estimated_cost_avg,
+                coalesce(sum(total_estimated_cost), 0.0) as total_estimated_cost_sum,
+                coalesce(avg(total_estimated_cost), 0.0) as total_estimated_cost_avg,
                 mapFromArrays(
                     ['p50', 'p90', 'p99'],
                     arrayMap(
-                        v -> toDecimal64(
+                        v -> toDecimal128(
                             greatest(
-                                least(if(isFinite(toFloat64(v)), v, 0), 999999999.999999999),
-                                -999999999.999999999
+                                least(if(isFinite(toFloat64(v)), v, 0), 999999999999.999999999999),
+                                -999999999999.999999999999
                             ),
-                            9
+                            12
                         ),
                         quantiles(0.5, 0.9, 0.99)(total_estimated_cost)
                     )
@@ -390,7 +393,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 :trace_count,
                 :experiment_items_count,
                 mapFromArrays(:duration_percentiles_keys, :duration_percentiles_values),
-                CAST(map() AS Map(String, Map(String, Float64))),
+                :feedback_scores_percentiles,
                 mapFromArrays(:feedback_scores_avg_keys, :feedback_scores_avg_values),
                 :total_estimated_cost_sum,
                 :total_estimated_cost_avg,
@@ -625,26 +628,41 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             return getExperimentData(experimentId)
                     .flatMap(experimentData -> {
-                        // First get project_id
-                        return getProjectId(experimentId)
-                                .flatMap(projectId -> {
-                                    // Now fetch aggregations using project_id for filtering
-                                    return Mono.zip(
-                                            getTraceAggregations(experimentId, projectId),
-                                            getSpanAggregations(experimentId, projectId),
-                                            getFeedbackScoreAggregations(experimentId, projectId),
-                                            getExperimentItemsCount(experimentId)).flatMap(tuple -> {
-                                                var traceAgg = tuple.getT1();
-                                                var spanAgg = tuple.getT2();
-                                                var feedbackAgg = tuple.getT3();
-                                                var itemsCount = tuple.getT4();
+                        // First check if experiment has any items
+                        return getExperimentItemsCount(experimentId)
+                                .flatMap(itemsCount -> {
+                                    if (itemsCount == 0) {
+                                        // Handle experiments with zero items - insert empty aggregate row
+                                        log.info("Experiment '{}' has no items, inserting empty aggregate",
+                                                experimentId);
+                                        return insertExperimentAggregate(
+                                                experimentData,
+                                                createEmptyTraceAggregations(experimentId),
+                                                createEmptySpanAggregations(experimentId),
+                                                createEmptyFeedbackScoreAggregations(experimentId),
+                                                0L);
+                                    }
 
-                                                return insertExperimentAggregate(
-                                                        experimentData,
-                                                        traceAgg,
-                                                        spanAgg,
-                                                        feedbackAgg,
-                                                        itemsCount);
+                                    // Get project_id for experiments with items
+                                    return getProjectId(experimentId)
+                                            .flatMap(projectId -> {
+                                                // Fetch aggregations using project_id for filtering
+                                                return Mono.zip(
+                                                        getTraceAggregations(experimentId, projectId),
+                                                        getSpanAggregations(experimentId, projectId),
+                                                        getFeedbackScoreAggregations(experimentId, projectId))
+                                                        .flatMap(tuple -> {
+                                                            var traceAgg = tuple.getT1();
+                                                            var spanAgg = tuple.getT2();
+                                                            var feedbackAgg = tuple.getT3();
+
+                                                            return insertExperimentAggregate(
+                                                                    experimentData,
+                                                                    traceAgg,
+                                                                    spanAgg,
+                                                                    feedbackAgg,
+                                                                    itemsCount);
+                                                        });
                                             });
                                 });
                     })
@@ -862,6 +880,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("experiment_items_count", itemsCount)
                     .bind("duration_percentiles_keys", durationPercentilesArrays.keys())
                     .bind("duration_percentiles_values", durationPercentilesArrays.values())
+                    .bind("feedback_scores_percentiles",
+                            defaultIfNull(feedbackAgg.feedbackScoresPercentiles(), Map.of()))
                     .bind("total_estimated_cost_sum", spanAgg.totalEstimatedCostSum())
                     .bind("total_estimated_cost_avg", spanAgg.totalEstimatedCostAvg())
                     .bind("total_estimated_cost_percentiles_keys", totalEstimatedCostPercentilesArrays.keys())
@@ -984,7 +1004,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             statement.bind("id" + i, item.id())
                     .bind("has_usage" + i, !usageMap.isEmpty())
                     .bind("has_feedback_scores" + i, !feedbackScoresMap.isEmpty())
-                    .bind("id" + i, item.id())
                     .bind("experiment_id" + i, item.experimentId())
                     .bind("dataset_item_id" + i, item.datasetItemId())
                     .bind("trace_id" + i, item.traceId())
@@ -1198,7 +1217,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         JsonNode metadata = getJsonNodeOrNull(row, "metadata");
 
         // tags is Array(String), read as List<String> and convert to Set<String>
-        Set<String> tags = Set.copyOf(row.get("tags", List.class));
+        Set<String> tags = Set.copyOf(Optional.ofNullable(row.get("tags", List.class)).orElse(List.of()));
 
         // type is Enum8, read as String and convert to ExperimentType
         ExperimentType type = ExperimentType.fromString(row.get("type", String.class));
@@ -1477,5 +1496,33 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
                 });
+    }
+
+    private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {
+        return TraceAggregations.builder()
+                .experimentId(experimentId)
+                .projectId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                .durationPercentiles(Map.of())
+                .traceCount(0L)
+                .build();
+    }
+
+    private SpanAggregations createEmptySpanAggregations(UUID experimentId) {
+        return SpanAggregations.builder()
+                .experimentId(experimentId)
+                .usageAvg(Map.of())
+                .totalEstimatedCostSum(0.0)
+                .totalEstimatedCostAvg(0.0)
+                .totalEstimatedCostPercentiles(Map.of())
+                .usageTotalTokensPercentiles(Map.of())
+                .build();
+    }
+
+    private FeedbackScoreAggregations createEmptyFeedbackScoreAggregations(UUID experimentId) {
+        return FeedbackScoreAggregations.builder()
+                .experimentId(experimentId)
+                .feedbackScoresPercentiles(Map.of())
+                .feedbackScoresAvg(Map.of())
+                .build();
     }
 }

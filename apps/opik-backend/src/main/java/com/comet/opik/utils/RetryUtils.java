@@ -33,10 +33,11 @@ public class RetryUtils {
         return Retry.backoff(5, Duration.ofMillis(250))
                 .maxBackoff(Duration.ofSeconds(2))
                 .jitter(0.5) // Add jitter to reduce thundering herd effect
-                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: '{}'",
+                        retrySignal.failure().getMessage(), retrySignal.failure()))
                 .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
                 .filter(throwable -> {
-                    log.debug("Filtering for retry: {}", throwable.getMessage());
+                    log.debug("Filtering for retry: '{}'", throwable.getMessage(), throwable);
 
                     return isDatabaseDeadlock(throwable);
                 });
