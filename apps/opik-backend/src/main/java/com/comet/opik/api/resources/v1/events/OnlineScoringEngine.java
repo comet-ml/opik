@@ -217,7 +217,8 @@ public class OnlineScoringEngine {
         Map<String, String> replacements;
         if (variablesMap == null || variablesMap.isEmpty()) {
             // New mode: treat template variables directly as JSONPath
-            Set<String> templateVariables = OnlineScoringDataExtractor.extractAllVariablesFromMessages(templateMessages);
+            Set<String> templateVariables = OnlineScoringDataExtractor
+                    .extractAllVariablesFromMessages(templateMessages);
             replacements = OnlineScoringDataExtractor.toReplacementsFromTemplateVariables(templateVariables, trace);
         } else {
             // Legacy mode: use the variables mapping
@@ -245,7 +246,8 @@ public class OnlineScoringEngine {
         Map<String, String> replacements;
         if (variablesMap == null || variablesMap.isEmpty()) {
             // New mode: treat template variables directly as JSONPath
-            Set<String> templateVariables = OnlineScoringDataExtractor.extractAllVariablesFromMessages(templateMessages);
+            Set<String> templateVariables = OnlineScoringDataExtractor
+                    .extractAllVariablesFromMessages(templateMessages);
             replacements = OnlineScoringDataExtractor.toReplacementsFromTemplateVariables(templateVariables, span);
         } else {
             // Legacy mode: use the variables mapping
