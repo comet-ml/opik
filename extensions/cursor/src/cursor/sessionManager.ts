@@ -7,7 +7,8 @@ import { findFolder } from '../utils';
 import { captureException } from '../sentry';
 import { executeQuery, executeQueryPaginated } from './sqlite';
 
-import { TraceData } from "../interface";
+import { TraceData, SpanData } from "../interface";
+import { debugLog } from '../utils';
 
 /**
  * Convert cursor conversations to Opik traces with per-session tracking.
@@ -175,7 +176,7 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
     try {
         // Use the original database path directly
         const dbPath = stateDbPath;
-        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const fiveMinutesAgo = Date.now() - (10 * 1000);
         const lastSyncedAtWithBuffer = lastSyncedAt - (5 * 60 * 1000);
 
         // Find all composer chats updated between last sync and current sync time
@@ -190,12 +191,19 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                          AND json_extract(value, '$.lastUpdatedAt') < ${fiveMinutesAgo}))`;
         
         const composerRows = await executeQuery(dbPath, composerQuery);
-        
+
+        // Explore DB key prefixes for discovery
+        try {
+            const prefixQuery = `SELECT SUBSTR(key, 1, INSTR(key || ':', ':') - 1) as prefix, COUNT(*) as cnt FROM cursorDiskKV GROUP BY prefix ORDER BY cnt DESC LIMIT 30`;
+            const prefixes = await executeQuery(dbPath, prefixQuery);
+            debugLog('DB key prefixes', prefixes);
+        } catch (e) { /* ignore */ }
+
         if (!composerRows || composerRows.length === 0) {
             console.log(`⚠️ No composer data found (queried ${lastSyncedAt} < lastUpdatedAt <= ${currentSyncTime})`);
             return [];
         }
-        
+
         console.log(`📊 Found ${composerRows.length} composer(s) updated since last sync (${lastSyncedAt} < lastUpdatedAt <= ${currentSyncTime})`);
         
         // Log the composer IDs and their update times for debugging
@@ -313,14 +321,22 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                     });
                 }
                 
-                // Add conversation
                 conversations.push({
                     chatTitle: composerData.name || `Composer Session ${index + 1}`,
                     bubbles: bubbles,
                     lastSendTime: composerData.lastUpdatedAt || composerData.createdAt,
                     composerId: threadId,
                     createdAt: composerData.createdAt,
-                    bubbleCount: bubbles.length
+                    bubbleCount: bubbles.length,
+                    modelName: composerData.modelConfig?.modelName,
+                    usageData: composerData.usageData,
+                    contextTokensUsed: composerData.contextTokensUsed,
+                    contextTokenLimit: composerData.contextTokenLimit,
+                    isAgentic: composerData.isAgentic,
+                    unifiedMode: composerData.unifiedMode,
+                    agentBackend: composerData.agentBackend,
+                    status: composerData.status,
+                    createdOnBranch: composerData.createdOnBranch,
                 });
             } catch (parseErr) {
                 captureException(parseErr);
@@ -434,6 +450,53 @@ function groupBubblesByType(bubbles: any[]) {
     return groups;
 }
 
+function parseThinkingBlocks(text: string): { thinkingSpans: SpanData[]; cleanedText: string } {
+    const thinkingSpans: SpanData[] = [];
+    const thoughtRegex = /⛢Thought☤([\s\S]*?)⛢\/Thought☤/g;
+    let match;
+    let count = 0;
+    while ((match = thoughtRegex.exec(text)) !== null) {
+        count++;
+        thinkingSpans.push({
+            name: 'Thinking',
+            type: 'llm',
+            input: {},
+            output: { thinking: match[1].trim() },
+            tags: ['cursor', 'thinking'],
+        });
+    }
+    const cleanedText = text
+        .replace(/⛢Thought☤[\s\S]*?⛢\/Thought☤/g, '')
+        .replace(/⛢Action☤[\s\S]*?⛢\/Action☤/g, '')
+        .replace(/⛢RawAction☤[\s\S]*?⛢\/RawAction☤/g, '')
+        .trim();
+    return { thinkingSpans, cleanedText };
+}
+
+function parseToolSpans(bubble: any): SpanData[] {
+    if (!bubble.toolFormerData) return [];
+    const tools = Array.isArray(bubble.toolFormerData) ? bubble.toolFormerData : [bubble.toolFormerData];
+    return tools.map((tool: any, i: number) => {
+        let input = {};
+        try { input = tool.params ? JSON.parse(tool.params) : (tool.rawArgs ? JSON.parse(tool.rawArgs) : {}); } catch { input = tool.params || tool.rawArgs || {}; }
+        let output: any;
+        try { output = tool.result ? { result: JSON.parse(tool.result) } : undefined; } catch { output = tool.result != null ? { result: tool.result } : undefined; }
+        return {
+            name: tool.name || `tool_${i}`,
+            type: 'tool' as const,
+            input,
+            output,
+            metadata: {
+                tool_call_id: tool.toolCallId,
+                tool_name: tool.name,
+                status: tool.status,
+                message_type: 'tool_use',
+            },
+            tags: ['cursor', 'tool_use', tool.name].filter(Boolean),
+        };
+    });
+}
+
 // Helper function to create a trace from a bubble group
 function createTraceFromBubbleGroup(
     group: { userMessages: any[], aiMessages: any[] },
@@ -443,27 +506,119 @@ function createTraceFromBubbleGroup(
 ): TraceData | null {
     const { userMessages, aiMessages } = group;
     
-    // Extract user content inline
     const userContent = userMessages
         .map(msg => msg.text || msg.content || msg.rawText || '')
         .filter(content => content.trim())
         .join('\n\n');
-    
-    // Extract and clean AI content inline
-    const assistantContent = aiMessages
-        .map(msg => {
-            let content = msg.text || msg.content || msg.rawText || '';
-            // Clean cursor-specific markup
-            return content
-                .replace(/⛢Thought☤[\s\S]*?⛢\/Thought☤/g, '')
-                .replace(/⛢Action☤[\s\S]*?⛢\/Action☤/g, '')
-                .replace(/⛢RawAction☤[\s\S]*?⛢\/RawAction☤/g, '')
-                .trim();
-        })
-        .filter(content => content)
-        .join('\n\n');
-    
-    // Filter out traces without proper input or output
+
+    const spans: SpanData[] = [];
+    const cleanedParts: string[] = [];
+
+    for (const msg of aiMessages) {
+        const text = msg.text || msg.content || msg.rawText || '';
+        const bubbleTime = msg.createdAt ? new Date(msg.createdAt).toISOString() : undefined;
+
+        debugLog(`AI bubble: capabilityType=${msg.capabilityType}, thinking=${!!msg.thinking}, tool=${msg.toolFormerData?.name || 'none'}, tokens=${msg.tokenCount?.inputTokens || 0}/${msg.tokenCount?.outputTokens || 0}`);
+
+        // Per-message usage: apply only to first span from this message (dedup like Claude plugin)
+        const msgUsage = msg.tokenCount && (msg.tokenCount.inputTokens || msg.tokenCount.outputTokens)
+            ? {
+                prompt_tokens: msg.tokenCount.inputTokens || 0,
+                completion_tokens: msg.tokenCount.outputTokens || 0,
+                total_tokens: (msg.tokenCount.inputTokens || 0) + (msg.tokenCount.outputTokens || 0),
+            }
+            : undefined;
+        let usageApplied = false;
+
+        // 1. Check for `thinking` field (structured thinking from Cursor)
+        if (msg.thinking && msg.thinking.text) {
+            const thinkingEndTime = msg.thinkingDurationMs && bubbleTime
+                ? new Date(new Date(msg.createdAt).getTime() + msg.thinkingDurationMs).toISOString()
+                : bubbleTime;
+            spans.push({
+                name: 'Thinking',
+                type: 'llm',
+                input: {},
+                output: { thinking: msg.thinking.text },
+                start_time: bubbleTime,
+                end_time: thinkingEndTime,
+                usage: !usageApplied ? msgUsage : undefined,
+                model: conversation.modelName,
+                provider: 'cursor',
+                tags: ['cursor', 'thinking'],
+            });
+            if (msgUsage) usageApplied = true;
+        }
+
+        // 2. Check allThinkingBlocks as fallback
+        if (!msg.thinking && msg.allThinkingBlocks && Array.isArray(msg.allThinkingBlocks) && msg.allThinkingBlocks.length > 0) {
+            msg.allThinkingBlocks.forEach((block: any) => {
+                spans.push({
+                    name: 'Thinking',
+                    type: 'llm',
+                    input: {},
+                    output: { thinking: block.thinking || block.content || block },
+                    start_time: bubbleTime,
+                    end_time: bubbleTime,
+                    usage: !usageApplied ? msgUsage : undefined,
+                    model: conversation.modelName,
+                    provider: 'cursor',
+                    tags: ['cursor', 'thinking'],
+                });
+                if (msgUsage) usageApplied = true;
+            });
+        }
+
+        // 3. Regex fallback for ⛢Thought☤ markup
+        const { thinkingSpans, cleanedText } = parseThinkingBlocks(text);
+        if (!msg.thinking && (!msg.allThinkingBlocks || !Array.isArray(msg.allThinkingBlocks) || msg.allThinkingBlocks.length === 0)) {
+            for (const ts of thinkingSpans) {
+                ts.input = {};
+                ts.start_time = bubbleTime;
+                ts.end_time = bubbleTime;
+                ts.model = conversation.modelName;
+                ts.provider = 'cursor';
+                if (!usageApplied && msgUsage) {
+                    ts.usage = msgUsage;
+                    usageApplied = true;
+                }
+                spans.push(ts);
+            }
+        }
+
+        // 4. Tool spans
+        const toolSpans = parseToolSpans(msg);
+        for (const ts of toolSpans) {
+            ts.start_time = bubbleTime;
+            ts.end_time = bubbleTime;
+            if (!usageApplied && msgUsage) {
+                ts.usage = msgUsage;
+                usageApplied = true;
+            }
+            spans.push(ts);
+        }
+
+        // 5. Text span
+        if (cleanedText) {
+            cleanedParts.push(cleanedText);
+            spans.push({
+                name: 'Text',
+                type: 'general',
+                input: {},
+                output: { text: cleanedText },
+                start_time: bubbleTime,
+                end_time: bubbleTime,
+                usage: !usageApplied ? msgUsage : undefined,
+                model: conversation.modelName,
+                provider: 'cursor',
+                tags: ['cursor', 'assistant_response'],
+            });
+            if (msgUsage) usageApplied = true;
+        }
+    }
+
+    const assistantContent = cleanedParts.join('\n\n');
+
     if (!userContent || !assistantContent) {
         return null;
     }
@@ -487,56 +642,81 @@ function createTraceFromBubbleGroup(
         total_tokens: totalPromptTokens + totalCompletionTokens
     } : undefined;
 
-    // Extract timestamp from the resolved timestamps
     const firstUserMessage = userMessages[0];
     const lastAiMessage = aiMessages[aiMessages.length - 1];
-    
-    const startTime = firstUserMessage.resolvedTimestamp || conversation.createdAt || Date.now();
-    const endTime = lastAiMessage.resolvedTimestamp || startTime + 1000; // Add 1 second if no end time
 
-    // Create metadata inline
-    const cleanMessages = (messages: any[]) => 
-        messages.map(msg => {
-            const cleanMsg = { ...msg };
-            delete cleanMsg.delegate;
-            return cleanMsg;
-        });
+    // Prefer createdAt (ISO string) for accurate timestamps, fall back to resolvedTimestamp
+    const startTime = firstUserMessage.createdAt
+        ? new Date(firstUserMessage.createdAt).getTime()
+        : (firstUserMessage.resolvedTimestamp || conversation.createdAt || Date.now());
+    const endTime = lastAiMessage.createdAt
+        ? new Date(lastAiMessage.createdAt).getTime()
+        : (lastAiMessage.resolvedTimestamp || startTime + 1000);
 
-    const metadata = {
+    // Compute cost from usageData
+    let totalCostCents = 0;
+    let totalRequests = 0;
+    if (conversation.usageData && typeof conversation.usageData === 'object') {
+        for (const modelKey of Object.keys(conversation.usageData)) {
+            const entry = conversation.usageData[modelKey];
+            if (entry?.costInCents) totalCostCents += entry.costInCents;
+            if (entry?.amount) totalRequests += entry.amount;
+        }
+    }
+
+    const metadata: any = {
         conversationTitle: conversation.chatTitle,
         composerId: conversation.composerId,
-        userMessages: cleanMessages(userMessages),
-        aiMessages: cleanMessages(aiMessages),
+        model: conversation.modelName,
         totalBubbles: conversation.bubbleCount,
         conversationCreatedAt: conversation.createdAt,
-        gitInfo: gitInfo
+        gitInfo: gitInfo,
+        cursor: {
+            isAgentic: conversation.isAgentic,
+            unifiedMode: conversation.unifiedMode,
+            agentBackend: conversation.agentBackend,
+            status: conversation.status,
+            createdOnBranch: conversation.createdOnBranch,
+        },
     };
 
-    // Create git-based tags only for recent conversations (last 2 minutes)
-    const TWO_MINUTES_MS = 2 * 60 * 1000; // 2 minutes in milliseconds
+    if (totalCostCents > 0) {
+        metadata.cost = {
+            totalCostCents,
+            totalCostDollars: totalCostCents / 100,
+            totalRequests,
+            usageData: conversation.usageData,
+        };
+    }
+
+    if (conversation.contextTokensUsed) {
+        metadata.context = {
+            tokensUsed: conversation.contextTokensUsed,
+            tokenLimit: conversation.contextTokenLimit,
+            utilizationPercent: conversation.contextTokenLimit
+                ? Math.round((conversation.contextTokensUsed / conversation.contextTokenLimit) * 100)
+                : undefined,
+        };
+    }
+
+    const tags: string[] = ['cursor'];
+    if (conversation.modelName) tags.push(conversation.modelName);
+    if (conversation.isAgentic) tags.push('agentic');
+
     const conversationAge = Date.now() - (conversation.createdAt || 0);
-    const isRecentConversation = conversationAge <= TWO_MINUTES_MS;
-    
-    const tags: string[] = [];
+    const isRecentConversation = conversationAge <= 2 * 60 * 1000;
+
     if (isRecentConversation && gitInfo) {
-        // Apply current git context for recent conversations
-        if (gitInfo.branch) {
-            tags.push(gitInfo.branch);
-        }
-        if (gitInfo.repoName) {
-            tags.push(`repo:${gitInfo.repoName}`);
-        }
-        if (gitInfo.commit) {
-            tags.push(`commit:${gitInfo.commit}`);
-        }
-        tags.push("recent");
+        if (gitInfo.branch) tags.push(gitInfo.branch);
+        if (gitInfo.repoName) tags.push(`repo:${gitInfo.repoName}`);
+        if (gitInfo.commit) tags.push(`commit:${gitInfo.commit}`);
+        tags.push('recent');
     } else {
-        // Mark older conversations as historical
-        tags.push("historical");
+        tags.push('historical');
     }
 
     const traceData: any = {
-        name: "cursor-chat",
+        name: conversation.chatTitle || 'cursor-chat',
         project_name: opikProjectName,
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
@@ -544,12 +724,16 @@ function createTraceFromBubbleGroup(
         output: { output: assistantContent },
         thread_id: conversation.composerId,
         tags: tags,
-        metadata: metadata
+        metadata: metadata,
+        model: conversation.modelName,
     };
 
-    // Only include usage if we have token counts
     if (usage) {
         traceData.usage = usage;
+    }
+
+    if (spans.length > 0) {
+        traceData.spans = spans;
     }
 
     return traceData;

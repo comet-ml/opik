@@ -44,15 +44,57 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
                 threadId: traceData.thread_id
             });
             
-            // Create LLM span with usage data if available
-            if (traceData.usage && (traceData.usage.completion_tokens || traceData.usage.prompt_tokens || traceData.usage.total_tokens)) {
+            const startTime = new Date(traceData.start_time);
+            const endTime = traceData.end_time ? new Date(traceData.end_time) : undefined;
+
+            if (traceData.spans && traceData.spans.length > 0) {
+                const parentSpan = trace.span({
+                    name: traceData.name,
+                    type: 'general',
+                    input: traceData.input,
+                    output: traceData.output,
+                    startTime,
+                    endTime,
+                    model: traceData.model,
+                    usage: traceData.usage ? {
+                        completionTokens: traceData.usage.completion_tokens || 0,
+                        promptTokens: traceData.usage.prompt_tokens || 0,
+                        totalTokens: traceData.usage.total_tokens || 0
+                    } : undefined,
+                    tags: traceData.tags,
+                    metadata: traceData.metadata,
+                });
+
+                for (const spanData of traceData.spans) {
+                    const child = parentSpan.span({
+                        name: spanData.name,
+                        type: spanData.type,
+                        input: spanData.input,
+                        output: spanData.output,
+                        startTime: spanData.start_time ? new Date(spanData.start_time) : startTime,
+                        endTime: spanData.end_time ? new Date(spanData.end_time) : endTime,
+                        model: spanData.model,
+                        provider: spanData.provider,
+                        usage: spanData.usage ? {
+                            completionTokens: spanData.usage.completion_tokens || 0,
+                            promptTokens: spanData.usage.prompt_tokens || 0,
+                            totalTokens: spanData.usage.total_tokens || 0
+                        } : undefined,
+                        metadata: spanData.metadata,
+                        tags: spanData.tags,
+                    });
+                    child.end();
+                }
+                parentSpan.end();
+            } else if (traceData.usage && (traceData.usage.completion_tokens || traceData.usage.prompt_tokens || traceData.usage.total_tokens)) {
                 const span = trace.span({
                     name: traceData.name,
                     type: 'llm',
                     input: traceData.input,
                     output: traceData.output,
-                    startTime: new Date(traceData.start_time),
-                    endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
+                    startTime,
+                    endTime,
+                    model: traceData.model,
                     usage: {
                         completionTokens: traceData.usage.completion_tokens || 0,
                         promptTokens: traceData.usage.prompt_tokens || 0,
@@ -61,8 +103,6 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
                     tags: traceData.tags,
                     metadata: traceData.metadata
                 });
-                
-                // End the span
                 span.end();
             }
             

@@ -14,6 +14,20 @@ export interface Session {
     cursorSession?: CursorSession;
 }
 
+export interface SpanData {
+    name: string;
+    type: 'llm' | 'tool' | 'general';
+    input?: any;
+    output?: any;
+    start_time?: string;
+    end_time?: string;
+    metadata?: any;
+    tags?: string[];
+    usage?: { completion_tokens?: number; prompt_tokens?: number; total_tokens?: number };
+    model?: string;
+    provider?: string;
+}
+
 export interface TraceData {
     name: string;
     project_name?: string;
@@ -29,4 +43,6 @@ export interface TraceData {
         total_tokens?: number;
     };
     metadata?: any;
+    spans?: SpanData[];
+    model?: string;
 }
