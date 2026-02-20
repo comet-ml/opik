@@ -17,11 +17,11 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 Run commands from `sdks/python` unless noted.
 - `pip install -r tests/test_requirements.txt && pytest tests/unit tests/integration tests/e2e`: install test dependencies and run standard tests.
 - `pytest tests/e2e_library_integration tests/e2e_smoke`: run higher-cost integration coverage.
-- `git diff --name-only | xargs pre-commit run --files`: run formatting, linting, and mypy hooks on changed files only.
+- `make precommit`: run formatting, linting, and mypy hooks on changed files in this module (repo-level shared entry is `make precommit-sdks`).
 - `opik configure --use_local` (or `opik configure`): local SDK configuration for local/dev environments.
 
 ## Coding Style & Naming Conventions
-- Python target is 3.10+ with 4-space indentation and line length 88.
+- Python target matches the module’s supported versions in `pyproject.toml` (currently 3.10+) with 4-space indentation and line length 88.
 - Primary style tooling: `ruff` and `ruff format` (configured in `.ruff.toml`) plus `mypy` (via pre-commit).
 - Prefer explicit names, avoid abbreviations; avoid `utils.py`/`helpers.py` style catch-alls.
 - Prefer module-style imports over single-name imports in new code.

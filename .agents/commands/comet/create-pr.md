@@ -123,6 +123,9 @@ This workflow will:
   
   # For frontend projects
   (cd apps/opik-frontend && npm run lint && npm run typecheck)
+
+  # For SDK changes
+  (cd "$(git rev-parse --show-toplevel)" && make precommit-sdks)
   ```
 - **If all pass**: Continue to next step
 - **If errors found**: Run auto-fix commands, then re-verify:
@@ -132,6 +135,9 @@ This workflow will:
   
   # For frontend projects
   (cd apps/opik-frontend && npm run lint:fix && npm run lint && npm run typecheck)
+
+  # For SDK changes
+  (cd "$(git rev-parse --show-toplevel)" && make precommit-sdks)
   ```
 - **If quality checks still fail**: Show errors and ask if user wants to continue
 - **If user chooses to continue**: Proceed with warnings
@@ -152,7 +158,7 @@ This workflow will:
 ### 7. Pre-fill PR Template
 
 - **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TYPE}: {TASK-SUMMARY}` extracted from branch description and change analysis
-  - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat: add create trace endpoint`
+  - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`
 - **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public:
   ```markdown
   ## Details

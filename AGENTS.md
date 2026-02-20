@@ -28,7 +28,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - `cd apps/opik-backend && mvn test` — backend unit/integration tests.
 - `cd apps/opik-backend && mvn spotless:apply` — apply Java formatting.
 - `cd sdks/python && pip install -r tests/test_requirements.txt && pip install -r tests/unit/test_requirements.txt && pytest tests/unit tests/e2e` — Python SDK test suites.
-- `cd sdks/python && git diff --name-only | xargs pre-commit run --files` — lint/format gate for Python changes (staged/changed files only).
+- `make precommit-sdks` — run module-specific pre-commit checks across all SDKs from their local docs (do not duplicate SDK-specific command lines in multiple places).
 - `cd sdks/typescript && npm run lint && npm run test && npm run build` — TS SDK checks.
 - `cd tests_end_to_end/typescript-tests && TEST_SUITE=sanity npm test` — cross-stack Playwright sanity suite.
 
@@ -49,7 +49,7 @@ This repository is a multi-module Opik codebase. Main areas:
 - For SDK integration tests requiring external services, document any required keys in the PR.
 - For end-to-end execution across backend/frontend, use:
   - `./opik.sh` or `scripts/dev-runner.sh` to start local services
-  - `tests_end_to_end/README.md` for suite-specific commands and helper-service setup
+  - `tests_end_to_end/typescript-tests/README.md` for suite-specific command and helper-service setup
 
 ## Agent Contribution Workflow
 - This repository is a monorepo; submodule `AGENTS.md` files inherit this workflow by default.
@@ -60,7 +60,8 @@ This repository is a multi-module Opik codebase. Main areas:
 - Run relevant unit tests and formatters for the touched area before requesting review.
 
 ## Commit & Pull Request Guidelines
-- Recent history uses ticket/component prefixes such as `[OPIK-1234] [BE] ...`, `[FE]`, `[SDK]`, `[DOCS]`, `[NA]`, `[INFRA]`.
+- PR title and first commit should use semantic style with ticket prefix: `[OPIK-1234] [COMPONENT] feat|fix|refactor|docs: short summary`.
+- Follow existing component prefixes (`[FE]`, `[SDK]`, `[DOCS]`, `[NA]`, `[INFRA]`, etc.).
 - PR descriptions should include: change summary, test coverage run, and linked issue references (`Resolves #...`).
 - Follow `pull_request_template.md` sections: Details, checklist, Issues, Testing, Documentation.
 - Include screenshots or short recordings for user-visible UI changes when possible.

@@ -84,7 +84,7 @@ This workflow will:
 
 - **Extract Jira ticket from PR title**:
   - Parse PR title for pattern `[OPIK-\d+]` or `[issue-\d+]` or `[NA]`
-  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] Add endpoint`)
+  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`)
   - If not found in title, check PR description "## Issues" section for `OPIK-\d+` pattern
   - If still not found, prompt: "Jira ticket not found in PR. Enter Jira ticket number (e.g., OPIK-1234):"
   - Validate format and store
@@ -338,7 +338,7 @@ cursor send-code-review-slack
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
-# 2. Extract Jira ticket from PR title: [OPIK-1234] [BE] [FE] Add metrics dashboard
+# 2. Extract Jira ticket from PR title: [OPIK-1234] [BE] feat(api): add metrics dashboard
 # 3. Extract test env from PR comments or description: https://pr-1234.dev.comet.com (from PR comments or Testing section)
 # 4. Extract summaries from PR description:
 #    - FE: Added new metrics dashboard UI (from Details section)

@@ -14,6 +14,16 @@ If you need to have changes explained in detail include single line dot point(s)
 - Resolves #
 - OPIK-
 
+## AI-WATERMARK
+
+AI-WATERMARK: [yes|no]
+
+- If yes:
+  - Tools:
+  - Model(s):
+  - Scope:
+  - Human verification:
+
 ## Testing
 <!--
 REPLACE ME WITH:
