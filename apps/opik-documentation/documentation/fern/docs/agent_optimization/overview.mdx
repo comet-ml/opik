@@ -13,7 +13,7 @@ og:title: Optimize Prompts with Opik Agent Optimizer
 title: Agent Optimization
 ---
 
-**Opik Agent Optimizer** is a turnkey, open-source agent and prompt optimization SDK. It automatically tunes prompts, tools, and agent workflows using the datasets, metrics, and traces you already log to Opik. Instead of hand-editing instructions and re-running evaluations, pick an optimizer (MetaPrompt, HRPO, Evolutionary, GEPA, etc.) and let it iterate for you online or fully offline inside Docker and Kubernetes.
+**Opik Agent Optimizer** is a turnkey, open-source agent and prompt optimization SDK. It automatically tunes prompts and agent workflows (including tool-using agents) using the datasets, metrics, and traces you already log to Opik. MCP tool schema optimization support is coming soon. Instead of hand-editing instructions and re-running evaluations, pick an optimizer (MetaPrompt, HRPO, Evolutionary, GEPA, etc.) and let it iterate for you online or fully offline inside Docker and Kubernetes.
 
 <Frame>
   <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard showing optimization progress" />
@@ -23,20 +23,21 @@ title: Agent Optimization
 
 - **Automatic prompt optimization** – end-to-end workflow that installs in minutes and runs locally or in your stack.
 - **Open-source and framework agnostic** – no lock-in, use Opik’s first-party optimizers or community favorites like GEPA in the same SDK.
-- **Agent-aware** – optimize beyond system prompts, including MCP tool signatures, function-calling schemas, and multi-step agent workflows.
+- **Agent-aware** – optimize beyond system prompts, including multi-step workflows and tool-using agents. MetaPrompt adds MCP tool schema optimization (beta).
+- **Multimodal-ready** – optimize prompts that include text + image/audio/video content parts. See [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal).
 - **Deep observability** – every trial logs prompts, tool calls, traces, and metric reasons to Opik so you can explain and ship changes confidently.
 
 ## Key capabilities
 
 <CardGroup cols={2}>
   <Card title="Optimizer suite" href="/agent_optimization/algorithms/overview" icon="fa-solid fa-diagram-project" iconPosition="left">
-    MetaPrompt, HRPO, Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning. Swap optimizers without changing your workflow.
+    MetaPrompt, HRPO, Few-Shot Bayesian, Evolutionary, GEPA, Parameter optimization. Swap optimizers without changing your workflow.
   </Card>
   <Card title="Multi-agent + multi-prompt" href="/agent_optimization/optimization/optimize_agents" icon="fa-solid fa-people-group" iconPosition="left">
     Optimize full agent systems with multiple prompts, tools, and orchestration logic, not just a single system message.
   </Card>
   <Card title="Tool & function calling" href="/agent_optimization/algorithms/tool_optimization" icon="fa-solid fa-screwdriver-wrench" iconPosition="left">
-    Optimize tool schemas and function calling alongside prompt text with the same metrics and datasets.
+    Optimize tool-using prompts and function calling alongside prompt text. MetaPrompt adds MCP tool schema optimization (beta).
   </Card>
   <Card title="Dashboard analytics" href="/agent_optimization/optimization/dashboard_results" icon="fa-solid fa-chart-line" iconPosition="left">
     Track trials, candidates, datasets, and trace-level evidence to explain and ship improvements confidently.
@@ -78,7 +79,7 @@ as a first step:
 
 | **Algorithm**                                                                               | **Description**                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/agent_optimization/algorithms/tool_optimization).** |
+| [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool optimization](/agent_optimization/algorithms/tool_optimization) (beta, MetaPrompt-only).** |
 | [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
