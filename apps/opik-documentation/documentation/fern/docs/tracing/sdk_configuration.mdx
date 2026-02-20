@@ -116,6 +116,7 @@ Both SDKs support environment variables for configuration. Here's a comparison o
 | Project Name        | `OPIK_PROJECT_NAME`          | `OPIK_PROJECT_NAME`     | Project name                                   |
 | Workspace           | `OPIK_WORKSPACE`             | `OPIK_WORKSPACE`        | Workspace name                                 |
 | Config Path         | `OPIK_CONFIG_PATH`           | `OPIK_CONFIG_PATH`      | Custom config file location                    |
+| Default LLM         | `OPIK_DEFAULT_LLM`           | N/A                     | Default model used by Python evaluation/simulation helpers |
 | Track Disable       | `OPIK_TRACK_DISABLE`         | N/A                     | Disable tracking (Python only)                 |
 | Flush Timeout       | `OPIK_DEFAULT_FLUSH_TIMEOUT` | N/A                     | Default flush timeout (Python only)            |
 | TLS Certificate     | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
@@ -146,6 +147,7 @@ OPIK_API_KEY="YOUR_OPIK_API_KEY"
 OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
 OPIK_PROJECT_NAME="your-project-name"
 OPIK_WORKSPACE="your-workspace-name"
+OPIK_DEFAULT_LLM="openai/gpt-5-nano"
 
 # LLM Provider API Keys (if needed)
 OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
@@ -432,6 +434,7 @@ await flushAll();
 | api_key                    | `OPIK_API_KEY`               | The API key - Only required for Opik Cloud                                |
 | workspace                  | `OPIK_WORKSPACE`             | The workspace name - Only required for Opik Cloud                         |
 | project_name               | `OPIK_PROJECT_NAME`          | The project name to use                                                   |
+| N/A                        | `OPIK_DEFAULT_LLM`           | Default LLM used by Python evaluation/simulation helpers - Defaults to `openai/gpt-5-nano` |
 | opik_track_disable         | `OPIK_TRACK_DISABLE`         | Disable tracking of traces and spans - Defaults to `false`                |
 | default_flush_timeout      | `OPIK_DEFAULT_FLUSH_TIMEOUT` | Default flush timeout - Defaults to no timeout                            |
 | opik_check_tls_certificate | `OPIK_CHECK_TLS_CERTIFICATE` | Check TLS certificate - Defaults to `true`                                |

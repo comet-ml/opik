@@ -27,7 +27,7 @@ Constructor
 
    SimulatedUser(
        persona: str,
-       model: str = "gpt-4o-mini",
+       model: Optional[str] = None,
        fixed_responses: Optional[List[str]] = None
    )
 
@@ -38,7 +38,7 @@ Parameters
    Description of the user's personality and behavior. This is used as a system prompt to guide the LLM's response generation.
 
 **model** (str, optional)
-   LLM model to use for generating responses. Defaults to "gpt-4o-mini". Supports any model available through Opik's model factory.
+   LLM model to use for generating responses. If omitted, defaults to the value of ``OPIK_DEFAULT_LLM`` (or ``openai/gpt-5-nano`` when unset). Supports any model available through Opik's model factory.
 
 **fixed_responses** (List[str], optional)
    List of predefined responses to cycle through. If provided, these responses will be used instead of LLM generation.
@@ -82,7 +82,7 @@ Basic Usage
    # Create a simulated user with a specific persona
    user_simulator = SimulatedUser(
        persona="You are a frustrated customer who wants a refund for a broken product",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
    # Generate a response based on conversation history
@@ -124,19 +124,19 @@ Different Personas
    # Happy customer persona
    happy_customer = SimulatedUser(
        persona="You are a satisfied customer who loves the product and wants to buy more",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
    # Confused user persona
    confused_user = SimulatedUser(
        persona="You are a confused user who needs help understanding how to use the product",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
    # Technical user persona
    technical_user = SimulatedUser(
        persona="You are a technical user who asks detailed questions about implementation and integration",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
 Integration with run_simulation

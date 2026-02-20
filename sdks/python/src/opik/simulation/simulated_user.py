@@ -1,7 +1,10 @@
 """SimulatedUser class for multi-turn conversation simulation."""
 
 from typing import List, Dict, Optional
-from opik.evaluation.models.models_factory import get as get_model
+from opik.evaluation.models.models_factory import (
+    get as get_model,
+    get_default_model_name,
+)
 
 
 class SimulatedUser:
@@ -15,7 +18,7 @@ class SimulatedUser:
     def __init__(
         self,
         persona: str,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
         fixed_responses: Optional[List[str]] = None,
     ):
         """
@@ -23,16 +26,18 @@ class SimulatedUser:
 
         Args:
             persona: Description of the user's personality and behavior
-            model: LLM model to use for generating responses (default: gpt-4o-mini)
+            model: LLM model to use for generating responses. If omitted, uses the
+                central default model resolved by `get_default_model_name()`
+                (override with `OPIK_DEFAULT_LLM`).
             fixed_responses: Optional list of predefined responses to cycle through
         """
         self.persona = persona
-        self.model = model
+        self.model = model or get_default_model_name()
         self.fixed_responses = fixed_responses or []
         self._response_index = 0
 
         # Initialize LLM backend using models_factory for consistency
-        self._llm = get_model(model_name=model)
+        self._llm = get_model(model_name=self.model)
 
     def generate_response(self, conversation_history: List[Dict[str, str]]) -> str:
         """
