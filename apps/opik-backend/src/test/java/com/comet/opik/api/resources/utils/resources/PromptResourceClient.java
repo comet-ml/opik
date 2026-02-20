@@ -4,15 +4,19 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionIdsRequest;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -83,6 +87,27 @@ public class PromptResourceClient {
                 .post(Entity.json(batchDelete))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public List<PromptVersionLink> getPromptsByVersionIds(List<UUID> versionIds, String apiKey,
+            String workspaceName) {
+
+        var request = PromptVersionIdsRequest.builder()
+                .promptVersionIds(versionIds)
+                .build();
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path("retrieve-by-version-ids")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(new GenericType<>() {
+            });
         }
     }
 
