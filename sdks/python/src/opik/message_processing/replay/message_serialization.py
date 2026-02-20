@@ -3,7 +3,9 @@ import json
 import re
 from typing import Any, Dict, Set, Type
 
+from opik import jsonable_encoder
 from .. import messages
+
 
 # ISO 8601 datetime pattern (matches formats like 2024-01-15T10:30:00, 2024-01-15T10:30:00.123456, with optional timezone)
 _ISO_DATETIME_PATTERN = re.compile(
@@ -15,15 +17,6 @@ _ISO_DATETIME_PATTERN = re.compile(
 # during deserialization, to avoid false conversions of ISO-like strings in
 # arbitrary dictionary fields (e.g., input, output, metadata).
 DATETIME_FIELD_NAMES: Set[str] = {"start_time", "end_time", "last_updated_at"}
-
-
-class MessageJSONEncoder(json.JSONEncoder):
-    """Custom JSON encoder that handles datetime objects in BaseMessage subclasses."""
-
-    def default(self, obj: Any) -> Any:
-        if isinstance(obj, datetime.datetime):
-            return obj.isoformat()
-        return super().default(obj)
 
 
 def datetime_object_hook(obj: Dict[str, Any]) -> Dict[str, Any]:
@@ -58,7 +51,8 @@ def serialize_message(message: messages.BaseMessage) -> str:
         str: A JSON string representation of the message object.
     """
     data = message.as_db_message_dict()
-    return json.dumps(data, cls=MessageJSONEncoder)
+    encoded_data_dict = jsonable_encoder.encode(data)
+    return json.dumps(encoded_data_dict)
 
 
 def deserialize_message(message_class: Type[messages.T], json_str: str) -> messages.T:

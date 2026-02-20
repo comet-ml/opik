@@ -126,8 +126,10 @@ class TestAddThreadsFeedbackScoresBatchMessageSerialization:
 class TestCreateSpansBatchMessageSerialization:
     def test_create_spans_batch_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
 
         spans = [
             span_write.SpanWrite(
@@ -189,8 +191,10 @@ class TestCreateSpansBatchMessageSerialization:
 class TestCreateTraceBatchMessageSerialization:
     def test_create_trace_batch_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
 
         traces = [
             trace_write.TraceWrite(
@@ -372,9 +376,13 @@ class TestCreateAttachmentMessageSerialization:
 class TestCreateTraceMessageSerialization:
     def test_create_trace_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
-        last_updated_at = datetime.datetime(2024, 1, 1, 12, 0, 2)
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
         error_info = ErrorInfoDict(
             exception_type="ValueError",
             message="test error",
@@ -425,7 +433,7 @@ class TestCreateTraceMessageSerialization:
 class TestUpdateTraceMessageSerialization:
     def test_update_trace_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
 
         original = messages.UpdateTraceMessage(
             trace_id="trace-1",
@@ -465,9 +473,13 @@ class TestUpdateTraceMessageSerialization:
 class TestCreateSpanMessageSerialization:
     def test_create_span_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
-        last_updated_at = datetime.datetime(2024, 1, 1, 12, 0, 2)
+        start_time = datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
+        last_updated_at = datetime.datetime(
+            2024, 1, 1, 12, 0, 2, tzinfo=datetime.timezone.utc
+        )
 
         error_info = ErrorInfoDict(
             exception_type="ValueError",
@@ -530,7 +542,7 @@ class TestCreateSpanMessageSerialization:
 class TestUpdateSpanMessageSerialization:
     def test_update_span_message__round_trip_serialization__preserves_data(self):
         """Test round-trip serialization/deserialization through JSON."""
-        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
+        end_time = datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc)
 
         original = messages.UpdateSpanMessage(
             span_id="span-1",
