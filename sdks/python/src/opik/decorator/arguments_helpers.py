@@ -73,6 +73,7 @@ class TrackOptions(BaseArguments):
     flush: bool
     project_name: Optional[str]
     create_duplicate_root_span: bool
+    capture_source: bool
 
 
 def create_span_data(
