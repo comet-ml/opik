@@ -66,6 +66,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -485,30 +487,30 @@ class OnlineScoringEngineTest {
         assertThat(variableMappings).hasSize(6);
 
         var varSummary = variableMappings.getFirst();
-        assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(varSummary.jsonPath()).isEqualTo("$.questions.question1");
 
         var varInstruction = variableMappings.get(1);
-        assertThat(varInstruction.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(varInstruction.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.OUTPUT);
         assertThat(varInstruction.jsonPath()).isEqualTo("$.output");
 
         var varNonUsed = variableMappings.get(2);
-        assertThat(varNonUsed.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(varNonUsed.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(varNonUsed.jsonPath()).isEqualTo("$.questions.question2");
 
         var varToFail = variableMappings.get(3);
-        assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.METADATA);
         assertThat(varToFail.jsonPath()).isEqualTo("$.nonexistent.path");
 
         var actualVarNonexistent = variableMappings.get(4);
-        var expectedVarNonexistent = OnlineScoringEngine.MessageVariableMapping.builder()
+        var expectedVarNonexistent = OnlineScoringDataExtractor.MessageVariableMapping.builder()
                 .variableName("nonexistent")
                 .valueToReplace("some.nonexistent.path")
                 .build();
         assertThat(actualVarNonexistent).isEqualTo(expectedVarNonexistent);
 
         var actualVarLiteral = variableMappings.get(5);
-        var expectedVarLiteral = OnlineScoringEngine.MessageVariableMapping.builder()
+        var expectedVarLiteral = OnlineScoringDataExtractor.MessageVariableMapping.builder()
                 .variableName("literal")
                 .valueToReplace("some literal value")
                 .build();
@@ -537,7 +539,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_input".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(inputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(inputMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(inputMapping.jsonPath()).isEqualTo("$");
 
         // Test "output" maps to root "$"
@@ -545,7 +547,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_output".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(outputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(outputMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.OUTPUT);
         assertThat(outputMapping.jsonPath()).isEqualTo("$");
 
         // Test "metadata" maps to root "$"
@@ -553,7 +555,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_metadata".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.METADATA);
         assertThat(metadataMapping.jsonPath()).isEqualTo("$");
 
         // Test subtree works correctly
@@ -561,7 +563,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "subtree".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(subtreeMapping.jsonPath()).isEqualTo("$.questions");
 
         // Test nested field still works correctly
@@ -569,7 +571,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "nested_field".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(nestedMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(nestedMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(nestedMapping.jsonPath()).isEqualTo("$.questions.question1");
     }
 
@@ -1685,19 +1687,19 @@ class OnlineScoringEngineTest {
 
     static Stream<Arguments> parseVariableAsPathCases() {
         return Stream.of(
-                arguments("input.question", OnlineScoringEngine.TraceSection.INPUT, "$.question"),
-                arguments("output.answer", OnlineScoringEngine.TraceSection.OUTPUT, "$.answer"),
-                arguments("metadata.model", OnlineScoringEngine.TraceSection.METADATA, "$.model"),
-                arguments("input", OnlineScoringEngine.TraceSection.INPUT, "$"),
-                arguments("input.questions.question1", OnlineScoringEngine.TraceSection.INPUT,
+                arguments("input.question", OnlineScoringDataExtractor.TraceSection.INPUT, "$.question"),
+                arguments("output.answer", OnlineScoringDataExtractor.TraceSection.OUTPUT, "$.answer"),
+                arguments("metadata.model", OnlineScoringDataExtractor.TraceSection.METADATA, "$.model"),
+                arguments("input", OnlineScoringDataExtractor.TraceSection.INPUT, "$"),
+                arguments("input.questions.question1", OnlineScoringDataExtractor.TraceSection.INPUT,
                         "$.questions.question1"));
     }
 
     @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> section={1}, jsonPath={2}")
     @MethodSource("parseVariableAsPathCases")
-    void testParseVariableAsPath(String variableName, OnlineScoringEngine.TraceSection expectedSection,
+    void testParseVariableAsPath(String variableName, OnlineScoringDataExtractor.TraceSection expectedSection,
             String expectedJsonPath) {
-        var mapping = OnlineScoringEngine.parseVariableAsPath(variableName);
+        var mapping = OnlineScoringDataExtractor.parseVariableAsPath(variableName);
 
         assertThat(mapping).isNotNull();
         assertThat(mapping.variableName()).isEqualTo(variableName);
@@ -1705,20 +1707,11 @@ class OnlineScoringEngineTest {
         assertThat(mapping.jsonPath()).isEqualTo(expectedJsonPath);
     }
 
-    @Test
-    @DisplayName("parseVariableAsPath should return null for unknown section")
-    void testParseVariableAsPath_unknownSection() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("unknown.field");
-
-        assertThat(mapping).isNull();
-    }
-
-    @Test
-    @DisplayName("parseVariableAsPath should return null for blank input")
-    void testParseVariableAsPath_blankInput() {
-        assertThat(OnlineScoringEngine.parseVariableAsPath("")).isNull();
-        assertThat(OnlineScoringEngine.parseVariableAsPath("   ")).isNull();
-        assertThat(OnlineScoringEngine.parseVariableAsPath(null)).isNull();
+    @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> null")
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "unknown.field"})
+    void testParseVariableAsPath_returnsNull(String input) {
+        assertThat(OnlineScoringDataExtractor.parseVariableAsPath(input)).isNull();
     }
 
     @Test
@@ -1735,7 +1728,7 @@ class OnlineScoringEngineTest {
                 "input");
 
         // When
-        var replacements = OnlineScoringEngine.toReplacementsFromTemplateVariables(templateVariables, trace);
+        var replacements = OnlineScoringDataExtractor.toReplacementsFromTemplateVariables(templateVariables, trace);
 
         // Then
         assertThat(replacements).hasSize(3);
@@ -1745,15 +1738,9 @@ class OnlineScoringEngineTest {
         assertThat(replacements.get("input")).contains("questions");
     }
 
-    static Stream<Arguments> emptyOrNullVariablesMap() {
-        return Stream.of(
-                arguments("empty map", Map.of()),
-                arguments("null", null));
-    }
-
     @ParameterizedTest(name = "renderMessages with {0} variablesMap should render templates using dot-notation variables")
-    @MethodSource("emptyOrNullVariablesMap")
-    void testRenderMessagesWithEmptyOrNullVariablesMap(String desc, Map<String, String> variablesMap)
+    @NullAndEmptySource
+    void testRenderMessagesWithEmptyOrNullVariablesMap(Map<String, String> variablesMap)
             throws JsonProcessingException {
         // Given
         List<LlmAsJudgeMessage> messages = List.of(
@@ -1805,13 +1792,43 @@ class OnlineScoringEngineTest {
         assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
     }
 
-    @Test
-    @DisplayName("toFullSectionObjectData should extract all sections as objects from trace with dict input/output")
-    void testToFullSectionObjectData_dictInputOutput() {
+    static Stream<Arguments> toFullSectionObjectDataCases() {
+        return Stream.of(
+                Arguments.of(
+                        "dict input/output with metadata",
+                        Map.of("question", "What is AI?", "context", "tech"),
+                        Map.of("answer", "Artificial Intelligence", "confidence", 0.95),
+                        Map.of("model", "gpt-4", "tokens", 150),
+                        Map.of(
+                                "input", Map.of("question", "What is AI?", "context", "tech"),
+                                "output", Map.of("answer", "Artificial Intelligence", "confidence", 0.95),
+                                "metadata", Map.of("model", "gpt-4", "tokens", 150))),
+                Arguments.of(
+                        "string input/output without metadata",
+                        "What is AI?",
+                        "Artificial Intelligence",
+                        null,
+                        Map.of(
+                                "input", "What is AI?",
+                                "output", "Artificial Intelligence")),
+                Arguments.of(
+                        "array input/output",
+                        List.of("item1", "item2", "item3"),
+                        List.of(Map.of("score", 0.8), Map.of("score", 0.9)),
+                        null,
+                        Map.of(
+                                "input", List.of("item1", "item2", "item3"),
+                                "output", List.of(Map.of("score", 0.8), Map.of("score", 0.9)))));
+    }
+
+    @ParameterizedTest(name = "toFullSectionObjectData should handle {0}")
+    @MethodSource("toFullSectionObjectDataCases")
+    void testToFullSectionObjectData(String scenario, Object inputVal, Object outputVal,
+            Object metadataVal, Map<String, Object> expectedData) {
         // Given
-        var input = JsonUtils.getMapper().valueToTree(Map.of("question", "What is AI?", "context", "tech"));
-        var output = JsonUtils.getMapper().valueToTree(Map.of("answer", "Artificial Intelligence", "confidence", 0.95));
-        var metadata = JsonUtils.getMapper().valueToTree(Map.of("model", "gpt-4", "tokens", 150));
+        var input = JsonUtils.getMapper().valueToTree(inputVal);
+        var output = JsonUtils.getMapper().valueToTree(outputVal);
+        var metadata = metadataVal != null ? JsonUtils.getMapper().valueToTree(metadataVal) : null;
 
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1823,38 +1840,11 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
 
         // Then
-        assertThat(data).hasSize(3);
-        assertThat(data.get("input")).isEqualTo(Map.of("question", "What is AI?", "context", "tech"));
-        assertThat(data.get("output")).isEqualTo(Map.of("answer", "Artificial Intelligence", "confidence", 0.95));
-        assertThat(data.get("metadata")).isEqualTo(Map.of("model", "gpt-4", "tokens", 150));
-    }
-
-    @Test
-    @DisplayName("toFullSectionObjectData should handle string input/output")
-    void testToFullSectionObjectData_stringInputOutput() {
-        // Given
-        var input = JsonUtils.getMapper().valueToTree("What is AI?");
-        var output = JsonUtils.getMapper().valueToTree("Artificial Intelligence");
-
-        var trace = Trace.builder()
-                .id(UUID.randomUUID())
-                .projectName(PROJECT_NAME)
-                .projectId(UUID.randomUUID())
-                .input(input)
-                .output(output)
-                .build();
-
-        // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
-
-        // Then
-        assertThat(data).hasSize(2);
-        assertThat(data.get("input")).isEqualTo("What is AI?");
-        assertThat(data.get("output")).isEqualTo("Artificial Intelligence");
-        assertThat(data).doesNotContainKey("metadata");
+        assertThat(data).hasSize(expectedData.size());
+        expectedData.forEach((key, value) -> assertThat(data.get(key)).isEqualTo(value));
     }
 
     @Test
@@ -1877,7 +1867,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
 
         // Then
         assertThat(data).hasSize(2);
@@ -1898,34 +1888,6 @@ class OnlineScoringEngineTest {
     }
 
     @Test
-    @DisplayName("toFullSectionObjectData should handle array input/output")
-    void testToFullSectionObjectData_arrayInputOutput() {
-        // Given
-        var input = JsonUtils.getMapper().valueToTree(List.of("item1", "item2", "item3"));
-        var output = JsonUtils.getMapper().valueToTree(List.of(Map.of("score", 0.8), Map.of("score", 0.9)));
-
-        var trace = Trace.builder()
-                .id(UUID.randomUUID())
-                .projectName(PROJECT_NAME)
-                .projectId(UUID.randomUUID())
-                .input(input)
-                .output(output)
-                .build();
-
-        // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
-
-        // Then
-        assertThat(data).hasSize(2);
-        assertThat(data.get("input")).isEqualTo(List.of("item1", "item2", "item3"));
-
-        @SuppressWarnings("unchecked")
-        var outputList = (List<Map<String, Object>>) data.get("output");
-        assertThat(outputList).hasSize(2);
-        assertThat(outputList.get(0).get("score")).isEqualTo(0.8);
-    }
-
-    @Test
     @DisplayName("toFullSectionObjectData should skip null sections")
     void testToFullSectionObjectData_nullSections() {
         // Given - only output, no input or metadata
@@ -1939,7 +1901,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
 
         // Then
         assertThat(data).hasSize(1);
@@ -1966,7 +1928,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
 
         // Then
         assertThat(data).hasSize(3);
@@ -1993,7 +1955,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(span);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(span);
 
         // Then
         assertThat(data).hasSize(2);
@@ -2024,7 +1986,7 @@ class OnlineScoringEngineTest {
                 .build();
 
         // When
-        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+        var data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
 
         // Then
         assertThat(data).hasSize(2);
