@@ -68,8 +68,10 @@ public class CostService {
      *
      * Fixes issue #4114: Handles model name variations like "claude-3.5-sonnet"
      * by normalizing to "claude-3-5-sonnet" format used in pricing database.
+     * Fixes issue #5130: Handles Bedrock model name variations like "anthropic.claude-opus-4-6-v1:0"
+     * by removing the ":0" suffix to match entries without the suffix.
      *
-     * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet")
+     * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet", or ":0" suffix)
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
@@ -94,6 +96,19 @@ public class CostService {
                 log.debug("Found model price using normalized name. Original: '{}', Normalized: '{}'",
                         modelName, normalizedModelName);
                 return normalizedMatch;
+            }
+        }
+
+        // Try removing ":0" suffix if present (for Bedrock model name compatibility)
+        int colonIndex = normalizedModelName.indexOf(':');
+        if (colonIndex > 0) {
+            String withoutSuffix = normalizedModelName.substring(0, colonIndex);
+            String withoutSuffixKey = createModelProviderKey(withoutSuffix, provider);
+            ModelPrice withoutSuffixMatch = modelProviderPrices.get(withoutSuffixKey);
+            if (withoutSuffixMatch != null) {
+                log.debug("Found model price by removing ':0' suffix. Original: '{}', Without suffix: '{}'",
+                        modelName, withoutSuffix);
+                return withoutSuffixMatch;
             }
         }
 
