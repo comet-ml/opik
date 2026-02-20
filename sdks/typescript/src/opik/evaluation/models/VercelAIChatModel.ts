@@ -147,12 +147,24 @@ export class VercelAIChatModel extends OpikBaseModel {
           `Generating structured output with model ${this.modelName}, input length: ${input.length}`
         );
 
-        const result = await this._generateText({
+        const request = {
           model: this.model,
           prompt: input,
-          output: Output.object({ schema: responseFormat }),
+          // Cast to include the current AI SDK output shape used by Opik.
+          // Keep this guarded by explicit runtime handling because this key is not typed
+          // in all SDK minor versions.
+          ...({ output: Output.object({ schema: responseFormat }) } as Record<
+            string,
+            unknown
+          >),
           ...options,
-        });
+        } as Parameters<typeof generateText>[0] & { output?: unknown };
+
+        const result = (await this._generateText(request)) as {
+          output?: unknown;
+          text?: string;
+          usage?: unknown;
+        };
 
         logger.debug(
           `Generated structured output with model ${this.modelName}`
