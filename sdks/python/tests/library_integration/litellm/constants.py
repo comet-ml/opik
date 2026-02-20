@@ -12,7 +12,7 @@ TEST_MODELS_PARAMETRIZE = [
         "anthropic",
     ),  # Anthropic - fully supported with usage tracking
     (
-        "openai/gpt-4o-2024-08-06",
+        "openai/gpt-4o-mini",
         "openai",
     ),  # OpenAI - fully supported with usage tracking
 ]
