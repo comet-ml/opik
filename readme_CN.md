@@ -1,4 +1,4 @@
-> 注意：此文件为机器翻译版本。欢迎对翻译进行改进！
+> 注意：此文件使用AI进行机器翻译。欢迎对翻译进行改进！
 
 <div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
 

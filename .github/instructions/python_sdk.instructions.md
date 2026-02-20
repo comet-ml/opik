@@ -266,11 +266,11 @@ class DataProcessor:
 
 ## 📖 Essential References
 
-- **[API and Data Flow Design](API_AND_DATA_FLOW.md)** - Core architecture and execution paths
-- **[Testing Design](TESTING.md)** - Test categories and fake backend usage
-- **[Integrations Design](INTEGRATIONS.md)** - Integration patterns and streaming strategies
-- **[Architecture Rules](architecture.mdc)** - Layered architecture details
-- **[Test Organization Rules](test-organization.mdc)** - Testing standards and patterns
+- **[API and Data Flow Design](../../sdks/python/design/API_AND_DATA_FLOW.md)** - Core architecture and execution paths
+- **[Testing Design](../../sdks/python/design/TESTING.md)** - Test categories and fake backend usage
+- **[Integrations Design](../../sdks/python/design/INTEGRATIONS.md)** - Integration patterns and streaming strategies
+- **[Architecture Rules](../../.agents/skills/python-sdk/SKILL.md)** - Layered architecture details
+- **[Test Organization Rules](../../.agents/skills/python-sdk/testing.md)** - Testing standards and patterns
 
 ## Code Structure Guidelines
 
@@ -1160,7 +1160,7 @@ When reviewing a method, ask these questions in order:
 
 ## Key References
 
-- [API Design Guidelines](api-design.mdc)
-- [Architecture Guidelines](architecture.mdc)
-- [Code Structure Guidelines](code-structure.mdc)
-- [Error Handling Guidelines](error-handling.mdc)
+- [API Design Guidelines](../../.agents/skills/python-sdk/good-code.md)
+- [Architecture Guidelines](../../.agents/skills/python-sdk/SKILL.md)
+- [Code Structure Guidelines](../../.agents/skills/python-sdk/good-code.md)
+- [Error Handling Guidelines](../../.agents/skills/python-sdk/error-handling.md)

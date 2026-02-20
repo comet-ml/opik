@@ -21,7 +21,7 @@ Opik is a comprehensive observability and AI evaluation platform with multiple a
 
 ### Branch Naming Convention
 ```
-{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}
+{username}/{ticket}-{summary}
 ```
 
 **Examples:**
@@ -49,7 +49,7 @@ git commit -m "[OPIK-1234] Add project custom metrics UI dashboard"
 ```
 
 ### Pull Request Guidelines
-**Title Format:** `[{TICKET-NUMBER}] [{COMPONENT}] {TASK-SUMMARY}`
+**Title Format:** `[{ticket}] [{component}] {summary}`
 
 **Required Sections:**
 - **Details**: What the change does, why it was made, and any design decisions

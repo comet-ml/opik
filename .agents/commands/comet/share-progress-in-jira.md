@@ -28,7 +28,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check Jira MCP**: Test Jira MCP availability by attempting to fetch user info using `atlassianUserInfo`
-  > If unavailable, respond with: "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs Jira MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Ensure we're not on `main`
@@ -187,7 +187,7 @@ The command is successful when:
 
 ### **Common Issues**
 
-- **Jira MCP not available**: Run `npm run install-mcp`
+- **Jira MCP not available**: Configure MCP and run `make cursor` (Cursor) or `make claude` (Claude CLI)
 - **Branch name format**: Ensure it follows Opik conventions:
   - `username/OPIK-<number>-<description>` for Jira tickets
   - `username/issue-<number>-<description>` for GitHub issues

@@ -83,6 +83,7 @@ pip-log.txt
 .claude/
 .mcp.json
 CLAUDE.md
+.codex
 
 # Cursor
 .cursor
