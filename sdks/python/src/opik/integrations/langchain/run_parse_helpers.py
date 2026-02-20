@@ -86,9 +86,10 @@ def parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     Returns:
         The interrupt value as a string if found, None otherwise.
     """
-    # Search for GraphInterrupt( anywhere in the traceback
+    # Search for GraphInterrupt( or NodeInterrupt( anywhere in the traceback.
+    # NodeInterrupt is deprecated but still exists as a subclass of GraphInterrupt.
     match = re.search(
-        r"GraphInterrupt\(.*?Interrupt\(value=",
+        r"(?:GraphInterrupt|NodeInterrupt)\(.*?Interrupt\(value=",
         error_traceback,
         re.DOTALL,
     )
@@ -162,6 +163,26 @@ def parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
             pass
 
     return value
+
+
+def is_langgraph_parent_command(error_traceback: str) -> bool:
+    """
+    Check if the error traceback represents a LangGraph ParentCommand exception.
+
+    ParentCommand is raised internally by LangGraph when a subgraph node needs to
+    route execution to a node in the parent graph. This is a control flow mechanism
+    used in multi-agent/supervisor patterns, not a real error.
+
+    Args:
+        error_traceback: The error traceback string.
+
+    Returns:
+        True if the error is a ParentCommand exception, False otherwise.
+    """
+    return bool(
+        re.search(r"langgraph\.errors\.ParentCommand", error_traceback)
+        or error_traceback.startswith("ParentCommand(")
+    )
 
 
 def extract_resume_value_from_command(obj: Any) -> Optional[str]:
