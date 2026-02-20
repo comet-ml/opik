@@ -201,22 +201,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
       label: "Claude Haiku 4.5",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
-      label: "Claude Haiku 3.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3,
-      label: "Claude Haiku 3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
-      label: "Claude 3.5 Sonnet 2024-10-22",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
-      label: "Claude 3 Opus 2024-02-29",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -277,28 +261,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthracite-org/magnum-v4-72b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_HAIKU,
-      label: "anthropic/claude-3-haiku",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_OPUS,
-      label: "anthropic/claude-3-opus",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
-      label: "anthropic/claude-3.5-haiku",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022,
-      label: "anthropic/claude-3.5-haiku-20241022",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
       label: "anthropic/claude-haiku-4.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET,
-      label: "anthropic/claude-3.5-sonnet",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET,
@@ -1132,6 +1096,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO,
       label: "openrouter/auto",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
+      label: "openrouter/free",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,

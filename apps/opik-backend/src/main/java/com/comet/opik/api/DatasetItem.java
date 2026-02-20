@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -31,6 +34,8 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotEmpty Map<String, JsonNode> data,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String description,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) Set<String> tags,
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) List<@Valid EvaluatorItem> evaluators,

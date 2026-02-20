@@ -17,10 +17,6 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_SONNET_4("claude-sonnet-4-20250514"),
     CLAUDE_SONNET_3_7("claude-3-7-sonnet-20250219"),
     CLAUDE_HAIKU_4_5("claude-haiku-4-5-20251001"),
-    CLAUDE_HAIKU_3_5("claude-3-5-haiku-20241022"),
-    CLAUDE_HAIKU_3("claude-3-haiku-20240307"),
-    CLAUDE_3_5_SONNET_20241022("claude-3-5-sonnet-20241022"),
-    CLAUDE_3_OPUS_20240229("claude-3-opus-20240229"),
     ;
 
     private final String value;

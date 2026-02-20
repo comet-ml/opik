@@ -152,7 +152,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                         existing_span.end_time is None
                         or span.end_time > existing_span.end_time
                     ):
-                        self._span_trees.remove(existing_span)
+                        if existing_span in self._span_trees:
+                            self._span_trees.remove(existing_span)
 
         self._span_to_parent_span[span.id] = parent_span_id
         if parent_span_id is None:

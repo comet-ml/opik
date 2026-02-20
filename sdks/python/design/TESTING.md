@@ -521,7 +521,7 @@ def patch_streamer():
         message_processor=fake_processor,
         n_consumers=1,
         use_batching=True,
-        upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(fake_upload_manager),
+        file_uploader=fake_upload_manager,
         max_queue_size=None
     )
     yield streamer, fake_processor
