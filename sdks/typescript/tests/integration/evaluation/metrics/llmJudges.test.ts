@@ -261,7 +261,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
             "You evaluate how well a response answers a factual question.",
           evaluationCriteria:
             "Score from 0 (incorrect) to 10 (correct and complete).",
-          model: "claude-3-5-haiku-latest",
+          model: "claude-haiku-4-5-20251001",
         });
 
         const result = await metric.score({

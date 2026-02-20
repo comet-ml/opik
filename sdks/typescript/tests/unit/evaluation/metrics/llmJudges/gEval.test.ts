@@ -271,7 +271,7 @@ describe("GEval providerOptions with Vercel models", () => {
   });
 
   it("should pass providerOptions when using anthropic() wrapper", async () => {
-    const model = new VercelAIChatModel(anthropic("claude-3-5-haiku-latest"), {
+    const model = new VercelAIChatModel(anthropic("claude-haiku-4-5-20251001"), {
       trackGenerations: false,
     });
     const providerSpy = spyOnVercelModel(model);
