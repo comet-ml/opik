@@ -58,6 +58,9 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.operation.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
                     .build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.tool.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .spanType(SpanType.tool).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.conversation.id").source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.THREAD_ID).build());
 
