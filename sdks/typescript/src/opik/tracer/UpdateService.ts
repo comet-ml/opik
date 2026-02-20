@@ -94,86 +94,40 @@ export class UpdateService {
     };
   }
 
-  /**
-   * Processes trace update by extracting prompts and merging into metadata.
-   * Returns processed update ready for batch queue.
-   *
-   * @param updates - Trace update with optional prompts
-   * @param existingMetadata - Current trace metadata
-   * @returns Processed trace update without prompts field
-   */
+  private static processUpdate<T extends { metadata?: OpikApi.JsonListString; prompts?: Prompt[] }>(
+    updates: T,
+    existingMetadata?: OpikApi.JsonListString
+  ): Omit<T, "prompts"> {
+    const { prompts, ...restUpdates } = updates;
+
+    if (!prompts || prompts.length === 0) {
+      // Even without prompts, merge existing metadata with new metadata
+      // so that update({ metadata: {...} }) preserves prior metadata
+      if (restUpdates.metadata && existingMetadata) {
+        const existingObj = this.normalizeMetadata(existingMetadata);
+        const newObj = this.normalizeMetadata(restUpdates.metadata);
+        return { ...restUpdates, metadata: { ...existingObj, ...newObj } };
+      }
+      return restUpdates as Omit<T, "prompts">;
+    }
+
+    return {
+      ...restUpdates,
+      metadata: this.mergePromptsIntoMetadata(existingMetadata, restUpdates.metadata, prompts),
+    };
+  }
+
   static processTraceUpdate(
     updates: TraceUpdateData,
     existingMetadata?: OpikApi.JsonListString
   ): Omit<OpikApi.TraceUpdate, "projectId"> {
-    const { prompts, ...restUpdates } = updates;
-
-    if (!prompts || prompts.length === 0) {
-      // Even without prompts, merge existing metadata with new metadata
-      // so that trace.update({ metadata: {...} }) preserves prior metadata
-      if (restUpdates.metadata && existingMetadata) {
-        const existingObj = this.normalizeMetadata(existingMetadata);
-        const newObj = this.normalizeMetadata(restUpdates.metadata);
-        return {
-          ...restUpdates,
-          metadata: { ...existingObj, ...newObj },
-        };
-      }
-      return restUpdates;
-    }
-
-    const mergedMetadata = this.mergePromptsIntoMetadata(
-      existingMetadata,
-      restUpdates.metadata,
-      prompts
-    );
-
-    return {
-      ...restUpdates,
-      metadata: mergedMetadata,
-    };
+    return this.processUpdate(updates, existingMetadata);
   }
 
-  /**
-   * Processes span update by extracting prompts and merging into metadata.
-   * Returns processed update ready for batch queue.
-   *
-   * @param updates - Span update with optional prompts
-   * @param existingMetadata - Current span metadata
-   * @returns Processed span update without prompts field
-   */
   static processSpanUpdate(
     updates: SpanUpdateData,
     existingMetadata?: OpikApi.JsonListString
-  ): Omit<
-    OpikApi.SpanUpdate,
-    "traceId" | "parentSpanId" | "projectId" | "projectName"
-  > {
-    const { prompts, ...restUpdates } = updates;
-
-    if (!prompts || prompts.length === 0) {
-      // Even without prompts, merge existing metadata with new metadata
-      // so that span.update({ metadata: {...} }) preserves prior metadata
-      if (restUpdates.metadata && existingMetadata) {
-        const existingObj = this.normalizeMetadata(existingMetadata);
-        const newObj = this.normalizeMetadata(restUpdates.metadata);
-        return {
-          ...restUpdates,
-          metadata: { ...existingObj, ...newObj },
-        };
-      }
-      return restUpdates;
-    }
-
-    const mergedMetadata = this.mergePromptsIntoMetadata(
-      existingMetadata,
-      restUpdates.metadata,
-      prompts
-    );
-
-    return {
-      ...restUpdates,
-      metadata: mergedMetadata,
-    };
+  ): Omit<OpikApi.SpanUpdate, "traceId" | "parentSpanId" | "projectId" | "projectName"> {
+    return this.processUpdate(updates, existingMetadata);
   }
 }
