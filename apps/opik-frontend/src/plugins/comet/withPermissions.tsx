@@ -8,10 +8,14 @@ export const withPermissions = <P extends WithPermissionsProps>(
   const WrappedComponent = (
     props: Omit<P, "canViewExperiments"> & Partial<WithPermissionsProps>,
   ) => {
-    const { canViewExperiments } = useUserPermission();
+    const { canViewExperiments, canViewDashboards } = useUserPermission();
 
     return (
-      <Component {...(props as P)} canViewExperiments={!!canViewExperiments} />
+      <Component
+        {...(props as P)}
+        canViewExperiments={!!canViewExperiments}
+        canViewDashboards={!!canViewDashboards}
+      />
     );
   };
 

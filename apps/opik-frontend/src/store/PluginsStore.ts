@@ -11,6 +11,8 @@ import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/Dashboar
 import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
+import { DashboardsViewGuardProps } from "@/plugins/comet/DashboardsViewGuard";
+import { ViewSelectorProps } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { PlaygroundExperimentsLinkProps } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
 import { RunExperimentButtonProps } from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
 import { DashboardTemplateItemsProps } from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/DashboardTemplateItems";
@@ -35,9 +37,12 @@ type PluginStore = {
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   EvaluationSection: React.ComponentType | null;
   ExperimentsPageGuard: React.ComponentType | null;
+  DashboardsPageGuard: React.ComponentType | null;
+  DashboardsViewGuard: React.ComponentType<DashboardsViewGuardProps> | null;
   StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   PromptPageExperimentsTabTrigger: React.ComponentType | null;
   PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
+  ViewSelector: React.ComponentType<ViewSelectorProps> | null;
   PlaygroundExperimentsLink: React.ComponentType<PlaygroundExperimentsLinkProps> | null;
   RunExperimentButton: React.ComponentType<RunExperimentButtonProps> | null;
   DashboardTemplateItems: React.ComponentType<DashboardTemplateItemsProps> | null;
@@ -64,9 +69,12 @@ const PLUGIN_NAMES = [
   "DashboardWidgetGrid",
   "EvaluationSection",
   "ExperimentsPageGuard",
+  "DashboardsPageGuard",
+  "DashboardsViewGuard",
   "StartPreferenceExperimentsLink",
   "PromptPageExperimentsTabTrigger",
   "PromptPageExperimentsTabContent",
+  "ViewSelector",
   "PlaygroundExperimentsLink",
   "RunExperimentButton",
   "DashboardTemplateItems",
@@ -91,9 +99,12 @@ const usePluginsStore = create<PluginStore>((set) => ({
   DashboardWidgetGrid: null,
   EvaluationSection: null,
   ExperimentsPageGuard: null,
+  DashboardsPageGuard: null,
+  DashboardsViewGuard: null,
   StartPreferenceExperimentsLink: null,
   PromptPageExperimentsTabTrigger: null,
   PromptPageExperimentsTabContent: null,
+  ViewSelector: null,
   PlaygroundExperimentsLink: null,
   RunExperimentButton: null,
   DashboardTemplateItems: null,

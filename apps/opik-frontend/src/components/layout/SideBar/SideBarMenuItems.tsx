@@ -26,10 +26,10 @@ export interface SideBarMenuItemsProps {
 
 const SideBarMenuItems: React.FC<
   SideBarMenuItemsProps & WithPermissionsProps
-> = ({ expanded, canViewExperiments }) => {
+> = ({ expanded, canViewExperiments = true, canViewDashboards = true }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
 
-  const menuItems = getMenuItems({ canViewExperiments });
+  const menuItems = getMenuItems({ canViewExperiments, canViewDashboards });
 
   const { data: projectData } = useProjectsList(
     {
@@ -63,7 +63,7 @@ const SideBarMenuItems: React.FC<
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewExperiments,
     },
   );
 
@@ -137,7 +137,7 @@ const SideBarMenuItems: React.FC<
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewDashboards,
     },
   );
 

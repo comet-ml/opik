@@ -6,20 +6,37 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
+import { WithPermissionsProps } from "@/types/permissions";
 
 export enum VIEW_TYPE {
   DETAILS = "details",
   DASHBOARDS = "dashboards",
 }
 
-interface ViewSelectorProps {
+export interface ViewSelectorProps {
   value: VIEW_TYPE;
   onChange: (value: VIEW_TYPE) => void;
 }
 
-const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
+const ViewSelector: React.FC<ViewSelectorProps & WithPermissionsProps> = ({
+  value,
+  onChange,
+  canViewDashboards,
+}) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
-  const disabled = value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges;
+
+  const disabled =
+    (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) || !canViewDashboards;
+
+  const getTooltipContent = () => {
+    if (!canViewDashboards) {
+      return "You do not have permission to view dashboards";
+    }
+    if (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) {
+      return "Save or discard your changes before switching";
+    }
+    return null;
+  };
 
   const content = (
     <ToggleGroup
@@ -52,7 +69,7 @@ const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
 
   if (disabled) {
     return (
-      <TooltipWrapper content="Save or discard your changes before switching">
+      <TooltipWrapper content={getTooltipContent()}>
         <div>{content}</div>
       </TooltipWrapper>
     );
