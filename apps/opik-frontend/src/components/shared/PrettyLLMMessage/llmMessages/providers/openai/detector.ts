@@ -1,4 +1,4 @@
-import { ProviderDetector } from "../../types";
+import { FormatDetector } from "../../types";
 
 interface OpenAIMessage {
   role?: string;
@@ -149,7 +149,7 @@ const hasCustomOutputFormat = (data: unknown): boolean => {
  * Detects if the provided data is in OpenAI format.
  * Supports multiple input and output formats.
  */
-export const detectOpenAIFormat: ProviderDetector = (data, prettifyConfig) => {
+export const detectOpenAIFormat: FormatDetector = (data, prettifyConfig) => {
   // If data is null or undefined, not supported
   if (!data) {
     return false;
