@@ -74,14 +74,16 @@ public interface DatasetDAO {
     @SqlUpdate("DELETE FROM datasets WHERE id IN (<ids>) AND workspace_id = :workspace_id")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspace_id") String workspaceId);
 
-    @SqlQuery("SELECT COUNT(id) FROM datasets " +
-            " WHERE workspace_id = :workspace_id " +
-            " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            " <if(visibility)> AND visibility = :visibility <endif> " +
-            " <if(type)> AND type = :type <endif> " +
-            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
-            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> ")
+    @SqlQuery("""
+            SELECT COUNT(id) FROM datasets
+            WHERE workspace_id = :workspace_id
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
+            <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif>
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspace_id") String workspaceId, @Define("name") @Bind("name") String name,
@@ -92,13 +94,15 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT COUNT(id) FROM datasets " +
-            "WHERE workspace_id = :workspace_id " +
-            "AND id IN (<ids>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> " +
-            "<if(type)> AND type = :type <endif> ")
+    @SqlQuery("""
+            SELECT COUNT(id) FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (<ids>)
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
@@ -108,15 +112,17 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets " +
-            "WHERE workspace_id = :workspace_id " +
-            "AND id IN (<ids>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> " +
-            "<if(type)> AND type = :type <endif> " +
-            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
-            " LIMIT :limit OFFSET :offset ")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (<ids>)
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            LIMIT :limit OFFSET :offset
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByIds(@Bind("workspace_id") String workspaceId, @BindList("ids") Set<UUID> ids,
@@ -127,13 +133,15 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT COUNT(id) FROM datasets " +
-            "WHERE workspace_id = :workspace_id " +
-            "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> " +
-            "<if(type)> AND type = :type <endif> ")
+    @SqlQuery("""
+            SELECT COUNT(id) FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>)
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCountByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
@@ -143,15 +151,17 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets " +
-            "WHERE workspace_id = :workspace_id " +
-            "AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>) " +
-            "<if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            "<if(visibility)> AND visibility = :visibility <endif> " +
-            "<if(type)> AND type = :type <endif> " +
-            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
-            " LIMIT :limit OFFSET :offset ")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id
+            AND id IN (SELECT id FROM experiment_dataset_ids_<table_name>)
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            LIMIT :limit OFFSET :offset
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> findByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName,
@@ -162,16 +172,18 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets " +
-            " WHERE workspace_id = :workspace_id " +
-            " <if(name)> AND name like concat('%', :name, '%') <endif> " +
-            "<if(filters)> AND <filters> <endif>" +
-            " <if(visibility)> AND visibility = :visibility <endif> " +
-            " <if(type)> AND type = :type <endif> " +
-            " <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif> " +
-            " <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif> " +
-            " ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
-            " LIMIT :limit OFFSET :offset ")
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id
+            <if(name)> AND name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
+            <if(visibility)> AND visibility = :visibility <endif>
+            <if(type)> AND type = :type <endif>
+            <if(with_experiments_only)> AND last_created_experiment_at IS NOT NULL <endif>
+            <if(with_optimizations_only)> AND last_created_optimization_at IS NOT NULL <endif>
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            LIMIT :limit OFFSET :offset
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dataset> find(@Bind("limit") int limit,

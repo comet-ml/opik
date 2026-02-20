@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.web;
 
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 
@@ -12,7 +13,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public abstract class AbstractParamConverterProvider<T> implements ParamConverterProvider {
 
-    private final Class<T> targetType;
+    private final @NonNull Class<T> targetType;
 
     @Override
     @SuppressWarnings("unchecked")
