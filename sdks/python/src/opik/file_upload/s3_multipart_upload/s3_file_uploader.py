@@ -45,8 +45,13 @@ class S3FileDataUploader:
             with file_to_upload.open("rb") as fp:
                 self._upload(fp=fp)
         except Exception as e:
+            connection_error = isinstance(e, httpx.ConnectError) or isinstance(
+                e, httpx.TimeoutException
+            )
             raise s3_upload_error.S3UploadFileError(
-                file=self._file_parts.file, reason=str(e)
+                file=self._file_parts.file,
+                reason=str(e),
+                connection_error=connection_error,
             ) from e
 
         return self.uploaded_parts

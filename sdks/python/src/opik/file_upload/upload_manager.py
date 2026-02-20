@@ -13,6 +13,7 @@ from . import (
     file_upload_monitor,
     thread_pool,
     file_uploader,
+    types as upload_types,
 )
 from .. import format_helpers, synchronization
 from ..message_processing import messages
@@ -136,18 +137,32 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
         self._upload_results: List[UploadResult] = []
         self.closed = False
 
-    def upload(self, message: messages.BaseMessage) -> None:
+    def upload(
+        self,
+        message: messages.BaseMessage,
+        on_upload_success: Optional[upload_types.OnUploadSuccessCallback],
+        on_upload_failed: Optional[upload_types.OnUploadFailureCallback],
+    ) -> None:
         if isinstance(message, messages.CreateAttachmentMessage):
-            self.upload_attachment(message)
+            self.upload_attachment(
+                attachment=message,
+                on_upload_success=on_upload_success,
+                on_upload_failed=on_upload_failed,
+            )
         else:
             raise ValueError(f"Message {message} is not supported for file upload.")
 
-    def upload_attachment(self, attachment: messages.CreateAttachmentMessage) -> None:
-        assert isinstance(attachment, messages.CreateAttachmentMessage), (
-            "Wrong attachment message type"
+    def upload_attachment(
+        self,
+        attachment: messages.CreateAttachmentMessage,
+        on_upload_success: Optional[upload_types.OnUploadSuccessCallback],
+        on_upload_failed: Optional[upload_types.OnUploadFailureCallback],
+    ) -> None:
+        options = upload_options.file_upload_options_from_attachment(
+            attachment=attachment,
+            on_upload_success=on_upload_success,
+            on_upload_failed=on_upload_failed,
         )
-
-        options = upload_options.file_upload_options_from_attachment(attachment)
         self._submit_upload(
             uploader=file_uploader.upload_attachment,
             options=options,

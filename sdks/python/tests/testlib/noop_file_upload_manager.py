@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from opik.file_upload import base_upload_manager
+from opik.file_upload import base_upload_manager, types as upload_types
 from opik.message_processing import messages
 
 
@@ -20,7 +20,12 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
             str, List[messages.CreateAttachmentMessage]
         ] = {}
 
-    def upload(self, message: messages.BaseMessage) -> None:
+    def upload(
+        self,
+        message: messages.BaseMessage,
+        on_upload_success: Optional[upload_types.OnUploadSuccessCallback],
+        on_upload_failed: Optional[upload_types.OnUploadFailureCallback],
+    ) -> None:
         self.current_uploads.append(message)
 
         # Store attachment messages by entity for easy lookup
@@ -33,6 +38,9 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
                 if message.entity_id not in self.attachments_by_trace:
                     self.attachments_by_trace[message.entity_id] = []
                 self.attachments_by_trace[message.entity_id].append(message)
+
+            if on_upload_success is not None:
+                on_upload_success()
 
     def remaining_data(self) -> base_upload_manager.RemainingUploadData:
         return base_upload_manager.RemainingUploadData(

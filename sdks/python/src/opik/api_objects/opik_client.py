@@ -59,6 +59,7 @@ from .. import (
     rest_client_configurator,
     url_helpers,
 )
+from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
     messages,
     streamer_constructors,
@@ -66,6 +67,7 @@ from ..message_processing import (
 )
 from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
+from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
@@ -83,6 +85,7 @@ from ..types import (
     LLMProvider,
     SpanType,
 )
+from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -196,23 +199,51 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
+        file_uploader = upload_manager.FileUploadManager(
+            rest_client=self._rest_client,
+            httpx_client=self._httpx_client,
+            worker_count=self._config.file_upload_background_workers,
+        )
+
+        fallback_replay = self._create_replay_manager()
+
         self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
-                rest_client=self._rest_client
+                rest_client=self._rest_client,
+                file_upload_manager=file_uploader,
+                fallback_replay_manager=fallback_replay,
             )
         )
         self._streamer = streamer_constructors.construct_online_streamer(
+            file_uploader=file_uploader,
             n_consumers=self._config.background_workers,
-            rest_client=self._rest_client,
-            httpx_client=self._httpx_client,
             use_batching=use_batching,
             use_attachment_extraction=self._config.is_attachment_extraction_active,
             min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
-            file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
             message_processor=self.__internal_api__message_processor__,
             url_override=self._config.url_override,
+            fallback_replay_manager=fallback_replay,
         )
+
+    def _create_replay_manager(self) -> replay_manager.ReplayManager:
+        probe = connection_probe.ConnectionProbe(
+            base_url=self._config.url_override,
+            client=self._httpx_client,
+        )
+        monitor = connection_monitor.OpikConnectionMonitor(
+            ping_interval=self._config.connection_monitor_ping_interval,
+            check_timeout=self._config.connection_monitor_check_timeout,
+            probe=probe,
+        )
+
+        fallback_replay = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=self._config.replay_batch_size,
+            batch_replay_delay=self._config.replay_batch_replay_delay,
+            tick_interval_seconds=self._config.replay_tick_interval,
+        )
+        return fallback_replay
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
