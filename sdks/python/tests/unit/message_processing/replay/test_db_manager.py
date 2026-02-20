@@ -35,8 +35,10 @@ def _create_trace_message(
         trace_id=trace_id,
         project_name="test-project",
         name="test-trace",
-        start_time=datetime.datetime(2024, 1, 1, 12, 0, 0),
-        end_time=datetime.datetime(2024, 1, 1, 12, 0, 1),
+        start_time=datetime.datetime(
+            2024, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc
+        ),
+        end_time=datetime.datetime(2024, 1, 1, 12, 0, 1, tzinfo=datetime.timezone.utc),
         input={"query": "test"},
         output={"answer": "response"},
         metadata=None,
