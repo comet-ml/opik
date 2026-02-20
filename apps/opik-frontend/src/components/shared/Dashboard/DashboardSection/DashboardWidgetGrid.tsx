@@ -8,7 +8,6 @@ import {
   DashboardWidget,
   WIDGET_TYPE,
 } from "@/types/dashboard";
-import { WithPermissionsProps } from "@/types/permissions";
 import {
   GRID_COLUMNS,
   ROW_HEIGHT,
@@ -23,25 +22,27 @@ import {
   selectUpdateLayout,
   selectWidgetResolver,
 } from "@/store/DashboardStore";
-import DashboardWidgetGridEmpty from "../DashboardWidgetGridEmpty";
-import DashboardWidgetDisabled from "../../DashboardWidget/DashboardWidgetDisabled";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
+import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
 const ResponsiveGridLayout = WidthProvider(GridLayout);
 
-export interface DashboardWidgetGridProps {
+interface DashboardWidgetGridProps {
   sectionId: string;
   widgets: DashboardWidget[];
   layout: DashboardLayout;
 }
 
 const DashboardWidgetGrid: React.FunctionComponent<
-  DashboardWidgetGridProps & WithPermissionsProps
-> = ({ sectionId, widgets, layout, canViewExperiments }) => {
+  DashboardWidgetGridProps
+> = ({ sectionId, widgets, layout }) => {
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
+  const { canViewExperiments } = usePermissions();
 
   const handleAddWidget = () => {
     onAddEditWidgetCallback?.({ sectionId });
@@ -80,7 +81,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
       {widgets.map((widget) => {
         const widgetComponents = widgetResolver?.({
           type: widget.type || WIDGET_TYPE.PROJECT_METRICS,
-          canViewExperiments,
+          canViewExperiments: !!canViewExperiments,
         });
 
         if (!widgetComponents) return null;

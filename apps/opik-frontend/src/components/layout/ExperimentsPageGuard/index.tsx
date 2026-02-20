@@ -1,16 +1,15 @@
-import usePluginsStore from "@/store/PluginsStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const ExperimentsPageGuard = () => {
-  const ExperimentsPageGuardPlugin = usePluginsStore(
-    (state) => state.ExperimentsPageGuard,
+  const { canViewExperiments } = usePermissions();
+
+  return (
+    <NoAccessPageGuard
+      resourceName="experiments"
+      canViewPage={canViewExperiments}
+    />
   );
-
-  if (ExperimentsPageGuardPlugin) {
-    return <ExperimentsPageGuardPlugin />;
-  }
-
-  return <NoAccessPageGuard canViewPage />;
 };
 
 export default ExperimentsPageGuard;

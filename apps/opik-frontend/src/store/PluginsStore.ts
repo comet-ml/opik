@@ -6,16 +6,6 @@ import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/G
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
-import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep/WidgetConfigDialogAddStep";
-import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid/DashboardWidgetGrid";
-import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
-import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
-import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
-import { DashboardsViewGuardProps } from "@/plugins/comet/DashboardsViewGuard";
-import { ViewSelectorProps } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { PlaygroundExperimentsLinkProps } from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundExperimentsLink";
-import { RunExperimentButtonProps } from "@/components/pages/HomePage/GetStartedSection/RunExperimentButton";
-import { DashboardTemplateItemsProps } from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/DashboardTemplateItems";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -23,29 +13,18 @@ type PluginStore = {
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
+  PermissionsProvider: React.ComponentType<{
+    children: React.ReactNode;
+  }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
-  SideBarMenuItems: React.ComponentType<SideBarMenuItemsProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
-  WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
-  DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
-  EvaluationSection: React.ComponentType | null;
-  ExperimentsPageGuard: React.ComponentType | null;
-  DashboardsPageGuard: React.ComponentType | null;
-  DashboardsViewGuard: React.ComponentType<DashboardsViewGuardProps> | null;
-  StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
-  PromptPageExperimentsTabTrigger: React.ComponentType | null;
-  PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
-  ViewSelector: React.ComponentType<ViewSelectorProps> | null;
-  PlaygroundExperimentsLink: React.ComponentType<PlaygroundExperimentsLinkProps> | null;
-  RunExperimentButton: React.ComponentType<RunExperimentButtonProps> | null;
-  DashboardTemplateItems: React.ComponentType<DashboardTemplateItemsProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -58,6 +37,7 @@ const PLUGIN_NAMES = [
   "GetStartedPage",
   "GoogleColabCard",
   "WorkspacePreloader",
+  "PermissionsProvider",
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
@@ -65,19 +45,6 @@ const PLUGIN_NAMES = [
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
-  "WidgetConfigDialogAddStep",
-  "DashboardWidgetGrid",
-  "EvaluationSection",
-  "ExperimentsPageGuard",
-  "DashboardsPageGuard",
-  "DashboardsViewGuard",
-  "StartPreferenceExperimentsLink",
-  "PromptPageExperimentsTabTrigger",
-  "PromptPageExperimentsTabContent",
-  "ViewSelector",
-  "PlaygroundExperimentsLink",
-  "RunExperimentButton",
-  "DashboardTemplateItems",
   "init",
 ];
 
@@ -88,6 +55,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GetStartedPage: null,
   GoogleColabCard: null,
   WorkspacePreloader: null,
+  PermissionsProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
@@ -95,19 +63,6 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
-  WidgetConfigDialogAddStep: null,
-  DashboardWidgetGrid: null,
-  EvaluationSection: null,
-  ExperimentsPageGuard: null,
-  DashboardsPageGuard: null,
-  DashboardsViewGuard: null,
-  StartPreferenceExperimentsLink: null,
-  PromptPageExperimentsTabTrigger: null,
-  PromptPageExperimentsTabContent: null,
-  ViewSelector: null,
-  PlaygroundExperimentsLink: null,
-  RunExperimentButton: null,
-  DashboardTemplateItems: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
