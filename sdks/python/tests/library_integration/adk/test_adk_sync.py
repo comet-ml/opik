@@ -663,7 +663,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -703,9 +703,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         "original_usage.total_tokens",
     ]
     for llm_span in llm_spans:
-        assert_dict_has_keys(
-            llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
-        )
+        assert_dict_has_keys(llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
 
 
 def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
@@ -746,7 +744,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -787,9 +785,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         # "original_usage.total_tokens",
     ]
     for llm_span in llm_spans:
-        assert_dict_has_keys(
-            llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT
-        )
+        assert_dict_has_keys(llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
 
 
 def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_subagent_is_tracked(
