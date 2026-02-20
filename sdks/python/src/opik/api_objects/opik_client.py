@@ -2,7 +2,20 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    Literal,
+    cast,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
 
 import httpx
 
@@ -26,6 +39,8 @@ from .annotation_queue import rest_operations as annotation_queue_rest_operation
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
+from .dataset import evaluation_suite
+from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
@@ -939,6 +954,139 @@ class Opik:
         except ApiError as e:
             if e.status_code == 404:
                 return self.create_dataset(name, description)
+            raise
+
+    def create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
+        """
+        Create a new evaluation suite for regression testing.
+
+        Evaluation suites are pre-configured test suites that let you validate
+        that prompt changes, model updates, or code modifications don't break
+        existing functionality.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description of what this suite tests.
+            evaluators: Suite-level evaluators (e.g., LLMJudge instances)
+                applied to all test items.
+            execution_policy: Dataset-level execution policy.
+                Example: {"runs_per_item": 3, "pass_threshold": 2}
+
+        Returns:
+            EvaluationSuite: The created evaluation suite object.
+
+        Example:
+            >>> from opik.evaluation.suite_evaluators import LLMJudge
+            >>>
+            >>> suite = client.create_evaluation_suite(
+            ...     name="Refund Policy Tests",
+            ...     description="Regression tests for refund scenarios",
+            ...     evaluators=[
+            ...         LLMJudge(assertions=[
+            ...             {"name": "no_hallucination", "expected_behavior": "No hallucinated information"},
+            ...         ]),
+            ...     ]
+            ... )
+            >>>
+            >>> suite.add_item(
+            ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
+            ... )
+            >>>
+            >>> results = suite.run(task=my_llm_function)
+        """
+        from .dataset import validators, rest_operations
+
+        if evaluators:
+            validators.validate_evaluators(evaluators, "suite-level evaluators")
+
+        rest_operations.create_evaluation_suite_dataset(
+            rest_client=self._rest_client,
+            dataset_name=name,
+            description=description,
+            evaluators=evaluators,
+            exec_policy=execution_policy,
+        )
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=description,
+            rest_client=self._rest_client,
+            dataset_items_count=0,
+        )
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            dataset_=suite_dataset,
+        )
+
+    def get_evaluation_suite(self, name: str) -> evaluation_suite.EvaluationSuite:
+        """
+        Get an existing evaluation suite by name.
+
+        Retrieves the dataset and its version-level evaluators/execution_policy
+        from the backend, returning a fully configured EvaluationSuite.
+
+        Args:
+            name: The name of the evaluation suite.
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+
+        Raises:
+            ApiError: If no dataset with the given name exists (404).
+        """
+        dataset_fern: dataset_public.DatasetPublic = (
+            self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
+        )
+
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=dataset_fern.description,
+            rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+        )
+
+        suite_dataset.__internal_api__sync_hashes__()
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            dataset_=suite_dataset,
+        )
+
+    def get_or_create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
+        """
+        Get an existing evaluation suite by name or create a new one if it does not exist.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description (used only when creating).
+            evaluators: Suite-level evaluators (used only when creating).
+            execution_policy: Execution policy (used only when creating).
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+        """
+        try:
+            return self.get_evaluation_suite(name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_evaluation_suite(
+                    name=name,
+                    description=description,
+                    evaluators=evaluators,
+                    execution_policy=execution_policy,
+                )
             raise
 
     def create_experiment(
