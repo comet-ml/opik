@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -47,6 +49,10 @@ public abstract sealed class FeedbackScoreItem {
 
     private final String reason;
 
+    @Min(0) @Max(1) private final Integer error;
+
+    private final String errorReason;
+
     @NotNull private final ScoreSource source;
 
     private final String author;
@@ -69,11 +75,13 @@ public abstract sealed class FeedbackScoreItem {
         // entity (trace or span) id
         @NotNull private UUID id;
 
-        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "source",
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "error",
+                "errorReason", "source",
                 "author", "id"})
         public FeedbackScoreBatchItem(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String author, UUID id) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author);
+                BigDecimal value, String reason, Integer error, String errorReason, ScoreSource source, String author,
+                UUID id) {
+            super(projectName, projectId, name, value, categoryName, reason, error, errorReason, source, author);
             this.id = id;
         }
 
@@ -98,11 +106,13 @@ public abstract sealed class FeedbackScoreItem {
         @JsonIgnore
         private UUID id;
 
-        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason",
+        @ConstructorProperties({"projectName", "projectId", "name", "categoryName", "value", "reason", "error",
+                "errorReason",
                 "source", "author", "threadId"})
         public FeedbackScoreBatchItemThread(String projectName, UUID projectId, String name, String categoryName,
-                BigDecimal value, String reason, ScoreSource source, String author, String threadId) {
-            super(projectName, projectId, name, value, categoryName, reason, source, author);
+                BigDecimal value, String reason, Integer error, String errorReason, ScoreSource source, String author,
+                String threadId) {
+            super(projectName, projectId, name, value, categoryName, reason, error, errorReason, source, author);
             this.threadId = threadId;
         }
 

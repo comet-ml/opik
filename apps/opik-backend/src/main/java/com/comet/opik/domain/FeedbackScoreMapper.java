@@ -32,6 +32,8 @@ public interface FeedbackScoreMapper {
     @Mapping(target = "name", expression = "java(item.name())")
     @Mapping(target = "value", expression = "java(item.value())")
     @Mapping(target = "reason", expression = "java(item.reason())")
+    @Mapping(target = "error", expression = "java(item.error() == null ? 0 : item.error())")
+    @Mapping(target = "errorReason", expression = "java(item.errorReason())")
     @Mapping(target = "source", expression = "java(item.source())")
     FeedbackScore toFeedbackScore(FeedbackScoreItem item);
 
@@ -57,30 +59,49 @@ public interface FeedbackScoreMapper {
      *                      [1] categoryName (String)
      *                      [2] value (BigDecimal)
      *                      [3] reason (String)
-     *                      [4] source (String)
-     *                      [5] valueByAuthor (Map)
-     *                      [6] createdAt (OffsetDateTime)
-     *                      [7] lastUpdatedAt (OffsetDateTime)
-     *                      [8] createdBy (String)
-     *                      [9] lastUpdatedBy (String)
+     *                      [4] error (Number) [optional]
+     *                      [5] errorReason (String) [optional]
+     *                      [6] source (String)
+     *                      [7] valueByAuthor (Map)
+     *                      [8] createdAt (OffsetDateTime)
+     *                      [9] lastUpdatedAt (OffsetDateTime)
+     *                      [10] createdBy (String)
+     *                      [11] lastUpdatedBy (String)
      * @return List of FeedbackScore objects, or null if input is null/empty
      */
     static List<FeedbackScore> mapFeedbackScores(List<List<Object>> feedbackScores) {
         return Optional.ofNullable(feedbackScores)
                 .orElse(List.of())
                 .stream()
-                .map(feedbackScore -> FeedbackScore.builder()
-                        .name((String) feedbackScore.get(0))
-                        .categoryName(getIfNotEmpty(feedbackScore.get(1)))
-                        .value((BigDecimal) feedbackScore.get(2))
-                        .reason(getIfNotEmpty(feedbackScore.get(3)))
-                        .source(ScoreSource.fromString((String) feedbackScore.get(4)))
-                        .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
-                        .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
-                        .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(7)).toInstant())
-                        .createdBy((String) feedbackScore.get(8))
-                        .lastUpdatedBy((String) feedbackScore.get(9))
-                        .build())
+                .map(feedbackScore -> {
+                    boolean hasErrorColumns = feedbackScore.size() >= 12;
+                    int sourceIndex = hasErrorColumns ? 6 : 4;
+                    int valueByAuthorIndex = hasErrorColumns ? 7 : 5;
+                    int createdAtIndex = hasErrorColumns ? 8 : 6;
+                    int lastUpdatedAtIndex = hasErrorColumns ? 9 : 7;
+                    int createdByIndex = hasErrorColumns ? 10 : 8;
+                    int lastUpdatedByIndex = hasErrorColumns ? 11 : 9;
+
+                    return FeedbackScore.builder()
+                            .name((String) feedbackScore.getFirst())
+                            .categoryName(getIfNotEmpty(feedbackScore.get(1)))
+                            .value((BigDecimal) feedbackScore.get(2))
+                            .reason(getIfNotEmpty(feedbackScore.get(3)))
+                            .error(hasErrorColumns ? parseError(feedbackScore.get(4)) : 0)
+                            .errorReason(hasErrorColumns
+                                    ? Optional.ofNullable(feedbackScore.get(5))
+                                            .map(Object::toString)
+                                            .filter(StringUtils::isNotEmpty)
+                                            .orElse(null)
+                                    : null)
+                            .source(ScoreSource.fromString((String) feedbackScore.get(sourceIndex)))
+                            .valueByAuthor(parseValueByAuthor(feedbackScore.get(valueByAuthorIndex)))
+                            .createdAt(((OffsetDateTime) feedbackScore.get(createdAtIndex)).toInstant())
+                            .lastUpdatedAt(((OffsetDateTime) feedbackScore.get(lastUpdatedAtIndex)).toInstant())
+                            .createdBy((String) feedbackScore.get(createdByIndex))
+                            .lastUpdatedBy((String) feedbackScore.get(lastUpdatedByIndex))
+                            .build();
+                })
                 .toList();
     }
 
@@ -152,23 +173,47 @@ public interface FeedbackScoreMapper {
             var feedbackScores = Arrays.stream(feedbackScoresArray)
                     .filter(feedbackScore -> CollectionUtils.isNotEmpty(feedbackScore) &&
                             !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(feedbackScore.getFirst().toString()))
-                    .map(feedbackScore -> FeedbackScore.builder()
-                            .name(feedbackScore.get(1).toString())
-                            .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .value(new BigDecimal(feedbackScore.get(3).toString()))
-                            .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
-                                    .filter(StringUtils::isNotEmpty).orElse(null))
-                            .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
-                            .createdAt(Instant.parse(feedbackScore.get(6).toString()))
-                            .lastUpdatedAt(Instant.parse(feedbackScore.get(7).toString()))
-                            .createdBy(feedbackScore.get(8).toString())
-                            .lastUpdatedBy(feedbackScore.get(9).toString())
-                            .valueByAuthor(parseValueByAuthor(feedbackScore.get(10)))
-                            .build())
+                    .map(feedbackScore -> {
+                        boolean hasErrorColumns = feedbackScore.size() >= 13;
+                        int sourceIndex = hasErrorColumns ? 7 : 5;
+                        int createdAtIndex = hasErrorColumns ? 8 : 6;
+                        int lastUpdatedAtIndex = hasErrorColumns ? 9 : 7;
+                        int createdByIndex = hasErrorColumns ? 10 : 8;
+                        int lastUpdatedByIndex = hasErrorColumns ? 11 : 9;
+                        int valueByAuthorIndex = hasErrorColumns ? 12 : 10;
+
+                        return FeedbackScore.builder()
+                                .name(feedbackScore.get(1).toString())
+                                .categoryName(Optional.ofNullable(feedbackScore.get(2)).map(Object::toString)
+                                        .filter(StringUtils::isNotEmpty).orElse(null))
+                                .value(new BigDecimal(feedbackScore.get(3).toString()))
+                                .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
+                                        .filter(StringUtils::isNotEmpty).orElse(null))
+                                .error(hasErrorColumns ? parseError(feedbackScore.get(5)) : 0)
+                                .errorReason(hasErrorColumns
+                                        ? Optional.ofNullable(feedbackScore.get(6))
+                                                .map(Object::toString)
+                                                .filter(StringUtils::isNotEmpty)
+                                                .orElse(null)
+                                        : null)
+                                .source(ScoreSource.fromString(feedbackScore.get(sourceIndex).toString()))
+                                .createdAt(Instant.parse(feedbackScore.get(createdAtIndex).toString()))
+                                .lastUpdatedAt(Instant.parse(feedbackScore.get(lastUpdatedAtIndex).toString()))
+                                .createdBy(feedbackScore.get(createdByIndex).toString())
+                                .lastUpdatedBy(feedbackScore.get(lastUpdatedByIndex).toString())
+                                .valueByAuthor(parseValueByAuthor(feedbackScore.get(valueByAuthorIndex)))
+                                .build();
+                    })
                     .toList();
             return feedbackScores.isEmpty() ? null : feedbackScores;
         }
         return null;
     }
+
+    static int parseError(Object value) {
+        return Optional.ofNullable(value)
+                .map(v -> v instanceof Number number ? number.intValue() : Integer.parseInt(v.toString()))
+                .orElse(0);
+    }
+
 }

@@ -80,6 +80,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 category_name,
                 value,
                 reason,
+                error,
+                error_reason,
                 source,
                 <if(author)>author,<endif>
                 created_by,
@@ -97,6 +99,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                          :category_name<item.index>,
                          :value<item.index>,
                          :reason<item.index>,
+                         :error<item.index>,
+                         :error_reason<item.index>,
                          :source<item.index>,
                          <if(author)>:author<item.index>,<endif>
                          :user_name,
@@ -305,6 +309,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 .orElse("");
     }
 
+    private int getErrorOrDefault(Integer error) {
+        if (error == null) {
+            return 0;
+        }
+        return error == 0 ? 0 : 1;
+    }
+
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
@@ -348,6 +359,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
                     .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
+                    .bind("error" + i, getErrorOrDefault(feedbackScoreBatchItem.error()))
+                    .bind("error_reason" + i, getValueOrDefault(feedbackScoreBatchItem.errorReason()))
                     .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
 
             if (author != null) {
