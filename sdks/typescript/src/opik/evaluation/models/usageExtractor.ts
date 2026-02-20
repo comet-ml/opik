@@ -136,12 +136,21 @@ function extractTokenUsage(
       opikUsage[opikField] = tokenCount;
     }
   }
-  const cacheReadTokens = usage.inputTokenDetails?.cacheReadTokens;
+  const typedUsage = usage as LanguageModelUsage & {
+    inputTokenDetails?: {
+      cacheReadTokens?: number;
+    };
+    outputTokenDetails?: {
+      reasoningTokens?: number;
+    };
+  };
+
+  const cacheReadTokens = typedUsage.inputTokenDetails?.cacheReadTokens;
   if (typeof cacheReadTokens === "number") {
     opikUsage.cached_input_tokens = cacheReadTokens;
   }
 
-  const reasoningTokens = usage.outputTokenDetails?.reasoningTokens;
+  const reasoningTokens = typedUsage.outputTokenDetails?.reasoningTokens;
   if (typeof reasoningTokens === "number") {
     opikUsage.reasoning_tokens = reasoningTokens;
   }

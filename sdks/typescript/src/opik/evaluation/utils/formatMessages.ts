@@ -8,10 +8,20 @@ import type {
   FilePart,
   ToolCallPart,
   ToolResultPart,
-  ToolApprovalRequest,
-  ToolApprovalResponse,
 } from "ai";
-import type { ReasoningPart } from "@ai-sdk/provider-utils";
+
+type ToolApprovalRequest = {
+  type: "tool-approval-request";
+};
+
+type ToolApprovalResponse = {
+  type: "tool-approval-response";
+};
+
+type ReasoningPart = {
+  type: "reasoning";
+  text?: string;
+};
 
 /**
  * Formats an array of OpikMessage objects into a human-readable string.
