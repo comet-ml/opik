@@ -29,6 +29,19 @@ public class RetryUtils {
                 });
     }
 
+    public static RetryBackoffSpec handleOnDeadLocks() {
+        return Retry.backoff(5, Duration.ofMillis(250))
+                .maxBackoff(Duration.ofSeconds(2))
+                .jitter(0.5) // Add jitter to reduce thundering herd effect
+                .doBeforeRetry(retrySignal -> log.warn("Retrying due to: {}", retrySignal.failure().getMessage()))
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
+                .filter(throwable -> {
+                    log.debug("Filtering for retry: {}", throwable.getMessage());
+
+                    return isDatabaseDeadlock(throwable);
+                });
+    }
+
     @Getter
     public static class RetryableHttpException extends RuntimeException {
         private final int statusCode;
@@ -61,6 +74,22 @@ public class RetryUtils {
                     log.debug("Filtering for retry: {}", throwable.getMessage());
                     return isRetriableException(throwable);
                 });
+    }
+
+    private static boolean isDatabaseDeadlock(Throwable throwable) {
+        if (throwable == null) {
+            return false;
+        }
+
+        String className = throwable.getClass().getName();
+        String message = throwable.getMessage();
+
+        // Check for MySQL transaction rollback exception (deadlock)
+        boolean isMySQLDeadlock = "com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException".equals(className)
+                && message != null && message.contains("Deadlock found");
+
+        // If not a direct match, check the cause recursively
+        return isMySQLDeadlock || (throwable.getCause() != null && isDatabaseDeadlock(throwable.getCause()));
     }
 
     private static boolean isRetriableException(Throwable throwable) {

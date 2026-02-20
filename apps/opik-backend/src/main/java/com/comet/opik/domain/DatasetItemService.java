@@ -20,6 +20,7 @@ import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.RetryUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -449,12 +450,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         Set.of(), // No deleted items
                                         unchangedUuids,
                                         Set.of())
-                                        .map(itemsTotal -> {
+                                        .flatMap(itemsTotal -> {
                                             log.info("Applied patch delta to dataset '{}': itemsTotal '{}'",
                                                     datasetId, itemsTotal);
 
                                             // Create version metadata
-                                            versionService.createVersionFromDelta(
+                                            return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                                                     datasetId,
                                                     newVersionId,
                                                     itemsTotal.intValue(),
@@ -463,11 +464,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     "Updated 1 item",
                                                     null, // No batch group ID
                                                     workspaceId,
-                                                    userName);
-
-                                            log.info("Created version '{}' for dataset '{}' after patch",
-                                                    newVersionId, datasetId);
-                                            return itemsTotal;
+                                                    userName))
+                                                    .retryWhen(RetryUtils.handleOnDeadLocks())
+                                                    .doOnSuccess(version -> log.info(
+                                                            "Created version '{}' for dataset '{}' after patch",
+                                                            newVersionId, datasetId))
+                                                    .thenReturn(itemsTotal);
                                         });
                             });
                 });
@@ -756,7 +758,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Create version metadata
         String changeDescription = createChangeDescription(updatedCount, isFilterBased);
 
-        versionService.createVersionFromDelta(
+        return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                 datasetId,
                 newVersionId,
                 (int) itemsTotal,
@@ -765,10 +767,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 changeDescription,
                 null, // No batch group ID
                 workspaceId,
-                userName);
-
-        log.info("Created version '{}' for dataset '{}' after batch update", newVersionId, datasetId);
-        return Mono.empty();
+                userName))
+                .retryWhen(RetryUtils.handleOnDeadLocks())
+                .doOnSuccess(version -> log.info("Created version '{}' for dataset '{}' after batch update",
+                        newVersionId, datasetId))
+                .then();
     }
 
     /**
@@ -1100,7 +1103,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         ? "Deleted 1 item"
                                         : "Deleted " + deletedCount + " items";
 
-                                versionService.createVersionFromDelta(
+                                return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                                         datasetId,
                                         newVersionId,
                                         newVersionItemCount.intValue(),
@@ -1109,9 +1112,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         changeDescription,
                                         batchGroupId, // Pass batch group ID
                                         workspaceId,
-                                        userName);
-
-                                return Mono.empty();
+                                        userName)).retryWhen(RetryUtils.handleOnDeadLocks());
                             })
                             .then();
                 }));
@@ -1234,11 +1235,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 deletedIds,
                 unchangedUuids,
                 Set.of())
-                .map(itemsTotal -> {
+                .flatMap(itemsTotal -> {
                     log.info("Applied deletion delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
                     // Create version metadata
-                    DatasetVersion version = versionService.createVersionFromDelta(
+                    return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                             datasetId,
                             newVersionId,
                             itemsTotal.intValue(),
@@ -1247,10 +1248,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No change description (auto-generated)
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
-                            userName);
-
-                    log.info("Created version '{}' for dataset '{}' after deletion", version.id(), datasetId);
-                    return version;
+                            userName))
+                            .retryWhen(RetryUtils.handleOnDeadLocks())
+                            .doOnSuccess(version -> log.info("Created version '{}' for dataset '{}' after deletion",
+                                    version.id(), datasetId));
                 })
                 .then();
     }
@@ -1514,10 +1515,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         addedItemsWithIds, List.of(), deletedIds, unchangedUuids,
                                         editedDatasetItemIds)
                                         .map(otherCount -> editedCount + otherCount))
-                                .map(itemsTotal -> {
+                                .flatMap(itemsTotal -> {
                                     log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
-                                    DatasetVersion version = versionService.createVersionFromDelta(
+                                    return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                                             datasetId,
                                             newVersionId,
                                             itemsTotal.intValue(),
@@ -1526,11 +1527,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             changes.changeDescription(),
                                             null,
                                             workspaceId,
-                                            userName);
-
-                                    log.info("Created version '{}' for dataset '{}' with hash '{}'",
-                                            version.id(), datasetId, version.versionHash());
-                                    return version;
+                                            userName))
+                                            .doOnSuccess(version -> log.info(
+                                                    "Created version '{}' for dataset '{}' with hash '{}'",
+                                                    version.id(), datasetId, version.versionHash()));
                                 });
                     });
         });
@@ -1882,7 +1882,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Use applyDelta with no base version items (empty copy)
         // We need a special path since there's no base version
         return versionDao.insertItems(datasetId, newVersionId, addedItems, workspaceId, userName)
-                .map(itemsTotal -> {
+                .flatMap(itemsTotal -> {
                     log.info("Inserted '{}' items for first version of dataset '{}'", itemsTotal, datasetId);
 
                     // Determine change description based on whether this is a batch operation
@@ -1891,7 +1891,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             : null;
 
                     // Create version metadata (first version - all items are "added")
-                    DatasetVersion version = versionService.createVersionFromDelta(
+                    return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                             datasetId,
                             newVersionId,
                             itemsTotal.intValue(),
@@ -1900,11 +1900,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             changeDescription,
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
-                            userName);
-
-                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
-                            version.id(), datasetId, version.versionHash());
-                    return version;
+                            userName))
+                            .retryWhen(RetryUtils.handleOnDeadLocks())
+                            .doOnSuccess(
+                                    version -> log.info("Created first version '{}' for dataset '{}' with hash '{}'",
+                                            version.id(), datasetId, version.versionHash()));
                 });
     }
 
@@ -1968,7 +1968,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
                             addedItemsWithIds, editedItems, Set.of(), unchangedUuids,
                             Set.of())
-                            .map(itemsTotal -> {
+                            .flatMap(itemsTotal -> {
                                 log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
                                 // Determine change description based on whether this is a batch operation
@@ -1977,7 +1977,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         : null;
 
                                 // Create version metadata
-                                DatasetVersion version = versionService.createVersionFromDelta(
+                                return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                                         datasetId,
                                         newVersionId,
                                         itemsTotal.intValue(),
@@ -1986,11 +1986,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         changeDescription,
                                         batchGroupId, // Include batch group ID if provided
                                         workspaceId,
-                                        userName);
-
-                                log.info("Created version '{}' for dataset '{}' with hash '{}'",
-                                        version.id(), datasetId, version.versionHash());
-                                return version;
+                                        userName)).retryWhen(RetryUtils.handleOnDeadLocks())
+                                        .doOnSuccess(version -> log.info(
+                                                "Created version '{}' for dataset '{}' with hash '{}'",
+                                                version.id(), datasetId, version.versionHash()));
                             });
                 });
     }
