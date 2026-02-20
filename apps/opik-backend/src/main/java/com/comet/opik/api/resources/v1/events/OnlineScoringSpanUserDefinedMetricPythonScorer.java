@@ -81,12 +81,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
 
             Map<String, Object> data;
             try {
-                var arguments = message.code().arguments();
-                if (arguments != null && !arguments.isEmpty()) {
-                    data = Map.copyOf(OnlineScoringEngine.toReplacements(arguments, span));
-                } else {
-                    data = OnlineScoringDataExtractor.toFullSectionObjectData(span);
-                }
+                data = OnlineScoringDataExtractor.preparePythonEvaluatorData(message.code().arguments(), span);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for spanId '{}'", span.id());
                 throw exception;

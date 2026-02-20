@@ -214,17 +214,11 @@ public class OnlineScoringEngine {
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
-        Map<String, String> replacements;
-        if (variablesMap == null || variablesMap.isEmpty()) {
-            // New mode: treat template variables directly as JSONPath
-            Set<String> templateVariables = OnlineScoringDataExtractor
-                    .extractAllVariablesFromMessages(templateMessages);
-            replacements = OnlineScoringDataExtractor.toReplacementsFromTemplateVariables(templateVariables, trace);
-        } else {
-            // Legacy mode: use the variables mapping
-            replacements = toReplacements(variablesMap, trace);
-        }
-        return renderMessagesWithReplacements(templateMessages, replacements);
+        return renderMessages(templateMessages, variablesMap, section -> switch (section) {
+            case INPUT -> trace.input();
+            case OUTPUT -> trace.output();
+            case METADATA -> trace.metadata();
+        });
     }
 
     /**
@@ -243,15 +237,30 @@ public class OnlineScoringEngine {
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
+        return renderMessages(templateMessages, variablesMap, section -> switch (section) {
+            case INPUT -> span.input();
+            case OUTPUT -> span.output();
+            case METADATA -> span.metadata();
+        });
+    }
+
+    /**
+     * Common implementation that resolves replacements and renders messages.
+     * Supports both legacy variable mapping mode and direct JSONPath mode.
+     */
+    private static List<ChatMessage> renderMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap,
+            JsonSectionExtractor sectionExtractor) {
         Map<String, String> replacements;
         if (variablesMap == null || variablesMap.isEmpty()) {
             // New mode: treat template variables directly as JSONPath
             Set<String> templateVariables = OnlineScoringDataExtractor
                     .extractAllVariablesFromMessages(templateMessages);
-            replacements = OnlineScoringDataExtractor.toReplacementsFromTemplateVariables(templateVariables, span);
+            replacements = OnlineScoringDataExtractor
+                    .toReplacementsFromTemplateVariables(templateVariables, sectionExtractor);
         } else {
             // Legacy mode: use the variables mapping
-            replacements = toReplacements(variablesMap, span);
+            replacements = toReplacements(variablesMap, sectionExtractor);
         }
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
