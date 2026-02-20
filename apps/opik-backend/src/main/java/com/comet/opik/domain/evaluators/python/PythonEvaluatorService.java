@@ -29,7 +29,7 @@ public class PythonEvaluatorService {
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;
 
-    public List<PythonScoreResult> evaluate(@NonNull String code, Map<String, String> data) {
+    public List<PythonScoreResult> evaluate(@NonNull String code, Map<String, Object> data) {
         Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
         var request = PythonEvaluatorRequest.builder()
                 .code(code)

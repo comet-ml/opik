@@ -684,6 +684,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not online evaluation optional variable mapping is enabled
+  onlineEvaluationOptionalVariableMappingEnabled: ${TOGGLE_ONLINE_EVALUATION_OPTIONAL_VARIABLE_MAPPING_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

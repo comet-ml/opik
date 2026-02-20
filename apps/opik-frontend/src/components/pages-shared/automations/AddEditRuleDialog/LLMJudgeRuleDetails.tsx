@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -66,6 +66,7 @@ type LLMJudgeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   projectName?: string;
   datasetColumnNames?: string[];
+  hideVariables?: boolean;
 };
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
@@ -73,6 +74,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   form,
   projectName,
   datasetColumnNames,
+  hideVariables = false,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
   const { calculateModelProvider, calculateDefaultModel } =
@@ -83,6 +85,14 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
+
+  // Clear variables when hideVariables is enabled (direct JSONPath mode)
+  useEffect(() => {
+    if (hideVariables) {
+      form.setValue("llmJudgeDetails.variables", {});
+      form.setValue("llmJudgeDetails.parsingVariablesError", false);
+    }
+  }, [hideVariables, form]);
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope
@@ -122,8 +132,17 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       messages: LLMMessage[],
       fieldOnChange: (messages: LLMMessage[]) => void,
       formInstance: UseFormReturn<EvaluationRuleFormType>,
+      skipVariableExtraction: boolean = false,
     ) => {
       fieldOnChange(messages);
+
+      // When direct JSONPath mode is enabled (hideVariables=true), skip variable extraction
+      // Variables in templates like {{input.question}} will be resolved directly by backend
+      if (skipVariableExtraction) {
+        formInstance.setValue("llmJudgeDetails.variables", {});
+        formInstance.setValue("llmJudgeDetails.parsingVariablesError", false);
+        return;
+      }
 
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
@@ -303,7 +322,12 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   disableMedia={isThreadScope}
                   promptVariables={datasetColumnNames}
                   onChange={(messages: LLMMessage[]) =>
-                    handleMessagesChange(messages, field.onChange, form)
+                    handleMessagesChange(
+                      messages,
+                      field.onChange,
+                      form,
+                      hideVariables,
+                    )
                   }
                   onAddMessage={() =>
                     field.onChange([
@@ -318,7 +342,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             );
           }}
         />
-        {!isThreadScope && (
+        {!isThreadScope && !hideVariables && (
           <FormField
             control={form.control}
             name="llmJudgeDetails.variables"

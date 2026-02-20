@@ -8,16 +8,16 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.resources.v1.events.OnlineScoringDataExtractor.JsonSectionExtractor;
+import com.comet.opik.api.resources.v1.events.OnlineScoringDataExtractor.MessageVariableMapping;
+import com.comet.opik.api.resources.v1.events.OnlineScoringDataExtractor.TraceSection;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.api.gax.rpc.InvalidArgumentException;
-import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
@@ -28,8 +28,6 @@ import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -42,7 +40,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.regex.Matcher;
@@ -199,37 +197,71 @@ public class OnlineScoringEngine {
      * Render the rule evaluator message template using the values from an actual
      * trace.
      * <p>
-     * As the rule may consist in multiple messages, we check each one of them for
-     * variables to fill.
-     * Then we go through every variable template to replace them for the value from
-     * the trace.
+     * Supports two modes:
+     * 1. If variablesMap is provided (non-empty): Uses the mapping to convert template variables
+     *    to trace paths (legacy behavior for backward compatibility).
+     *    Example: variablesMap={"question": "input.question"}, template="{{question}}"
+     * 2. If variablesMap is empty/null: Treats template variables directly as JSONPath.
+     *    Example: template="{{input.question}}" extracts from trace.input().question
      *
      * @param templateMessages a list of messages with variables to fill with a
      *                         Trace value
      * @param variablesMap     a map of template variable to a path to a value into
-     *                         a Trace
+     *                         a Trace (can be null or empty for direct JSONPath mode)
      * @param trace            the trace with value to use to replace template
      *                         variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
-        Map<String, String> replacements = toReplacements(variablesMap, trace);
-        return renderMessagesWithReplacements(templateMessages, replacements);
+        return renderMessages(templateMessages, variablesMap, section -> switch (section) {
+            case INPUT -> trace.input();
+            case OUTPUT -> trace.output();
+            case METADATA -> trace.metadata();
+        });
     }
 
     /**
      * Render the rule evaluator message template using the values from an actual span.
-     * Similar to renderMessages but for spans.
+     * <p>
+     * Supports two modes:
+     * 1. If variablesMap is provided (non-empty): Uses the mapping to convert template variables
+     *    to span paths (legacy behavior for backward compatibility).
+     * 2. If variablesMap is empty/null: Treats template variables directly as JSONPath.
      *
      * @param templateMessages a list of messages with variables to fill with a Span value
      * @param variablesMap     a map of template variable to a path to a value into a Span
+     *                         (can be null or empty for direct JSONPath mode)
      * @param span             the span with value to use to replace template variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
-        Map<String, String> replacements = toReplacements(variablesMap, span);
+        return renderMessages(templateMessages, variablesMap, section -> switch (section) {
+            case INPUT -> span.input();
+            case OUTPUT -> span.output();
+            case METADATA -> span.metadata();
+        });
+    }
+
+    /**
+     * Common implementation that resolves replacements and renders messages.
+     * Supports both legacy variable mapping mode and direct JSONPath mode.
+     */
+    private static List<ChatMessage> renderMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap,
+            JsonSectionExtractor sectionExtractor) {
+        Map<String, String> replacements;
+        if (variablesMap == null || variablesMap.isEmpty()) {
+            // New mode: treat template variables directly as JSONPath
+            Set<String> templateVariables = OnlineScoringDataExtractor
+                    .extractAllVariablesFromMessages(templateMessages);
+            replacements = OnlineScoringDataExtractor
+                    .toReplacementsFromTemplateVariables(templateVariables, sectionExtractor);
+        } else {
+            // Legacy mode: use the variables mapping
+            replacements = toReplacements(variablesMap, sectionExtractor);
+        }
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
@@ -285,14 +317,6 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    /**
-     * Functional interface to extract JSON sections (input/output/metadata) from an entity.
-     */
-    @FunctionalInterface
-    private interface JsonSectionExtractor {
-        JsonNode extract(TraceSection section);
-    }
-
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> trace.input();
@@ -322,8 +346,8 @@ public class OnlineScoringEngine {
             var jsonSection = section != null ? sectionExtractor.extract(section) : null;
             // if no section, there's no replacement and the literal value is taken
             var valueToReplace = jsonSection != null
-                    ? extractFromJson(jsonSection, mapper.jsonPath())
-                    : mapper.valueToReplace;
+                    ? OnlineScoringDataExtractor.extractFromJson(jsonSection, mapper.jsonPath())
+                    : mapper.valueToReplace();
             return mapper.toBuilder()
                     .valueToReplace(valueToReplace)
                     .build();
@@ -416,66 +440,6 @@ public class OnlineScoringEngine {
         return builder.build();
     }
 
-    private static String extractFromJson(JsonNode json, String path) {
-        // Special case: if path is "$", return the entire JSON object as string
-        if ("$".equals(path)) {
-            try {
-                return OBJECT_MAPPER.writeValueAsString(json);
-            } catch (JsonProcessingException e) {
-                log.warn("failed to serialize entire json object, json={}", json, e);
-                return null;
-            }
-        }
-
-        Map<String, Object> forcedObject;
-        try {
-            // JsonPath didn't work with JsonNode, even explicitly using
-            // JacksonJsonProvider, so we convert to a Map
-            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
-            });
-        } catch (InvalidArgumentException e) {
-            log.warn("failed to parse json, json={}", json, e);
-            return null;
-        }
-
-        try {
-            var value = JsonPath.parse(forcedObject).read(path);
-            return value != null ? serializeToJsonString(value) : null;
-        } catch (Exception e) {
-            log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
-            return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
-                    .map(OnlineScoringEngine::serializeToJsonString)
-                    .orElseGet(() -> {
-                        log.info("couldn't find flat or nested path in json, path={}, json={}", path, json);
-                        return null;
-                    });
-        }
-    }
-
-    /**
-     * Serialize a value to a JSON string. For simple types (String, Number, Boolean),
-     * returns the value directly as a string. For complex types (Map, List), serializes to JSON.
-     */
-    private static String serializeToJsonString(Object value) {
-        if (value == null) {
-            return null;
-        }
-        // For simple types, return as-is to preserve backward compatibility
-        if (value instanceof String) {
-            return (String) value;
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
-        }
-        // For complex types (Map, List, etc.), serialize to proper JSON
-        try {
-            return OBJECT_MAPPER.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize value to JSON, falling back to toString(), value={}", value, e);
-            return value.toString();
-        }
-    }
-
     public static List<TraceThreadPythonEvaluatorRequest.ChatMessage> fromTraceToThread(List<Trace> traces) {
         return traces.stream()
                 .flatMap(trace -> Stream.of(
@@ -549,19 +513,5 @@ public class OnlineScoringEngine {
 
         // Assume the whole response is raw JSON
         return response.trim();
-    }
-
-    @AllArgsConstructor
-    enum TraceSection {
-        INPUT("input."),
-        OUTPUT("output."),
-        METADATA("metadata.");
-
-        final String prefix;
-    }
-
-    @Builder(toBuilder = true)
-    record MessageVariableMapping(
-            TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
 }

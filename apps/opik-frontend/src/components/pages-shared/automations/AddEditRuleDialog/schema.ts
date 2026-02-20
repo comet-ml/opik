@@ -351,15 +351,17 @@ export const BasePythonCodeFormSchema = z.object({
 
 export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
   {
-    arguments: z.record(
-      z.string(),
-      z
-        .string()
-        .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-        }),
-    ),
+    arguments: z
+      .record(
+        z.string(),
+        z
+          .string()
+          .min(1, { message: "Key is required" })
+          .regex(/^(input|output|metadata)(\.|$)/, {
+            message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+          }),
+      )
+      .optional(),
     parsingArgumentsError: z.boolean().optional(),
   },
 );
@@ -367,15 +369,17 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
 export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
 
 export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
-  arguments: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-      }),
-  ),
+  arguments: z
+    .record(
+      z.string(),
+      z
+        .string()
+        .min(1, { message: "Key is required" })
+        .regex(/^(input|output|metadata)(\.|$)/, {
+          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        }),
+    )
+    .optional(),
   parsingArgumentsError: z.boolean().optional(),
 });
 
@@ -505,6 +509,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsTraceFormType
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
+  options?: { skipVariables?: boolean },
 ) => {
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
@@ -520,10 +525,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.custom_parameters = custom_parameters;
   }
 
+  const variables = options?.skipVariables ? {} : data.variables;
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
-    variables: data.variables,
+    variables,
     schema: data.schema,
   };
 };
