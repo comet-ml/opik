@@ -57,6 +57,42 @@ class OnlineScoringDataExtractor {
 
     // --- Full section object data extraction ---
 
+    // --- Python evaluator data preparation ---
+
+    /**
+     * Prepare the data payload for a Python evaluator.
+     * If arguments are provided, uses them as variable mappings to extract specific values.
+     * Otherwise, passes the full trace sections (input/output/metadata) as objects.
+     *
+     * @param arguments the evaluator code arguments (variable mappings), may be null or empty
+     * @param trace     the trace to extract data from
+     * @return the data map to send to the Python evaluator
+     */
+    static Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, Trace trace) {
+        if (arguments != null && !arguments.isEmpty()) {
+            return Map.copyOf(OnlineScoringEngine.toReplacements(arguments, trace));
+        }
+        return toFullSectionObjectData(trace);
+    }
+
+    /**
+     * Prepare the data payload for a Python evaluator.
+     * If arguments are provided, uses them as variable mappings to extract specific values.
+     * Otherwise, passes the full span sections (input/output/metadata) as objects.
+     *
+     * @param arguments the evaluator code arguments (variable mappings), may be null or empty
+     * @param span      the span to extract data from
+     * @return the data map to send to the Python evaluator
+     */
+    static Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, Span span) {
+        if (arguments != null && !arguments.isEmpty()) {
+            return Map.copyOf(OnlineScoringEngine.toReplacements(arguments, span));
+        }
+        return toFullSectionObjectData(span);
+    }
+
+    // --- Full section object data extraction ---
+
     static Map<String, Object> toFullSectionObjectData(Trace trace) {
         return toFullSectionObjectData(section -> switch (section) {
             case INPUT -> trace.input();
@@ -159,7 +195,7 @@ class OnlineScoringDataExtractor {
         });
     }
 
-    private static Map<String, String> toReplacementsFromTemplateVariables(
+    static Map<String, String> toReplacementsFromTemplateVariables(
             Set<String> templateVariables, JsonSectionExtractor sectionExtractor) {
         return templateVariables.stream()
                 .map(variableName -> {
@@ -245,6 +281,10 @@ class OnlineScoringDataExtractor {
             });
         } catch (InvalidArgumentException e) {
             log.warn("failed to parse json, json={}", json, e);
+            return null;
+        }
+
+        if (forcedObject == null) {
             return null;
         }
 
