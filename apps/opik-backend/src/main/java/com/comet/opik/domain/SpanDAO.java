@@ -1278,7 +1278,7 @@ class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , spans_deduped AS (
+            , spans_final AS (
                 SELECT
                      workspace_id,
                      project_id,
@@ -1291,7 +1291,10 @@ class SpanDAO {
                      usage,
                      total_estimated_cost,
                      error_info
-                FROM spans
+                FROM spans final
+                <if(feedback_scores_empty_filters)>
+                    LEFT JOIN fsc ON fsc.entity_id = spans.id
+                <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
@@ -1308,16 +1311,11 @@ class SpanDAO {
                     HAVING <feedback_scores_filters>
                 )
                 <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )
-            , spans_final AS (
-                SELECT sd.*
-                FROM spans_deduped sd
                 <if(feedback_scores_empty_filters)>
-                    LEFT JOIN fsc ON fsc.entity_id = sd.id
-                WHERE fsc.feedback_scores_count = 0
+                AND fsc.feedback_scores_count = 0
                 <endif>
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
             )
             SELECT
                 project_id as project_id,
