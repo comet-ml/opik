@@ -26275,7 +26275,7 @@
         "supports_web_search": true,
         "supports_reasoning": false
     },
-    "perplexity/anthropic/claude-haiku-4.5": {
+    "perplexity/anthropic/claude-3-5-haiku-20241022": {
         "litellm_provider": "perplexity",
         "mode": "responses",
         "supports_web_search": true,
