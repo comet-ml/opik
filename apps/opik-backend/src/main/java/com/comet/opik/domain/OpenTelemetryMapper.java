@@ -32,6 +32,10 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsa
 @Slf4j
 public class OpenTelemetryMapper {
 
+    private static final String USAGE_INPUT_TOKENS_KEY = "prompt_tokens";
+    private static final String USAGE_CACHE_READ_INPUT_TOKENS_KEY = "cache_read.input_tokens";
+    private static final String USAGE_CACHE_WRITE_INPUT_TOKENS_KEY = "cache_creation.input_tokens";
+
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
      * of concepts, especially around ids.
@@ -89,6 +93,7 @@ public class OpenTelemetryMapper {
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
         Set<String> tags = new HashSet<>();
+        boolean explicitThreadId = attributes.stream().anyMatch(attr -> "thread_id".equals(attr.getKey()));
 
         if (StringUtils.isNotBlank(integrationName)) {
             metadata.put("integration", integrationName);
@@ -136,9 +141,9 @@ public class OpenTelemetryMapper {
                         break;
 
                     case THREAD_ID :
-                        // Store as 'thread_id' in metadata for trace grouping
-                        // First value wins if multiple attributes map to THREAD_ID
-                        if (!metadata.has("thread_id")) {
+                        // Store as 'thread_id' in metadata for trace grouping.
+                        // Explicit thread_id attribute takes precedence over gen_ai.conversation.id.
+                        if (!explicitThreadId || "thread_id".equals(key)) {
                             extractToJsonColumn(metadata, "thread_id", value);
                         }
                         break;
@@ -153,6 +158,8 @@ public class OpenTelemetryMapper {
                 extractToJsonColumn(input, key, value);
             });
         });
+
+        enrichUsageWithAnthropicCacheTokens(usage);
 
         // Process events and add them to metadata
         processEvents(events, metadata);
@@ -172,6 +179,30 @@ public class OpenTelemetryMapper {
         if (!tags.isEmpty()) {
             spanBuilder.tags(tags);
         }
+    }
+
+    private static void enrichUsageWithAnthropicCacheTokens(Map<String, Integer> usage) {
+        if (usage.isEmpty()) {
+            return;
+        }
+
+        Integer inputTokens = usage.get(USAGE_INPUT_TOKENS_KEY);
+        Integer cacheReadTokens = usage.get(USAGE_CACHE_READ_INPUT_TOKENS_KEY);
+        Integer cacheWriteTokens = usage.get(USAGE_CACHE_WRITE_INPUT_TOKENS_KEY);
+
+        if (inputTokens == null || (cacheReadTokens == null && cacheWriteTokens == null)) {
+            return;
+        }
+
+        int computedInputTokens = inputTokens;
+        if (cacheReadTokens != null) {
+            computedInputTokens += cacheReadTokens;
+        }
+        if (cacheWriteTokens != null) {
+            computedInputTokens += cacheWriteTokens;
+        }
+
+        usage.put(USAGE_INPUT_TOKENS_KEY, computedInputTokens);
     }
 
     /**
