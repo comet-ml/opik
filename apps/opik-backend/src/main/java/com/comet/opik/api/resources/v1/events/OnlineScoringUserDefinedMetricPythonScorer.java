@@ -79,7 +79,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 if (arguments != null && !arguments.isEmpty()) {
                     data = Map.copyOf(OnlineScoringEngine.toReplacements(arguments, trace));
                 } else {
-                    data = OnlineScoringEngine.toFullSectionObjectData(trace);
+                    data = OnlineScoringDataExtractor.toFullSectionObjectData(trace);
                 }
             } catch (IllegalArgumentException exception) {
                 userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
