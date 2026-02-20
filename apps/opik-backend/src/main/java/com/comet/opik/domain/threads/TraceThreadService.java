@@ -12,6 +12,7 @@ import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TagOperations;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -168,7 +169,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
-                        traceThreadIdModel.projectId(), threadUpdate));
+                        traceThreadIdModel.projectId(), threadUpdate))
+                .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     @Override
@@ -178,7 +180,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
         boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         List<UUID> threadModelIds = new ArrayList<>(batchUpdate.ids());
         return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()));
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()))
+                .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     @Override

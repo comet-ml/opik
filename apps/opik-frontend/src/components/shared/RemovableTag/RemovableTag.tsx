@@ -4,8 +4,8 @@ import isFunction from "lodash/isFunction";
 import { cn } from "@/lib/utils";
 import { Tag, TagProps } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
-import { Button } from "@/components/ui/button";
 import { CircleX } from "lucide-react";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 export interface RemovableTagProps {
   label: string;
@@ -30,25 +30,28 @@ const RemovableTag: React.FunctionComponent<RemovableTagProps> = ({
   const isRemovable = isFunction(onDelete);
 
   return (
-    <Tag
-      size={size}
-      variant={calculatedVariant}
-      className={cn("group max-w-full shrink-0 pr-2 transition-all", className)}
-    >
-      <div className="flex max-w-full items-center">
-        <span className="mr-1 truncate">{label}</span>
-        {isRemovable && (
-          <Button
-            size="icon-2xs"
-            variant="ghost"
-            className="hidden group-hover:flex"
-            onClick={() => onDelete(label)}
-          >
-            <CircleX />
-          </Button>
+    <TooltipWrapper content={label}>
+      <Tag
+        size={size}
+        variant={calculatedVariant}
+        className={cn(
+          "group relative max-w-40 shrink-0 text-center transition-all",
+          className,
         )}
-      </div>
-    </Tag>
+      >
+        <span className="block truncate">{label}</span>
+        {isRemovable && (
+          <span className="pointer-events-none absolute inset-y-0 right-0 hidden items-center rounded-r-[inherit] bg-inherit pl-3 [mask-image:linear-gradient(to_right,transparent,black_40%)] group-hover:flex">
+            <span
+              className="pointer-events-auto flex h-full w-5 cursor-pointer items-center justify-center"
+              onClick={() => onDelete(label)}
+            >
+              <CircleX className="size-3.5" />
+            </span>
+          </span>
+        )}
+      </Tag>
+    </TooltipWrapper>
   );
 };
 
