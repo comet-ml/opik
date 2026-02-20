@@ -104,8 +104,8 @@ def test_opik_usage__to_backend_compatible_full_usage_dict__anthropic_source():
     usage = OpikUsage.from_anthropic_dict(usage_data)
     full_dict = usage.to_backend_compatible_full_usage_dict()
     assert full_dict == {
-        "completion_tokens": 150,
-        "prompt_tokens": 230,
+        "completion_tokens": 100,
+        "prompt_tokens": 280,
         "total_tokens": 380,
         "original_usage.input_tokens": 200,
         "original_usage.output_tokens": 100,
