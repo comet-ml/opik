@@ -8,6 +8,8 @@ import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionIdsRequest;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -194,6 +196,28 @@ public class PromptResource {
         promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/retrieve-by-version-ids")
+    @Operation(operationId = "getPromptsByVersionIds", summary = "Get prompts by version ids", description = "Get prompts by prompt version ids", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionLink.class))),
+    })
+    @JsonView({Prompt.View.Public.class})
+    public Response getPromptsByVersionIds(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompts by version ids, count '{}', on workspace_id '{}'",
+                request.promptVersionIds().size(), workspaceId);
+
+        var prompts = promptService.getByVersionIds(request.promptVersionIds());
+
+        log.info("Got prompts by version ids, count '{}', on workspace_id '{}'",
+                prompts.size(), workspaceId);
+
+        return Response.ok(prompts).build();
     }
 
     @POST

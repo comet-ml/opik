@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
@@ -48,6 +49,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
@@ -86,6 +88,8 @@ public interface PromptService {
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
+
+    List<PromptVersionLink> getByVersionIds(List<UUID> versionIds);
 }
 
 @Singleton
@@ -688,6 +692,42 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
+    public List<PromptVersionLink> getByVersionIds(@NonNull List<UUID> versionIds) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            // Get versions indexed by id
+            Map<UUID, PromptVersion> versionsById = promptVersionDAO
+                    .findByIds(versionIds, workspaceId).stream()
+                    .collect(toMap(PromptVersion::id, Function.identity()));
+
+            // Get prompts by their IDs
+            Set<UUID> promptIds = versionsById.values().stream()
+                    .map(PromptVersion::promptId)
+                    .collect(toSet());
+            Map<UUID, Prompt> promptById = promptIds.isEmpty()
+                    ? Map.of()
+                    : promptDAO.findByIds(promptIds, workspaceId).stream()
+                            .collect(toMap(Prompt::id, Function.identity()));
+
+            // Assemble in input order, one entry per version ID
+            return versionIds.stream()
+                    .map(versionId -> {
+                        PromptVersion version = versionsById.get(versionId);
+                        return PromptVersionLink.builder()
+                                .promptVersionId(versionId)
+                                .commit(version != null ? version.commit() : null)
+                                .prompt(version != null ? promptById.get(version.promptId()) : null)
+                                .build();
+                    })
+                    .toList();
+        });
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
