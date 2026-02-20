@@ -154,6 +154,12 @@ public class OpenTelemetryMapper {
             });
         });
 
+        // gen_ai.operation.name = "execute_tool" signals a tool execution span per OTel GenAI semantic conventions
+        if (metadata.has("gen_ai.operation.name")
+                && "execute_tool".equals(metadata.get("gen_ai.operation.name").asText())) {
+            spanBuilder.type(SpanType.tool);
+        }
+
         // Process events and add them to metadata
         processEvents(events, metadata);
 

@@ -112,4 +112,71 @@ class OpenTelemetryMapperTest {
         assertThat(span.metadata().has("thread_id")).isTrue();
         assertThat(span.metadata().get("thread_id").asLong()).isEqualTo(12345L);
     }
+
+    @Test
+    void testGenAiOperationNameExecuteToolSetsToolSpanType() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.operation.name")
+                        .setValue(AnyValue.newBuilder().setStringValue("execute_tool"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now())
+                .type(SpanType.general);
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.type()).isEqualTo(SpanType.tool);
+    }
+
+    @Test
+    void testGenAiOperationNameChatDoesNotSetToolSpanType() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.operation.name")
+                        .setValue(AnyValue.newBuilder().setStringValue("chat"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now())
+                .type(SpanType.general);
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.type()).isEqualTo(SpanType.general);
+    }
+
+    @Test
+    void testGenAiToolNameSetsToolSpanType() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.tool.name")
+                        .setValue(AnyValue.newBuilder().setStringValue("get_weather"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now())
+                .type(SpanType.general);
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.type()).isEqualTo(SpanType.tool);
+        assertThat(span.metadata().get("gen_ai.tool.name").asText()).isEqualTo("get_weather");
+    }
 }
