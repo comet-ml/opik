@@ -2947,6 +2947,118 @@ class DatasetsResourceTest {
                     arguments(10, 0),
                     arguments(10, 5));
         }
+
+        Stream<Arguments> filterByType() {
+            return Stream.of(
+                    arguments(DatasetType.DATASET, "dataset"),
+                    arguments(DatasetType.EVALUATION_SUITE, "evaluation_suite"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("filterByType")
+        @DisplayName("when filtering by type, then return only datasets of that type")
+        void getDatasets__whenFilteringByType__thenReturnOnlyMatchingType(DatasetType filterType, String queryValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .queryParam("type", queryValue)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
+        }
+
+        @Test
+        @DisplayName("when no type filter, then return all datasets regardless of type")
+        void getDatasets__whenNoTypeFilter__thenReturnAllDatasets() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 2, 2, 1, List.of(evaluationSuite, regularDataset));
+        }
+
+        @Test
+        @DisplayName("when filtering by type combined with name, then return matching datasets")
+        void getDatasets__whenFilteringByTypeAndName__thenReturnMatchingDatasets() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var sharedNamePrefix = "shared-" + UUID.randomUUID();
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .name(sharedNamePrefix + "-regular")
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .name(sharedNamePrefix + "-eval")
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .queryParam("name", sharedNamePrefix)
+                    .queryParam("type", "evaluation_suite")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 1, 1, 1, List.of(evaluationSuite));
+        }
     }
 
     private Experiment getExperiment(String apiKey, String workspaceName, Experiment experiment) {
