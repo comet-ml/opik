@@ -356,21 +356,88 @@ def _extract_objective_scores(
     return objective_score_results
 
 
+def build_evaluation_report(
+    *,
+    evaluation_result: (
+        opik_evaluation_result.EvaluationResult
+        | opik_evaluation_result.EvaluationResultOnDictItems
+        | None
+    ),
+    objective_metric_name: str,
+) -> dict[str, Any]:
+    """Build a compact report for objective-metric outcomes of one evaluation run.
+
+    Report fields:
+    - ``objective_metric``: Objective metric name used for extraction.
+    - ``evaluated_items``: Number of evaluated test rows.
+    - ``objective_scores``: Number of objective metric results found.
+    - ``failed_objective_scores``: Count of objective scores with
+      ``scoring_failed=True``.
+    - ``failed_ratio``: ``failed_objective_scores / objective_scores`` when
+      objective scores exist, otherwise ``0.0``.
+    - ``failed_objective_samples``: Up to 5 failed objective score samples with
+      ``name``, ``value``, ``reason``, and ``metadata``.
+
+    Edge cases:
+    - When ``evaluation_result`` is ``None``, this returns an empty report
+      (0 items, 0 objective scores, empty failed samples).
+    - ``failed_ratio`` is ``0.0`` when objective scores are absent.
+    """
+    if evaluation_result is None:
+        return {
+            "objective_metric": objective_metric_name,
+            "evaluated_items": 0,
+            "objective_scores": 0,
+            "failed_objective_scores": 0,
+            "failed_ratio": 0.0,
+            "failed_objective_samples": [],
+        }
+
+    objective_scores = _extract_objective_scores(
+        evaluation_result, objective_metric_name
+    )
+    failed = [score for score in objective_scores if score.scoring_failed]
+    failed_samples = [
+        {
+            "name": score.name,
+            "value": score.value,
+            "reason": score.reason,
+            "metadata": score.metadata,
+        }
+        for score in failed[:5]
+    ]
+
+    return {
+        "objective_metric": objective_metric_name,
+        "evaluated_items": len(evaluation_result.test_results),
+        "objective_scores": len(objective_scores),
+        "failed_objective_scores": len(failed),
+        "failed_ratio": len(failed) / len(objective_scores)
+        if objective_scores
+        else 0.0,
+        "failed_objective_samples": failed_samples,
+    }
+
+
 def _average_finite_scores(
     scores: list[score_result.ScoreResult], *, objective_metric_name: str
 ) -> float:
     finite_values = [
         score_result_.value
         for score_result_ in scores
-        if score_result_.value is not None and math.isfinite(score_result_.value)
+        if (
+            not score_result_.scoring_failed
+            and score_result_.value is not None
+            and math.isfinite(score_result_.value)
+        )
     ]
     if not finite_values:
         logger.error(
-            "All metric scores were non-finite for metric '%s'; aborting evaluation.",
+            "No successful finite metric scores for metric '%s'; aborting evaluation.",
             objective_metric_name,
         )
         raise ValueError(
-            f"All metric scores were non-finite for metric '{objective_metric_name}'."
+            f"No successful finite metric scores for metric '{objective_metric_name}'."
         )
     return sum(finite_values) / len(finite_values)
 

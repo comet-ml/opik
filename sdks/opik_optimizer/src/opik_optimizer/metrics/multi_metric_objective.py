@@ -134,8 +134,20 @@ class MultiMetricObjective:
         llm_output: str,
     ) -> ScoreResult:
         """Evaluate a single metric and normalize it to a ScoreResult."""
-        metric_result = self._call_metric(metric, dataset_item, llm_output)
-        return self._normalize_metric_result(metric, metric_result)
+        try:
+            metric_result = self._call_metric(metric, dataset_item, llm_output)
+            return self._normalize_metric_result(metric, metric_result)
+        except Exception as exception:
+            return ScoreResult(
+                name=self._metric_name(metric),
+                value=0.0,
+                reason=f"Metric execution failed: {exception}",
+                scoring_failed=True,
+                metadata={
+                    "_error_type": type(exception).__name__,
+                    "_error_message": str(exception),
+                },
+            )
 
     def _call_metric(
         self,

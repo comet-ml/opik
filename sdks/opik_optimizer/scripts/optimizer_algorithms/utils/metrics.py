@@ -102,6 +102,11 @@ Return your evaluation as JSON with 'is_correct' and 'reason' fields."""
                 name=self.name,
                 value=0.0,
                 reason=f"Error during evaluation: {str(e)}",
+                scoring_failed=True,
+                metadata={
+                    "_error_type": type(e).__name__,
+                    "_error_message": str(e),
+                },
             )
 
 

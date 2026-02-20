@@ -1,6 +1,7 @@
 # mypy: disable-error-code=no-untyped-def
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -73,10 +74,24 @@ def test_validation_dataset_sets_history_split(monkeypatch: pytest.MonkeyPatch) 
         num_generations=1,
     )
 
-    def fake_evaluate(**_kwargs: Any) -> float:
-        return 0.6
+    def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
+        metric = kwargs.get("metric")
+        metric_name = getattr(metric, "__name__", "metric")
+        score_result = MagicMock()
+        score_result.name = metric_name
+        score_result.value = 0.6
+        score_result.reason = None
+        score_result.scoring_failed = False
+        test_result = MagicMock()
+        test_result.score_results = [score_result]
+        mock_result = MagicMock()
+        mock_result.test_results = [test_result]
+        return 0.6, mock_result
 
-    monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.evaluate_with_result",
+        fake_evaluate_with_result,
+    )
     monkeypatch.setattr(
         population_ops,
         "initialize_population",

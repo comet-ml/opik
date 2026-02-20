@@ -151,7 +151,6 @@ def build_final_result(
         "stop_reason": finish_reason,
         "verbose": optimizer.verbose,
     }
-
     details.update(optimizer_metadata)
     details.update(algorithm_result.metadata)
 

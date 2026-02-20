@@ -150,10 +150,24 @@ def test_history_schema_smoke(
     )
 
     # Avoid real network/LLM calls in this smoke test.
-    def fake_evaluate(**kwargs: Any) -> float:
-        return 0.1
+    def fake_evaluate_with_result(**kwargs: Any) -> tuple[float, Any]:
+        metric = kwargs.get("metric")
+        metric_name = getattr(metric, "__name__", "metric")
+        score_result = MagicMock()
+        score_result.name = metric_name
+        score_result.value = 0.1
+        score_result.reason = None
+        score_result.scoring_failed = False
+        test_result = MagicMock()
+        test_result.score_results = [score_result]
+        mock_result = MagicMock()
+        mock_result.test_results = [test_result]
+        return 0.1, mock_result
 
-    monkeypatch.setattr("opik_optimizer.core.evaluation.evaluate", fake_evaluate)
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation.evaluate_with_result",
+        fake_evaluate_with_result,
+    )
     # Stub Opik client to avoid network
     fake_client = MagicMock()
     fake_optimization = MagicMock()

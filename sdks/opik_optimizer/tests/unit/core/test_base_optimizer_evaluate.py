@@ -11,6 +11,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik.evaluation.metrics import base_metric
+from opik.evaluation import evaluation_result as opik_evaluation_result
+from opik.evaluation import test_case as opik_test_case
+from opik.evaluation import test_result as opik_test_result
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.constants import MAX_EVAL_THREADS, MIN_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
@@ -21,7 +24,6 @@ from tests.unit.fixtures.base_optimizer_test_helpers import (
 )
 from tests.unit.test_helpers import (
     make_candidate_agent,
-    make_fake_evaluator,
     make_mock_dataset,
     make_optimization_context,
 )
@@ -64,9 +66,55 @@ def test_evaluate_prompt_selection_policies(
         model_parameters=model_params,
     )
 
-    fake_evaluate = make_fake_evaluator(expected_output=expected_output)
+    def fake_evaluate_with_result(
+        dataset: Any,
+        evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+        metric: Any,
+        num_threads: int,
+        optimization_id: str | None = None,
+        dataset_item_ids: list[str] | None = None,
+        project_name: str | None = None,
+        n_samples: int | float | str | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        verbose: int = 1,
+        use_evaluate_on_dict_items: bool = False,
+    ) -> tuple[float, opik_evaluation_result.EvaluationResultOnDictItems]:
+        _ = (
+            dataset,
+            metric,
+            num_threads,
+            optimization_id,
+            dataset_item_ids,
+            project_name,
+            n_samples,
+            experiment_config,
+            verbose,
+            use_evaluate_on_dict_items,
+        )
+        output = evaluated_task({"id": "1", "input": "x"})
+        assert output["llm_output"] == expected_output
+        test_result = opik_test_result.TestResult(
+            test_case=opik_test_case.TestCase(
+                trace_id="trace-1",
+                dataset_item_id="item-1",
+                task_output=output,
+                dataset_item_content={"id": "1", "input": "x"},
+            ),
+            score_results=[
+                score_result.ScoreResult(name=metric_func.__name__, value=1.0)
+            ],
+            trial_id=0,
+        )
+        return (
+            1.0,
+            opik_evaluation_result.EvaluationResultOnDictItems(
+                test_results=[test_result]
+            ),
+        )
+
     monkeypatch.setattr(
-        "opik_optimizer.base_optimizer.task_evaluator.evaluate", fake_evaluate
+        "opik_optimizer.base_optimizer.task_evaluator.evaluate_with_result",
+        fake_evaluate_with_result,
     )
 
     dataset = make_mock_dataset([{"id": "1", "input": "x"}])
@@ -397,3 +445,37 @@ def test_optimize_prompt_uses_injected_display(
     )
 
     assert spy.header_calls, "Injected display handler should be used"
+
+
+def test_evaluate_prompt_records_no_result_report(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset([{"id": "1", "input": "x"}])
+    metric = MagicMock()
+    metric.__name__ = "metric_fn"
+    agent = MagicMock()
+
+    def fake_evaluate_with_result(**kwargs: Any):
+        _ = kwargs
+        return 0.0, None
+
+    monkeypatch.setattr(
+        "opik_optimizer.base_optimizer.task_evaluator.evaluate_with_result",
+        fake_evaluate_with_result,
+    )
+
+    score = optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        n_threads=1,
+        verbose=0,
+    )
+
+    assert score == 0.0
+    assert optimizer._last_evaluation_report is not None
+    assert optimizer._last_evaluation_report["objective_metric"] == "metric_fn"
+    assert optimizer._last_evaluation_report["evaluated_items"] == 0
+    assert optimizer._last_evaluation_report["objective_scores"] == 0

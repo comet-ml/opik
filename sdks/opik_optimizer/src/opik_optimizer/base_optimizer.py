@@ -137,6 +137,7 @@ class BaseOptimizer(ABC):
         }
         self._reporter: Any | None = None
         self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
+        self._last_evaluation_report: dict[str, Any] | None = None
 
         # Initialize prompt library with overrides
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
@@ -211,6 +212,7 @@ class BaseOptimizer(ABC):
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
         runtime.reset_usage(self)
+        self._last_evaluation_report = None
 
     def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
@@ -1145,6 +1147,10 @@ class BaseOptimizer(ABC):
         round_handle: Any | None = None,
     ) -> None:
         """Hook fired after a trial to record history."""
+        merged_extras = dict(extras or {})
+        if self._last_evaluation_report is not None:
+            merged_extras.setdefault("evaluation_report", self._last_evaluation_report)
+
         if hasattr(self._history_builder, "record_trial"):
             if dataset is None:
                 dataset = getattr(context.evaluation_dataset, "name", None)
@@ -1161,7 +1167,7 @@ class BaseOptimizer(ABC):
                 metrics=metrics,
                 dataset=dataset,
                 dataset_split=dataset_split,
-                extras=extras,
+                extras=merged_extras or None,
                 candidates=candidates,
                 timestamp=timestamp,
                 stop_reason=stop_reason,
@@ -1926,7 +1932,7 @@ class BaseOptimizer(ABC):
             dataset_item_ids_count=len(resolved_ids) if resolved_ids else 0,
         )
 
-        result = task_evaluator.evaluate(
+        score, evaluation_result = task_evaluator.evaluate_with_result(
             dataset=dataset,
             evaluated_task=llm_task,
             metric=metric,
@@ -1936,8 +1942,15 @@ class BaseOptimizer(ABC):
             experiment_config=experiment_config,
             optimization_id=self.current_optimization_id,
             verbose=verbose,
-            return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
             n_samples=resolved_n_samples,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
         )
-        return result
+        self._last_evaluation_report = task_evaluator.build_evaluation_report(
+            evaluation_result=evaluation_result,
+            objective_metric_name=metric.__name__,
+        )
+        if return_evaluation_result:
+            if evaluation_result is None:
+                raise ValueError("EvaluationResult is None, cannot return it")
+            return evaluation_result
+        return score

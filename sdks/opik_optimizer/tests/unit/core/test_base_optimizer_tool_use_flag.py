@@ -9,11 +9,15 @@ from typing import Any
 import pytest
 
 from opik_optimizer import ChatPrompt
+from opik.evaluation import evaluation_result as opik_evaluation_result
+from opik.evaluation import test_case as opik_test_case
+from opik.evaluation import test_result as opik_test_result
+from opik.evaluation.metrics import score_result
 from tests.unit.fixtures.base_optimizer_test_helpers import (
     ConcreteOptimizer,
     _ToolFlagAgent,
 )
-from tests.unit.test_helpers import make_fake_evaluator, make_mock_dataset
+from tests.unit.test_helpers import make_mock_dataset
 
 
 class TestToolUseFlag:
@@ -27,9 +31,36 @@ class TestToolUseFlag:
         def assert_output(output: dict[str, Any]) -> None:
             assert agent.last_allow_tool_use is True
 
+        def fake_evaluate_with_result(
+            dataset: Any,
+            evaluated_task: Any,
+            metric: Any,
+            num_threads: int,
+            **kwargs: Any,
+        ) -> tuple[float, opik_evaluation_result.EvaluationResultOnDictItems]:
+            _ = dataset, metric, num_threads, kwargs
+            output = evaluated_task({"id": "1", "input": "x"})
+            assert_output(output)
+            result = opik_test_result.TestResult(
+                test_case=opik_test_case.TestCase(
+                    trace_id="trace-1",
+                    dataset_item_id="item-1",
+                    task_output=output,
+                    dataset_item_content={"id": "1", "input": "x"},
+                ),
+                score_results=[score_result.ScoreResult(name="<lambda>", value=1.0)],
+                trial_id=0,
+            )
+            return (
+                1.0,
+                opik_evaluation_result.EvaluationResultOnDictItems(
+                    test_results=[result]
+                ),
+            )
+
         monkeypatch.setattr(
-            "opik_optimizer.core.evaluation.evaluate",
-            make_fake_evaluator(assert_output=assert_output),
+            "opik_optimizer.core.evaluation.evaluate_with_result",
+            fake_evaluate_with_result,
         )
 
         prompt = ChatPrompt(system="Test", user="Query")
@@ -51,9 +82,36 @@ class TestToolUseFlag:
         def assert_output(output: dict[str, Any]) -> None:
             assert agent.last_allow_tool_use is True
 
+        def fake_evaluate_with_result(
+            dataset: Any,
+            evaluated_task: Any,
+            metric: Any,
+            num_threads: int,
+            **kwargs: Any,
+        ) -> tuple[float, opik_evaluation_result.EvaluationResultOnDictItems]:
+            _ = dataset, metric, num_threads, kwargs
+            output = evaluated_task({"id": "1", "input": "x"})
+            assert_output(output)
+            result = opik_test_result.TestResult(
+                test_case=opik_test_case.TestCase(
+                    trace_id="trace-1",
+                    dataset_item_id="item-1",
+                    task_output=output,
+                    dataset_item_content={"id": "1", "input": "x"},
+                ),
+                score_results=[score_result.ScoreResult(name="<lambda>", value=1.0)],
+                trial_id=0,
+            )
+            return (
+                1.0,
+                opik_evaluation_result.EvaluationResultOnDictItems(
+                    test_results=[result]
+                ),
+            )
+
         monkeypatch.setattr(
-            "opik_optimizer.core.evaluation.evaluate",
-            make_fake_evaluator(assert_output=assert_output),
+            "opik_optimizer.core.evaluation.evaluate_with_result",
+            fake_evaluate_with_result,
         )
 
         prompt = ChatPrompt(system="Test", user="Query")
