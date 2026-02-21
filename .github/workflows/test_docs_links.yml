@@ -2,6 +2,38 @@ name: Check Documentation Links
 on:
   schedule:
     - cron: '0 12 * * *'  # Run daily at noon UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (default) = fail on issues, fix = apply link rewrites and open PR"
+        required: false
+        default: "check"
+        type: choice
+        options:
+          - check
+          - fix
+      suggestion_scope:
+        description: "Suggestion/reporting scope"
+        required: false
+        default: "changed"
+        type: choice
+        options:
+          - changed
+          - all
+      publish_suggestions:
+        description: "Post inline suggestions and summary comments"
+        required: false
+        default: false
+        type: boolean
+      max_suggestions:
+        description: "Maximum number of suggestions to post in a review (0 for all)"
+        required: false
+        default: 10
+        type: number
+      pull_request_number:
+        description: "Optional pull request number to attach suggestions/comments"
+        required: false
+        default: ""
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/**'
@@ -13,15 +45,16 @@ permissions:
 
 jobs:
   check-links-pr:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/docs-fern-link-check.yml
     with:
-      mode: check
-      create_pr: false
+      mode: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'check' }}
+      create_pr: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'fix' }}
       draft_pr: true
-      suggest_only_changed_files: true
-      publish_suggestions: true
-      pull_request_number: ${{ github.event.number }}
+      suggest_only_changed_files: ${{ github.event_name != 'workflow_dispatch' || inputs.suggestion_scope != 'all' }}
+      publish_suggestions: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_suggestions }}
+      max_suggestions: ${{ github.event_name == 'workflow_dispatch' && inputs.max_suggestions || 10 }}
+      pull_request_number: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request_number || github.event.number }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
 

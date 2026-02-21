@@ -264,8 +264,6 @@ def normalize_base_url(raw_url: str) -> Optional[str]:
         return None
 
     path, suffix = split_path_and_suffix(raw_url)
-    if path.startswith("./") or path.startswith("../"):
-        return None
 
     path = path or "/"
     if path.startswith("/"):
