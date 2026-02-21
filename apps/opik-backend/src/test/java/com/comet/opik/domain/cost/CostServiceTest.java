@@ -98,4 +98,44 @@ class CostServiceTest {
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
+
+    /**
+     * Test for issue #5130: Cost lookup for Bedrock Opus 4.6 models.
+     *
+     * AWS Bedrock changed the naming convention for Claude Opus 4.6 by dropping the
+     * trailing ":0" suffix. This test verifies that model names with ":0" suffix
+     * correctly resolve to pricing entries without the suffix, and that models
+     * already without the suffix continue to work.
+     */
+    @ParameterizedTest
+    @MethodSource("provideOpus46BedrockModelNames")
+    void calculateCost_shouldHandleOpus46BedrockNaming_issue5130(String modelNameWithSuffix,
+            String modelNameWithoutSuffix, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        BigDecimal costWithSuffix = CostService.calculateCost(modelNameWithSuffix, provider, usage, null);
+        BigDecimal costWithoutSuffix = CostService.calculateCost(modelNameWithoutSuffix, provider, usage, null);
+
+        // Both should resolve to the same pricing
+        assertThat(costWithSuffix).isGreaterThan(BigDecimal.ZERO);
+        assertThat(costWithoutSuffix).isGreaterThan(BigDecimal.ZERO);
+        assertThat(costWithSuffix).isEqualByComparingTo(costWithoutSuffix);
+    }
+
+    private static Stream<Arguments> provideOpus46BedrockModelNames() {
+        return Stream.of(
+                // Base model
+                Arguments.of("anthropic.claude-opus-4-6-v1:0", "anthropic.claude-opus-4-6-v1", "bedrock"),
+                // Global inference profile
+                Arguments.of("global.anthropic.claude-opus-4-6-v1:0", "global.anthropic.claude-opus-4-6-v1",
+                        "bedrock"),
+                // US region
+                Arguments.of("us.anthropic.claude-opus-4-6-v1:0", "us.anthropic.claude-opus-4-6-v1", "bedrock"),
+                // EU region
+                Arguments.of("eu.anthropic.claude-opus-4-6-v1:0", "eu.anthropic.claude-opus-4-6-v1", "bedrock"),
+                // AU region
+                Arguments.of("au.anthropic.claude-opus-4-6-v1:0", "au.anthropic.claude-opus-4-6-v1", "bedrock"));
+    }
 }
