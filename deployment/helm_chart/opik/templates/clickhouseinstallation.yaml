@@ -105,6 +105,10 @@ spec:
             readinessProbe:
               {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
             {{- end }}
+            {{- with .Values.clickhouse.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
             image: {{ .Values.clickhouse.backupServer.image }}
@@ -124,6 +128,10 @@ spec:
             ports:
             - name: ch-backup-rest
               containerPort: {{ .Values.clickhouse.backupServer.port }}
+            {{- with .Values.clickhouse.backupServer.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
           {{- end }}
           {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
@@ -136,6 +144,15 @@ spec:
           {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.clickhouse.extraVolumes (and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes) }}
+          volumes:
+            {{- with .Values.clickhouse.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes }}
+            {{- toYaml .Values.clickhouse.backupServer.extraVolumes | nindent 12 }}
+            {{- end }}
           {{- end }}
       {{- with .Values.clickhouse.extraPodTemplates }}
       {{- . | toYaml | nindent 6 }}

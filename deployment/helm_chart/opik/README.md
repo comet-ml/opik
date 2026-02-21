@@ -126,6 +126,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
 | clickhouse.backupServer.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
+| clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
+| clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
 | clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
@@ -153,6 +155,8 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
+| clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
+| clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
 | clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
