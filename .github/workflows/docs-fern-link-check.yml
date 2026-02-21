@@ -123,6 +123,7 @@ jobs:
             }
 
             const workspace = process.env.GITHUB_WORKSPACE || '';
+            const workspaceRoot = path.resolve(workspace);
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER || '0');
             if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
               core.warning('No pull request number available; skipping suggestion posting.');
@@ -193,16 +194,22 @@ jobs:
               if (!file.filename || !file.patch) {
                 continue;
               }
-              changedLinesByFile.set(file.filename, parseChangedLines(file.patch || ''));
+              const filePath = path.resolve(workspaceRoot, file.filename);
+              changedLinesByFile.set(filePath, parseChangedLines(file.patch || ''));
             }
 
             const comments = issues
               .filter((issue) => issue.suggestion && issue.suggestion !== issue.original)
               .map((issue) => {
                 const absolutePath = path.resolve(issue.file);
-                const relativePath = path.relative(workspace, absolutePath).replace(/^\.\//, '');
+                const normalizedAbsolutePath = path.resolve(absolutePath);
+                const relativePath = path
+                  .relative(workspaceRoot, normalizedAbsolutePath)
+                  .replace(/^\.\//, '')
+                  .replace(/\\\\/g, '/');
 
-                if (relativePath.startsWith('..')) {
+                const changedLines = changedLinesByFile.get(normalizedAbsolutePath);
+                if (!changedLines) {
                   return null;
                 }
 
@@ -228,7 +235,8 @@ jobs:
 
             const inlineComments = suggestOnlyChangedFiles
               ? uniqueComments.filter((comment) => {
-                  const changedLines = changedLinesByFile.get(comment.path);
+                  const normalizedPath = path.resolve(workspaceRoot, comment.path);
+                  const changedLines = changedLinesByFile.get(normalizedPath);
                   return changedFiles.has(comment.path) && changedLines && changedLines.has(comment.line);
                 })
               : uniqueComments;
