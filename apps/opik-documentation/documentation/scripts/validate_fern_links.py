@@ -291,13 +291,15 @@ def resolve_relative_url(
     path_to_route: Dict[str, str],
     redirects: List[dict],
     assets: set[str],
+    *,
+    allow_missing: bool = False,
 ) -> Optional[str]:
     _, suffix = split_path_and_suffix(raw_url)
     candidates = resolve_relative_candidates(base_file, raw_url)
 
     docs_root = docs_root.resolve()
     for candidate in candidates:
-        if not candidate.exists():
+        if not allow_missing and not candidate.exists():
             continue
 
         try:
@@ -329,7 +331,15 @@ def resolve_url(
     if path.startswith("./") or path.startswith("../"):
         if base_file is None or docs_root is None:
             return None
-        return resolve_relative_url(raw_url, base_file, docs_root, routes, path_to_route, redirects, assets)
+        return resolve_relative_url(
+            raw_url,
+            base_file,
+            docs_root,
+            routes,
+            path_to_route,
+            redirects,
+            assets,
+        )
 
     target = normalize_base_url(raw_url)
     if target is None:
@@ -350,15 +360,6 @@ def resolve_url(
         return f"{path}{suffix}"
 
     return None
-
-
-def is_relative_missing(base_file: Path, raw_url: str) -> bool:
-    path, _ = split_path_and_suffix(raw_url)
-    if not (path.startswith("./") or path.startswith("../")):
-        return False
-
-    candidates = resolve_relative_candidates(base_file, raw_url)
-    return not any(candidate.exists() for candidate in candidates)
 
 
 def check_file(
@@ -388,13 +389,23 @@ def check_file(
                     docs_root=docs_root,
                 )
                 if suggestion is None:
+                    route_suggestion = resolve_relative_url(
+                        raw_url,
+                        path,
+                        docs_root,
+                        routes,
+                        path_to_route,
+                        redirects,
+                        assets,
+                        allow_missing=True,
+                    )
                     issues.append(
                         Issue(
                             file=path,
                             line=line,
                             original=raw_url,
                             suggestion=None,
-                            kind=("relative_missing" if is_relative_missing(path, raw_url) else "route_missing"),
+                            kind=("relative_missing" if route_suggestion is None else "route_missing"),
                         )
                     )
                 elif suggestion != raw_url:
