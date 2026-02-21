@@ -55,12 +55,6 @@ const PAGINATION_SIZE_KEY = "alerts-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   {
-    id: COLUMN_ID_ID,
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
@@ -73,22 +67,10 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     cell: AlertTypeCell as never,
   },
   {
-    id: "webhook_url",
-    label: "Endpoint",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.webhook?.url || "-",
-  },
-  {
     id: "triggers",
     label: "Events",
     type: COLUMN_TYPE.string,
     cell: AlertsEventsCell as never,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-    accessorFn: (row) => row.created_by || "-",
   },
   {
     id: "status",
@@ -98,17 +80,35 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     accessorFn: (row) => row.enabled,
   },
   {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) =>
+      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
+  },
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
+    id: "webhook_url",
+    label: "Endpoint",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.webhook?.url || "-",
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.created_by || "-",
+  },
+  {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
-  },
-  {
-    id: "last_updated_at",
-    label: "Updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
   },
 ];
 
@@ -145,7 +145,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
   },
 ];
@@ -158,10 +158,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "alert_type",
-  "webhook_url",
   "triggers",
-  "created_by",
   "status",
+  "last_updated_at",
 ];
 
 const AlertsPage: React.FunctionComponent = () => {
