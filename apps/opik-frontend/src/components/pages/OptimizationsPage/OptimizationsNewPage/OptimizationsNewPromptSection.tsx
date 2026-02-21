@@ -146,7 +146,7 @@ const OptimizationsNewPromptSection: React.FC<
               control={form.control}
               name="modelName"
               render={({ field }) => (
-                <FormItem className="flex h-full items-center gap-1">
+                <FormItem className="flex flex-row h-full items-center gap-1">
                   <FormControl>
                     <div className="h-full w-56">
                       <OptimizationModelSelect
