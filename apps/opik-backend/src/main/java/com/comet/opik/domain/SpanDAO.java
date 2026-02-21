@@ -1314,6 +1314,8 @@ class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
             )
             SELECT
                 project_id as project_id,
