@@ -35,6 +35,8 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.audio.speech.create()` (TTS)
+    * `openai_client.audio.transcriptions.create()`
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
       `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
       and `write_to_file()` on downloaded content
@@ -57,6 +59,9 @@ def track_openai(
 
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
+
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio(openai_client, project_name)
 
     if hasattr(openai_client, "videos"):
         _patch_openai_videos(openai_client, project_name)
@@ -154,6 +159,45 @@ def _patch_openai_responses(
         )
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
+        )
+
+
+def _patch_openai_audio(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import audio
+
+    provider = _get_provider(openai_client)
+
+    # Patch audio.speech.create (TTS)
+    if hasattr(openai_client.audio, "speech") and hasattr(
+        openai_client.audio.speech, "create"
+    ):
+        speech_decorator_factory = audio.AudioSpeechTrackDecorator(provider=provider)
+        speech_create_decorator = speech_decorator_factory.track(
+            type="llm",
+            name="audio.speech.create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = speech_create_decorator(
+            openai_client.audio.speech.create
+        )
+
+    # Patch audio.transcriptions.create
+    if hasattr(openai_client.audio, "transcriptions") and hasattr(
+        openai_client.audio.transcriptions, "create"
+    ):
+        transcriptions_decorator_factory = audio.AudioTranscriptionsTrackDecorator(
+            provider=provider
+        )
+        transcriptions_create_decorator = transcriptions_decorator_factory.track(
+            type="llm",
+            name="audio.transcriptions.create",
+            project_name=project_name,
+        )
+        openai_client.audio.transcriptions.create = transcriptions_create_decorator(
+            openai_client.audio.transcriptions.create
         )
 
 
