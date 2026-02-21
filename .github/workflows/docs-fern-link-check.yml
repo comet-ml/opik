@@ -124,18 +124,57 @@ jobs:
               return;
             }
 
-            const changedFiles = new Set(
-              (await github.paginate(
-                github.rest.pulls.listFiles,
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: pullNumber,
-                  per_page: 100,
-                },
-                (response) => response.data
-              )).map((file) => file.filename)
+            const changedFilePayload = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+                per_page: 100,
+              },
+              (response) => response.data
             );
+
+            const changedFiles = new Set(changedFilePayload.map((file) => file.filename));
+            const changedLinesByFile = new Map();
+
+            const parseChangedLines = (patch = '') => {
+              const lines = new Set();
+              let currentLine = null;
+
+              for (const patchLine of patch.split('\n')) {
+                const hunkMatch = patchLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                if (hunkMatch) {
+                  currentLine = Number(hunkMatch[1]);
+                  continue;
+                }
+                if (currentLine === null) {
+                  continue;
+                }
+                if (patchLine.startsWith('@@')) {
+                  continue;
+                }
+                if (patchLine.startsWith('+') && !patchLine.startsWith('+++')) {
+                  lines.add(currentLine);
+                  currentLine += 1;
+                } else if (patchLine.startsWith(' ')) {
+                  currentLine += 1;
+                } else if (patchLine.startsWith('\\')) {
+                  continue;
+                } else if (patchLine.startsWith('-')) {
+                  continue;
+                }
+              }
+
+              return lines;
+            };
+
+            for (const file of changedFilePayload) {
+              if (!file.filename || !file.patch) {
+                continue;
+              }
+              changedLinesByFile.set(file.filename, parseChangedLines(file.patch || ''));
+            }
 
             const comments = issues
               .filter((issue) => issue.suggestion && issue.suggestion !== issue.original)
@@ -168,7 +207,10 @@ jobs:
             }
 
             const inlineComments = suggestOnlyChangedFiles
-              ? uniqueComments.filter((comment) => changedFiles.has(comment.path))
+              ? uniqueComments.filter((comment) => {
+                  const changedLines = changedLinesByFile.get(comment.path);
+                  return changedFiles.has(comment.path) && changedLines && changedLines.has(comment.line);
+                })
               : uniqueComments;
             const suggestionsForReview = inlineComments.slice(0, maxSuggestions);
             const truncatedSuggestionCount = uniqueComments.length - suggestionsForReview.length;
@@ -191,8 +233,9 @@ jobs:
                 baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
               } else {
                 baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
+                baseSummary.push('GitHub only renders clickable suggestions on changed lines in the PR diff.');
                 const previewSuggestions = uniqueComments.slice(0, Math.min(previewLimit, uniqueComments.length));
-                baseSummary.push(`Detected ${uniqueComments.length} suggestion(s) in unchanged files in the current diff scope.`);
+                baseSummary.push(`Detected ${uniqueComments.length} suggestion(s) outside changed lines.`);
                 baseSummary.push(`Top ${previewSuggestions.length} suggestion(s):`);
                 for (let i = 0; i < previewSuggestions.length; i++) {
                   const suggestionMatch = previewSuggestions[i].body.match(/```suggestion\n([\s\S]*?)\n```/);
