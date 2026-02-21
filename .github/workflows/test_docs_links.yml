@@ -62,7 +62,7 @@ jobs:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
 
   check-links-dispatch:
-    if: ${{ github.event_name != 'pull_request' && github.event_name != 'schedule' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/docs-fern-link-check.yml
     with:
       mode: ${{ github.event.inputs.mode || 'check' }}
