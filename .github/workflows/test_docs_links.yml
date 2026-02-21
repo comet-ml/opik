@@ -55,7 +55,7 @@ jobs:
       create_pr: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'fix' }}
       draft_pr: true
       suggest_only_changed_files: ${{ github.event_name != 'workflow_dispatch' || inputs.suggestion_scope != 'all' }}
-      publish_suggestions: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_suggestions }}
+      publish_suggestions: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_suggestions || github.event_name != 'workflow_dispatch' }}
       max_suggestions: ${{ github.event_name == 'workflow_dispatch' && inputs.max_suggestions || 10 }}
       pull_request_number: ${{ github.event_name == 'workflow_dispatch' && inputs.pull_request_number || github.event.number }}
     secrets:
