@@ -98,4 +98,38 @@ class CostServiceTest {
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
+
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithDateSuffixes")
+    void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithDateSuffix_issue5018() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
+        return Stream.of(
+                // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
+                Arguments.of("gpt-5.2-2025-12-17", "openai"),
+                // 2. Stripped date on normalized name (dots normalized to hyphens, then date suffix removed)
+                Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
+                // 3. Base models without date suffix should still work
+                Arguments.of("gpt-5.2", "openai"),
+                Arguments.of("claude-sonnet-4.5", "anthropic"));
+    }
 }
