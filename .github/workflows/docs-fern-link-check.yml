@@ -124,20 +124,18 @@ jobs:
               return;
             }
 
-            const changedFiles = suggestOnlyChangedFiles
-              ? new Set(
-                  (await github.paginate(
-                    github.rest.pulls.listFiles,
-                    {
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      pull_number: pullNumber,
-                      per_page: 100,
-                    },
-                    (response) => response.data
-                  )).map((file) => file.filename)
-                )
-              : null;
+            const changedFiles = new Set(
+              (await github.paginate(
+                github.rest.pulls.listFiles,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pullNumber,
+                  per_page: 100,
+                },
+                (response) => response.data
+              )).map((file) => file.filename)
+            );
 
             const comments = issues
               .filter((issue) => issue.suggestion && issue.suggestion !== issue.original)
@@ -145,7 +143,7 @@ jobs:
                 const absolutePath = path.resolve(issue.file);
                 const relativePath = path.relative(workspace, absolutePath).replace(/^\.\//, '');
 
-                if (relativePath.startsWith('..') || (suggestOnlyChangedFiles && !changedFiles.has(relativePath))) {
+                if (relativePath.startsWith('..')) {
                   return null;
                 }
 
@@ -169,7 +167,10 @@ jobs:
               }
             }
 
-            const suggestionsForReview = uniqueComments.slice(0, maxSuggestions);
+            const inlineComments = suggestOnlyChangedFiles
+              ? uniqueComments.filter((comment) => changedFiles.has(comment.path))
+              : uniqueComments;
+            const suggestionsForReview = inlineComments.slice(0, maxSuggestions);
             const truncatedSuggestionCount = uniqueComments.length - suggestionsForReview.length;
             const scopeLabel = suggestOnlyChangedFiles
               ? 'Changed files only (suggestions)'
@@ -184,8 +185,20 @@ jobs:
               `Computed suggestions: ${uniqueComments.length}`,
             ];
 
-            if (!uniqueComments.length) {
-              baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
+            if (!inlineComments.length) {
+              if (!uniqueComments.length) {
+                baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
+              } else {
+                baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
+                const previewSuggestions = uniqueComments.slice(0, Math.min(maxSuggestions, uniqueComments.length));
+                baseSummary.push(`Detected ${uniqueComments.length} suggestion(s) in unchanged files in the current diff scope.`);
+                baseSummary.push('Top suggestion(s):');
+                for (let i = 0; i < previewSuggestions.length; i++) {
+                  const suggestionMatch = previewSuggestions[i].body.match(/```suggestion\n([\s\S]*?)\n```/);
+                  const replacement = suggestionMatch ? suggestionMatch[1] : previewSuggestions[i].body;
+                  baseSummary.push(`${i + 1}. \`${previewSuggestions[i].path}:${previewSuggestions[i].line}\` -> \`${replacement}\``);
+                }
+              }
 
               await github.rest.issues.createComment({
                 issue_number: Number(pullNumber),
