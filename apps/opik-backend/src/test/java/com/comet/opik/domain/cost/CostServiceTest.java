@@ -56,6 +56,15 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostForAudioSpeechWithOriginalUsagePrefix() {
+        // SDK 1.6.0+ sends usage with original_usage. prefix
+        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
+                Map.of("original_usage.input_characters", 1000), null);
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
+
+    @Test
     void calculateCostFallsBackToMetadataWhenNoMatchingModelFound() {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.putObject("cost")

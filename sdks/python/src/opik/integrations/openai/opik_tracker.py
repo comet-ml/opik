@@ -266,9 +266,7 @@ def _patch_openai_audio(
             name="audio.speech.create",
             project_name=project_name,
         )
-        openai_client.audio.speech.create = decorator(
-            openai_client.audio.speech.create
-        )
+        openai_client.audio.speech.create = decorator(openai_client.audio.speech.create)
 
     # Patch audio.speech.with_streaming_response.create
     # (returns a context manager wrapping a streaming HTTP response)

@@ -127,6 +127,7 @@ class TTSStreamingResponseCreateTrackDecorator(base_track_decorator.BaseTrackDec
 
         if input_characters > 0:
             usage = {
+                "completion_tokens": 0,
                 "prompt_tokens": input_characters,
                 "total_tokens": input_characters,
                 "input_characters": input_characters,
@@ -147,7 +148,9 @@ class TTSStreamingResponseCreateTrackDecorator(base_track_decorator.BaseTrackDec
                     if content_length is not None:
                         output_data["content_length"] = int(content_length)
                         metadata["audio_bytes"] = int(content_length)
-                elif hasattr(output, "http_response") and hasattr(output.http_response, "headers"):
+                elif hasattr(output, "http_response") and hasattr(
+                    output.http_response, "headers"
+                ):
                     headers = output.http_response.headers
                     content_type = headers.get("content-type", "audio/mpeg")
                     output_data = {"content_type": content_type}

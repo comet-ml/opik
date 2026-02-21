@@ -66,7 +66,9 @@ class TTSCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert kwargs is not None, "Expected kwargs to be not None in audio.speech.create(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in audio.speech.create(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
 
@@ -122,6 +124,7 @@ class TTSCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
             # Map character count to token fields for backend compatibility
             # The backend will use input_characters for audio_speech cost calculation
             usage = {
+                "completion_tokens": 0,
                 "prompt_tokens": input_characters,
                 "total_tokens": input_characters,
                 "input_characters": input_characters,

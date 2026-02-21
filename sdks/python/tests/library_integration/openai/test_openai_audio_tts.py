@@ -4,7 +4,7 @@ Tests for OpenAI TTS (audio.speech) integration tracking.
 Tests cover:
 1. audio.speech.create (sync) — trace/span structure, metadata, usage
 2. audio.speech.with_streaming_response.create — trace/span structure
-3. Character-based usage tracking (input_characters → prompt_tokens)
+3. Character-based usage tracking (input_characters → prompt_tokens, completion_tokens=0)
 4. Model and provider metadata
 """
 
@@ -111,9 +111,13 @@ def test_openai_audio_speech_create__happyflow(fake_backend):
                     }
                 ),
                 usage={
+                    "completion_tokens": 0,
                     "prompt_tokens": len(input_text),
                     "total_tokens": len(input_text),
-                    "input_characters": len(input_text),
+                    "original_usage.completion_tokens": 0,
+                    "original_usage.prompt_tokens": len(input_text),
+                    "original_usage.total_tokens": len(input_text),
+                    "original_usage.input_characters": len(input_text),
                 },
                 model="tts-1",
                 provider="openai",
@@ -205,9 +209,13 @@ def test_openai_audio_speech_with_streaming_response__happyflow(fake_backend):
                     }
                 ),
                 usage={
+                    "completion_tokens": 0,
                     "prompt_tokens": len(input_text),
                     "total_tokens": len(input_text),
-                    "input_characters": len(input_text),
+                    "original_usage.completion_tokens": 0,
+                    "original_usage.prompt_tokens": len(input_text),
+                    "original_usage.total_tokens": len(input_text),
+                    "original_usage.input_characters": len(input_text),
                 },
                 model="tts-1",
                 provider="openai",
@@ -319,6 +327,7 @@ def test_openai_audio_speech_create__character_count_usage(fake_backend):
     assert len(fake_backend.trace_trees) == 1
     span = fake_backend.trace_trees[0].spans[0]
 
-    assert span.usage["input_characters"] == 26
+    assert span.usage["original_usage.input_characters"] == 26
     assert span.usage["prompt_tokens"] == 26
     assert span.usage["total_tokens"] == 26
+    assert span.usage["completion_tokens"] == 0

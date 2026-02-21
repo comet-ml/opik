@@ -93,4 +93,16 @@ class SpanCostCalculatorTest {
                 // tts-1-hd: $0.000030 per character, 500 characters → $0.015
                 Arguments.of("0.000030", 500, "0.015"));
     }
+
+    @Test
+    void audioSpeechCostUsesOriginalUsagePrefix() {
+        ModelPrice modelPrice = new ModelPrice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, new BigDecimal("0.000015"), SpanCostCalculator::defaultCost);
+
+        // SDK 1.6.0+ sends usage with original_usage. prefix
+        BigDecimal cost = SpanCostCalculator.audioSpeechCost(modelPrice,
+                Map.of("original_usage.input_characters", 1000));
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
 }
