@@ -38,6 +38,8 @@ def track_openai(
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
       `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
       and `write_to_file()` on downloaded content
+    * `openai_client.audio.speech.create()` and
+      `openai_client.audio.speech.with_streaming_response.create()`
 
     Can be used within other Opik-tracked functions.
 
@@ -60,6 +62,9 @@ def track_openai(
 
     if hasattr(openai_client, "videos"):
         _patch_openai_videos(openai_client, project_name)
+
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio(openai_client, project_name)
 
     return openai_client
 
@@ -238,3 +243,43 @@ def _patch_openai_videos(
             project_name=project_name,
         )
         openai_client.videos.list = decorator(openai_client.videos.list)
+
+
+def _patch_openai_audio(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import audio
+
+    provider = _get_provider(openai_client)
+    tts_create_decorator_factory = audio.TTSCreateTrackDecorator(provider=provider)
+    tts_streaming_decorator_factory = audio.TTSStreamingResponseCreateTrackDecorator(
+        provider=provider,
+    )
+
+    # Patch audio.speech.create (synchronous, returns HttpxBinaryResponseContent)
+    if hasattr(openai_client.audio, "speech") and hasattr(
+        openai_client.audio.speech, "create"
+    ):
+        decorator = tts_create_decorator_factory.track(
+            type="llm",
+            name="audio.speech.create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = decorator(openai_client.audio.speech.create)
+
+    # Patch audio.speech.with_streaming_response.create
+    # (returns a context manager wrapping a streaming HTTP response)
+    if (
+        hasattr(openai_client.audio, "speech")
+        and hasattr(openai_client.audio.speech, "with_streaming_response")
+        and hasattr(openai_client.audio.speech.with_streaming_response, "create")
+    ):
+        decorator = tts_streaming_decorator_factory.track(
+            type="llm",
+            name="audio.speech.with_streaming_response.create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.with_streaming_response.create = decorator(
+            openai_client.audio.speech.with_streaming_response.create
+        )

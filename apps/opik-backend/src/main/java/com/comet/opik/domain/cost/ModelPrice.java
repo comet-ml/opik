@@ -14,10 +14,12 @@ public record ModelPrice(
         @NonNull BigDecimal cacheCreationInputTokenPrice,
         @NonNull BigDecimal cacheReadInputTokenPrice,
         @NonNull BigDecimal videoOutputPrice,
+        @NonNull BigDecimal audioInputCharacterPrice,
         @NonNull BiFunction<ModelPrice, Map<String, Integer>, BigDecimal> calculator) {
 
     public static ModelPrice empty() {
         return new ModelPrice(
+                BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
