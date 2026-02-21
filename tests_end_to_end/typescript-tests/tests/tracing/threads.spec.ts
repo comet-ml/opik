@@ -135,11 +135,9 @@ This test ensures threads can be properly deleted via the UI.`
         for (let i = 0; i < 2; i++) {
           const threadId = threadConfigs[i].thread_id;
           await threadsPage.searchForThread(threadId);
-          await threadsPage.deleteThreadFromTable();
+          await threadsPage.deleteThreadFromTable(threadId);
           await threadsPage.checkThreadIsDeleted(threadId);
-
-          await page.getByTestId('search-input').clear();
-          await page.waitForTimeout(500);
+          await threadsPage.clearThreadSearch();
         }
       });
     });
