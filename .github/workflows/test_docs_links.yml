@@ -24,7 +24,10 @@ on:
           - changed
           - all
 
-permissions: {}
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
 
 jobs:
   check-links:
