@@ -47,44 +47,17 @@ permissions:
   actions: read
 
 jobs:
-  check-links-pr:
-    if: ${{ github.event_name == 'pull_request' }}
+  check-links:
     uses: ./.github/workflows/docs-fern-link-check.yml
     with:
-      mode: check
-      create_pr: false
+      mode: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.mode || 'check') || 'check' }}
+      create_pr: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fix' }}
       draft_pr: true
-      suggest_only_changed_files: true
-      publish_suggestions: true
-      max_suggestions: ${{ github.event.inputs.max_suggestions || 0 }}
-      pull_request_number: ${{ github.event.number }}
-    secrets:
-      OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
-
-  check-links-dispatch:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/docs-fern-link-check.yml
-    with:
-      mode: ${{ github.event.inputs.mode || 'check' }}
-      create_pr: ${{ github.event.inputs.mode == 'fix' }}
-      draft_pr: true
-      suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
-      publish_suggestions: ${{ github.event.inputs.publish_suggestions == 'true' || github.event.inputs.publish_suggestions == true }}
-      max_suggestions: ${{ github.event.inputs.max_suggestions || 0 }}
-      pull_request_number: ${{ github.event.inputs.pull_request_number || '' }}
-    secrets:
-      OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
-
-  check-links-schedule:
-    if: ${{ github.event_name == 'schedule' }}
-    uses: ./.github/workflows/docs-fern-link-check.yml
-    with:
-      mode: check
-      create_pr: false
-      draft_pr: true
-      suggest_only_changed_files: false
-      publish_suggestions: false
-      max_suggestions: 0
-      pull_request_number: ''
+      suggest_only_changed_files:
+        ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.suggestion_scope != 'all' || github.event_name == 'pull_request' }}
+      publish_suggestions:
+        ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.publish_suggestions == 'true' || github.event.inputs.publish_suggestions == true) || github.event_name == 'pull_request' }}
+      max_suggestions: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.max_suggestions || 0) || 0 }}
+      pull_request_number: ${{ github.event_name == 'pull_request' && github.event.number || github.event_name == 'workflow_dispatch' && github.event.inputs.pull_request_number || '' }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
