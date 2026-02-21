@@ -153,8 +153,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
-  COLUMN_COMMENTS_ID,
+  COLUMN_DURATION_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
   USER_FEEDBACK_COLUMN_ID,
 ];
 
