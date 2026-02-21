@@ -208,6 +208,40 @@ cd opik
 
 This will build the Frontend and Backend Docker images and start the Opik platform.
 
+### Enabling Opik Assist (AI Trace Analyzer)
+
+Opik Assist is an optional AI-powered trace analysis feature that helps you debug and optimize your traces conversationally.
+
+#### Using the opik.sh script
+
+To start Opik with Opik Assist enabled:
+
+```bash
+./opik.sh --opik-ai
+```
+
+#### Manual Docker Compose configuration
+
+Alternatively, you can enable Opik Assist manually:
+
+```bash
+cd deployment/docker-compose
+
+# Start Opik with the opik-ai-backend profile
+docker compose --profile opik-ai-backend up --detach
+```
+
+You'll also need to set the following environment variables:
+
+```bash
+export TOGGLE_OPIK_AI_ENABLED=true
+export OPIK_FRONTEND_FLAVOR=opik-ai-backend
+```
+
+<Note>
+**Prerequisites**: Before using Opik Assist, you must configure an OpenAI provider in Workspace Settings → AI Providers. See the [AI Providers documentation](/administration/workspace-settings/ai_providers) for setup instructions.
+</Note>
+
 ## Troubleshooting
 
 If you get this error when running `docker compose`
