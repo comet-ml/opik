@@ -35,7 +35,7 @@ Principle: optimizer algorithms decide **what to test next**; the framework deci
 3. **Trial**: One candidate evaluation record, backed by one experiment.
 4. **Evaluation Suite**: Dataset + evaluators + policy used by experiment engine.
 5. **Mask (`mask_id`)**: Request-scoped configuration overlay for isolated candidate execution.
-6. **Lineage**: Parent-child relations between candidates.
+6. **Optimization Graph**: Parent-child relations between candidates used to render optimization evolution.
 7. **Experiment Runner**: Existing experiment execution capability (push/pull behavior belongs there).
 8. **Result Aggregator**: Framework component that detects completion and builds normalized trial results.
 9. **Canonical Config Hash**: Deterministic hash of a normalized full candidate configuration used for deduplication.
@@ -79,8 +79,21 @@ Framework implementation uses existing Opik persistence models.
 
 ```mermaid
 erDiagram
+    DATASETS ||--o{ OPTIMIZATIONS : "dataset_id"
+    DATASETS ||--o{ EXPERIMENTS : "dataset_id"
+    DATASETS ||--o{ DATASET_ITEMS : "dataset_id"
     OPTIMIZATIONS ||--o{ EXPERIMENTS : "optimization_id"
     EXPERIMENTS ||--o{ EXPERIMENT_ITEMS : "experiment_id"
+    DATASET_ITEMS ||--o{ EXPERIMENT_ITEMS : "dataset_item_id"
+    EXPERIMENT_ITEMS ||--o{ FEEDBACK_SCORES : "trace_id/entity_id"
+
+    DATASETS {
+        UUID id PK
+        STRING name
+        STRING description
+        DATETIME created_at
+        DATETIME last_updated_at
+    }
 
     OPTIMIZATIONS {
         UUID id PK
@@ -114,6 +127,26 @@ erDiagram
         DATETIME created_at
         DATETIME last_updated_at
     }
+
+    DATASET_ITEMS {
+        UUID id PK
+        UUID dataset_id FK
+        JSON data
+        STRING source
+        UUID trace_id
+        UUID span_id
+        DATETIME created_at
+        DATETIME last_updated_at
+    }
+
+    FEEDBACK_SCORES {
+        STRING entity_id
+        STRING entity_type
+        STRING name
+        DECIMAL value
+        DATETIME last_updated_at
+    }
+
 ```
 
 DB location:
@@ -121,6 +154,9 @@ DB location:
 1. `optimizations`: Opik analytics DB.
 2. `experiments`: Opik analytics DB.
 3. `experiment_items`: Opik analytics DB.
+4. `datasets`: Opik analytics DB.
+5. `dataset_items`: Opik analytics DB.
+6. `feedback_scores`: Opik analytics DB.
 
 Storage mapping:
 
@@ -133,6 +169,7 @@ Storage mapping:
    - `parent_candidate_ids`
    - `candidate_config_hash`
 4. Trial-level terminal errors -> `experiments.metadata.trial_error`.
+5. Objective/trial metric values shown in optimization views are derived from `feedback_scores` linked through experiment item traces.
 
 Notes:
 
@@ -593,7 +630,7 @@ class OptimizationRepository(Protocol):
     def list_trials(self, optimization_id: str) -> list[TrialResult]:
         ...
 
-    def get_lineage_graph(self, optimization_id: str) -> dict[str, Any]:
+    def get_optimization_graph(self, optimization_id: str) -> dict[str, Any]:
         ...
 
     def list_validation_rejections(self, optimization_id: str) -> list[dict[str, Any]]:
@@ -613,7 +650,7 @@ Storage mapping for repository methods:
 3. `save_rejection` -> optimization-level validation event log in `optimizations.metadata.validation_rejections`.
 4. `get_optimization_summary` -> `optimizations` (+ aggregate trial signals from linked experiments).
 5. `list_trials` -> `experiments` linked by `experiments.optimization_id`.
-6. `get_lineage_graph` -> candidate lineage fields in `experiments.metadata`.
+6. `get_optimization_graph` -> candidate lineage fields in `experiments.metadata`.
 7. `list_validation_rejections` -> `optimizations.metadata.validation_rejections`.
 
 Scope:
@@ -707,6 +744,63 @@ Duplicate-work avoidance (canonical hash):
 
 Persistence style:
 
-1. Trial records should be write-once for completed outcomes.
-2. Corrections/retries should create explicit update records or versioned updates, not silent overwrite.
-3. This preserves auditability and deterministic recovery.
+1. One logical trial record exists per `(optimization_id, candidate_id)`.
+2. Trial persistence is idempotent upsert keyed by `(optimization_id, candidate_id)`.
+3. Retries update the same trial record until it reaches a terminal state.
+
+---
+
+### 11. Frontend Realtime Communication
+
+This section defines what the backend reports to the UI during optimization execution, when it is reported, and how it is delivered.
+
+### 11.1 UI-facing events
+
+1. `run_status_changed`
+   - When emitted: optimization status changes (`initialized/running/completed/failed/cancelled`).
+   - UI impact: status badge, start/stop controls, terminal banners.
+2. `progress_changed`
+   - When emitted: counters change (`proposed`, `running`, `completed`, `failed`, `rejected`).
+   - UI impact: progress bar and summary counters.
+3. `trial_added_or_updated`
+   - When emitted: candidate trial is created/updated with terminal result.
+   - UI impact: trials table row and chart points.
+4. `best_candidate_changed`
+   - When emitted: current best candidate changes.
+   - UI impact: best-trial highlight, score cards, best prompt panel.
+5. `run_finished`
+   - When emitted: run reaches terminal state.
+   - UI impact: stop live refresh indicators and lock final state.
+
+Notes:
+
+1. `candidate_validated` can remain internal unless product explicitly adds a rejected-candidates panel.
+2. Large payloads are not pushed in events; UI fetches heavy details on demand.
+
+### 11.2 Emission timing rules
+
+1. Emit events only after persistence succeeds.
+2. Emit on state transitions, not on every internal method call.
+3. If no transition occurs for a long period, emit periodic `progress_changed` heartbeat updates (optional).
+
+### 11.3 Transport
+
+Recommended transport:
+
+1. **SSE stream** for realtime server-to-client updates:
+   - `GET /v1/private/optimizations/{optimization_id}/events`
+2. **Snapshot endpoints** for initial load and recovery:
+   - `GET /v1/private/optimizations/{optimization_id}`
+   - `GET /v1/private/optimizations/{optimization_id}/trials`
+3. **Polling fallback** if stream disconnects or is unavailable.
+
+Why SSE:
+
+1. This flow is server-to-client only.
+2. Simpler operational model than WebSocket for this use case.
+
+### 11.4 Current behavior vs target behavior
+
+1. Current optimization compare page behavior is polling-based (periodic refetch).
+2. Target behavior is SSE + snapshot + polling fallback.
+3. The same UI can support both by using stream updates when connected and polling when not.
