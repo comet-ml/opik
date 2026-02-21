@@ -158,6 +158,8 @@ jobs:
 
             const changedFiles = new Set(changedFilePayload.map((file) => file.filename));
             const changedLinesByFile = new Map();
+            const summaryMarker = '### Fern docs canonical link check';
+            const suggestionMarker = 'Suggested fix for canonical link:';
 
             const parseChangedLines = (patch = '') => {
               const lines = new Set();
@@ -196,6 +198,75 @@ jobs:
               }
               const filePath = path.resolve(workspaceRoot, file.filename);
               changedLinesByFile.set(filePath, parseChangedLines(file.patch || ''));
+            }
+
+            const isBotSuggestionScopeComment = (body = '') =>
+              typeof body === 'string' &&
+              body.includes(summaryMarker) &&
+              (body.includes('Found ') || body.includes('### Fern docs canonical link check'));
+
+            const cleanupPromises = [];
+
+            const staleReviewComments = await github.paginate(
+              github.rest.pulls.listReviewComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+                per_page: 100,
+              },
+              (response) => response.data
+            );
+
+            for (const comment of staleReviewComments) {
+              const commentBody = comment.body || '';
+              const commentPath = comment.path || '';
+              const hasSuggestion = commentBody.includes(suggestionMarker);
+              const sameFileChanged = changedFiles.has(commentPath);
+              const shouldCleanReviewComment =
+                isBotSuggestionScopeComment(commentBody) &&
+                hasSuggestion &&
+                (suggestOnlyChangedFiles
+                  ? sameFileChanged
+                  : true);
+
+              if (shouldCleanReviewComment) {
+                cleanupPromises.push(
+                  github.rest.pulls.deleteReviewComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: pullNumber,
+                    comment_id: comment.id,
+                  })
+                );
+              }
+            }
+
+            const staleIssueComments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullNumber,
+                per_page: 100,
+              },
+              (response) => response.data
+            );
+
+            for (const comment of staleIssueComments) {
+              if (isBotSuggestionScopeComment(comment.body || '')) {
+                cleanupPromises.push(
+                  github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: comment.id,
+                  })
+                );
+              }
+            }
+
+            if (cleanupPromises.length) {
+              await Promise.all(cleanupPromises);
             }
 
             const comments = issues
