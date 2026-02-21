@@ -252,7 +252,64 @@ def normalize_base_url(raw_url: str) -> Optional[str]:
     return parsed.path, suffix
 
 
-def resolve_url(raw_url: str, routes: set[str], path_to_route: Dict[str, str], redirects: List[dict], assets: set[str]) -> Optional[str]:
+def resolve_relative_url(
+    raw_url: str,
+    base_file: Path,
+    docs_root: Path,
+    routes: set[str],
+    path_to_route: Dict[str, str],
+    redirects: List[dict],
+    assets: set[str],
+) -> Optional[str]:
+    path, suffix = split_path_and_suffix(raw_url)
+    candidate_path = (base_file.parent / path).resolve()
+
+    candidates = {candidate_path}
+
+    if candidate_path.suffix == "":
+        candidates.add(candidate_path.with_suffix(".md"))
+        candidates.add(candidate_path.with_suffix(".mdx"))
+
+    if candidate_path.is_dir():
+        candidates.add(candidate_path / "index.md")
+        candidates.add(candidate_path / "index.mdx")
+
+    docs_root = docs_root.resolve()
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+
+        try:
+            relative_path = candidate.relative_to(docs_root)
+        except ValueError:
+            continue
+
+        candidate_url = f"/{relative_path.as_posix().lstrip('/')}"
+        resolved = find_route(candidate_url, routes, path_to_route, redirects)
+        if resolved:
+            return f"{resolved}{suffix}"
+
+        if candidate_url in assets or candidate_url.rstrip("/") in assets:
+            return f"{candidate_url}{suffix}"
+
+    return None
+
+
+def resolve_url(
+    raw_url: str,
+    routes: set[str],
+    path_to_route: Dict[str, str],
+    redirects: List[dict],
+    assets: set[str],
+    base_file: Optional[Path] = None,
+    docs_root: Optional[Path] = None,
+) -> Optional[str]:
+    path, _ = split_path_and_suffix(raw_url)
+    if path.startswith("./") or path.startswith("../"):
+        if base_file is None or docs_root is None:
+            return None
+        return resolve_relative_url(raw_url, base_file, docs_root, routes, path_to_route, redirects, assets)
+
     target = normalize_base_url(raw_url)
     if target is None:
         return None
@@ -289,6 +346,7 @@ def check_file(
     path_to_route: Dict[str, str],
     redirects: List[dict],
     assets: set[str],
+    docs_root: Path,
 ) -> List[Issue]:
     text = path.read_text(encoding="utf-8")
     issues: List[Issue] = []
@@ -310,7 +368,15 @@ def check_file(
                 )
                 continue
 
-            suggestion = resolve_url(raw_url, routes, path_to_route, redirects, assets)
+            suggestion = resolve_url(
+                raw_url,
+                routes,
+                path_to_route,
+                redirects,
+                assets,
+                base_file=path,
+                docs_root=docs_root,
+            )
             if suggestion is None:
                 if raw_url.startswith(("http://", "https://", "/", "./", "../")):
                     if raw_url.startswith(("http://", "https://")) and urlparse(raw_url).path.startswith("/docs/opik"):
@@ -324,6 +390,16 @@ def check_file(
                             )
                         )
                     elif raw_url.startswith("/"):
+                        issues.append(
+                            Issue(
+                                file=path,
+                                line=line,
+                                original=raw_url,
+                                suggestion=None,
+                                kind="route_missing",
+                            )
+                        )
+                    elif raw_url.startswith(("./", "../")):
                         issues.append(
                             Issue(
                                 file=path,
@@ -458,7 +534,7 @@ def main() -> int:
             issues.extend(apply_fixes(path, routes, path_to_route, redirects, assets))
     else:
         for path in mdx_files:
-            issues.extend(check_file(path, routes, path_to_route, redirects, assets))
+            issues.extend(check_file(path, routes, path_to_route, redirects, assets, args.docs_root))
 
     if args.json_output:
         payload = {
