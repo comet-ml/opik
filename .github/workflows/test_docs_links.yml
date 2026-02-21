@@ -2,6 +2,9 @@ name: Check Documentation Links
 on:
   schedule:
     - cron: '0 12 * * *'  # Run daily at noon UTC
+  pull_request:
+    paths:
+      - 'apps/opik-documentation/documentation/**'
   workflow_dispatch:
     inputs:
       mode:
@@ -31,5 +34,7 @@ jobs:
       create_pr: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fix' }}
       draft_pr: true
       suggest_only_changed_files: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.suggestion_scope != 'all' }}
+      publish_suggestions: ${{ github.event_name == 'pull_request' }}
+      pull_request_number: ${{ github.event_name == 'pull_request' && github.event.number || '' }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
