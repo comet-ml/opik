@@ -411,7 +411,7 @@ def check_file(
                         )
                 continue
 
-            if suggestion != raw_url and raw_url.startswith(("/", "http://", "https://")):
+            if suggestion != raw_url:
                 issues.append(
                     Issue(
                         file=path,
