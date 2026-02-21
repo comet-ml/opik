@@ -124,8 +124,8 @@ data:
         add_header {{ $name }} {{ $value | squote }} always;
         {{- end }}
         {{- end }}
-        
-        {{- $rootPath := ternary "" "/opik" .Values.standalone }}
+
+        {{- $rootPath := .Values.component.frontend.pathPrefix | default (ternary "" "/opik" .Values.standalone) }}
         # Dedicated healthcheck endpoint
         # Returns 200 OK if nginx is running and can serve requests
         location {{ $rootPath }}/health {

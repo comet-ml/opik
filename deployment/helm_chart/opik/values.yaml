@@ -434,6 +434,10 @@ component:
         enabled: false
         hosts: []
         secretName: ""
+    # Path prefix for frontend URLs (e.g., "/opik" to serve at http://localhost/opik)
+    # Set to "" or "/" for no prefix (default standalone behavior)
+    # When set to a custom value, the frontend will be accessible at <host>/<pathPrefix>
+    pathPrefix: ""
     # throttled locations
     throttling: {}
     # map variables for use with throttling and other places
