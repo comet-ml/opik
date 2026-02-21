@@ -12,6 +12,14 @@ on:
         options:
           - check
           - fix
+      suggestion_scope:
+        description: "Suggestion/reporting scope"
+        required: false
+        default: "changed"
+        type: choice
+        options:
+          - changed
+          - all
 
 jobs:
   check-links:
@@ -20,3 +28,4 @@ jobs:
       mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'check' }}
       create_pr: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fix' }}
       draft_pr: true
+      suggest_only_changed_files: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.suggestion_scope != 'all' }}

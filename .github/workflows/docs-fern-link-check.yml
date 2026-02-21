@@ -86,6 +86,10 @@ jobs:
             const pullNumber = context.payload.pull_request.number;
             const issues = JSON.parse(fs.readFileSync(issuesPath, 'utf8'));
             const totalIssues = Array.isArray(issues) ? issues.length : 0;
+            const kindCounts = issues.reduce((acc, issue) => {
+              acc[issue.kind] = (acc[issue.kind] || 0) + 1;
+              return acc;
+            }, {});
             const suggestOnlyChangedFiles = String(process.env.SUGGEST_ONLY_CHANGED_FILES || 'true').toLowerCase() !== 'false';
 
             if (!totalIssues) {
@@ -137,10 +141,17 @@ jobs:
               }
             }
 
+            const scopeLabel = suggestOnlyChangedFiles
+              ? 'Changed files only (suggestions)'
+              : `All files.
+
+Note: inline suggestions can only be applied on changed lines in the PR diff.`;
             const baseSummary = [
               '### Fern docs canonical link check',
               '',
               `Found ${totalIssues} issue(s) in Fern docs links.`,
+              `Issue breakdown: rewrite=${kindCounts.rewrite || 0}, route_missing=${kindCounts.route_missing || 0}, relative_missing=${kindCounts.relative_missing || 0}.`,
+              `Suggestion scope: ${scopeLabel}`,
             ];
 
             if (!uniqueComments.length) {
