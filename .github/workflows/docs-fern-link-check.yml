@@ -23,6 +23,16 @@ on:
         required: false
         type: boolean
         default: true
+      publish_suggestions:
+        description: "Post inline suggestions and summary comments"
+        required: false
+        type: boolean
+        default: false
+      pull_request_number:
+        description: "Pull request number for posting suggestions/comments"
+        required: false
+        type: string
+        default: ""
     secrets:
       OLLIE_BOT_TOKEN:
         required: false
@@ -65,10 +75,11 @@ jobs:
           fi
 
       - name: Publish inline suggestions on PRs
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ inputs.publish_suggestions && inputs.pull_request_number != '' }}
         uses: actions/github-script@v7
         env:
           SUGGEST_ONLY_CHANGED_FILES: ${{ inputs.suggest_only_changed_files }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
         with:
           github-token: ${{ secrets.OLLIE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -86,7 +97,11 @@ jobs:
             }
 
             const workspace = process.env.GITHUB_WORKSPACE || '';
-            const pullNumber = context.payload.pull_request.number;
+            const pullNumber = Number(process.env.PULL_REQUEST_NUMBER || '0');
+            if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
+              core.warning('No pull request number available; skipping suggestion posting.');
+              return;
+            }
             const issues = JSON.parse(fs.readFileSync(issuesPath, 'utf8'));
             const totalIssues = Array.isArray(issues) ? issues.length : 0;
             const kindCounts = issues.reduce((acc, issue) => {

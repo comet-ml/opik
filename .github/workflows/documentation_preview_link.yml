@@ -11,6 +11,8 @@ jobs:
         with:
             mode: check
             create_pr: false
+            publish_suggestions: true
+            pull_request_number: ${{ github.event.number }}
         secrets:
             OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
 
