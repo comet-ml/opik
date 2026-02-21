@@ -1,4 +1,5 @@
 import { Page, Locator, expect } from '@playwright/test';
+import { dismissWelcomeWizardDialog } from '../helpers/welcome-wizard';
 
 export class ThreadsPage {
   readonly page: Page;
@@ -8,8 +9,7 @@ export class ThreadsPage {
   readonly threadRow: Locator;
   readonly threadContainer: Locator;
   readonly threadContainerDeleteButton: Locator;
-  readonly threadDeletePopupDeleteButton: Locator;
-  readonly threadCheckbox: Locator;
+  readonly threadContainerDeleteMenuItem: Locator;
   readonly threadTableDeleteButton: Locator;
   readonly outputContainer: Locator;
 
@@ -20,13 +20,10 @@ export class ThreadsPage {
     this.threadsToggle = page.getByRole('radio', { name: 'Threads' });
     this.threadRow = page.locator('tbody tr');
     this.threadContainer = page.getByTestId('thread');
-    this.threadContainerDeleteButton = page
-      .locator('div')
-      .filter({ hasText: /^Add to/ })
-      .getByRole('button')
-      .nth(2);
-    this.threadDeletePopupDeleteButton = page.getByRole('button', { name: 'Delete' });
-    this.threadCheckbox = page.getByLabel('Select row');
+    this.threadContainerDeleteButton = this.threadContainer.getByRole('button', {
+      name: 'Actions menu',
+    });
+    this.threadContainerDeleteMenuItem = page.getByRole('menuitem', { name: /delete/i });
     // Find the delete button by its trash icon SVG (same pattern as traces page)
     this.threadTableDeleteButton = page
       .getByRole('button')
@@ -35,40 +32,66 @@ export class ThreadsPage {
   }
 
   async switchToPage(): Promise<void> {
-    // Click the Logs tab first
-    await this.logsTab.click();
+    await dismissWelcomeWizardDialog(this.page);
+
+    await expect(this.logsTab).toBeVisible({ timeout: 15000 });
+    if ((await this.logsTab.getAttribute('aria-selected')) !== 'true') {
+      await this.logsTab.click();
+    }
+
     // Then click the Threads toggle within the Logs tab
-    await this.threadsToggle.click();
+    if ((await this.threadsToggle.getAttribute('aria-checked')) !== 'true') {
+      await this.threadsToggle.click();
+      await expect(this.threadsToggle).toHaveAttribute('aria-checked', 'true');
+    }
   }
 
   async getNumberOfThreadsOnPage(): Promise<number> {
+    const maxWaitMs = 30000;
+    const start = Date.now();
+
     try {
-      // Retry up to 5 times if no threads found initially
-      for (let i = 0; i < 5; i++) {
+      while (Date.now() - start < maxWaitMs) {
         const count = await this.threadRow.count();
-        if (count === 0) {
-          await this.page.waitForTimeout(1000);
-          await this.page.reload();
-        } else {
-          break;
+        if (count > 0) {
+          await expect(this.threadRow.first()).toBeVisible();
+          return count;
         }
+
+        await this.page.waitForTimeout(1000);
       }
 
-      await expect(this.threadRow.first()).toBeVisible();
-      return await this.threadRow.count();
+      throw new Error(`No threads visible after ${maxWaitMs}ms.`);
     } catch (error) {
       throw new Error(`No threads found in the project.\nError: ${error}`);
     }
   }
 
   async openThreadContent(threadId: string): Promise<void> {
-    // Click on the row containing the thread ID (not the ID cell itself, which copies to clipboard)
-    await this.page
+    const threadRow = this.page
       .getByRole('row')
       .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
-      .click();
-    // Wait for thread panel to be visible
-    await this.threadContainer.waitFor({ state: 'visible' });
+      .first();
+
+    await expect(threadRow).toBeVisible({ timeout: 15000 });
+    await threadRow.scrollIntoViewIfNeeded();
+    await threadRow.click({ timeout: 10000 });
+
+    const openThreadUrl = new URL(this.page.url());
+    openThreadUrl.searchParams.set("thread", threadId);
+    await this.page.goto(openThreadUrl.toString());
+
+    await this.page.waitForURL(
+      (url) => new URL(url).searchParams.get("thread") === threadId,
+      { timeout: 10000 },
+    );
+    await this.threadContainer.waitFor({ state: "visible" });
+    await this.threadContainer.scrollIntoViewIfNeeded();
+    await expect(this.threadContainer).toBeVisible();
+    await expect(
+      this.threadContainerDeleteButton,
+    ).toBeVisible({ timeout: 10000 });
+    await this.threadContainerDeleteButton.scrollIntoViewIfNeeded();
   }
 
   async checkMessageInThread(message: string, isOutput: boolean = false): Promise<void> {
@@ -80,25 +103,106 @@ export class ThreadsPage {
   }
 
   async searchForThread(threadId: string): Promise<void> {
+    await this.searchInput.fill("");
     await this.searchInput.fill(threadId);
-    await expect(this.threadRow).toHaveCount(1);
+    await expect(
+      this.page
+        .getByRole('row')
+        .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
+    ).toHaveCount(1);
   }
 
-  async deleteThreadFromTable(): Promise<void> {
-    await this.threadCheckbox.click();
+  async clearThreadSearch(): Promise<void> {
+    await this.searchInput.fill("");
+    await expect(this.threadRow.first()).toBeVisible({ timeout: 10000 });
+  }
+
+  private getThreadRowById(threadId: string): Locator {
+    return this.page.getByRole('row').filter({
+      has: this.page.getByRole('cell', { name: threadId, exact: true }),
+    });
+  }
+
+  async deleteThreadFromTable(threadId: string): Promise<void> {
+    const row = this.getThreadRowById(threadId).first();
+    await row.scrollIntoViewIfNeeded();
+    const checkbox = row.getByRole('checkbox', { name: 'Select row' });
+    await expect(checkbox).toBeVisible({ timeout: 5000 });
+    await expect(row).toBeVisible({ timeout: 15000 });
+
+    const isChecked = async () =>
+      (await checkbox.getAttribute("data-state")) === "checked";
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (await isChecked()) {
+        break;
+      }
+
+      await checkbox.click({ force: true });
+      await this.page.waitForTimeout(250);
+
+      if (await isChecked()) {
+        break;
+      }
+
+      await checkbox.focus();
+      await this.page.keyboard.press(" ");
+      await this.page.waitForTimeout(250);
+
+      if (await isChecked()) {
+        break;
+      }
+
+      await row.click();
+      await this.page.waitForTimeout(250);
+    }
+
+    await expect
+      .poll(
+        async () => {
+          return isChecked();
+        },
+        { timeout: 10000 },
+      )
+      .toBe(true);
+    await expect(this.threadTableDeleteButton).toBeEnabled({ timeout: 10000 });
     await this.threadTableDeleteButton.click();
-    await this.page.waitForTimeout(500);
-    await this.threadDeletePopupDeleteButton.click();
+
+    const confirmButton = this.page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete threads' });
+
+    await expect(confirmButton).toBeVisible({
+      timeout: 10000,
+    });
+    await confirmButton.click({
+      delay: 100,
+    });
+    await expect(confirmButton).toBeHidden();
+    await expect(
+      this.page
+        .getByRole('row')
+        .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
+    ).toHaveCount(0, { timeout: 12000 });
   }
 
   async checkThreadIsDeleted(threadId: string): Promise<void> {
     await this.searchInput.fill(threadId);
-    await expect(this.threadRow.filter({ hasText: threadId })).toHaveCount(0);
+    await expect(
+      this.page
+        .getByRole('row')
+        .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
+    ).toHaveCount(0);
   }
 
   async deleteThreadFromThreadContentBar(): Promise<void> {
-    await this.threadContainerDeleteButton.click();
-    await this.threadDeletePopupDeleteButton.click();
+    await this.threadContainerDeleteButton.click({ timeout: 5000 });
+    await this.threadContainerDeleteMenuItem.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(this.threadContainerDeleteMenuItem).toBeVisible({ timeout: 8000 });
+    await this.threadContainerDeleteMenuItem.evaluate((menuItem) =>
+      (menuItem as HTMLElement).click(),
+    );
+    await this.page.getByRole('button', { name: 'Delete thread' }).click();
   }
 
   async closeThreadContent(): Promise<void> {
