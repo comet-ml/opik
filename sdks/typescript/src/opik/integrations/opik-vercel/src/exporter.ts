@@ -101,6 +101,10 @@ export class OpikExporter implements SpanExporter {
       return { text: attributes["ai.response.text"] };
     }
 
+    if (attributes["ai.response.object"]) {
+      return { object: safeParseJson(attributes["ai.response.object"]) };
+    }
+
     if (attributes["ai.toolCall.result"]) {
       return { result: attributes["ai.toolCall.result"] };
     }
