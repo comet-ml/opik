@@ -23,6 +23,9 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      OLLIE_BOT_TOKEN:
+        required: false
 
 permissions:
   contents: write
@@ -67,7 +70,7 @@ jobs:
         env:
           SUGGEST_ONLY_CHANGED_FILES: ${{ inputs.suggest_only_changed_files }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.OLLIE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
@@ -204,7 +207,7 @@ Note: inline suggestions can only be applied on changed lines in the PR diff.`;
         if: ${{ inputs.create_pr }}
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.OLLIE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
           branch: "github-actions/docs-link-fixes-${{ github.run_id }}"
           draft: ${{ inputs.draft_pr }}
           title: "chore(docs): fix Fern docs canonical links"

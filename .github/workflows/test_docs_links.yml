@@ -29,3 +29,5 @@ jobs:
       create_pr: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fix' }}
       draft_pr: true
       suggest_only_changed_files: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.suggestion_scope != 'all' }}
+    secrets:
+      OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
