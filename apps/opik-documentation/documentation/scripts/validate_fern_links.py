@@ -167,6 +167,31 @@ def collect_img_routes(doc_root: Path) -> set[str]:
     return assets
 
 
+def normalize_restricted_files(raw_files: str, workspace: Path) -> set[Path]:
+    files = set()
+    if not raw_files:
+        return files
+
+    root = workspace.resolve()
+    for raw_file in raw_files.split(","):
+        candidate = raw_file.strip()
+        if not candidate:
+            continue
+
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = (root / path).resolve()
+        else:
+            path = path.resolve()
+
+        if path.suffix.lower() not in {".md", ".mdx"}:
+            continue
+        if path.exists():
+            files.add(path)
+
+    return files
+
+
 def find_route(path: str, routes: set[str], path_to_route: Dict[str, str], redirects: List[dict]) -> Optional[str]:
     def resolve(candidate: str, seen: set[str]) -> Optional[str]:
         candidate_path, candidate_suffix = split_path_and_suffix(candidate)
@@ -562,21 +587,37 @@ def build_parser() -> argparse.Namespace:
         default=None,
         help="Optional path to write a JSON issue report",
     )
+    parser.add_argument(
+        "--workspace-root",
+        type=Path,
+        default=None,
+        help="Repository workspace root for resolving restrict-to file paths",
+    )
+    parser.add_argument(
+        "--restrict-to",
+        type=str,
+        default="",
+        help="Optional comma-separated paths to restrict checks to (md/mdx files only).",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = build_parser()
+    workspace_root = args.workspace_root or Path(__file__).resolve().parents[4]
 
     config = load_docs_config(args.docs_yml)
     routes, path_to_route, redirects = collect_routes(config)
     assets = collect_img_routes(args.docs_root)
+    restricted_files = normalize_restricted_files(args.restrict_to, workspace_root)
 
     mdx_files = [
         path
         for path in args.docs_root.rglob("*")
         if path.is_file() and path.suffix.lower() in {".md", ".mdx"}
     ]
+    if restricted_files:
+        mdx_files = [path for path in mdx_files if path.resolve() in restricted_files]
 
     issues: List[Issue] = []
 

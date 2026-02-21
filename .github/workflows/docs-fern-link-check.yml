@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: true
+      restrict_to_changed_files:
+        description: "Limit checker execution to files changed in the PR diff"
+        required: false
+        type: boolean
+        default: false
       draft_pr:
         description: "Create pull request as draft"
         required: false
@@ -72,11 +77,22 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p .github-artifacts
+          CHECK_ARGS=()
+          if [ "${{ inputs.restrict_to_changed_files }}" = "true" ]; then
+            CHANGED_DOC_FILES=$(
+              git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- apps/opik-documentation/documentation/fern/docs \
+                | awk '/\.(md|mdx)$/ { print }' \
+                | paste -sd ','
+            )
+            if [ -n "$CHANGED_DOC_FILES" ]; then
+              CHECK_ARGS=(--restrict-to "$CHANGED_DOC_FILES" --workspace-root "$GITHUB_WORKSPACE")
+            fi
+          fi
 
           if [ "${{ inputs.mode }}" = "fix" ]; then
-            python scripts/validate_fern_links.py --fix --json-output .github-artifacts/docs-link-issues.json
+            python scripts/validate_fern_links.py --fix --json-output .github-artifacts/docs-link-issues.json "${CHECK_ARGS[@]}"
           else
-            python scripts/validate_fern_links.py --check-only --json-output .github-artifacts/docs-link-issues.json
+            python scripts/validate_fern_links.py --check-only --json-output .github-artifacts/docs-link-issues.json "${CHECK_ARGS[@]}"
           fi
 
       - name: Publish inline suggestions on PRs
