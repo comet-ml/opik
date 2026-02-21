@@ -61,10 +61,9 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     sortable: true,
   },
   {
-    id: "id",
-    label: "ID",
-    type: COLUMN_TYPE.string,
-    cell: IdCell as never,
+    id: "version_count",
+    label: "Versions",
+    type: COLUMN_TYPE.number,
   },
   {
     id: "template_structure",
@@ -80,14 +79,21 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     },
   },
   {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.last_updated_at),
+  },
+  {
+    id: "id",
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
     id: "description",
     label: "Description",
     type: COLUMN_TYPE.string,
-  },
-  {
-    id: "version_count",
-    label: "Versions",
-    type: COLUMN_TYPE.number,
   },
   {
     id: "tags",
@@ -95,12 +101,6 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     type: COLUMN_TYPE.list,
     iconType: "tags",
     cell: ListCell as never,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
   },
   {
     id: "created_at",
@@ -171,9 +171,8 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "template_structure",
-  "description",
   "version_count",
+  "template_structure",
   "last_updated_at",
 ];
 
