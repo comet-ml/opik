@@ -6,18 +6,7 @@ on:
         - 'apps/opik-documentation/documentation/**'
 
 jobs:
-    validate-links:
-        uses: ./.github/workflows/docs-fern-link-check.yml
-        with:
-            mode: check
-            create_pr: false
-            publish_suggestions: true
-            pull_request_number: ${{ github.event.number }}
-        secrets:
-            OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
-
     run:
-        needs: validate-links
         runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions: write-all

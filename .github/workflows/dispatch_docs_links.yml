@@ -19,6 +19,15 @@ on:
         options:
           - changed
           - all
+      publish_suggestions:
+        description: "Post inline suggestions and summary comments"
+        required: false
+        default: false
+        type: boolean
+      pull_request_number:
+        description: "Optional pull request number to attach suggestions/comments"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -33,7 +42,7 @@ jobs:
       create_pr: ${{ github.event.inputs.mode == 'fix' }}
       draft_pr: true
       suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
-      publish_suggestions: false
-      pull_request_number: ''
+      publish_suggestions: ${{ github.event.inputs.publish_suggestions }}
+      pull_request_number: ${{ github.event.inputs.pull_request_number }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}

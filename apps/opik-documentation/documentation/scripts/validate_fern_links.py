@@ -169,36 +169,42 @@ def collect_img_routes(doc_root: Path) -> set[str]:
 
 def find_route(path: str, routes: set[str], path_to_route: Dict[str, str], redirects: List[dict]) -> Optional[str]:
     compact = path.rstrip("/") or "/"
+    candidate_routes: List[str] = [compact]
 
-    if compact in routes:
-        return compact
-
-    if compact in path_to_route:
-        return path_to_route[compact]
-
-    for redirect in redirects:
-        if redirect["exact"] and redirect["source"] == compact:
-            return redirect["destination"]
-        if not redirect["exact"] and redirect["regex"].match(compact):
-            return redirect["destination"]
-
-    if compact.startswith("/docs/opik"):
-        mapped = compact.replace("/docs/opik", "", 1)
+    if compact == "/":
+        candidate_routes.append("/docs/opik")
+    elif compact.startswith("/docs/opik"):
+        mapped = compact[len("/docs/opik") :]
         mapped = mapped or "/"
         mapped = mapped.rstrip("/") or "/"
-        if mapped in routes:
-            return mapped
+        candidate_routes.append(mapped)
+    else:
+        candidate_routes.append(f"/docs/opik{compact}")
 
-    compact_lookup = compact.lstrip("/")
-    for candidate in (compact_lookup, f"{compact_lookup}.md", f"{compact_lookup}.mdx"):
-        route = path_to_route.get(candidate)
-        if route:
-            return route
+    seen = set()
+    candidates = []
+    for candidate in candidate_routes:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        candidates.append(candidate)
 
-    if compact.startswith("/docs/opik"):
-        stripped = compact[len("/docs/opik") :].lstrip("/")
-        for candidate in (stripped, f"{stripped}.md", f"{stripped}.mdx"):
-            route = path_to_route.get(candidate)
+    for candidate in candidates:
+        if candidate in routes:
+            return candidate
+
+        if candidate in path_to_route:
+            return path_to_route[candidate]
+
+        for redirect in redirects:
+            if redirect["exact"] and redirect["source"] == candidate:
+                return redirect["destination"]
+            if not redirect["exact"] and redirect["regex"].match(candidate):
+                return redirect["destination"]
+
+        compact_lookup = candidate.lstrip("/")
+        for candidate_path in (compact_lookup, f"{compact_lookup}.md", f"{compact_lookup}.mdx"):
+            route = path_to_route.get(candidate_path)
             if route:
                 return route
 
@@ -356,16 +362,36 @@ def check_file(
             raw_url = match.group(1)
             line = line_number(text, match.start(1))
 
-            if is_relative_missing(path, raw_url):
-                issues.append(
-                    Issue(
-                        file=path,
-                        line=line,
-                        original=raw_url,
-                        suggestion=None,
-                        kind="relative_missing",
-                    )
+            if raw_url.startswith(("./", "../")):
+                suggestion = resolve_url(
+                    raw_url,
+                    routes,
+                    path_to_route,
+                    redirects,
+                    assets,
+                    base_file=path,
+                    docs_root=docs_root,
                 )
+                if suggestion is None:
+                    issues.append(
+                        Issue(
+                            file=path,
+                            line=line,
+                            original=raw_url,
+                            suggestion=None,
+                            kind=("relative_missing" if is_relative_missing(path, raw_url) else "route_missing"),
+                        )
+                    )
+                elif suggestion != raw_url:
+                    issues.append(
+                        Issue(
+                            file=path,
+                            line=line,
+                            original=raw_url,
+                            suggestion=suggestion,
+                            kind="rewrite",
+                        )
+                    )
                 continue
 
             suggestion = resolve_url(
@@ -378,7 +404,7 @@ def check_file(
                 docs_root=docs_root,
             )
             if suggestion is None:
-                if raw_url.startswith(("http://", "https://", "/", "./", "../")):
+                if raw_url.startswith(("http://", "https://", "/")):
                     if raw_url.startswith(("http://", "https://")) and urlparse(raw_url).path.startswith("/docs/opik"):
                         issues.append(
                             Issue(
@@ -390,16 +416,6 @@ def check_file(
                             )
                         )
                     elif raw_url.startswith("/"):
-                        issues.append(
-                            Issue(
-                                file=path,
-                                line=line,
-                                original=raw_url,
-                                suggestion=None,
-                                kind="route_missing",
-                            )
-                        )
-                    elif raw_url.startswith(("./", "../")):
                         issues.append(
                             Issue(
                                 file=path,

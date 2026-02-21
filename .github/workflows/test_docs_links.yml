@@ -37,16 +37,3 @@ jobs:
       pull_request_number: ''
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
-
-  check-links-dispatch:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    uses: ./.github/workflows/docs-fern-link-check.yml
-    with:
-      mode: ${{ github.event.inputs.mode }}
-      create_pr: ${{ github.event.inputs.mode == 'fix' }}
-      draft_pr: true
-      suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
-      publish_suggestions: false
-      pull_request_number: ''
-    secrets:
-      OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
