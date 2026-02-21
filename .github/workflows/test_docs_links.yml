@@ -21,6 +21,8 @@ on:
           - changed
           - all
 
+permissions: {}
+
 jobs:
   check-links:
     uses: ./.github/workflows/docs-fern-link-check.yml
