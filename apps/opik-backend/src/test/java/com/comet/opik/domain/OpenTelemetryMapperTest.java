@@ -440,4 +440,71 @@ class OpenTelemetryMapperTest {
         assertThat(span.metadata().has("hidden_params")).isTrue();
         assertThat(span.input()).isNull();
     }
+
+    @Test
+    void testOpenAiDeprecatedKeysMapToMetadata() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.openai.request.response_format")
+                        .setValue(AnyValue.newBuilder().setStringValue("json_object").build())
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.openai.request.seed")
+                        .setValue(AnyValue.newBuilder().setIntValue(12345).build())
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.openai.request.service_tier")
+                        .setValue(AnyValue.newBuilder().setStringValue("priority").build())
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.openai.response.service_tier")
+                        .setValue(AnyValue.newBuilder().setStringValue("standard").build())
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.openai.response.system_fingerprint")
+                        .setValue(AnyValue.newBuilder().setStringValue("fp_123").build())
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.metadata().has("gen_ai.openai.request.response_format")).isTrue();
+        assertThat(span.metadata().has("gen_ai.openai.request.seed")).isTrue();
+        assertThat(span.metadata().has("gen_ai.openai.request.service_tier")).isTrue();
+        assertThat(span.metadata().has("gen_ai.openai.response.service_tier")).isTrue();
+        assertThat(span.metadata().has("gen_ai.openai.response.system_fingerprint")).isTrue();
+    }
+
+    @Test
+    void testMalformedUsageJsonDoesNotFailSpanMapping() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.input_tokens")
+                        .setValue(AnyValue.newBuilder().setStringValue("{this is not valid json}").build())
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.prompt")
+                        .setValue(AnyValue.newBuilder().setStringValue("keep mapping").build())
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.input().has("gen_ai.prompt")).isTrue();
+        assertThat(span.usage()).isNull();
+    }
 }

@@ -79,6 +79,21 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.response").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.openai.request.response_format")
+                    .source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.openai.request.seed")
+                    .source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.openai.request.service_tier")
+                    .source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.openai.response.service_tier")
+                    .source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.openai.response.system_fingerprint")
+                    .source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.operation.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
                     .build(),
             OpenTelemetryMappingRule.builder()

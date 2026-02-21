@@ -88,6 +88,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class OpenTelemetryResourceTest {
 
     public static final String URL_TEMPLATE = "%s/v1/private/otel/v1/traces";
+    public static final String METRICS_URL_TEMPLATE = "%s/v1/private/otel/v1/metrics";
     public static final String API_KEY = UUID.randomUUID().toString();
     public static final String USER = UUID.randomUUID().toString();
     public static final String WORKSPACE_ID = UUID.randomUUID().toString();
@@ -152,15 +153,28 @@ class OpenTelemetryResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ApiKey {
 
-        private final String fakeApikey = UUID.randomUUID().toString();
-        private final String okApikey = UUID.randomUUID().toString();
+        private static final String fakeApikey = UUID.randomUUID().toString();
+        private static final String okApikey = UUID.randomUUID().toString();
 
-        Stream<Arguments> credentials() {
+        static Stream<Arguments> credentials() {
             return Stream.of(
                     arguments(okApikey, null, true, null),
                     arguments(okApikey, "Demo Project", true, null),
                     arguments(fakeApikey, null, false, UNAUTHORIZED_RESPONSE),
                     arguments("", null, false, NO_API_KEY_RESPONSE));
+        }
+
+        static Stream<Arguments> otelMetricsPayloads() {
+            return Stream.of(
+                    arguments("application/x-protobuf", Entity.entity(new byte[]{1, 2, 3}, "application/x-protobuf")),
+                    arguments("application/json", Entity.json("{}")));
+        }
+
+        static Stream<Arguments> otelMetricsRequests() {
+            return credentials()
+                    .flatMap(credentials -> otelMetricsPayloads().map(metricsPayload -> arguments(credentials.get()[0],
+                            credentials.get()[1], credentials.get()[2], credentials.get()[3],
+                            metricsPayload.get()[0], metricsPayload.get()[1])));
         }
 
         @BeforeEach
@@ -281,10 +295,30 @@ class OpenTelemetryResourceTest {
             sendBatch(payload, "application/json", projectName, workspaceName, apiKey, expected, errorMessage);
         }
 
+        @ParameterizedTest
+        @MethodSource("otelMetricsRequests")
+        @DisplayName("ingest otel metrics")
+        void ingestOtelMetrics(String apiKey, String projectName, boolean expected,
+                io.dropwizard.jersey.errors.ErrorMessage errorMessage, String mediaType, Entity<?> payload) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+            sendBatch(payload, mediaType, projectName, workspaceName, apiKey, expected, 501,
+                    new ErrorMessage(501, "OpenTelemetry metrics ingestion is not yet supported"),
+                    errorMessage, METRICS_URL_TEMPLATE);
+        }
+
         void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
                 boolean expected, ErrorMessage errorMessage) {
 
-            var requestBuilder = client.target(URL_TEMPLATE.formatted(baseURI))
+            sendBatch(payload, mediaType, projectName, workspaceName, apiKey, expected, 200, null,
+                    errorMessage, URL_TEMPLATE);
+        }
+
+        void sendBatch(Entity<?> payload, String mediaType, String projectName, String workspaceName, String apiKey,
+                boolean expected, int expectedSuccessStatus, ErrorMessage expectedSuccessError,
+                ErrorMessage errorMessage, String endpointTemplate) {
+
+            var requestBuilder = client.target(endpointTemplate.formatted(baseURI))
                     .request(mediaType)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName);
@@ -296,7 +330,11 @@ class OpenTelemetryResourceTest {
             try (Response actualResponse = requestBuilder.post(payload)) {
 
                 if (expected) {
-                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                    assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedSuccessStatus);
+                    if (expectedSuccessError != null) {
+                        assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                                .isEqualTo(expectedSuccessError);
+                    }
 
                 } else {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(401);
@@ -590,6 +628,52 @@ class OpenTelemetryResourceTest {
                     .findFirst()
                     .orElseThrow();
             assertThat(rootSpanFromDb.metadata().get("thread_id").asLong()).isEqualTo(integerThreadId);
+        }
+
+        @Test
+        @DisplayName("test malformed gen_ai.usage JSON does not fail trace ingestion")
+        void testMalformedUsageJsonDoesNotFailIngestion() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var rootSpanId = UUID.randomUUID().toString().getBytes();
+            long startTimeNano = (System.currentTimeMillis() - 1_000) * 1_000_000L;
+            long endTimeNano = System.currentTimeMillis() * 1_000_000L;
+
+            var rootSpan = Span.newBuilder()
+                    .setName("span with malformed usage")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(rootSpanId))
+                    .setStartTimeUnixNano(startTimeNano)
+                    .setEndTimeUnixNano(endTimeNano)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setStringValue("not a valid integer and not valid json {")
+                                    .build())
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.prompt")
+                            .setValue(AnyValue.newBuilder().setStringValue("still ingest")).build())
+                    .build();
+
+            var otelSpans = List.of(rootSpan);
+            var minTimestampMs = Duration.ofNanos(startTimeNano).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.name()).isEqualTo("span with malformed usage");
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(1);
+            var persistedSpan = generatedSpanPage.content().get(0);
+            assertThat(persistedSpan.input().get("gen_ai.prompt").asText())
+                    .isEqualTo("still ingest");
+            assertThat(persistedSpan.usage()).isNull();
         }
 
     }
