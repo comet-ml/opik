@@ -37,6 +37,9 @@ on:
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/**'
+      - 'apps/opik-documentation/documentation/scripts/**'
+      - '.github/workflows/test_docs_links.yml'
+      - '.github/workflows/docs-fern-link-check.yml'
 
 permissions:
   contents: write
