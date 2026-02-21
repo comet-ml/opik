@@ -1,0 +1,197 @@
+name: Docs - Fern Link Check
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "check (default) or fix"
+        required: false
+        type: string
+        default: "check"
+      create_pr:
+        description: "Create a pull request when mode is fix"
+        required: false
+        type: boolean
+        default: false
+      draft_pr:
+        description: "Create pull request as draft"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install docs link checker dependencies
+        run: |
+          python -m pip install --quiet pyyaml
+
+      - name: Run Fern docs link checks
+        id: fern-link-check
+        working-directory: apps/opik-documentation/documentation
+        continue-on-error: true
+        run: |
+          mkdir -p .github-artifacts
+
+          if [ "${{ inputs.mode }}" = "fix" ]; then
+            python scripts/validate_fern_links.py --fix --json-output .github-artifacts/docs-link-issues.json
+          else
+            python scripts/validate_fern_links.py --check-only --json-output .github-artifacts/docs-link-issues.json
+          fi
+
+      - name: Publish inline suggestions on PRs
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const issuesPath = path.join(
+              process.env.GITHUB_WORKSPACE,
+              'apps/opik-documentation/documentation/.github-artifacts/docs-link-issues.json'
+            );
+
+            if (!fs.existsSync(issuesPath)) {
+              core.info('No issues file found; skipping suggestion posting.');
+              return;
+            }
+
+            const workspace = process.env.GITHUB_WORKSPACE || '';
+            const pullNumber = context.payload.pull_request.number;
+            const issues = JSON.parse(fs.readFileSync(issuesPath, 'utf8'));
+            const totalIssues = Array.isArray(issues) ? issues.length : 0;
+
+            if (!totalIssues) {
+              return;
+            }
+
+            const changedFiles = new Set(
+              (await github.paginate(
+                github.rest.pulls.listFiles,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pullNumber,
+                  per_page: 100,
+                },
+                (response) => response.data
+              )).map((file) => file.filename)
+            );
+
+            const comments = issues
+              .filter((issue) => issue.suggestion && issue.suggestion !== issue.original)
+              .map((issue) => {
+                const absolutePath = path.resolve(issue.file);
+                const relativePath = path.relative(workspace, absolutePath).replace(/^\.\//, '');
+
+                if (relativePath.startsWith('..') || !changedFiles.has(relativePath)) {
+                  return null;
+                }
+
+                return {
+                  path: relativePath,
+                  line: issue.line,
+                  side: 'RIGHT',
+                  body: `Suggested fix for canonical link:\n\n\`\`\`suggestion\n${issue.suggestion}\n\`\`\``,
+                };
+              })
+              .filter(Boolean);
+
+            const uniqueComments = [];
+            const seen = new Set();
+
+            for (const comment of comments) {
+              const key = `${comment.path}:${comment.line}:${comment.body}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueComments.push(comment);
+              }
+            }
+
+            const baseSummary = [
+              '### Fern docs canonical link check',
+              '',
+              `Found ${totalIssues} issue(s) in Fern docs links.`,
+            ];
+
+            if (!uniqueComments.length) {
+              baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
+
+              await github.rest.issues.createComment({
+                issue_number: Number(pullNumber),
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: baseSummary.join('\n'),
+              });
+              return;
+            }
+
+            baseSummary.push('', `Generated ${uniqueComments.length} clickable suggestion(s) for review.`);
+            const chunkSize = 40;
+            for (let i = 0; i < uniqueComments.length; i += chunkSize) {
+              const chunk = uniqueComments.slice(i, i + chunkSize);
+              const summaryBody =
+                i === 0
+                  ? baseSummary.join('\n')
+                  : '### Fern docs canonical link check (continued)\n\nSome suggestion(s) were generated in a follow-up review.';
+
+              try {
+                await github.rest.pulls.createReview({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pullNumber,
+                  event: 'COMMENT',
+                  body: summaryBody,
+                  comments: chunk,
+                });
+              } catch (error) {
+                core.warning(`Could not create inline suggestions (${error.message}). Falling back to summary comment.`);
+                await github.rest.issues.createComment({
+                  issue_number: Number(pullNumber),
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: `${baseSummary.join('\n')}\n\nI could not create inline suggestions due patch line constraints in this run, so review comments were skipped.`
+                });
+                break;
+              }
+            }
+
+      - name: Fail when check issues remain
+        if: ${{ inputs.mode != 'fix' && steps.fern-link-check.outcome != 'success' }}
+        run: exit 1
+
+      - name: Open docs link fix PR
+        if: ${{ inputs.create_pr }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: "github-actions/docs-link-fixes-${{ github.run_id }}"
+          draft: ${{ inputs.draft_pr }}
+          title: "chore(docs): fix Fern docs canonical links"
+          commit-message: "chore(docs): fix Fern docs canonical links"
+          body: |
+            Automated pass of the Fern docs link fixer.
+            - Mode: `--fix`
+            - File set: `apps/opik-documentation/documentation/fern/docs/**`
+
+            This PR updates internal links that can be automatically rewritten from docs route/path mismatch.
+          base: main

@@ -6,14 +6,21 @@ on:
         - 'apps/opik-documentation/documentation/**'
 
 jobs:
+    validate-links:
+        uses: ./.github/workflows/docs-fern-link-check.yml
+        with:
+            mode: check
+            create_pr: false
+
     run:
+        needs: validate-links
         runs-on: ubuntu-latest
         timeout-minutes: 15
         permissions: write-all
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
-                
+
             - name: Install Fern
               run: npm install -g fern-api@0.64.26
 
