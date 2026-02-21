@@ -326,6 +326,7 @@ def resolve_url(
     assets: set[str],
     base_file: Optional[Path] = None,
     docs_root: Optional[Path] = None,
+    allow_missing: bool = False,
 ) -> Optional[str]:
     path, _ = split_path_and_suffix(raw_url)
     if path.startswith("./") or path.startswith("../"):
@@ -339,6 +340,7 @@ def resolve_url(
             path_to_route,
             redirects,
             assets,
+            allow_missing=allow_missing,
         )
 
     target = normalize_base_url(raw_url)
@@ -387,25 +389,16 @@ def check_file(
                     assets,
                     base_file=path,
                     docs_root=docs_root,
+                    allow_missing=True,
                 )
                 if suggestion is None:
-                    route_suggestion = resolve_relative_url(
-                        raw_url,
-                        path,
-                        docs_root,
-                        routes,
-                        path_to_route,
-                        redirects,
-                        assets,
-                        allow_missing=True,
-                    )
                     issues.append(
                         Issue(
                             file=path,
                             line=line,
                             original=raw_url,
                             suggestion=None,
-                            kind=("relative_missing" if route_suggestion is None else "route_missing"),
+                            kind="route_missing",
                         )
                     )
                 elif suggestion != raw_url:
@@ -428,6 +421,7 @@ def check_file(
                 assets,
                 base_file=path,
                 docs_root=docs_root,
+                allow_missing=True,
             )
             if suggestion is None:
                 if raw_url.startswith(("http://", "https://", "/")):
@@ -593,12 +587,12 @@ def main() -> int:
         for path in mdx_files:
             issues.extend(check_file(path, routes, path_to_route, redirects, assets, args.docs_root))
 
-    if args.json_output:
-        payload = {
-            "route_missing": [i for i in issues if i.kind != "relative_missing"],
-            "relative_missing": [i for i in issues if i.kind == "relative_missing"],
-            "all": issues,
-        }
+        if args.json_output:
+            payload = {
+                "route_missing": [i for i in issues if i.kind == "route_missing"],
+                "relative_missing": [i for i in issues if i.kind == "relative_missing"],
+                "all": issues,
+            }
         args.json_output.write_text(
             __import__("json").dumps(
                 [

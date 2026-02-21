@@ -15,7 +15,7 @@ on:
       suggestion_scope:
         description: "Suggestion/reporting scope"
         required: false
-        default: "changed"
+        default: "all"
         type: choice
         options:
           - changed
@@ -23,7 +23,7 @@ on:
       publish_suggestions:
         description: "Post inline suggestions and summary comments"
         required: false
-        default: false
+        default: true
         type: boolean
       max_suggestions:
         description: "Maximum number of suggestions to post in a review (0 for all)"
@@ -52,10 +52,10 @@ jobs:
     uses: ./.github/workflows/docs-fern-link-check.yml
     with:
       mode: check
-      create_pr: ${{ github.event.inputs.mode == 'fix' }}
+      create_pr: false
       draft_pr: true
-      suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
-      publish_suggestions: ${{ github.event.inputs.publish_suggestions == 'true' || github.event.inputs.publish_suggestions == true }}
+      suggest_only_changed_files: true
+      publish_suggestions: true
       max_suggestions: ${{ github.event.inputs.max_suggestions || 0 }}
       pull_request_number: ${{ github.event.number }}
     secrets:
@@ -66,11 +66,11 @@ jobs:
     uses: ./.github/workflows/docs-fern-link-check.yml
     with:
       mode: ${{ github.event.inputs.mode || 'check' }}
-      create_pr: false
+      create_pr: ${{ github.event.inputs.mode == 'fix' }}
       draft_pr: true
-      suggest_only_changed_files: true
-      publish_suggestions: true
-      max_suggestions: 0
+      suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
+      publish_suggestions: ${{ github.event.inputs.publish_suggestions == 'true' || github.event.inputs.publish_suggestions == true }}
+      max_suggestions: ${{ github.event.inputs.max_suggestions || 0 }}
       pull_request_number: ${{ github.event.inputs.pull_request_number || '' }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
