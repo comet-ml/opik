@@ -75,7 +75,7 @@ describe("evaluate function", () => {
       .mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: "019c6c79-9e01-760b-aca7-2d8013169301",
             data: { input: "test input 1", expected: "test output 1" },
             source: "sdk",
           }) + "\n"
@@ -101,6 +101,7 @@ describe("evaluate function", () => {
   });
 
   test("should execute evaluation successfully", async () => {
+    const mockDatasetItemId = "019c6c79-9e01-760b-aca7-2d8013169301";
     const mockTask: EvaluationTask = async () => {
       return { output: "generated output" };
     };
@@ -133,7 +134,7 @@ describe("evaluate function", () => {
             id: expect.any(String),
             input: {
               expected: "test output 1",
-              id: "item-1",
+              id: mockDatasetItemId,
               input: "test input 1",
             },
             name: "evaluation_task",
@@ -166,7 +167,7 @@ describe("evaluate function", () => {
       testResults: [
         expect.objectContaining({
           testCase: expect.objectContaining({
-            datasetItemId: "item-1",
+            datasetItemId: mockDatasetItemId,
             traceId: expect.any(String),
             taskOutput: { output: "generated output" },
             scoringInputs: expect.objectContaining({

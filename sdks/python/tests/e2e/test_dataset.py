@@ -92,6 +92,42 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
         dataset_items=EXPECTED_DATASET_ITEMS,
     )
 
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of Germany?"},
+            },
+        ]
+    )
+
+    items = dataset.get_items()
+    assert len(items) == 2
+
+    germany_item = next(
+        item
+        for item in items
+        if item.get("input", {}).get("question") == "What is the capital of Germany?"
+    )
+    fetched_id = germany_item["id"]
+
+    dataset.update(
+        [
+            {
+                "id": fetched_id,
+                "input": {"question": "What is the capital of Germany?"},
+                "expected_output": {"output": "Berlin"},
+            },
+        ]
+    )
+
+    updated_items = dataset.get_items()
+    assert len(updated_items) == 2
+
+    updated_germany_item = next(
+        item for item in updated_items if item["id"] == fetched_id
+    )
+    assert updated_germany_item.get("expected_output") == {"output": "Berlin"}
+
 
 def test_deduplication(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"

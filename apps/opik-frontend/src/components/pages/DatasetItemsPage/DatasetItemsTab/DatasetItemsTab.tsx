@@ -358,6 +358,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
+        accessorFn: (row) => row.dataset_item_id ?? row.id,
         cell: IdCell as never,
       },
       ...dynamicDatasetColumns.map(
@@ -415,7 +416,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
 
     return [
       {
-        id: "id",
+        id: "dataset_item_id",
         label: "ID",
         type: COLUMN_TYPE.string,
       },

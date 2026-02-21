@@ -6,7 +6,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { Dataset } from "@/dataset/Dataset";
-import { searchAndWaitForDone } from "@/utils/searchHelpers";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
@@ -50,32 +49,22 @@ describe.skipIf(!shouldRunApiTests)("Dataset CRUD Integration Test", () => {
     const description = "Test dataset for CRUD operations";
 
     // CREATE: Create a new dataset
-    const createdDataset = await client.createDataset(
-      testDatasetName,
-      description
-    );
+    const dataset = await client.createDataset(testDatasetName, description);
     createdDatasetNames.push(testDatasetName);
     await client.flush();
 
-    expect(createdDataset).toBeInstanceOf(Dataset);
-    expect(createdDataset.name).toBe(testDatasetName);
-    expect(createdDataset.description).toBe(description);
-    const datasetId = createdDataset.id;
+    expect(dataset).toBeInstanceOf(Dataset);
+    expect(dataset.name).toBe(testDatasetName);
+    expect(dataset.description).toBe(description);
+    const datasetId = dataset.id;
     expect(datasetId).toBeDefined();
 
-    // Wait for dataset to be available via search
-    const datasetsFound = await searchAndWaitForDone(
-      async () => {
-        const datasets = await client.getDatasets();
-        return datasets.filter((d) => d.name === testDatasetName);
-      },
-      1, // Wait for at least 1 dataset
-      10000, // 10 second timeout
-      1000 // 1 second poll interval
-    );
+    // Verify dataset is available via search
+    const datasets = await client.getDatasets();
+    const datasetsFound = datasets.filter((d) => d.name === testDatasetName);
     expect(datasetsFound.length).toBeGreaterThanOrEqual(1);
 
-    // READ: Retrieve the dataset by name (fresh fetch, not reusing object)
+    // READ: Retrieve the dataset by name
     const retrievedDataset = await client.getDataset(testDatasetName);
     expect(retrievedDataset).toBeInstanceOf(Dataset);
     expect(retrievedDataset.name).toBe(testDatasetName);
@@ -83,48 +72,33 @@ describe.skipIf(!shouldRunApiTests)("Dataset CRUD Integration Test", () => {
     expect(retrievedDataset.id).toBe(datasetId);
 
     // INSERT: Add items to the dataset
-    await retrievedDataset.insert([
+    await dataset.insert([
       { input: "Hello", output: "Hi" },
       { input: "Goodbye", output: "Bye" },
     ]);
 
-    // Wait for items to be available
-    const itemsFound = await searchAndWaitForDone(
-      async () => {
-        const freshDataset = await client.getDataset(testDatasetName);
-        return await freshDataset.getItems();
-      },
-      2, // Wait for at least 2 items
-      10000, // 10 second timeout
-      1000 // 1 second poll interval
-    );
+    // Verify items are available
+    const itemsFound = await dataset.getItems();
     expect(itemsFound.length).toBe(2);
 
-    // UPDATE: Fetch dataset again and update an item
-    const datasetForUpdate = await client.getDataset(testDatasetName);
-    const items = await datasetForUpdate.getItems();
+    // UPDATE: Update an item
+    const items = await dataset.getItems();
     expect(items.length).toBe(2);
 
+    const idToUpdate = items[0].id;
     const itemToUpdate = {
-      id: items[0].id,
+      id: idToUpdate,
       input: items[0].input,
       output: "Updated output",
     };
-    await datasetForUpdate.update([itemToUpdate]);
+    await dataset.update([itemToUpdate]);
 
-    // Verify update by fetching again
-    const updatedItems = await searchAndWaitForDone(
-      async () => {
-        const freshDataset = await client.getDataset(testDatasetName);
-        const allItems = await freshDataset.getItems();
-        return allItems.filter((item) => item.output === "Updated output");
-      },
-      1, // Wait for at least 1 updated item
-      10000, // 10 second timeout
-      1000 // 1 second poll interval
-    );
-    expect(updatedItems.length).toBeGreaterThanOrEqual(1);
-    expect(updatedItems[0].output).toBe("Updated output");
+    // Verify update by fetching all items
+    const allItemsAfterUpdate = await dataset.getItems();
+    expect(allItemsAfterUpdate.length).toBe(2);
+    const updatedItem = allItemsAfterUpdate.find((item) => item.id === idToUpdate);
+    expect(updatedItem).toBeDefined();
+    expect(updatedItem!.output).toBe("Updated output");
 
     // DELETE: Delete the dataset
     await client.deleteDataset(testDatasetName);
@@ -138,5 +112,48 @@ describe.skipIf(!shouldRunApiTests)("Dataset CRUD Integration Test", () => {
     if (index > -1) {
       createdDatasetNames.splice(index, 1);
     }
+  });
+
+  it("should not duplicate items when updating with all item properties", async () => {
+    const testDatasetName = `test-dataset-update-${Date.now()}`;
+    const description = "temp dataset for testing add and update";
+
+    const dataset = await client.getOrCreateDataset(testDatasetName, description);
+    createdDatasetNames.push(testDatasetName);
+
+    const firstItem = {
+      eval_key: `firstItem.test_${Date.now()}`,
+      input_value: "First",
+    };
+
+    await dataset.insert([firstItem]);
+
+    const newItem = {
+      eval_key: `tempAddThenUpdateItem.test_${Date.now()}`,
+      input_value: "Hello",
+    };
+
+    await dataset.insert([newItem]);
+
+    const items = await dataset.getItems(10);
+    expect(items.length).toBe(2);
+
+    const inserted = items.find(item => item.eval_key === newItem.eval_key);
+    expect(inserted).toBeDefined();
+    const insertedId = inserted!.id;
+
+    const toUpdate = {
+      ...(inserted as object),
+      id: insertedId,
+      input_value: "Goodbye",
+    };
+
+    await dataset.update([toUpdate]);
+
+    const newItems = await dataset.getItems(10);
+    expect(newItems.length).toBe(2);
+    const updatedItem = newItems.find(item => item.id === insertedId);
+    expect(updatedItem).toBeDefined();
+    expect(updatedItem!.input_value).toBe("Goodbye");
   });
 });
