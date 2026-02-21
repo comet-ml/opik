@@ -5,27 +5,10 @@ on:
   pull_request:
     paths:
       - 'apps/opik-documentation/documentation/**'
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "check (default) = fail on issues, fix = apply link rewrites and open PR"
-        required: false
-        default: "check"
-        type: choice
-        options:
-          - check
-          - fix
-      suggestion_scope:
-        description: "Suggestion/reporting scope"
-        required: false
-        default: "changed"
-        type: choice
-        options:
-          - changed
-          - all
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   actions: read
 
 jobs:
