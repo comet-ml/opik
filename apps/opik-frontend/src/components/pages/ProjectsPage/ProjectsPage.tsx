@@ -71,11 +71,13 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "total_estimated_cost_sum",
-  "duration.p50",
   "last_updated_at",
-  "created_at",
-  "description",
+  "trace_count",
+  "duration.p50",
+  "total_estimated_cost_sum",
+  "error_count",
+  "usage.total_tokens",
+  COLUMN_FEEDBACK_SCORES_ID,
 ];
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
@@ -102,11 +104,17 @@ const ProjectsPage: React.FunctionComponent = () => {
         sortable: true,
       },
       {
-        id: "id",
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
+        id: "last_updated_at",
+        label: "Last updated",
+        type: COLUMN_TYPE.time,
+        accessorFn: (row) =>
+          formatDate(row.last_updated_trace_at ?? row.last_updated_at),
         sortable: true,
+      },
+      {
+        id: "trace_count",
+        label: "Trace count",
+        type: COLUMN_TYPE.number,
       },
       {
         id: "duration.p50",
@@ -116,34 +124,10 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: DurationCell as never,
       },
       {
-        id: "duration.p90",
-        label: "Duration (p90)",
-        type: COLUMN_TYPE.duration,
-        accessorFn: (row) => row.duration?.p90,
-        cell: DurationCell as never,
-      },
-      {
-        id: "duration.p99",
-        label: "Duration (p99)",
-        type: COLUMN_TYPE.duration,
-        accessorFn: (row) => row.duration?.p99,
-        cell: DurationCell as never,
-      },
-      {
         id: "total_estimated_cost_sum",
         label: "Total cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
-      },
-      {
-        id: "trace_count",
-        label: "Trace count",
-        type: COLUMN_TYPE.number,
-      },
-      {
-        id: "thread_count",
-        label: "Thread count",
-        type: COLUMN_TYPE.number,
       },
       {
         id: "error_count",
@@ -184,6 +168,44 @@ const ProjectsPage: React.FunctionComponent = () => {
             : "-",
       },
       {
+        id: COLUMN_FEEDBACK_SCORES_ID,
+        label: "Feedback scores (avg.)",
+        type: COLUMN_TYPE.numberDictionary,
+        accessorFn: (row) => get(row, "feedback_scores", []),
+        cell: FeedbackScoreListCell as never,
+        customMeta: {
+          getHoverCardName: (row: ProjectWithStatistic) => row.name,
+          areAggregatedScores: true,
+        },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
+      },
+      {
+        id: "id",
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        sortable: true,
+      },
+      {
+        id: "thread_count",
+        label: "Thread count",
+        type: COLUMN_TYPE.number,
+      },
+      {
+        id: "duration.p90",
+        label: "Duration (p90)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p90,
+        cell: DurationCell as never,
+      },
+      {
+        id: "duration.p99",
+        label: "Duration (p99)",
+        type: COLUMN_TYPE.duration,
+        accessorFn: (row) => row.duration?.p99,
+        cell: DurationCell as never,
+      },
+      {
         id: "usage.prompt_tokens",
         label: "Input tokens (avg.)",
         type: COLUMN_TYPE.number,
@@ -201,18 +223,6 @@ const ProjectsPage: React.FunctionComponent = () => {
             ? formatNumericData(row.usage.completion_tokens)
             : "-",
       },
-      {
-        id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores (avg.)",
-        type: COLUMN_TYPE.numberDictionary,
-        accessorFn: (row) => get(row, "feedback_scores", []),
-        cell: FeedbackScoreListCell as never,
-        customMeta: {
-          getHoverCardName: (row: ProjectWithStatistic) => row.name,
-          areAggregatedScores: true,
-        },
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
-      },
       ...(isGuardrailsEnabled
         ? [
             {
@@ -228,15 +238,6 @@ const ProjectsPage: React.FunctionComponent = () => {
             },
           ]
         : []),
-
-      {
-        id: "last_updated_at",
-        label: "Last updated",
-        type: COLUMN_TYPE.time,
-        accessorFn: (row) =>
-          formatDate(row.last_updated_trace_at ?? row.last_updated_at),
-        sortable: true,
-      },
       {
         id: "created_at",
         label: "Created",
