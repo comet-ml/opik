@@ -630,5 +630,51 @@ class OpenTelemetryResourceTest {
             assertThat(rootSpanFromDb.metadata().get("thread_id").asLong()).isEqualTo(integerThreadId);
         }
 
+        @Test
+        @DisplayName("test malformed gen_ai.usage JSON does not fail trace ingestion")
+        void testMalformedUsageJsonDoesNotFailIngestion() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var rootSpanId = UUID.randomUUID().toString().getBytes();
+            long startTimeNano = (System.currentTimeMillis() - 1_000) * 1_000_000L;
+            long endTimeNano = System.currentTimeMillis() * 1_000_000L;
+
+            var rootSpan = Span.newBuilder()
+                    .setName("span with malformed usage")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(rootSpanId))
+                    .setStartTimeUnixNano(startTimeNano)
+                    .setEndTimeUnixNano(endTimeNano)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setStringValue("not a valid integer and not valid json {")
+                                    .build())
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.prompt")
+                            .setValue(AnyValue.newBuilder().setStringValue("still ingest")).build())
+                    .build();
+
+            var otelSpans = List.of(rootSpan);
+            var minTimestampMs = Duration.ofNanos(startTimeNano).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.name()).isEqualTo("span with malformed usage");
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(1);
+            var persistedSpan = generatedSpanPage.content().get(0);
+            assertThat(persistedSpan.input().get("gen_ai.prompt").asText())
+                    .isEqualTo("still ingest");
+            assertThat(persistedSpan.usage()).isNull();
+        }
+
     }
 }
