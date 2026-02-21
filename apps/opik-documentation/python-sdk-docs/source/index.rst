@@ -224,6 +224,7 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    testing/llm_unit
+   testing/llm_episode
 
 .. toctree::
    :caption: Simulation

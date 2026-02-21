@@ -18,7 +18,7 @@ Key Features
 - **LLM-powered responses**: Uses any supported LLM model to generate context-aware user responses
 - **Fixed responses**: Option to use predefined responses for deterministic testing
 - **Persona-based behavior**: Simulates different user personalities and behaviors
-- **Conversation context**: Generates responses based on full conversation history
+- **Conversation context**: Generates responses based on recent conversation history (last 10 messages by default)
 
 Constructor
 -----------
@@ -28,7 +28,8 @@ Constructor
    SimulatedUser(
        persona: str,
        model: str = "gpt-4o-mini",
-       fixed_responses: Optional[List[str]] = None
+       fixed_responses: Optional[List[str]] = None,
+       max_history_messages: Optional[int] = 10
    )
 
 Parameters
@@ -42,6 +43,10 @@ Parameters
 
 **fixed_responses** (List[str], optional)
    List of predefined responses to cycle through. If provided, these responses will be used instead of LLM generation.
+
+**max_history_messages** (int, optional)
+   Maximum number of recent conversation messages included when generating LLM-based responses.
+   Use ``None`` to include full history. Defaults to ``10``.
 
 Methods
 -------
@@ -67,7 +72,7 @@ Generates a response based on the conversation history.
 
 - If ``fixed_responses`` are provided, cycles through them in order
 - Otherwise, uses the LLM to generate context-aware responses based on the persona and conversation history
-- Automatically limits conversation history to last 10 messages to avoid token limits
+- By default, includes the last 10 conversation messages for LLM generation
 
 Examples
 --------

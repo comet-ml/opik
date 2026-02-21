@@ -93,7 +93,7 @@ turn evaluate.
 
         agent_history = {}
 
-        def run_agent(user_message: str, *, thread_id: str, **kwargs) -> dict[str, str]:
+        def run_agent(user_message: str, *, thread_id: str, **kwargs) -> str:
             if thread_id not in agent_history:
                 agent_history[thread_id] = []
 
@@ -154,6 +154,104 @@ turn evaluate.
         </Frame>
     </Step>
 </Steps>
+
+## Advanced: Stateful simulations
+
+For more realistic multi-turn behavior, you can pass a shared `simulation_state` object into `run_simulation`.
+If your `app` (and/or custom user simulator callable) accepts a `simulation_state` argument, Opik passes the same state object on every turn so you can track workflow progress, tool decisions, and guardrails deterministically.
+
+```python title="Stateful simulation with shared run context" maxLines=1000
+from opik.simulation import run_simulation
+
+# Intent: demonstrate a stateful refund-flow simulation triggered when your app/user simulator
+# needs shared mutable run context; simulation_state can start as {} (no required keys).
+def run_agent(user_message: str, *, thread_id: str, simulation_state: dict, **kwargs) -> str:
+    workflow = simulation_state.setdefault(
+        "workflow", {"verified_identity": False, "refund_submitted": False}
+    )
+    normalized = user_message.lower()
+
+    if not workflow["verified_identity"] and "ord-" not in normalized:
+        simulation_state["last_action"] = "request_order_id"
+        return "Please share your order id so I can verify your request."
+
+    if not workflow["verified_identity"] and "ord-" in normalized:
+        workflow["verified_identity"] = True
+        simulation_state["order_id"] = "ORD-1234"
+        simulation_state["last_action"] = "verified_order"
+        return "Thanks. I verified order ORD-1234. Please confirm and I can submit your refund."
+
+    if workflow["verified_identity"] and not workflow["refund_submitted"] and "yes" in normalized:
+        workflow["refund_submitted"] = True
+        simulation_state["last_action"] = "refund_submitted"
+        return "Done. Your refund request has been submitted."
+
+    return "I can continue helping with this request."
+
+
+def scripted_user(
+    conversation_history: list[dict], simulation_state: dict, **kwargs
+) -> str:
+    script = simulation_state.setdefault(
+        "script",
+        [
+            "I want a refund because the item is damaged.",
+            "My order id is ORD-1234.",
+            "Yes, please submit it.",
+        ],
+    )
+    if script:
+        return script.pop(0)
+    return "Thank you."
+
+
+class ScriptedUserAdapter:
+    def generate_response(
+        self,
+        conversation_history: list[dict],
+        simulation_state: dict | None = None,
+    ) -> str:
+        return scripted_user(
+            conversation_history=conversation_history,
+            simulation_state=simulation_state or {},
+        )
+
+
+simulation = run_simulation(
+    app=run_agent,
+    user_simulator=ScriptedUserAdapter(),
+    max_turns=3,
+    project_name="multi_turn_evaluation",
+    simulation_state={"scenario_id": "refund_flow_v2"},
+)
+
+print(simulation["simulation_state"])
+# Example:
+# {
+#   "scenario_id": "refund_flow_v2",
+#   "workflow": {"verified_identity": True, "refund_submitted": True},
+#   "order_id": "ORD-1234",
+#   "last_action": "refund_submitted",
+#   "script": []
+# }
+```
+
+`simulation_state` contract for this pattern:
+
+- Required keys: none (you can start from `{}`).
+- Optional pre-seeded keys: `scenario_id`, `workflow`, `script`, or any app-specific routing flags.
+- Keys created during the run: `workflow`, `order_id`, `last_action`, `script`.
+
+Minimal valid input:
+
+```python
+simulation = run_simulation(
+    app=run_agent,
+    user_simulator=ScriptedUserAdapter(),
+    max_turns=2,
+    simulation_state={},  # valid minimal state
+)
+```
 
 ## Scoring threads
 

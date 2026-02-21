@@ -64,3 +64,163 @@ def test_simple_passing_test(user_question, expected_output):
     response = llm_application(user_question)
     assert response == expected_output
 ```
+
+### Configuration
+
+You can tune how pytest runs are stored in Opik with SDK config fields:
+
+- `pytest_experiment_enabled`
+- `pytest_experiment_dataset_name`
+- `pytest_experiment_name_prefix`
+- `pytest_passed_score_name`
+
+These can be provided through Opik configuration sources (for example environment variables or config file values).
+
+For episode-based tests, you can also enable a JSON artifact:
+
+- `pytest_episode_artifact_enabled` (default: `False`)
+- `pytest_episode_artifact_path` (default: `.opik/pytest_episode_report.json`)
+
+This artifact is useful in CI/CD because you can upload it as a build artifact for later inspection.  
+Example with GitHub Actions:
+
+```yaml
+- name: Run pytest
+  run: pytest -q
+
+- name: Upload episode artifact
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: pytest-episode-report
+    path: .opik/pytest_episode_report.json
+```
+
+### Episode-Based Tests with Simulated Users
+
+For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions and, when enabled, emit structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
+
+The example below uses `SimulatedUser` with fixed responses so the scenario is deterministic and easy to run in CI:
+
+```python
+import pytest
+from opik import llm_episode
+from opik.simulation import (
+    EpisodeAssertion,
+    EpisodeBudgetMetric,
+    EpisodeBudgets,
+    EpisodeResult,
+    SimulatedUser,
+    build_trajectory_summary,
+    make_max_turns_assertion,
+    make_tool_call_budget,
+    run_simulation,
+)
+
+class RefundAgent:
+    def __init__(self):
+        self.trajectory_by_thread = {}
+        self.state_by_thread = {}
+
+    def _record(self, thread_id, action, details):
+        self.trajectory_by_thread.setdefault(thread_id, []).append(
+            {"action": action, "details": details}
+        )
+
+    def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        state = self.state_by_thread.setdefault(
+            thread_id, {"order_id": None, "refund_submitted": False}
+        )
+        normalized = user_message.lower()
+
+        if state["order_id"] is None and "ord-" not in normalized:
+            return {
+                "role": "assistant",
+                "content": "Please share your order id (for example ORD-1234).",
+            }
+
+        if state["order_id"] is None and "ord-" in normalized:
+            state["order_id"] = "ORD-1234"
+            self._record(thread_id, "lookup_order", {"order_id": state["order_id"]})
+            return {
+                "role": "assistant",
+                "content": "Thanks. I found your order. Please confirm and I will submit the refund.",
+            }
+
+        if "yes" in normalized and not state["refund_submitted"]:
+            state["refund_submitted"] = True
+            self._record(thread_id, "create_refund", {"order_id": state["order_id"]})
+            return {
+                "role": "assistant",
+                "content": "Done. Your refund request has been submitted.",
+            }
+
+        return {"role": "assistant", "content": "I can continue helping with this request."}
+
+
+@pytest.mark.filterwarnings(
+    "ignore:Test functions should return None:pytest.PytestReturnNotNoneWarning"
+)
+@llm_episode(scenario_id_key="scenario_id")
+def test_refund_episode_ci_gate():
+    scenario_id = "refund_flow_v1"
+    max_turns = 3
+    tool_limit = 3
+    agent = RefundAgent()
+
+    simulation = run_simulation(
+        app=agent,
+        user_simulator=SimulatedUser(
+            persona="You are requesting a refund for a damaged package.",
+            fixed_responses=[
+                "Hi, I want a refund because my package arrived damaged.",
+                "My order id is ORD-1234.",
+                "Yes, please submit the refund.",
+            ],
+        ),
+        max_turns=max_turns,
+        project_name="pytest-episode-e2e",
+        tags=["simulation", "refund", "policy-check"],
+    )
+
+    thread_id = simulation["thread_id"]
+    trajectory = agent.trajectory_by_thread.get(thread_id, [])
+    conversation_history = simulation["conversation_history"]
+    assistant_messages = [
+        message["content"]
+        for message in conversation_history
+        if message["role"] == "assistant"
+    ]
+
+    episode = EpisodeResult(
+        scenario_id=scenario_id,
+        thread_id=thread_id,
+        assertions=[
+            EpisodeAssertion(
+                name="assistant_replied_each_turn",
+                passed=len(assistant_messages) == max_turns,
+                reason=f"assistant_messages={len(assistant_messages)}",
+            ),
+            make_max_turns_assertion(
+                conversation_history=conversation_history,
+                max_turns=max_turns,
+                name="max_turns_guardrail",
+            ),
+        ],
+        budgets=EpisodeBudgets(
+            max_turns=EpisodeBudgetMetric(
+                used=float(len(conversation_history) // 2),
+                limit=float(max_turns),
+                unit="count",
+            ),
+            tool_calls=make_tool_call_budget(trajectory=trajectory, limit=tool_limit),
+        ),
+        trajectory_summary=build_trajectory_summary(trajectory),
+        metadata={"tags": simulation.get("tags")},
+    )
+
+    # Native pytest failure signal.
+    assert episode.is_passing(), episode.model_dump_json(indent=2)
+    # Structured episode payload for Opik artifact/reporting.
+    return episode
+```
