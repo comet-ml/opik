@@ -82,7 +82,8 @@ jobs:
             CHANGED_DOC_FILES=$(
               git diff --name-only "origin/${{ github.base_ref }}...${GITHUB_SHA}" -- apps/opik-documentation/documentation/fern/docs \
                 | awk '/\.(md|mdx)$/ { print }' \
-                | paste -sd ','
+                | tr '\n' ',' \
+                | sed 's/,$//'
             )
             if [ -n "$CHANGED_DOC_FILES" ]; then
               CHECK_ARGS=(--restrict-to "$CHANGED_DOC_FILES" --workspace-root "$GITHUB_WORKSPACE")
