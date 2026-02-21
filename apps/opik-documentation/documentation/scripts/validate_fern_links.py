@@ -425,14 +425,29 @@ def check_file(
     return issues
 
 
-def apply_fixes(path: Path, routes: set[str], path_to_route: Dict[str, str], redirects: List[dict], assets: set[str]) -> List[Issue]:
+def apply_fixes(
+    path: Path,
+    routes: set[str],
+    path_to_route: Dict[str, str],
+    redirects: List[dict],
+    assets: set[str],
+    docs_root: Optional[Path] = None,
+) -> List[Issue]:
     original_text = path.read_text(encoding="utf-8")
     text = original_text
     issues: List[Issue] = []
 
     def rewrite(match: re.Match[str], kind: str) -> str:
         raw_url = match.group(1)
-        suggestion = resolve_url(raw_url, routes, path_to_route, redirects, assets)
+        suggestion = resolve_url(
+            raw_url,
+            routes,
+            path_to_route,
+            redirects,
+            assets,
+            base_file=path,
+            docs_root=docs_root,
+        )
 
         if suggestion is None:
             return match.group(0)
@@ -531,7 +546,7 @@ def main() -> int:
 
     if args.fix:
         for path in mdx_files:
-            issues.extend(apply_fixes(path, routes, path_to_route, redirects, assets))
+            issues.extend(apply_fixes(path, routes, path_to_route, redirects, assets, args.docs_root))
     else:
         for path in mdx_files:
             issues.extend(check_file(path, routes, path_to_route, redirects, assets, args.docs_root))
