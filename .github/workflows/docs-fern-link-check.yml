@@ -78,9 +78,9 @@ jobs:
         run: |
           mkdir -p .github-artifacts
           CHECK_ARGS=()
-          if [ "${{ inputs.restrict_to_changed_files }}" = "true" ]; then
+          if [ "${{ inputs.restrict_to_changed_files }}" = "true" ] && [ "${{ github.event_name }}" = "pull_request" ]; then
             CHANGED_DOC_FILES=$(
-              git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- apps/opik-documentation/documentation/fern/docs \
+              git diff --name-only "origin/${{ github.base_ref }}...${{ github.sha }}" -- apps/opik-documentation/documentation/fern/docs \
                 | awk '/\.(md|mdx)$/ { print }' \
                 | paste -sd ','
             )
