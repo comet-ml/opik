@@ -25,7 +25,7 @@ const handleError = (
   rootTracer.span({
     ...observationData,
     endTime: new Date(),
-    type: OpikSpanType.General,
+    type: OpikSpanType.Llm,
     errorInfo: {
       message: error.message,
       exceptionType: error.name,
@@ -33,6 +33,93 @@ const handleError = (
     },
   });
   rootTracer.end();
+};
+
+const normalizeProvider = (provider: unknown): string | undefined => {
+  if (typeof provider !== "string") {
+    return undefined;
+  }
+
+  const normalizedProvider = provider.trim().toLowerCase();
+  return normalizedProvider.length > 0 ? normalizedProvider : undefined;
+};
+
+const isOpenRouterRoutingInferred = (model: string | undefined): boolean => {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    return true;
+  }
+
+  const normalizedModel = model.trim();
+  if (!normalizedModel.startsWith("openrouter/")) {
+    return true;
+  }
+
+  const [, ...modelParts] = normalizedModel.split("/");
+  if (modelParts.length === 1) {
+    return ["auto", "free"].includes(modelParts[0] ?? "");
+  }
+
+  if (modelParts.length >= 2) {
+    return false;
+  }
+
+  return true;
+};
+
+const buildOpenRouterMetadata = (
+  model: string | undefined,
+  provider: string | undefined
+): Record<string, unknown> => {
+  if (provider !== "openrouter") {
+    return {};
+  }
+
+  return {
+    created_from: "openrouter",
+    type: "openrouter_chat",
+    openrouter_routing_inferred: isOpenRouterRoutingInferred(model),
+  };
+};
+
+export const resolveProvider = ({
+  model,
+  traceMetadata,
+  providerHint,
+}: {
+  model?: string;
+  traceMetadata?: Record<string, unknown>;
+  providerHint?: string;
+}): string => {
+  const configuredProvider = normalizeProvider(traceMetadata?.provider);
+  if (configuredProvider) {
+    return configuredProvider;
+  }
+
+  const normalizedHintProvider = normalizeProvider(providerHint);
+  if (normalizedHintProvider === "openrouter") {
+    return normalizedHintProvider;
+  }
+
+  if (model && model.includes("/")) {
+    const parts = model.split("/").filter(Boolean);
+
+    if (parts.length >= 2) {
+      const normalizedFirstPart = normalizeProvider(parts[0]);
+      const normalizedSecondPart = normalizeProvider(parts[1]);
+
+      if (normalizedFirstPart === "openrouter") {
+        return normalizedSecondPart ?? "openrouter";
+      }
+
+      return normalizedFirstPart ?? "openai";
+    }
+  }
+
+  if (providerHint) {
+    return normalizeProvider(providerHint) ?? "openai";
+  }
+
+  return "openai";
 };
 
 type TracingConfig = TrackOpikConfig &
@@ -58,16 +145,23 @@ const wrapMethod = <T extends GenericMethod>(
     args[0] as unknown as Record<string, unknown>
   );
 
+  const provider = resolveProvider({
+    model,
+    traceMetadata: configMetadata,
+    providerHint: config.provider,
+  });
+
   const finalMetadata = {
     ...configMetadata,
     ...modelParameters,
+    ...buildOpenRouterMetadata(model, provider),
     model,
   };
 
   const observationData = {
     model,
     input,
-    provider: "openai",
+    provider,
     name: config.generationName,
     tags,
     startTime: new Date(),
@@ -92,7 +186,9 @@ const wrapMethod = <T extends GenericMethod>(
         res,
         rootTracer,
         hasUserProvidedParent,
-        observationData
+        observationData,
+        configMetadata,
+        config.provider
       );
     }
 
@@ -104,7 +200,9 @@ const wrapMethod = <T extends GenericMethod>(
               result,
               rootTracer,
               hasUserProvidedParent,
-              observationData
+              observationData,
+              configMetadata,
+              config.provider
             );
           }
 
@@ -112,6 +210,11 @@ const wrapMethod = <T extends GenericMethod>(
           const usage = parseUsage(result);
           const { model: modelFromResponse, metadata: metadataFromResponse } =
             parseModelDataFromResponse(result);
+          const resolvedProvider = resolveProvider({
+            model: modelFromResponse || observationData.model,
+            traceMetadata: configMetadata,
+            providerHint: config.provider,
+          });
 
           const latestMetadata = {
             ...observationData.metadata,
@@ -122,11 +225,12 @@ const wrapMethod = <T extends GenericMethod>(
 
           rootTracer.span({
             ...observationData,
+            provider: resolvedProvider,
             output,
             endTime: new Date(),
             usage,
             model: modelFromResponse || observationData.model,
-            type: OpikSpanType.General,
+            type: OpikSpanType.Llm,
             metadata: latestMetadata,
           });
 
@@ -159,7 +263,9 @@ type ChunkUsage =
 
 const processResponseChunk = (
   rawChunk: unknown,
-  observationData: ObservationData
+  observationData: ObservationData,
+  traceMetadata?: Record<string, unknown>,
+  providerHint?: string
 ): {
   output?: Record<string, unknown>;
   usage: ChunkUsage;
@@ -186,6 +292,11 @@ const processResponseChunk = (
     } = parseModelDataFromResponse(result);
 
     updatedObservationData.model = modelFromResponse ?? observationData.model;
+    updatedObservationData.provider = resolveProvider({
+      model: updatedObservationData.model,
+      traceMetadata,
+      providerHint,
+    });
     updatedObservationData.metadata = {
       ...observationData.metadata,
       ...modelParametersFromResponse,
@@ -215,7 +326,9 @@ function wrapAsyncIterable<T>(
   iterable: AsyncIterable<unknown>,
   rootTracer: OpikParent,
   hasUserProvidedParent: boolean | undefined,
-  initialObservationData: ObservationData
+  initialObservationData: ObservationData,
+  traceMetadata?: Record<string, unknown>,
+  providerHint?: string
 ): AsyncIterable<T> {
   async function* tracedOutputGenerator(): AsyncGenerator<
     unknown,
@@ -238,7 +351,12 @@ function wrapAsyncIterable<T>(
         usage: chunkUsage,
         chunkData,
         updatedObservationData,
-      } = processResponseChunk(rawChunk, observationData);
+      } = processResponseChunk(
+        rawChunk,
+        observationData,
+        traceMetadata,
+        providerHint
+      );
 
       if (output) outputFromChunks = output;
       if (chunkUsage) usage = chunkUsage;
@@ -268,7 +386,7 @@ function wrapAsyncIterable<T>(
       ...observationData,
       output: finalOutput,
       endTime: new Date(),
-      type: OpikSpanType.General,
+      type: OpikSpanType.Llm,
       usage: usageData,
     });
 

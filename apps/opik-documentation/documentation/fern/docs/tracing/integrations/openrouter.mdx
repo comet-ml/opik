@@ -1,82 +1,162 @@
 ---
-description: Start here to integrate Opik into your OpenRouter-based genai application
-  for end-to-end LLM observability, unit testing, and optimization.
-headline: OpenRouter | Opik Documentation
-og:description: Learn to integrate Opik with OpenRouter using OpenAI SDK for seamless
-  access to AI models via a unified API.
+description: Start here to integrate Opik with the OpenRouter SDK for robust LLM observability.
+headline: OpenRouter SDK | Opik Documentation
+og:description: Track calls made via the official OpenRouter SDK with Opik.
 og:site_name: Opik Documentation
-og:title: Integrate OpenRouter with Opik Easily
-title: Observability for OpenRouter with Opik
+og:title: Integrate OpenRouter SDK with Opik Easily
+title: Observability for OpenRouter SDK with Opik
 ---
 
-This guide explains how to integrate Opik with OpenRouter using the OpenAI SDK. OpenRouter provides a unified API for accessing hundreds of AI models through a single OpenAI-compatible interface.
+This guide explains how to integrate Opik with the official OpenRouter SDK.
 
-## Getting started
+Use this path when your code already uses a native OpenRouter client object.
 
-First, ensure you have both `opik` and `openai` packages installed:
+<Tip>
+If your traffic is routed through OpenRouter Gateway, follow the [OpenRouter Gateway](/docs/opik/integrations/openrouter-gateway/) guide.
+</Tip>
+
+If you use OpenRouter as an OpenAI-compatible endpoint without the official SDK:
+
+- [OpenRouter Gateway](/docs/opik/integrations/openrouter-gateway/) for transport-level tracing
+- [OpenAI-compatible integration docs](/docs/opik/integrations/openai-typescript/) / [OpenAI Python docs](/docs/opik/integrations/openai/) for wrapper-level fallback
+
+## Option 1: Official OpenRouter SDK (recommended)
+
+Use this path when your app uses the official OpenRouter SDK and you want typed spans with explicit OpenRouter source attribution.
+
+<Tip>
+OpenRouter routing metadata in spans is best-effort inferred from request/response model and provider fields where available. There is currently no guaranteed explicit `routing_provider`/`routing_model` field in the OpenRouter SDK integrations, so downstream route labels should be treated as inference rather than absolute ground truth.
+</Tip>
+
+<Tabs>
+<Tab value="Python" title="Python">
+
+:::note
+Intent: choose this tab when your application already initializes a native OpenRouter Python client.
+:::
 
 ```bash
-pip install opik openai
+pip install opik
 ```
 
-You'll also need an OpenRouter API key which you can get from [OpenRouter](https://openrouter.ai/).
+### Required fields for OpenRouter payload
 
-## Tracking OpenRouter API calls
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
+
+### Optional fields
+
+- `stream`, `temperature`, `max_tokens`, `top_p`, `tools`, `response_format`, `tool_choice`
+- `provider` (optional) - OpenRouter routing request object, e.g. `{ order: ["deepinfra/turbo"], allow_fallbacks: false }`
+
+OpenRouter routing metadata is captured as `openrouter_routing` in span metadata.
 
 ```python
-from opik.integrations.openai import track_openai
-from openai import OpenAI
+from opik.integrations.openrouter import track_openrouter
 
-# Initialize the OpenAI client with OpenRouter base URL
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key="YOUR_OPENROUTER_API_KEY"
+# Replace with your initialized OpenRouter SDK client instance.
+openrouter_client = get_openrouter_client(api_key="YOUR_OPENROUTER_API_KEY")
+tracked_client = track_openrouter(openrouter_client)
+
+response = tracked_client.chat.send(
+    model="openai/gpt-4",
+    messages=[{"role": "user", "content": "Hello, world!"}],
 )
-client = track_openai(client)
-
-# Optional headers for OpenRouter leaderboard
-headers = {
-    "HTTP-Referer": "YOUR_SITE_URL",  # Optional. Site URL for rankings
-    "X-Title": "YOUR_SITE_NAME"  # Optional. Site title for rankings
-}
-
-response = client.chat.completions.create(
-    model="openai/gpt-4",  # You can use any model available on OpenRouter
-    extra_headers=headers,
-    messages=[
-        {"role": "user", "content": "Hello, world!"}
-    ],
-    temperature=0.7,
-    max_tokens=100
-)
-
-print(response.choices[0].message.content)
 ```
 
-## Available Models
+### Minimal valid payload
 
-OpenRouter provides access to a wide variety of models, including many open source models from different providers.
+```python
+response = tracked_client.chat.send(
+    model="openai/gpt-4",
+    messages=[{"role": "user", "content": "Hello, world!"}],
+)
+```
 
-- [OpenAI models](https://openrouter.ai/openai) (GPT-4o, o1, o3-mini)
-- [Anthropic models](https://openrouter.ai/anthropic) (Opus, Sonnet, Haiku)
-- [Google models](https://openrouter.ai/google) (Gemini Pro, Flash, Flash Thinking)
-- And many open source models
+:::note
+When using `track_openrouter`, Opik records the source as `openrouter`.
+:::
 
-You can find the complete list of available models in the [OpenRouter documentation](https://openrouter.ai/models).
+</Tab>
+<Tab value="TypeScript" title="TypeScript">
 
-## Supported Methods
+:::note
+Intent: choose this tab when your application already initializes an `@openrouter/sdk` `OpenRouter` client.
+:::
 
-OpenRouter supports the following methods:
+```bash
+npm install opik-openrouter opik @openrouter/sdk
+```
 
-### Chat Completions
+### Required fields for OpenRouter payload
 
-- `client.chat.completions.create()`: Works with all models
-- Provides standard chat completion functionality
-- Compatible with the OpenAI SDK interface
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
 
-### Structured Outputs
+### Optional fields
 
-- `client.beta.chat.completions.parse()`: Only compatible with OpenAI models
-- For non-OpenAI models, see OpenRouter's [Structured Outputs documentation](https://openrouter.ai/docs/features/structured-outputs)
+- `stream`, `temperature`, `max_tokens`, `top_p`, `tools`, `response_format`, `tool_choice`
+- `provider` (optional) - OpenRouter routing request object, e.g. `{ order: ["anthropic/claude-3-5-sonnet"], allow_fallbacks: false }`
 
-For detailed information about available methods, parameters, and best practices, refer to the [OpenRouter API documentation](https://openrouter.ai/docs).
+OpenRouter routing metadata is captured as `openrouter_routing` in span metadata.
+
+```ts
+import { OpenRouter } from "@openrouter/sdk";
+import { trackOpenRouter } from "opik-openrouter";
+
+const openrouterClient = new OpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const trackedOpenRouter = trackOpenRouter(openrouterClient);
+
+const response = await trackedOpenRouter.chat.send({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+### Minimal valid payload
+
+```typescript
+const response = await trackedOpenRouter.chat.send({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+</Tab>
+</Tabs>
+
+## Option 2: OpenAI-compatible path via OpenRouter
+
+Use this path when you do not use the official OpenRouter SDK directly:
+
+- Python: `track_openai` for OpenAI-style calls (OpenRouter base URL)
+- TypeScript: `trackOpenAI` for OpenAI-style calls (OpenRouter base URL)
+
+Then follow [OpenAI-compatible integration docs](/docs/opik/integrations/openai-typescript/) / [OpenAI Python docs](/docs/opik/integrations/openai/) for wrapper details.
+
+## Canonical references
+
+Use the examples in this page for both languages.
+
+- `track_openrouter` (Python)
+- `trackOpenRouter` (TypeScript)
+
+OpenRouter-specific response metadata can also surface in trace `metadata` as:
+
+- `openrouter_provider`
+- `openrouter_routing`
+- `openrouter_provider_name`
+- `openrouter_provider_id`
+- `openrouter_model_provider`
+
+## Supported OpenRouter SDK methods
+
+OpenRouter SDK integration tracks:
+
+- `chat.send`
+- `chat.send_async` (if available)
+
+For complete API details from OpenRouter, see the [OpenRouter API documentation](https://openrouter.ai/docs).

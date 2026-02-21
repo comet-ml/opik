@@ -38,6 +38,9 @@ class LLMProvider(str, enum.Enum):
     BEDROCK = "bedrock"
     """Used for models hosted by AWS Bedrock. https://aws.amazon.com/bedrock"""
 
+    OPENROUTER = "openrouter"
+    """Used for requests made through OpenRouter endpoints."""
+
     @classmethod
     def has_value(cls, value: str) -> bool:
         return value in [enum_item.value for enum_item in cls]

@@ -52,6 +52,7 @@ jobs:
         integration:
           - opik-openai
           - opik-gemini
+          - opik-openrouter
           - opik-langchain
           - opik-vercel
     env:

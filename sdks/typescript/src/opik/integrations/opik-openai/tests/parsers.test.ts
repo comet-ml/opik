@@ -1,4 +1,9 @@
-import { parseCompletionOutput, parseUsage } from "../src/parsers";
+import {
+  parseCompletionOutput,
+  parseInputArgs,
+  parseModelDataFromResponse,
+  parseUsage,
+} from "../src/parsers";
 
 describe("OpenAI Parsers", () => {
   describe("parseCompletionOutput", () => {
@@ -308,6 +313,81 @@ describe("OpenAI Parsers", () => {
         expect(result?.total_tokens).toBe(30);
         expect(result?.["original_usage.completion_tokens_details.reasoning_tokens"]).toBe(5);
         expect(result?.["original_usage.completion_tokens_details.accepted_prediction_tokens"]).toBe(3);
+      });
+    });
+  });
+
+  describe("parseInputArgs", () => {
+    it("should capture OpenRouter model variant metadata", () => {
+      const args = parseInputArgs({
+        model: "openai/gpt-4o-mini:extended:online",
+        messages: [{ role: "user", content: "Hello" }],
+        provider: "openrouter",
+        models: ["openrouter/anthropic/claude-3", "openrouter/openai/gpt-4o-mini"],
+      });
+
+      expect(args.model).toBe("openai/gpt-4o-mini:extended:online");
+      expect(args.modelParameters).toMatchObject({
+        openrouter_model_base: "openai/gpt-4o-mini",
+        openrouter_model_variants: ["extended", "online"],
+        openrouter_fallback_models: [
+          "openrouter/anthropic/claude-3",
+          "openrouter/openai/gpt-4o-mini",
+        ],
+      });
+    });
+
+    it("should capture OpenRouter routing settings from provider object", () => {
+      const args = parseInputArgs({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "Hello" }],
+        provider: {
+          order: ["deepinfra/turbo"],
+          allow_fallbacks: false,
+        },
+      });
+
+      expect(args.modelParameters).toMatchObject({
+        openrouter_routing: {
+          order: ["deepinfra/turbo"],
+          allow_fallbacks: false,
+        },
+      });
+    });
+  });
+
+  describe("parseModelDataFromResponse", () => {
+    it("should extract OpenRouter metadata from response model and provider fields", () => {
+      const responseMetadata = parseModelDataFromResponse({
+        model: "openai/gpt-4o-mini:thinking",
+        provider: "openai/gpt-4o-mini",
+        provider_name: "openrouter-openai",
+        provider_id: "openrouter/openai/gpt-4o-mini",
+        routing: {
+          order: ["anthropic/claude-3", "openai/gpt-4o-mini"],
+          allow_fallbacks: true,
+        },
+        web_search: true,
+        model_provider: "openrouter",
+        models: ["anthropic/claude-3", "openai/gpt-4o-mini"],
+      });
+
+      expect(responseMetadata).toMatchObject({
+        model: "openai/gpt-4o-mini:thinking",
+        metadata: {
+          openrouter_provider: "openai/gpt-4o-mini",
+          openrouter_provider_name: "openrouter-openai",
+          openrouter_provider_id: "openrouter/openai/gpt-4o-mini",
+          openrouter_model_provider: "openrouter",
+          openrouter_model_base: "openai/gpt-4o-mini",
+          openrouter_model_variants: ["thinking"],
+          openrouter_web_search: true,
+          openrouter_fallback_models: ["anthropic/claude-3", "openai/gpt-4o-mini"],
+          openrouter_routing: {
+            order: ["anthropic/claude-3", "openai/gpt-4o-mini"],
+            allow_fallbacks: true,
+          },
+        },
       });
     });
   });
