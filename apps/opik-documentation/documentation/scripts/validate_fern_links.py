@@ -168,47 +168,49 @@ def collect_img_routes(doc_root: Path) -> set[str]:
 
 
 def find_route(path: str, routes: set[str], path_to_route: Dict[str, str], redirects: List[dict]) -> Optional[str]:
-    compact = path.rstrip("/") or "/"
-    candidate_routes: List[str] = [compact]
+    def resolve(candidate: str, seen: set[str]) -> Optional[str]:
+        candidate_path, candidate_suffix = split_path_and_suffix(candidate)
+        candidate_path = strip_markdown_suffix(candidate_path)
+        candidate_path = candidate_path.rstrip("/") or "/"
+        if candidate_path in seen:
+            return None
+        seen.add(candidate_path)
 
-    if compact == "/":
-        candidate_routes.append("/docs/opik")
-    elif compact.startswith("/docs/opik"):
-        mapped = compact[len("/docs/opik") :]
-        mapped = mapped or "/"
-        mapped = mapped.rstrip("/") or "/"
-        candidate_routes.append(mapped)
-    else:
-        candidate_routes.append(f"/docs/opik{compact}")
+        compact = candidate_path
+        candidate_routes: List[str] = [compact]
 
-    seen = set()
-    candidates = []
-    for candidate in candidate_routes:
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        candidates.append(candidate)
+        if compact == "/":
+            candidate_routes.append("/docs/opik")
+        elif compact.startswith("/docs/opik"):
+            mapped = compact[len("/docs/opik") :]
+            mapped = mapped or "/"
+            mapped = mapped.rstrip("/") or "/"
+            candidate_routes.append(mapped)
+        else:
+            candidate_routes.append(f"/docs/opik{compact}")
 
-    for candidate in candidates:
-        if candidate in routes:
-            return candidate
+        for route_candidate in candidate_routes:
+            if route_candidate in routes:
+                return f"{route_candidate}{candidate_suffix}"
 
-        if candidate in path_to_route:
-            return path_to_route[candidate]
+            if route_candidate in path_to_route:
+                return f"{path_to_route[route_candidate]}{candidate_suffix}"
 
-        for redirect in redirects:
-            if redirect["exact"] and redirect["source"] == candidate:
-                return redirect["destination"]
-            if not redirect["exact"] and redirect["regex"].match(candidate):
-                return redirect["destination"]
+            for redirect in redirects:
+                if redirect["exact"] and redirect["source"] == route_candidate:
+                    return f"{(resolve(redirect['destination'], seen) or '')}{candidate_suffix}"
+                if not redirect["exact"] and redirect["regex"].match(route_candidate):
+                    return f"{(resolve(redirect['destination'], seen) or '')}{candidate_suffix}"
 
-        compact_lookup = candidate.lstrip("/")
-        for candidate_path in (compact_lookup, f"{compact_lookup}.md", f"{compact_lookup}.mdx"):
-            route = path_to_route.get(candidate_path)
-            if route:
-                return route
+            compact_lookup = route_candidate.lstrip("/")
+            for candidate_path in (compact_lookup, f"{compact_lookup}.md", f"{compact_lookup}.mdx"):
+                route = path_to_route.get(candidate_path)
+                if route:
+                    return f"{route}{candidate_suffix}"
 
-    return None
+        return None
+
+    return resolve(path, set())
 
 
 def split_path_and_suffix(raw_url: str) -> Tuple[str, str]:
@@ -226,6 +228,31 @@ def split_path_and_suffix(raw_url: str) -> Tuple[str, str]:
     if split:
         return split.group(1), split.group(2) or ""
     return raw_url, ""
+
+
+def strip_markdown_suffix(path: str) -> str:
+    lowered = path.lower()
+    if lowered.endswith(".mdx"):
+        return path[:-4]
+    if lowered.endswith(".md"):
+        return path[:-3]
+    return path
+
+
+def resolve_relative_candidates(base_file: Path, raw_url: str) -> List[Path]:
+    path, _ = split_path_and_suffix(raw_url)
+    candidate_path = (base_file.parent / path).resolve()
+
+    candidates = {candidate_path}
+    if candidate_path.suffix == "":
+        candidates.add(candidate_path.with_suffix(".md"))
+        candidates.add(candidate_path.with_suffix(".mdx"))
+
+    if candidate_path.is_dir():
+        candidates.add(candidate_path / "index.md")
+        candidates.add(candidate_path / "index.mdx")
+
+    return list(candidates)
 
 
 def normalize_base_url(raw_url: str) -> Optional[str]:
@@ -267,18 +294,8 @@ def resolve_relative_url(
     redirects: List[dict],
     assets: set[str],
 ) -> Optional[str]:
-    path, suffix = split_path_and_suffix(raw_url)
-    candidate_path = (base_file.parent / path).resolve()
-
-    candidates = {candidate_path}
-
-    if candidate_path.suffix == "":
-        candidates.add(candidate_path.with_suffix(".md"))
-        candidates.add(candidate_path.with_suffix(".mdx"))
-
-    if candidate_path.is_dir():
-        candidates.add(candidate_path / "index.md")
-        candidates.add(candidate_path / "index.mdx")
+    _, suffix = split_path_and_suffix(raw_url)
+    candidates = resolve_relative_candidates(base_file, raw_url)
 
     docs_root = docs_root.resolve()
     for candidate in candidates:
@@ -342,8 +359,8 @@ def is_relative_missing(base_file: Path, raw_url: str) -> bool:
     if not (path.startswith("./") or path.startswith("../")):
         return False
 
-    candidate = (base_file.parent / path).resolve()
-    return not candidate.exists()
+    candidates = resolve_relative_candidates(base_file, raw_url)
+    return not any(candidate.exists() for candidate in candidates)
 
 
 def check_file(

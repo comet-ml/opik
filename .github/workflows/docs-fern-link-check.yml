@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: false
+      max_suggestions:
+        description: "Maximum number of inline suggestions to post in a review (0 for unlimited)"
+        required: false
+        type: number
+        default: 10
       pull_request_number:
         description: "Pull request number for posting suggestions/comments"
         required: false
@@ -79,6 +84,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           SUGGEST_ONLY_CHANGED_FILES: ${{ inputs.suggest_only_changed_files }}
+          MAX_SUGGESTIONS: ${{ inputs.max_suggestions }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
         with:
           github-token: ${{ secrets.OLLIE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
@@ -109,6 +115,10 @@ jobs:
               return acc;
             }, {});
             const suggestOnlyChangedFiles = String(process.env.SUGGEST_ONLY_CHANGED_FILES || 'true').toLowerCase() !== 'false';
+            const maxSuggestionsInput = Number(process.env.MAX_SUGGESTIONS || '10');
+            const maxSuggestions = Number.isFinite(maxSuggestionsInput) && maxSuggestionsInput > 0
+              ? Math.floor(maxSuggestionsInput)
+              : Number.MAX_SAFE_INTEGER;
 
             if (!totalIssues) {
               return;
@@ -159,6 +169,8 @@ jobs:
               }
             }
 
+            const suggestionsForReview = uniqueComments.slice(0, maxSuggestions);
+            const truncatedSuggestionCount = uniqueComments.length - suggestionsForReview.length;
             const scopeLabel = suggestOnlyChangedFiles
               ? 'Changed files only (suggestions)'
               : 'All files.\\n\\nNote: inline suggestions can only be applied on changed lines in the PR diff.';
@@ -168,6 +180,8 @@ jobs:
               `Found ${totalIssues} issue(s) in Fern docs links.`,
               `Issue breakdown: rewrite=${kindCounts.rewrite || 0}, route_missing=${kindCounts.route_missing || 0}, relative_missing=${kindCounts.relative_missing || 0}.`,
               `Suggestion scope: ${scopeLabel}`,
+              `Clickable suggestions: showing up to ${maxSuggestions === Number.MAX_SAFE_INTEGER ? 'all' : maxSuggestions}.`,
+              `Computed suggestions: ${uniqueComments.length}`,
             ];
 
             if (!uniqueComments.length) {
@@ -182,10 +196,13 @@ jobs:
               return;
             }
 
-            baseSummary.push('', `Generated ${uniqueComments.length} clickable suggestion(s) for review.`);
+            baseSummary.push('', `Generated ${suggestionsForReview.length} clickable suggestion(s) for review.`);
+            if (truncatedSuggestionCount > 0) {
+              baseSummary.push(`Showing first ${maxSuggestions} suggestion(s) only; ${truncatedSuggestionCount} additional suggestion(s) hidden. Add a larger max_suggestions value to surface more.`);
+            }
             const chunkSize = 40;
-            for (let i = 0; i < uniqueComments.length; i += chunkSize) {
-              const chunk = uniqueComments.slice(i, i + chunkSize);
+            for (let i = 0; i < suggestionsForReview.length; i += chunkSize) {
+              const chunk = suggestionsForReview.slice(i, i + chunkSize);
               const summaryBody =
                 i === 0
                   ? baseSummary.join('\n')
