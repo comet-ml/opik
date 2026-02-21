@@ -172,6 +172,7 @@ jobs:
               : uniqueComments;
             const suggestionsForReview = inlineComments.slice(0, maxSuggestions);
             const truncatedSuggestionCount = uniqueComments.length - suggestionsForReview.length;
+            const previewLimit = 10;
             const scopeLabel = suggestOnlyChangedFiles
               ? 'Changed files only (suggestions)'
               : 'All files.\\n\\nNote: inline suggestions can only be applied on changed lines in the PR diff.';
@@ -190,9 +191,9 @@ jobs:
                 baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
               } else {
                 baseSummary.push('', 'No clickable suggestions were available for changed lines in this PR.');
-                const previewSuggestions = uniqueComments.slice(0, Math.min(maxSuggestions, uniqueComments.length));
+                const previewSuggestions = uniqueComments.slice(0, Math.min(previewLimit, uniqueComments.length));
                 baseSummary.push(`Detected ${uniqueComments.length} suggestion(s) in unchanged files in the current diff scope.`);
-                baseSummary.push('Top suggestion(s):');
+                baseSummary.push(`Top ${previewSuggestions.length} suggestion(s):`);
                 for (let i = 0; i < previewSuggestions.length; i++) {
                   const suggestionMatch = previewSuggestions[i].body.match(/```suggestion\n([\s\S]*?)\n```/);
                   const replacement = suggestionMatch ? suggestionMatch[1] : previewSuggestions[i].body;

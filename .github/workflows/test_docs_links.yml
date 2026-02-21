@@ -28,7 +28,7 @@ on:
       max_suggestions:
         description: "Maximum number of suggestions to post in a review (0 for all)"
         required: false
-        default: 0
+        default: 10
         type: number
       pull_request_number:
         description: "Optional pull request number to attach suggestions/comments"
@@ -57,7 +57,7 @@ jobs:
         ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.suggestion_scope != 'all' || github.event_name == 'pull_request' }}
       publish_suggestions:
         ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.publish_suggestions == 'true' || github.event.inputs.publish_suggestions == true) || github.event_name == 'pull_request' }}
-      max_suggestions: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.max_suggestions || 0) || 0 }}
+      max_suggestions: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.max_suggestions || 10) || 10 }}
       pull_request_number: ${{ github.event_name == 'pull_request' && github.event.number || github.event_name == 'workflow_dispatch' && github.event.inputs.pull_request_number || '' }}
     secrets:
       OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
