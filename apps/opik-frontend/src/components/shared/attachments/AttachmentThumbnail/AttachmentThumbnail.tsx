@@ -31,7 +31,8 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     type === ATTACHMENT_TYPE.VIDEO ||
     type === ATTACHMENT_TYPE.AUDIO ||
     (type === ATTACHMENT_TYPE.TEXT && allowedDomain) ||
-    (type === ATTACHMENT_TYPE.PDF && allowedDomain);
+    (type === ATTACHMENT_TYPE.PDF && allowedDomain) ||
+    (type === ATTACHMENT_TYPE.CSV && allowedDomain);
 
   const expandClickHandler = useCallback(
     (event: React.MouseEvent<unknown>) => {
