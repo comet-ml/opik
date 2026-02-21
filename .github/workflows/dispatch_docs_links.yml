@@ -1,0 +1,39 @@
+name: Dispatch Documentation Link Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check (default) = fail on issues, fix = apply link rewrites and open PR"
+        required: false
+        default: "check"
+        type: choice
+        options:
+          - check
+          - fix
+      suggestion_scope:
+        description: "Suggestion/reporting scope"
+        required: false
+        default: "changed"
+        type: choice
+        options:
+          - changed
+          - all
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  check-links-dispatch:
+    uses: ./.github/workflows/docs-fern-link-check.yml
+    with:
+      mode: ${{ github.event.inputs.mode }}
+      create_pr: ${{ github.event.inputs.mode == 'fix' }}
+      draft_pr: true
+      suggest_only_changed_files: ${{ github.event.inputs.suggestion_scope != 'all' }}
+      publish_suggestions: false
+      pull_request_number: ''
+    secrets:
+      OLLIE_BOT_TOKEN: ${{ secrets.COMET_ACTION_CREATE_PR }}
