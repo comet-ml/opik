@@ -8,6 +8,28 @@ dayjs.extend(utc);
 
 describe("calculateIntervalStartAndEnd", () => {
   const mockCurrentDate = "2024-01-15T14:30:00.000Z";
+  const getLocalDate = (
+    daysFromCurrent: number,
+    options?: {
+      hour?: number;
+      minute?: number;
+      second?: number;
+      millisecond?: number;
+    },
+  ) => {
+    const date = dayjs(mockCurrentDate)
+      .add(daysFromCurrent, "day")
+      .startOf("day");
+    if (!options) {
+      return date.toDate();
+    }
+    return date
+      .hour(options.hour ?? 0)
+      .minute(options.minute ?? 0)
+      .second(options.second ?? 0)
+      .millisecond(options.millisecond ?? 0)
+      .toDate();
+  };
 
   beforeEach(() => {
     // Mock the current time to a fixed point for consistent testing
@@ -21,7 +43,7 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("when end date is today", () => {
     it("should use current time as end and calculate start based on difference for <= 1 day range", () => {
-      const today = new Date("2024-01-15");
+      const today = getLocalDate(0);
       const dateRange: DateRangeValue = {
         from: today,
         to: today, // Same day
@@ -41,8 +63,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const yesterday = new Date("2024-01-14");
+      const today = getLocalDate(0);
+      const yesterday = getLocalDate(-1);
       const dateRange: DateRangeValue = {
         from: yesterday,
         to: today,
@@ -62,8 +84,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for > 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const threeDaysAgo = new Date("2024-01-12");
+      const today = getLocalDate(0);
+      const threeDaysAgo = getLocalDate(-3);
       const dateRange: DateRangeValue = {
         from: threeDaysAgo,
         to: today,
@@ -83,8 +105,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should handle week-long range ending today", () => {
-      const today = new Date("2024-01-15");
-      const weekAgo = new Date("2024-01-08");
+      const today = getLocalDate(0);
+      const weekAgo = getLocalDate(-7);
       const dateRange: DateRangeValue = {
         from: weekAgo,
         to: today,
@@ -183,8 +205,8 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("edge cases", () => {
     it("should handle exact boundary of 1 day difference with today", () => {
-      const today = new Date("2024-01-15");
-      const oneDayAgo = new Date("2024-01-14");
+      const today = getLocalDate(0);
+      const oneDayAgo = getLocalDate(-1);
       const dateRange: DateRangeValue = {
         from: oneDayAgo,
         to: today,
@@ -241,8 +263,18 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should handle Date objects with time components", () => {
-      const today = new Date("2024-01-15T16:45:30.500Z");
-      const yesterday = new Date("2024-01-14T08:20:15.250Z");
+      const today = getLocalDate(0, {
+        hour: 16,
+        minute: 45,
+        second: 30,
+        millisecond: 500,
+      });
+      const yesterday = getLocalDate(-1, {
+        hour: 8,
+        minute: 20,
+        second: 15,
+        millisecond: 250,
+      });
       const dateRange: DateRangeValue = {
         from: yesterday,
         to: today,
