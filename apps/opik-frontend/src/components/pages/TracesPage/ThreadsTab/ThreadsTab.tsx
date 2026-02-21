@@ -37,6 +37,7 @@ import { Thread } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   injectColumnCallback,
+  migrateColumnsOrder,
   migrateSelectedColumns,
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -246,22 +247,26 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
-  "created_at",
-  "last_updated_at",
   "duration",
-  "status",
-  USER_FEEDBACK_COLUMN_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_COMMENTS_ID,
 ];
+
+const DEFAULT_THREADS_ORDER: string[] = DEFAULT_SELECTED_COLUMNS.filter(
+  (c) => c !== COLUMN_FEEDBACK_SCORES_ID,
+);
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
+const COLUMNS_ORDER_V2_KEY = `${COLUMNS_ORDER_KEY}-v2`;
 const COLUMNS_SORT_KEY = "threads-columns-sort";
 const COLUMNS_SCORES_ORDER_KEY = "threads-columns-scores-order";
 const PAGINATION_SIZE_KEY = "threads-pagination-size";
@@ -506,9 +511,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    COLUMNS_ORDER_V2_KEY,
     {
-      defaultValue: [],
+      defaultValue: migrateColumnsOrder(
+        COLUMNS_ORDER_KEY,
+        DEFAULT_THREADS_ORDER,
+      ),
     },
   );
 
