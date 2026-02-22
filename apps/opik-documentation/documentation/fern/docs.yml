@@ -710,6 +710,9 @@ navigation:
           - page: n8n
             path: docs/tracing/integrations/n8n.mdx
             slug: n8n
+          - page: OpenAI Codex
+            path: docs/tracing/integrations/openai-codex.mdx
+            slug: openai-codex
           - page: OpenWebUI
             path: docs/tracing/integrations/openwebui.mdx
             slug: openwebui
@@ -1206,6 +1209,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/integrations/openai_agents"
     destination: "/docs/opik/integrations/openai_agents"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openai-codex"
+    destination: "/docs/opik/integrations/openai-codex"
     permanent: true
   - source: "/docs/opik/tracing/integrations/openrouter"
     destination: "/docs/opik/integrations/openrouter"

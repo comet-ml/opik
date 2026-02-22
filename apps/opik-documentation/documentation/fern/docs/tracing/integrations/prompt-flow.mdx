@@ -1,0 +1,85 @@
+---
+description: Configure Prompt Flow tracing with OpenTelemetry endpoint settings compatible with Opik deployment modes.
+headline: Prompt Flow | Opik Documentation
+og:description: Prompt Flow controls tracing via its own APIs; Opik export is configured through OTEL endpoint settings.
+og:site_name: Opik Documentation
+og:title: Prompt Flow Integration - Opik
+title: Observability for Prompt Flow with Opik
+---
+
+[Prompt Flow](https://microsoft.github.io/promptflow/) enables tracing through Prompt Flow APIs and uses OpenTelemetry export settings for outbound telemetry.
+
+## When this guide applies
+
+Use this when your Prompt Flow project already uses Prompt Flow tracing and you want its telemetry exported into Opik.
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers: none by default
+        Optional headers: `projectName`, auth headers if enabled
+    </Tab>
+</Tabs>
+
+## Example (Prompt Flow tracing API)
+
+Intent:
+Enable Prompt Flow tracing and export telemetry through your configured OTLP endpoint.
+
+Applies when:
+You use Prompt Flow's native tracing API and want those traces exported via your OTEL settings.
+
+Required inputs:
+- Prompt Flow tracing enabled in code
+- OTEL endpoint/header env vars for your Opik mode
+
+Optional inputs:
+- service/resource metadata
+- additional OTel collector routing or enrichment
+
+Minimal valid setup:
+
+```python
+from promptflow.tracing import start_trace
+
+start_trace()
+
+# Run prompt flow pipeline as usual.
+```
+
+## Validation
+
+1. Run a flow with `start_trace()` enabled.
+2. Confirm telemetry export calls are made to your configured OTLP endpoint.
+3. Verify trace records appear in the expected Opik project.
+
+## Source references
+
+- [Prompt Flow tracing docs](https://microsoft.github.io/promptflow/how-to-guides/tracing/index.html)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)

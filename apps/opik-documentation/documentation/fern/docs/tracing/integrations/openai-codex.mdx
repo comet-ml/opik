@@ -1,0 +1,142 @@
+---
+description: Configure OpenAI Codex OpenTelemetry export to send trace telemetry to Opik.
+headline: OpenAI Codex | Opik Documentation
+og:description: OpenAI Codex supports opt-in OpenTelemetry export via config.toml; this guide maps Codex settings to Opik endpoints.
+og:site_name: Opik Documentation
+og:title: OpenAI Codex Integration - Opik
+title: Observability for OpenAI Codex with Opik
+---
+
+[OpenAI Codex](https://developers.openai.com/codex) supports opt-in OpenTelemetry export through Codex configuration files.
+
+## When this guide applies
+
+Use this guide if you run Codex (CLI/IDE/app) and want its OTEL trace exporter to send telemetry to Opik.
+
+<Callout type="info">
+The block structure below follows the current Codex runtime config shape used in local `config.toml` (`[otel.trace_exporter.otlp-http]`).
+</Callout>
+
+## Where to configure Codex
+
+Codex reads configuration from:
+- user config: `~/.codex/config.toml`
+- project config: `.codex/config.toml`
+
+See [Codex config basics](https://developers.openai.com/codex/config-basic).
+
+## Opik OTLP trace endpoint modes
+
+For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```toml
+        [otel]
+        # Optional environment label in Codex telemetry
+        environment = "prod"
+        log_user_prompt = false
+
+        [otel.trace_exporter.otlp-http]
+        endpoint = "https://www.comet.com/opik/api/v1/private/otel/v1/traces"
+        protocol = "binary"
+        headers = { "Authorization" = "<your-api-key>", "Comet-Workspace" = "<your-workspace>", "projectName" = "<your-project-name>" }
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended)
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```toml
+        [otel]
+        environment = "prod"
+        log_user_prompt = false
+
+        [otel.trace_exporter.otlp-http]
+        endpoint = "https://<comet-deployment-url>/opik/api/v1/private/otel/v1/traces"
+        protocol = "binary"
+        headers = { "Authorization" = "<your-api-key>", "Comet-Workspace" = "<your-workspace>", "projectName" = "<your-project-name>" }
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended)
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```toml
+        [otel]
+        environment = "prod"
+        log_user_prompt = false
+
+        [otel.trace_exporter.otlp-http]
+        endpoint = "http://localhost:5173/api/v1/private/otel/v1/traces"
+        protocol = "binary"
+        headers = { "projectName" = "<your-project-name>" }
+        ```
+
+        Required headers:
+        - none by default (depends on your self-hosted auth setup)
+
+        Optional headers:
+        - `projectName` (recommended)
+        - auth headers if your instance enforces auth
+    </Tab>
+</Tabs>
+
+## Example intent and minimal valid setup
+
+Intent:
+Route Codex OTEL trace export to Opik with project/workspace attribution.
+
+Applies when:
+You have enabled Codex OTEL export and selected OTLP/HTTP exporter in config.
+
+Required fields:
+- `trace_exporter = "otlp-http"` under `[otel]`
+- `otel.trace_exporter` exporter block (`otlp-http`)
+- `endpoint`
+- `protocol` (`binary` or `json`, binary recommended)
+
+Optional fields:
+- `headers` (`projectName` strongly recommended)
+- `otel.environment`
+- `otel.log_user_prompt` (keep `false` unless policy allows prompt export)
+
+Minimal valid config:
+
+```toml
+[otel]
+trace_exporter = "otlp-http"
+log_user_prompt = false
+
+[otel.trace_exporter.otlp-http]
+endpoint = "https://www.comet.com/opik/api/v1/private/otel/v1/traces"
+protocol = "binary"
+headers = { "Authorization" = "<your-api-key>", "Comet-Workspace" = "<your-workspace>", "projectName" = "<your-project-name>" }
+```
+
+## Validation
+
+1. Run a Codex session after updating `config.toml`.
+2. Confirm OTLP HTTP requests are sent to `/otel/v1/traces`.
+3. Verify traces appear in the expected Opik workspace/project.
+
+## Notes
+
+- Codex telemetry export is opt-in.
+- Keep `log_user_prompt = false` unless your policy explicitly allows prompt text export.
+- If your Codex build uses a different exporter key path, align with your installed version's config reference.
+
+## Source references
+
+- [Codex security and OTEL opt-in](https://developers.openai.com/codex/security/)
+- [Codex config basics](https://developers.openai.com/codex/config-basic)
+- [Codex config reference](https://developers.openai.com/codex/config-reference)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
