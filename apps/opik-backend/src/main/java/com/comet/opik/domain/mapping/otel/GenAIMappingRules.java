@@ -49,6 +49,30 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.input.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.output.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.system_instructions").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.cost.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.tool.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.agent.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.token.type").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.framework").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.request.").isPrefix(true).source(SOURCE)
                     .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
             OpenTelemetryMappingRule.builder()

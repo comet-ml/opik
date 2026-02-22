@@ -32,6 +32,21 @@ users.get(0)
 users.get(users.size() - 1)
 ```
 
+### SQL Text Blocks
+```java
+// ✅ GOOD - text blocks for multi-line SQL
+@SqlQuery("""
+        SELECT * FROM datasets
+        WHERE workspace_id = :workspace_id
+        <if(name)> AND name like concat('%', :name, '%') <endif>
+        """)
+
+// ❌ BAD - string concatenation
+@SqlQuery("SELECT * FROM datasets " +
+        "WHERE workspace_id = :workspace_id " +
+        "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+```
+
 ### Immutable Collections
 ```java
 // ✅ GOOD
