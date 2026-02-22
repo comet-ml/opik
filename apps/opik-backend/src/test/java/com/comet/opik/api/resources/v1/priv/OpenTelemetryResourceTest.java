@@ -26,6 +26,7 @@ import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
 import io.opentelemetry.proto.common.v1.AnyValue;
+import io.opentelemetry.proto.common.v1.InstrumentationScope;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.ResourceSpans;
 import io.opentelemetry.proto.trace.v1.ScopeSpans;
@@ -319,6 +320,74 @@ class OpenTelemetryResourceTest {
             var payload = Entity.entity(requestProtobufBytes, "application/x-protobuf");
 
             sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
+        }
+
+        void sendScopedProtobufTraces(List<Span> otelSpans, String scopeName, String projectName, String workspaceName,
+                String apiKey, boolean expected, ErrorMessage errorMessage) {
+
+            var scopeSpansBuilder = ScopeSpans.newBuilder().addAllSpans(otelSpans);
+            if (StringUtils.isNotBlank(scopeName)) {
+                scopeSpansBuilder.setScope(InstrumentationScope.newBuilder().setName(scopeName).build());
+            }
+
+            var protoBuilder = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(scopeSpansBuilder.build())
+                            .build())
+                    .build();
+
+            byte[] requestProtobufBytes = protoBuilder.toByteArray();
+            var payload = Entity.entity(requestProtobufBytes, "application/x-protobuf");
+
+            sendBatch(payload, "application/x-protobuf", projectName, workspaceName, apiKey, expected, errorMessage);
+        }
+
+        Stream<Arguments> otelPlatformFixtures() {
+            return Stream.of(
+                    arguments("Temporal", "io.temporal.workflow"),
+                    arguments("LangServe", "langserve"),
+                    arguments("Quarkus LangChain4j", "io.quarkiverse.langchain4j"),
+                    arguments("Claude Agent SDK", "claude-agent-sdk"),
+                    arguments("Prompt Flow", "promptflow"),
+                    arguments("RubyLLM", "rubyllm"));
+        }
+
+        @ParameterizedTest(name = "fixture: {0}")
+        @MethodSource("otelPlatformFixtures")
+        @DisplayName("ingest scoped otel platform fixtures via protobuf")
+        void testScopedPlatformFixtures(String fixtureName, String scopeName) {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            String projectName = "otel-platform-fixtures";
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+            var now = System.currentTimeMillis();
+
+            var rootSpan = Span.newBuilder()
+                    .setName("fixture root span - " + fixtureName)
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((now - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(now * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder().setKey("input")
+                            .setValue(AnyValue.newBuilder().setStringValue("fixture-input")).build())
+                    .build();
+
+            sendScopedProtobufTraces(List.of(rootSpan), scopeName, projectName, workspaceName, okApikey, true, null);
+
+            var minTimestampMs = Duration.ofNanos(rootSpan.getStartTimeUnixNano()).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId, projectName,
+                    workspaceName, okApikey);
+
+            assertThat(generatedSpanPage.content()).hasSize(1);
+            var storedSpan = generatedSpanPage.content().getFirst();
+
+            assertThat(storedSpan.metadata()).isNotNull();
+            assertThat(storedSpan.metadata().get("integration").asText()).isEqualTo(scopeName);
+            assertThat(storedSpan.input()).isNotNull();
+            assertThat(storedSpan.input().get("input").asText()).isEqualTo("fixture-input");
         }
 
         @ParameterizedTest
