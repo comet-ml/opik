@@ -6,7 +6,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { DatasetVersion } from "@/types/datasets";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
@@ -61,7 +61,7 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",

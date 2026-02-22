@@ -28,7 +28,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
   ColumnPinningState,
@@ -101,14 +101,13 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
+    cell: TimeCell as never,
   },
 ];
 
