@@ -133,6 +133,17 @@ class ExperimentDAO {
     }
 
     /**
+     * Filter strategies used for experiment search binding.
+     * Reused across all experiment search operations to avoid repeated allocations.
+     */
+    private static final List<FilterStrategy> FILTER_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
+            FilterStrategy.EXPERIMENT_SCORES,
+            FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
+
+    /**
      * The query validates if already exists with this id. Failing if so.
      * That way only insert is allowed, but not update.
      */
@@ -1581,12 +1592,7 @@ class ExperimentDAO {
                 statement,
                 criteria,
                 filterQueryBuilder,
-                List.of(
-                        FilterStrategy.EXPERIMENT,
-                        FilterStrategy.FEEDBACK_SCORES,
-                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
-                        FilterStrategy.EXPERIMENT_SCORES,
-                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY),
+                FILTER_STRATEGIES,
                 !isCount // Bind entity_type when not a count query
         );
     }

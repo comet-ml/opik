@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:000059_create_experiment_aggregates_and_experiment_item_aggregates_tables
+--changeset thiaghora:000060_create_experiment_aggregates_and_experiment_item_aggregates_tables
 --comment: Create experiment_aggregates and experiment_item_aggregates tables for storing aggregated metrics at the experiment and experiment item level, respectively.
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'

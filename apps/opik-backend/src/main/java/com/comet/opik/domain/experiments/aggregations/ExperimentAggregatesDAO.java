@@ -57,7 +57,7 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @ImplementedBy(ExperimentAggregatesDAOImpl.class)
 public interface ExperimentAggregatesDAO {
 
-    Mono<Void> populateExperimentAggregate(UUID experimentId);
+    Mono<Void> populateExperimentAggregate(@NonNull UUID experimentId);
 
     Mono<BatchResult> populateExperimentItemAggregates(UUID experimentId, UUID cursor, int limit);
 
@@ -77,6 +77,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+
+    /**
+     * Filter strategies used for experiment aggregates search binding.
+     * Reused across all experiment search operations to avoid repeated allocations.
+     */
+    private static final List<FilterStrategy> FILTER_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+            FilterStrategy.EXPERIMENT_SCORES,
+            FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
 
     public static final String SELECT_EXPERIMENT_BY_ID = """
             SELECT
@@ -621,59 +632,44 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     @Override
     public Mono<Void> populateExperimentAggregate(UUID experimentId) {
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get("workspaceId");
+        return getExperimentData(experimentId)
+                .flatMap(experimentData -> {
+                    // First check if experiment has any items
+                    return getExperimentItemsCount(experimentId)
+                            .flatMap(itemsCount -> {
+                                if (itemsCount == 0) {
+                                    // Handle experiments with zero items - insert empty aggregate row
+                                    return insertExperimentAggregate(
+                                            experimentData,
+                                            createEmptyTraceAggregations(experimentId),
+                                            createEmptySpanAggregations(experimentId),
+                                            createEmptyFeedbackScoreAggregations(experimentId),
+                                            0L);
+                                }
 
-            log.info("Populating experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                    experimentId, workspaceId);
+                                // Get project_id for experiments with items
+                                return getProjectId(experimentId)
+                                        .flatMap(projectId -> {
+                                            // Fetch aggregations using project_id for filtering
+                                            return Mono.zip(
+                                                    getTraceAggregations(experimentId, projectId),
+                                                    getSpanAggregations(experimentId, projectId),
+                                                    getFeedbackScoreAggregations(experimentId, projectId))
+                                                    .flatMap(tuple -> {
+                                                        var traceAgg = tuple.getT1();
+                                                        var spanAgg = tuple.getT2();
+                                                        var feedbackAgg = tuple.getT3();
 
-            return getExperimentData(experimentId)
-                    .flatMap(experimentData -> {
-                        // First check if experiment has any items
-                        return getExperimentItemsCount(experimentId)
-                                .flatMap(itemsCount -> {
-                                    if (itemsCount == 0) {
-                                        // Handle experiments with zero items - insert empty aggregate row
-                                        log.info("Experiment '{}' has no items, inserting empty aggregate",
-                                                experimentId);
-                                        return insertExperimentAggregate(
-                                                experimentData,
-                                                createEmptyTraceAggregations(experimentId),
-                                                createEmptySpanAggregations(experimentId),
-                                                createEmptyFeedbackScoreAggregations(experimentId),
-                                                0L);
-                                    }
-
-                                    // Get project_id for experiments with items
-                                    return getProjectId(experimentId)
-                                            .flatMap(projectId -> {
-                                                // Fetch aggregations using project_id for filtering
-                                                return Mono.zip(
-                                                        getTraceAggregations(experimentId, projectId),
-                                                        getSpanAggregations(experimentId, projectId),
-                                                        getFeedbackScoreAggregations(experimentId, projectId))
-                                                        .flatMap(tuple -> {
-                                                            var traceAgg = tuple.getT1();
-                                                            var spanAgg = tuple.getT2();
-                                                            var feedbackAgg = tuple.getT3();
-
-                                                            return insertExperimentAggregate(
-                                                                    experimentData,
-                                                                    traceAgg,
-                                                                    spanAgg,
-                                                                    feedbackAgg,
-                                                                    itemsCount);
-                                                        });
-                                            });
-                                });
-                    })
-                    .doOnSuccess(v -> log.info(
-                            "Successfully populated experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                            experimentId, workspaceId))
-                    .doOnError(error -> log.error(
-                            "Failed to populate experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                            experimentId, workspaceId, error));
-        });
+                                                        return insertExperimentAggregate(
+                                                                experimentData,
+                                                                traceAgg,
+                                                                spanAgg,
+                                                                feedbackAgg,
+                                                                itemsCount);
+                                                    });
+                                        });
+                            });
+                });
     }
 
     @Override
@@ -682,16 +678,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get("workspaceId");
 
-            log.info(
-                    "Populating experiment_item_aggregates for experiment: '{}' in workspace: '{}', cursorId: '{}', limit: '{}'",
-                    experimentId, workspaceId, cursorId, limit);
-
             return getExperimentItems(experimentId, cursorId, limit)
                     .collectList()
                     .flatMap(items -> {
                         if (items.isEmpty()) {
-                            log.info("No experiment items found for experiment: '{}', cursorId: '{}'",
-                                    experimentId, cursorId);
                             return Mono.just(new BatchResult(0L, null));
                         }
 
@@ -719,13 +709,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                                     spansData,
                                                     feedbackData).map(count -> new BatchResult(count, lastCursor));
                                         }));
-                    })
-                    .doOnSuccess(result -> log.info(
-                            "Successfully populated '{}' experiment_item_aggregates for experiment: '{}', cursorId: '{}', lastCursor: '{}'",
-                            result.processedCount(), experimentId, cursorId, result.lastCursor()))
-                    .doOnError(error -> log.error(
-                            "Failed to populate experiment_item_aggregates for experiment: '{}', cursorId: '{}'",
-                            experimentId, cursorId, error));
+                    });
         });
     }
 
@@ -833,8 +817,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             // Convert Maps to key/value arrays for ClickHouse mapFromArrays
             var experimentScoresArrays = mapToArrays(
                     defaultIfNull(experimentData.experimentScores(), Map.of()),
-                    String[]::new, BigDecimal[]::new,
-                    v -> BigDecimal.valueOf(v.doubleValue()));
+                    String[]::new, Double[]::new,
+                    v -> v.doubleValue());
             var durationPercentilesArrays = mapToArrays(
                     defaultIfNull(traceAgg.durationPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
@@ -1476,12 +1460,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 statement,
                 criteria,
                 filterQueryBuilder,
-                List.of(
-                        FilterStrategy.EXPERIMENT,
-                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
-                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
-                        FilterStrategy.EXPERIMENT_SCORES,
-                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY),
+                FILTER_STRATEGIES,
                 false // Don't bind entity_type for aggregates
         );
     }

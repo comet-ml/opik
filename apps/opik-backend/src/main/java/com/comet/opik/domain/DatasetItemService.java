@@ -2056,7 +2056,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             String workspaceId,
             String userName) {
 
-        return Mono.<DatasetVersion>fromCallable(() -> versionService.createVersionFromDelta(
+        return Mono.fromCallable(() -> versionService.createVersionFromDelta(
                 datasetId,
                 newVersionId,
                 itemsTotal,
