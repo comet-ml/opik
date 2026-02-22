@@ -1577,35 +1577,18 @@ class ExperimentDAO {
     }
 
     private void bindSearchCriteria(Statement statement, ExperimentSearchCriteria criteria, boolean isCount) {
-        Optional.ofNullable(criteria.datasetId())
-                .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.datasetIds())
-                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.promptId())
-                .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
-        Optional.ofNullable(criteria.optimizationId())
-                .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.experimentIds())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(experimentIds -> statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
-                });
-        if (!isCount) {
-            statement.bind("entity_type", criteria.entityType().getType());
-        }
+        ExperimentSearchCriteriaBinder.bindSearchCriteria(
+                statement,
+                criteria,
+                filterQueryBuilder,
+                List.of(
+                        FilterStrategy.EXPERIMENT,
+                        FilterStrategy.FEEDBACK_SCORES,
+                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
+                        FilterStrategy.EXPERIMENT_SCORES,
+                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY),
+                !isCount // Bind entity_type when not a count query
+        );
     }
 
     @WithSpan

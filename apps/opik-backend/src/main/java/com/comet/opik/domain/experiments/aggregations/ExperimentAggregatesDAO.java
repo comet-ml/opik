@@ -6,6 +6,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.domain.ExperimentSearchCriteriaBinder;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -1174,7 +1175,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             return asyncTemplate.nonTransaction(connection -> {
 
-                var statement = connection.createStatement(SELECT_EXPERIMENT_BY_ID)
+                var template = getSTWithLogComment(SELECT_EXPERIMENT_BY_ID,
+                        "getExperimentFromAggregates", workspaceId, experimentId.toString());
+
+                var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("experiment_id", experimentId.toString());
 
@@ -1468,34 +1472,18 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private void bindSearchCriteria(Statement statement, ExperimentSearchCriteria criteria) {
-        Optional.ofNullable(criteria.datasetId())
-                .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.datasetIds())
-                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.promptId())
-                .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
-        Optional.ofNullable(criteria.optimizationId())
-                .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.experimentIds())
-                .filter(experimentIds -> experimentIds != null && !experimentIds.isEmpty())
-                .ifPresent(experimentIds -> statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new)));
-
-        // Bind filters (ONLY FEEDBACK_SCORES_AGGREGATED referenced here in ExperimentAggregatesDAO)
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
-                });
+        ExperimentSearchCriteriaBinder.bindSearchCriteria(
+                statement,
+                criteria,
+                filterQueryBuilder,
+                List.of(
+                        FilterStrategy.EXPERIMENT,
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+                        FilterStrategy.EXPERIMENT_SCORES,
+                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY),
+                false // Don't bind entity_type for aggregates
+        );
     }
 
     private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {
