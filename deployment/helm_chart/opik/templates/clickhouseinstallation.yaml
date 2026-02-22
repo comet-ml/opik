@@ -25,18 +25,40 @@ spec:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
       {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- if .Values.clickhouse.monitoring.useSecret }}
       {{- if .Values.clickhouse.monitoring.useSecret.enabled }}
       {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
       {{- else }}
       {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
       {{- end }}
+      {{- end }}
       {{ .Values.clickhouse.monitoring.username }}/networks/ip:
-        - '127.0.0.1/32'
         - '0.0.0.0/0'
       {{- end }}
-    {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- range .Values.clickhouse.additionalUsers }}
+      {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
+      {{- if .profile }}
+      {{ .username }}/profile: {{ .profile }}
+      {{- end }}
+      {{- if .allow_databases }}
+      {{ .username }}/allow_databases:
+        {{- toYaml .allow_databases | nindent 8 }}
+      {{- end }}
+      {{ .username }}/networks/ip:
+      {{- if .networks }}
+        {{- toYaml .networks | nindent 8 }}
+      {{- else }}
+        - '0.0.0.0/0'
+      {{- end }}
+      {{- end }}
+    {{- if .Values.clickhouse.additionalProfiles }}
     profiles:
-      {{ .Values.clickhouse.monitoring.username }}/readonly: 1
+      {{- range .Values.clickhouse.additionalProfiles }}
+      {{- $profileName := .name }}
+      {{- range $key, $value := .settings }}
+      {{ $profileName }}/{{ $key }}: {{ $value }}
+      {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.clickhouse.configuration }}
