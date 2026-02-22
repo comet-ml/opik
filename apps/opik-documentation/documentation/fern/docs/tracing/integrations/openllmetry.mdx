@@ -1,0 +1,120 @@
+---
+description: Send OpenLLMetry traces to Opik via OTLP with deployment-mode configuration and validation guidance.
+headline: OpenLLMetry | Opik Documentation
+og:description: Integrate Traceloop OpenLLMetry with Opik for LLM observability using
+  OpenTelemetry.
+og:site_name: Opik Documentation
+og:title: OpenLLMetry Integration - Opik
+title: Observability for OpenLLMetry with Opik
+---
+
+[OpenLLMetry](https://github.com/traceloop/openllmetry) is an OpenTelemetry-native instrumentation toolkit for LLM apps. Opik accepts OpenLLMetry spans via OTLP, so you can keep your instrumentation vendor-neutral.
+
+## When this guide applies
+
+Use this when your app is instrumented with Traceloop/OpenLLMetry and exports telemetry through standard OTEL environment variables.
+
+## Prerequisites
+
+- OpenLLMetry package for your runtime
+- OpenTelemetry SDK + OTLP HTTP exporter
+- Opik API key / workspace
+
+## Configure OTLP export to Opik
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+
+## Example (Python)
+
+Intent:
+Initialize OpenLLMetry so framework spans are emitted using your existing OTEL exporter settings.
+
+Applies when:
+You use the Traceloop Python SDK.
+
+Required inputs:
+- `Traceloop.init(...)`
+- OTEL endpoint/header env vars
+
+Optional inputs:
+- app metadata fields supported by your SDK version
+
+```python
+from traceloop.sdk import Traceloop
+
+# OpenLLMetry uses OpenTelemetry under the hood and reads OTEL_* env vars.
+Traceloop.init(app_name="my-openllmetry-app")
+
+# Your LLM framework calls now emit spans to Opik through OTLP.
+```
+
+## Example (Node.js)
+
+Intent:
+Initialize OpenLLMetry in Node so instrumentation uses your configured OTEL export path.
+
+Applies when:
+You use Traceloop TypeScript/Node SDK.
+
+Required inputs:
+- `initialize(...)`
+- OTEL endpoint/header env vars
+
+```ts
+import { initialize } from "@traceloop/node-server-sdk";
+
+// Reads OTEL exporter environment variables.
+initialize({
+  appName: "my-openllmetry-node-app",
+});
+
+// Continue with your framework setup as usual.
+```
+
+## Expected data in Opik
+
+With OpenLLMetry instrumentation, Opik will typically capture:
+
+- LLM model/provider information
+- request/response payloads
+- token usage fields
+- tool execution spans and metadata
+
+## Validation
+
+1. Run an instrumented request (Python or Node).
+2. Confirm spans are exported via OTLP and appear in Opik.
+3. Validate model/provider and usage fields on a sample trace.
+
+## Troubleshooting
+
+- Ensure OTLP protocol is HTTP (`http/protobuf`) for Opik ingestion
+- Confirm header formatting in `OTEL_EXPORTER_OTLP_HEADERS`
+- If traces are visible but fields are sparse, confirm the specific instrumentor emits OpenInference attributes
+
+If you want an example for a specific OpenLLMetry instrumentor package, open an issue on [GitHub](https://github.com/comet-ml/opik/issues).
+
+## Source references
+
+- [OpenLLMetry project](https://github.com/traceloop/openllmetry)
+- [Traceloop Python SDK docs](https://www.traceloop.com/docs/openllmetry/tracing/python-sdk)
+- [Traceloop TypeScript SDK docs](https://www.traceloop.com/docs/openllmetry/tracing/typescript-sdk)
