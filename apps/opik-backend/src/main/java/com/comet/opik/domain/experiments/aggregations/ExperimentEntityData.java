@@ -56,16 +56,24 @@ public class ExperimentEntityData {
     /**
      * Experiment item linking a dataset item to a trace.
      *
-     * @param id            The experiment item ID
-     * @param experimentId  The experiment ID
-     * @param traceId       The trace ID
-     * @param datasetItemId The dataset item ID
+     * @param id              The experiment item ID
+     * @param experimentId    The experiment ID
+     * @param traceId         The trace ID
+     * @param datasetItemId   The dataset item ID
+     * @param createdAt       Creation timestamp
+     * @param lastUpdatedAt   Last update timestamp
+     * @param createdBy       Creator user
+     * @param lastUpdatedBy   Last updater user
      */
     @Builder
     public record ExperimentItemData(
             UUID id,
             UUID experimentId,
             UUID traceId,
-            UUID datasetItemId) {
+            UUID datasetItemId,
+            java.time.Instant createdAt,
+            java.time.Instant lastUpdatedAt,
+            String createdBy,
+            String lastUpdatedBy) {
     }
 }

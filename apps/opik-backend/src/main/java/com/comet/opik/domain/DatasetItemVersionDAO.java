@@ -1798,7 +1798,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull IdGenerator idGenerator;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
@@ -2173,52 +2172,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+        return asyncTemplate.nonTransaction(connection -> {
+            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            return asyncTemplate.nonTransaction(connection -> {
-                ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
-                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-                template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+            // Add experiment IDs if present
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                template.add("experiment_ids", true);
+            }
 
-                // Add experiment IDs if present
-                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                    template.add("experiment_ids", true);
-                }
+            // Add filters and search criteria using helper method
+            addFiltersToTemplate(template, criteria);
 
-                // Add filters and search criteria using helper method
-                addFiltersToTemplate(template, criteria);
+            // Add target project IDs flag to template (from separate query to reduce traces table scans)
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                template.add("has_target_projects", true);
+            }
 
-                // Add target project IDs flag to template (from separate query to reduce traces table scans)
-                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                    template.add("has_target_projects", true);
-                }
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", criteria.datasetId())
+                    .bind("versionId", versionId.toString());
 
-                var statement = connection.createStatement(template.render())
-                        .bind("datasetId", criteria.datasetId())
-                        .bind("versionId", versionId.toString());
+            // Bind target project IDs (from separate query to reduce traces table scans)
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            }
 
-                // Bind target project IDs (from separate query to reduce traces table scans)
-                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                    statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-                }
+            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+            }
 
-                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                    statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-                }
+            // Bind search and filter parameters using helper method
+            statement = bindSearchAndFilters(statement, criteria);
 
-                // Bind search and filter parameters using helper method
-                statement = bindSearchAndFilters(statement, criteria);
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "count_dataset_item_versions_with_experiment_filters");
 
-                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                        "count_dataset_item_versions_with_experiment_filters");
-
-                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                        .doFinally(signalType -> endSegment(segment))
-                        .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                        .reduce(0L, Long::sum);
-            });
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                    .reduce(0L, Long::sum);
         });
     }
 

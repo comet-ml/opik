@@ -38,7 +38,7 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
-class DatasetItemResultMapper {
+public class DatasetItemResultMapper {
 
     private static final int COMMENT_INDEX = 11;
 
@@ -133,7 +133,7 @@ class DatasetItemResultMapper {
                 .toArray(ColumnType[]::new);
     }
 
-    static Publisher<DatasetItem> mapItem(Result results) {
+    public static Publisher<DatasetItem> mapItem(Result results) {
         return results.map((row, rowMetadata) -> {
 
             Map<String, JsonNode> data = getData(row);

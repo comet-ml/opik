@@ -14,7 +14,12 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
+import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.grouping.GroupBy;
+import com.comet.opik.api.grouping.GroupingFactory;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -35,6 +40,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
@@ -57,6 +63,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -91,6 +98,12 @@ class ExperimentAggregatesIntegrationTest {
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final RandomGenerator random = new Random();
+
+    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
+            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
+
+    public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
+            "lastUpdatedBy", "comments", "projectName"};
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -181,7 +194,7 @@ class ExperimentAggregatesIntegrationTest {
 
         List<Experiment> experiments = datasets
                 .parallelStream()
-                .map(dataset -> createExperiment(dataset.id(), apiKey, workspaceName))
+                .map(dataset -> createExperiment(dataset, apiKey, workspaceName))
                 .toList();
 
         // Create experiment items with feedback scores
@@ -226,7 +239,7 @@ class ExperimentAggregatesIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
 
-        var countFromAggregates = experimentAggregatesService.countTotal(criteria, Set.of())
+        var countFromAggregates = experimentAggregatesService.countTotal(criteria)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, USER)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -367,7 +380,7 @@ class ExperimentAggregatesIntegrationTest {
 
         List<Experiment> experiments = datasets
                 .parallelStream()
-                .map(dataset -> createExperiment(dataset.id(), API_KEY, TEST_WORKSPACE))
+                .map(dataset -> createExperiment(dataset, API_KEY, TEST_WORKSPACE))
                 .toList();
 
         // Create experiment items with specific feedback scores for verification
@@ -432,6 +445,184 @@ class ExperimentAggregatesIntegrationTest {
                 .isEqualTo(rawExperiment);
     }
 
+    @ParameterizedTest(name = "Group by {0}")
+    @MethodSource("groupingTestCases")
+    @DisplayName("ExperimentAggregatesService.findGroups matches ExperimentService.findGroups (raw)")
+    void testFindGroupsFromAggregates(String testName, List<GroupBy> groups) {
+        // Given: Isolate test with unique workspace
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        int numberOfItems = 5;
+
+        // Create experiments with different grouping values
+        List<Project> projects = IntStream.range(0, numberOfItems)
+                .mapToObj(i -> createProject(apiKey, workspaceName))
+                .toList();
+
+        List<Dataset> datasets = IntStream.range(0, numberOfItems)
+                .mapToObj(i -> createDataset(apiKey, workspaceName))
+                .toList();
+
+        List<Experiment> experiments = datasets.stream()
+                .map(dataset -> createExperiment(dataset, apiKey, workspaceName))
+                .toList();
+
+        // Create experiment items for each experiment
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        IntStream.range(0, numberOfItems).parallel().forEach(i -> {
+            createExperimentItemWithData(
+                    experiments.get(i).id(),
+                    datasets.get(i).id(),
+                    projects.get(i).name(),
+                    feedbackScores, apiKey, workspaceName);
+        });
+
+        // Populate aggregates for all experiments
+        experiments.parallelStream()
+                .forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // When: Query groups using both methods (both return Mono<ExperimentGroupResponse>)
+        var criteria = com.comet.opik.api.ExperimentGroupCriteria.builder()
+                .groups(groups)
+                .build();
+
+        // Query using raw calculation (ExperimentService -> ExperimentDAO)
+        var groupsFromRaw = experimentService.findGroups(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Query using aggregates (ExperimentAggregatesService -> ExperimentAggregatesDAO)
+        var groupsFromAggregates = experimentAggregatesService.findGroups(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Verify both return non-null results
+        assertThat(groupsFromRaw).isNotNull();
+        assertThat(groupsFromAggregates).isNotNull();
+        assertThat(groupsFromRaw.content()).isNotEmpty();
+        assertThat(groupsFromAggregates.content()).isNotEmpty();
+
+        // Compare the ExperimentGroupResponse objects from both methods
+        assertThat(groupsFromAggregates)
+                .as("Groups from aggregates should match groups from raw data for scenario: %s", testName)
+                .usingRecursiveComparison()
+                .isEqualTo(groupsFromRaw);
+    }
+
+    @ParameterizedTest(name = "Group aggregations by {0}")
+    @MethodSource("groupingTestCases")
+    @DisplayName("ExperimentAggregatesService.findGroupsAggregations matches ExperimentService.findGroupsAggregations (raw)")
+    void testFindGroupsAggregationsFromAggregates(String testName, List<GroupBy> groups) {
+        // Given: Isolate test with unique workspace
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        int numberOfItems = 5;
+        // Create experiments with different grouping values
+        List<Project> projects = IntStream.range(0, numberOfItems)
+                .mapToObj(i -> createProject(apiKey, workspaceName))
+                .toList();
+
+        List<Dataset> datasets = IntStream.range(0, numberOfItems)
+                .mapToObj(i -> createDataset(apiKey, workspaceName))
+                .toList();
+
+        List<Experiment> experiments = datasets.stream()
+                .map(dataset -> createExperiment(dataset, apiKey, workspaceName))
+                .toList();
+
+        // Create experiment items for each experiment
+        List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        IntStream.range(0, numberOfItems).parallel().forEach(i -> {
+            createExperimentItemWithData(
+                    experiments.get(i).id(),
+                    datasets.get(i).id(),
+                    projects.get(i).name(),
+                    feedbackScores, apiKey, workspaceName);
+        });
+
+        // Populate aggregates for all experiments
+        experiments.forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block());
+
+        // When: Query group aggregations using both methods (both return Mono<ExperimentGroupAggregationsResponse>)
+        var criteria = com.comet.opik.api.ExperimentGroupCriteria.builder()
+                .groups(groups)
+                .build();
+
+        // Query using raw calculation (ExperimentService -> ExperimentDAO)
+        var aggregationsFromRaw = experimentService.findGroupsAggregations(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Query using aggregates (ExperimentAggregatesService -> ExperimentAggregatesDAO)
+        var aggregationsFromAggregates = experimentAggregatesService.findGroupsAggregations(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Verify both return non-null results
+        assertThat(aggregationsFromRaw).isNotNull();
+        assertThat(aggregationsFromAggregates).isNotNull();
+        assertThat(aggregationsFromRaw.content()).isNotEmpty();
+        assertThat(aggregationsFromAggregates.content()).isNotEmpty();
+
+        // Compare the ExperimentGroupAggregationsResponse objects from both methods
+        assertThat(aggregationsFromAggregates)
+                .as("Group aggregations from aggregates should match aggregations from raw data for scenario: %s",
+                        testName)
+                .usingRecursiveComparison(
+                        RecursiveComparisonConfiguration.builder()
+                                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                                .build())
+                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .isEqualTo(aggregationsFromRaw);
+    }
+
+    static Stream<Arguments> groupingTestCases() {
+        return Stream.of(
+                Arguments.of("dataset_id", List.of(
+                        GroupBy.builder()
+                                .field(GroupingFactory.DATASET_ID)
+                                .type(FieldType.STRING)
+                                .build())),
+                Arguments.of("project_id", List.of(
+                        GroupBy.builder()
+                                .field(GroupingFactory.PROJECT_ID)
+                                .type(FieldType.STRING)
+                                .build())),
+                Arguments.of("dataset_id and project_id", List.of(
+                        GroupBy.builder()
+                                .field(GroupingFactory.DATASET_ID)
+                                .type(FieldType.STRING)
+                                .build(),
+                        GroupBy.builder()
+                                .field(GroupingFactory.PROJECT_ID)
+                                .type(FieldType.STRING)
+                                .build())));
+    }
+
     // Helper methods
 
     private Project createProject(String apiKey, String workspaceName) {
@@ -446,9 +637,10 @@ class ExperimentAggregatesIntegrationTest {
         return dataset;
     }
 
-    private Experiment createExperiment(UUID datasetId, String apiKey, String workspaceName) {
+    private Experiment createExperiment(Dataset dataset, String apiKey, String workspaceName) {
         var experiment = experimentResourceClient.createPartialExperiment()
-                .datasetId(datasetId)
+                .datasetId(dataset.id())
+                .datasetName(dataset.name()) // Use the actual dataset's name
                 .build();
         experimentResourceClient.create(experiment, apiKey, workspaceName);
         return experiment;
@@ -480,12 +672,16 @@ class ExperimentAggregatesIntegrationTest {
         List<ExperimentItem> experimentItems = datasetItems.stream()
                 .map(datasetItem -> {
 
-                    // Create trace
+                    // Create trace with output containing the dataset ID (common across experiments) and experiment ID
+                    // This allows filtering by a common value while maintaining experiment-specific data
+                    var outputNode = JsonUtils.getJsonNodeFromString(
+                            "{\"result\": \"" + datasetId.toString() + "-" + experimentId.toString() + "\"}");
                     var trace = factory.manufacturePojo(Trace.class)
                             .toBuilder()
                             .projectName(projectName)
                             .usage(null)
                             .visibilityMode(null)
+                            .output(outputNode)
                             .build();
 
                     traceResourceClient.createTrace(trace, apiKey, workspaceName);
@@ -529,6 +725,456 @@ class ExperimentAggregatesIntegrationTest {
 
         experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
         return experimentItems;
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("datasetItemCountFilterScenarios")
+    @DisplayName("countDatasetItemsWithExperimentItems matches countDatasetItemsWithExperimentItemsFromAggregates")
+    void testDatasetItemCountWithAggregates(String scenarioName,
+            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        List<List<UUID>> experimentIdsList = new ArrayList<>();
+        List<List<UUID>> datasetIdsList = new ArrayList<>();
+        List<List<String>> feedbackScoresList = new ArrayList<>();
+
+        // Given: Create test data with multiple experiments
+        IntStream.range(0, 2)
+                .parallel()
+                .forEach(i -> {
+                    var project = createProject(apiKey, workspaceName);
+                    var dataset = createDataset(apiKey, workspaceName);
+                    var experiment1 = createExperiment(dataset, apiKey, workspaceName);
+                    var experiment2 = createExperiment(dataset, apiKey, workspaceName);
+
+                    // Create experiment items with specific feedback scores and varied data
+                    List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+                    createExperimentItemWithData(
+                            experiment1.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+                    createExperimentItemWithData(
+                            experiment2.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+
+                    experimentIdsList.add(List.of(experiment1.id(), experiment2.id()));
+                    datasetIdsList.add(List.of(dataset.id()));
+                    feedbackScoresList.add(feedbackScores);
+                });
+
+        // Populate aggregates for both experiments
+        experimentIdsList
+                .parallelStream()
+                .flatMap(List::stream)
+                .forEach(experimentId -> experimentAggregatesService.populateAggregations(experimentId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // Build criteria using the provided function
+        var testData = new DatasetItemCountTestData(
+                datasetIdsList.getFirst().getFirst(),
+                Set.copyOf(experimentIdsList.getFirst()),
+                feedbackScoresList.getFirst());
+
+        var criteria = criteriaBuilder.apply(testData);
+
+        // When: Get count from original service method
+        var datasetItemPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                criteria.datasetId(),
+                List.copyOf(criteria.experimentIds()),
+                criteria.search(),
+                criteria.filters(),
+                apiKey,
+                workspaceName);
+
+        var countFromOriginal = datasetItemPage.total();
+
+        // When: Get count from aggregates (new version)
+        var countFromAggregates = experimentAggregatesService
+                .countDatasetItemsWithExperimentItemsFromAggregates(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Both should return the same count
+        assertThat(countFromAggregates)
+                .as("Count from aggregates should match count from original DAO for scenario: %s",
+                        scenarioName)
+                .isEqualTo(countFromOriginal);
+    }
+
+    Stream<Arguments> datasetItemCountFilterScenarios() {
+        return Stream.of(
+                Arguments.of("No filters",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Filter by duration > 0",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                                        .operator(Operator.GREATER_THAN)
+                                        .value("0")
+                                        .type(FieldType.NUMBER)
+                                        .build()))
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Filter by feedback score with key",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES
+                                                .getQueryParamField())
+                                        .key(data.feedbackScores().getFirst())
+                                        .operator(Operator.GREATER_THAN)
+                                        .value("0")
+                                        .type(FieldType.NUMBER)
+                                        .build()))
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Filter by feedback score is not empty with key",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES
+                                                .getQueryParamField())
+                                        .key(data.feedbackScores().getFirst())
+                                        .operator(Operator.IS_NOT_EMPTY)
+                                        .value("")
+                                        .type(FieldType.NUMBER)
+                                        .build()))
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Filter by feedback score is empty with key",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES
+                                                .getQueryParamField())
+                                        .key(UUID.randomUUID().toString())
+                                        .operator(Operator.IS_EMPTY)
+                                        .value("")
+                                        .type(FieldType.NUMBER)
+                                        .build()))
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Filter by output field (dynamic)",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field("output.result")
+                                        .operator(Operator.CONTAINS)
+                                        .value(data.experimentIds().iterator().next().toString())
+                                        .type(FieldType.STRING)
+                                        .build()))
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Search in input/output",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .search(data.experimentIds().iterator().next().toString())
+                                .truncate(false)
+                                .build()),
+
+                Arguments.of("Combined filter and search",
+                        (Function<DatasetItemCountTestData, DatasetItemSearchCriteria>) data -> DatasetItemSearchCriteria
+                                .builder()
+                                .datasetId(data.datasetId())
+                                .experimentIds(data.experimentIds())
+                                .entityType(EntityType.TRACE)
+                                .filters(List.of(ExperimentsComparisonFilter.builder()
+                                        .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                                        .operator(Operator.GREATER_THAN)
+                                        .value("0")
+                                        .type(FieldType.NUMBER)
+                                        .build()))
+                                .search(data.experimentIds().iterator().next().toString())
+                                .truncate(false)
+                                .build()));
+    }
+
+    private record DatasetItemCountTestData(
+            UUID datasetId,
+            Set<UUID> experimentIds,
+            List<String> feedbackScores) {
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("datasetItemCountFilterScenarios")
+    @DisplayName("getDatasetItemsWithExperimentItemsFromAggregates: Compare with original DAO")
+    void getDatasetItemsWithExperimentItemsFromAggregates(
+            String scenarioName,
+            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+
+        // Given: Create test data and populate aggregates
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        List<List<UUID>> experimentIdsList = new ArrayList<>();
+        List<List<UUID>> datasetIdsList = new ArrayList<>();
+        List<List<String>> feedbackScoresList = new ArrayList<>();
+
+        // Given: Create test data with multiple experiments
+        IntStream.range(0, 2)
+                .parallel()
+                .forEach(i -> {
+                    var project = createProject(apiKey, workspaceName);
+                    var dataset = createDataset(apiKey, workspaceName);
+                    var experiment1 = createExperiment(dataset, apiKey, workspaceName);
+                    var experiment2 = createExperiment(dataset, apiKey, workspaceName);
+
+                    // Create experiment items with specific feedback scores and varied data
+                    List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+                    createExperimentItemWithData(
+                            experiment1.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+                    createExperimentItemWithData(
+                            experiment2.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+
+                    experimentIdsList.add(List.of(experiment1.id(), experiment2.id()));
+                    datasetIdsList.add(List.of(dataset.id()));
+                    feedbackScoresList.add(feedbackScores);
+                });
+
+        // Populate aggregates for both experiments
+        experimentIdsList
+                .parallelStream()
+                .flatMap(List::stream)
+                .forEach(experimentId -> experimentAggregatesService.populateAggregations(experimentId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // Build criteria using the provided function
+        var testData = new DatasetItemCountTestData(
+                datasetIdsList.getFirst().getFirst(),
+                Set.copyOf(experimentIdsList.getFirst()),
+                feedbackScoresList.getFirst());
+
+        var criteria = criteriaBuilder.apply(testData);
+
+        // When: Get items from original service method
+        var pageFromOriginal = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                criteria.datasetId(),
+                List.copyOf(criteria.experimentIds()),
+                criteria.search(),
+                criteria.filters(),
+                apiKey,
+                workspaceName);
+
+        // When: Get items from aggregates
+        var pageFromAggregates = experimentAggregatesService
+                .getDatasetItemsWithExperimentItemsFromAggregates(criteria, 1, 10)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Verify page properties match
+        assertThat(pageFromAggregates.page())
+                .as("Page number should match for scenario: %s", scenarioName)
+                .isEqualTo(pageFromOriginal.page());
+
+        assertThat(pageFromAggregates.total())
+                .as("Total count should match for scenario: %s", scenarioName)
+                .isEqualTo(pageFromOriginal.total());
+
+        assertThat(pageFromAggregates.size())
+                .as("Page size should match for scenario: %s", scenarioName)
+                .isEqualTo(pageFromOriginal.size());
+
+        // Then: Verify content matches exactly
+        assertDatasetItemsWithExperimentItems(pageFromOriginal.content(), pageFromAggregates.content());
+    }
+
+    void assertDatasetItemsWithExperimentItems(List<DatasetItem> expectedDatasetItem,
+            List<DatasetItem> actualDatasetItems) {
+
+        assertThat(actualDatasetItems)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                .isEqualTo(expectedDatasetItem);
+
+        for (var i = 0; i < actualDatasetItems.size(); i++) {
+            var actualExperiments = actualDatasetItems.get(i).experimentItems();
+            var expectedExperiments = expectedDatasetItem.get(i).experimentItems();
+
+            // Filtering by those related to experiments 1 and 3
+            assertThat(actualExperiments)
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
+                    .isEqualTo(expectedExperiments);
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("datasetItemCountFilterScenarios")
+    @DisplayName("getExperimentItemsStats: aggregates should match original calculation with filters")
+    void getExperimentItemsStatsFromAggregates(String scenarioName,
+            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+
+        // Given: Create test data and populate aggregates
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        List<List<UUID>> experimentIdsList = new ArrayList<>();
+        List<List<UUID>> datasetIdsList = new ArrayList<>();
+        List<List<String>> feedbackScoresList = new ArrayList<>();
+
+        // Given: Create test data with multiple experiments
+        IntStream.range(0, 2)
+                .parallel()
+                .forEach(i -> {
+                    var project = createProject(apiKey, workspaceName);
+                    var dataset = createDataset(apiKey, workspaceName);
+                    var experiment1 = createExperiment(dataset, apiKey, workspaceName);
+                    var experiment2 = createExperiment(dataset, apiKey, workspaceName);
+
+                    // Create experiment items with specific feedback scores and varied data
+                    List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+                    createExperimentItemWithData(
+                            experiment1.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+                    createExperimentItemWithData(
+                            experiment2.id(),
+                            dataset.id(),
+                            project.name(),
+                            feedbackScores,
+                            apiKey,
+                            workspaceName);
+
+                    experimentIdsList.add(List.of(experiment1.id(), experiment2.id()));
+                    datasetIdsList.add(List.of(dataset.id()));
+                    feedbackScoresList.add(feedbackScores);
+                });
+
+        // Populate aggregates for both experiments
+        experimentIdsList
+                .parallelStream()
+                .flatMap(List::stream)
+                .forEach(experimentId -> experimentAggregatesService.populateAggregations(experimentId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // Build criteria using the provided function
+        var testData = new DatasetItemCountTestData(
+                datasetIdsList.getFirst().getFirst(),
+                Set.copyOf(experimentIdsList.getFirst()),
+                feedbackScoresList.getFirst());
+
+        var criteria = criteriaBuilder.apply(testData);
+
+        @SuppressWarnings("unchecked")
+        List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters = (List<com.comet.opik.api.filter.ExperimentsComparisonFilter>) criteria
+                .filters();
+
+        // When: Get stats from original DAO
+        var statsFromOriginal = datasetResourceClient.getDatasetExperimentItemsStats(
+                criteria.datasetId(),
+                List.copyOf(criteria.experimentIds()),
+                apiKey,
+                workspaceName,
+                filters);
+
+        // When: Get stats from aggregates DAO
+        var statsFromAggregates = experimentAggregatesService
+                .getExperimentItemsStatsFromAggregates(
+                        criteria.datasetId(),
+                        criteria.experimentIds(),
+                        filters)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Verify stats match
+        assertThat(statsFromAggregates)
+                .as("Stats from aggregates should not be null for scenario: %s", scenarioName)
+                .isNotNull();
+
+        assertThat(statsFromOriginal)
+                .as("Stats from original should not be null for scenario: %s", scenarioName)
+                .isNotNull();
+
+        assertThat(statsFromAggregates)
+                .as("Stats should match for scenario: %s", scenarioName)
+                .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "value")
+                .ignoringCollectionOrder()
+                .isEqualTo(statsFromOriginal);
     }
 
 }

@@ -1,5 +1,6 @@
 package com.comet.opik.domain.experiments.aggregations;
 
+import com.comet.opik.api.VisibilityMode;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -15,15 +16,25 @@ public class ExperimentSourceData {
     /**
      * Raw trace data for aggregation.
      *
-     * @param traceId   The trace ID
-     * @param projectId The project ID
-     * @param duration  The trace duration in milliseconds
+     * @param traceId         The trace ID
+     * @param projectId       The project ID
+     * @param duration        The trace duration in milliseconds
+     * @param input           The trace input
+     * @param output          The trace output
+     * @param inputTruncated  The truncated trace input
+     * @param outputTruncated The truncated trace output
+     * @param visibilityMode  The trace visibility mode
      */
     @Builder
     public record TraceData(
             UUID traceId,
             UUID projectId,
-            BigDecimal duration) {
+            BigDecimal duration,
+            String input,
+            String output,
+            String inputTruncated,
+            String outputTruncated,
+            VisibilityMode visibilityMode) {
     }
 
     /**
@@ -43,12 +54,14 @@ public class ExperimentSourceData {
     /**
      * Raw feedback score data for aggregation.
      *
-     * @param traceId        The trace ID
-     * @param feedbackScores Map of feedback score names to values
+     * @param traceId              The trace ID
+     * @param feedbackScores       Map of feedback score names to values (for aggregations)
+     * @param feedbackScoresArray  JSON string of complete feedback score array
      */
     @Builder
     public record FeedbackScoreData(
             UUID traceId,
-            Map<String, BigDecimal> feedbackScores) {
+            Map<String, BigDecimal> feedbackScores,
+            String feedbackScoresArray) {
     }
 }
