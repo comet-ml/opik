@@ -9,6 +9,8 @@ import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
@@ -1108,6 +1110,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId,
                                         workspaceId,
                                         userName);
@@ -1244,6 +1249,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             null, // No change description (auto-generated)
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
                             batchGroupId,
                             workspaceId,
                             userName);
@@ -1551,6 +1559,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             baseVersionId,
                                             changes.tags(),
                                             changes.changeDescription(),
+                                            changes.evaluators(),
+                                            changes.executionPolicy(),
+                                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
                                             null, // No batch group ID
                                             workspaceId,
                                             userName);
@@ -1921,6 +1932,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No base version for first version
                             null, // No tags
                             changeDescription,
+                            null, // No evaluators for first version
+                            null, // No execution policy for first version
+                            false, // Don't clear execution policy
                             batchGroupId,
                             workspaceId,
                             userName);
@@ -2003,6 +2017,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId,
                                         workspaceId,
                                         userName);
@@ -2032,17 +2049,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
             UUID baseVersionId,
             List<String> tags,
             String changeDescription,
+            List<EvaluatorItem> evaluators,
+            ExecutionPolicy executionPolicy,
+            boolean clearExecutionPolicy,
             UUID batchGroupId,
             String workspaceId,
             String userName) {
 
-        return Mono.fromCallable(() -> versionService.createVersionFromDelta(
+        return Mono.<DatasetVersion>fromCallable(() -> versionService.createVersionFromDelta(
                 datasetId,
                 newVersionId,
                 itemsTotal,
                 baseVersionId,
                 tags,
                 changeDescription,
+                evaluators,
+                executionPolicy,
+                clearExecutionPolicy,
                 batchGroupId,
                 workspaceId,
                 userName))
