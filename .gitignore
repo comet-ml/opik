@@ -104,3 +104,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 *~
+
+# Generated diagrams (local artifacts from /share-diagram command)
+diagrams/
