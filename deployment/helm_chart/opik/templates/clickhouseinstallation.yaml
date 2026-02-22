@@ -24,6 +24,17 @@ spec:
       {{ .Values.clickhouse.adminUser.username }}/networks/ip:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
+      {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- if .Values.clickhouse.monitoring.useSecret }}
+      {{- if .Values.clickhouse.monitoring.useSecret.enabled }}
+      {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
+      {{- else }}
+      {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
+      {{- end }}
+      {{- end }}
+      {{ .Values.clickhouse.monitoring.username }}/networks/ip:
+        - '0.0.0.0/0'
+      {{- end }}
       {{- range .Values.clickhouse.additionalUsers }}
       {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
       {{- if .profile }}
