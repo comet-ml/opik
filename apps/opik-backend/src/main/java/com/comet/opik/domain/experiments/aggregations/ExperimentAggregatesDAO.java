@@ -903,11 +903,33 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         }));
     }
 
-    private Flux<TraceData> getTracesData(String workspaceId, UUID experimentId, UUID projectId,
-            UUID cursor, int limit) {
+    /**
+     * Helper method to execute paginated queries with cursor-based pagination.
+     * Eliminates boilerplate for binding workspace_id, experiment_id, project_id, limit, and optional cursor.
+     *
+     * @param sqlTemplate   SQL template constant
+     * @param methodName    Method name for log comment
+     * @param workspaceId   Workspace ID
+     * @param experimentId  Experiment ID
+     * @param projectId     Project ID
+     * @param cursor        Optional cursor for pagination
+     * @param limit         Page size limit
+     * @param rowMapper     Function to map result row to target type
+     * @param <T>           Return type
+     * @return Flux of mapped results
+     */
+    private <T> Flux<T> streamWithExperimentPagination(
+            String sqlTemplate,
+            String methodName,
+            String workspaceId,
+            UUID experimentId,
+            UUID projectId,
+            UUID cursor,
+            int limit,
+            Function<Row, T> rowMapper) {
+
         return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_TRACES_DATA,
-                    "getTracesData", workspaceId, experimentId.toString())
+            var template = getSTWithLogComment(sqlTemplate, methodName, workspaceId, experimentId.toString())
                     .add("cursor", cursor != null);
 
             var statement = connection.createStatement(template.render())
@@ -921,52 +943,47 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             }
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapTraceData(row)));
+                    .flatMap(result -> result.map((row, metadata) -> rowMapper.apply(row)));
         });
+    }
+
+    private Flux<TraceData> getTracesData(String workspaceId, UUID experimentId, UUID projectId,
+            UUID cursor, int limit) {
+        return streamWithExperimentPagination(
+                GET_TRACES_DATA,
+                "getTracesData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapTraceData);
     }
 
     private Flux<SpanData> getSpansData(String workspaceId, UUID experimentId, UUID projectId,
             UUID cursor, int limit) {
-        return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_SPANS_DATA,
-                    "getSpansData", workspaceId, experimentId.toString())
-                    .add("cursor", cursor != null);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId)
-                    .bind("limit", limit);
-
-            if (cursor != null) {
-                statement.bind("cursor", cursor);
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapSpanData(row)));
-        });
+        return streamWithExperimentPagination(
+                GET_SPANS_DATA,
+                "getSpansData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapSpanData);
     }
 
     private Flux<FeedbackScoreData> getFeedbackScoresData(String workspaceId, UUID experimentId, UUID projectId,
             UUID cursor, int limit) {
-        return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_FEEDBACK_SCORES_DATA,
-                    "getFeedbackScoresData", workspaceId, experimentId.toString())
-                    .add("cursor", cursor != null);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId)
-                    .bind("limit", limit);
-
-            if (cursor != null) {
-                statement.bind("cursor", cursor);
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapFeedbackScoreData(row)));
-        });
+        return streamWithExperimentPagination(
+                GET_FEEDBACK_SCORES_DATA,
+                "getFeedbackScoresData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapFeedbackScoreData);
     }
 
     private void bindItemsParameters(Statement statement,
