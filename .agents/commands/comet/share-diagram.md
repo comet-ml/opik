@@ -91,6 +91,10 @@ Always include **Files Changed** section. Include at most 4 sections total.
   - Sections: Based on analysis from step 3
 - **Apply style guide**: Use semantic colors, flow boxes, section labels with dots, and all CSS patterns from the style guide
 - **Include "Copy as image" button**: Using the Canvas API + Clipboard API script from the template
+- **Content safety**:
+  - **NEVER** include raw secrets, API keys, tokens, or passwords in diagram content
+  - **NEVER** include customer names unless specifically requested — they should not be public
+  - Diagram content should be high-level summaries (component names, flow descriptions, file names) — never raw diff hunks or verbatim Jira comments
 - **Content rules**:
   - Keep text concise — diagram is visual, not a document
   - Use `<b>` for component names inside boxes
