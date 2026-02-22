@@ -35,6 +35,7 @@ def track_openai(
     * `openai_client.beta.chat.completions.parse()`
     * `openai_client.beta.chat.completions.stream()`
     * `openai_client.responses.create()`
+    * `openai_client.audio.speech.create()` - Text-to-Speech (TTS) with character-based usage tracking
     * `openai_client.videos.create()`, `videos.create_and_poll()`, `videos.poll()`,
       `videos.list()`, `videos.delete()`, `videos.remix()`, `videos.download_content()`,
       and `write_to_file()` on downloaded content
@@ -60,6 +61,9 @@ def track_openai(
 
     if hasattr(openai_client, "videos"):
         _patch_openai_videos(openai_client, project_name)
+
+    if hasattr(openai_client, "audio") and hasattr(openai_client.audio, "speech"):
+        _patch_openai_tts(openai_client, project_name)
 
     return openai_client
 
@@ -154,6 +158,28 @@ def _patch_openai_responses(
         )
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
+        )
+
+
+def _patch_openai_tts(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    """Patch OpenAI Text-to-Speech (TTS) methods for tracking."""
+    from . import openai_tts_decorator
+
+    provider = _get_provider(openai_client)
+    tts_decorator_factory = openai_tts_decorator.OpenaiTTSTrackDecorator()
+    tts_decorator_factory.provider = provider
+
+    if hasattr(openai_client.audio.speech, "create"):
+        tts_create_decorator = tts_decorator_factory.track(
+            type="llm",
+            name="tts_create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = tts_create_decorator(
+            openai_client.audio.speech.create
         )
 
 
