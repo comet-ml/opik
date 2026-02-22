@@ -21,6 +21,7 @@ import static java.util.stream.Collectors.toMap;
 public class StatsMapper {
 
     public static final String USAGE = "usage";
+    public static final String USAGE_SUM = "usage_sum";
     public static final String FEEDBACK_SCORE = "feedback_scores";
     public static final String SPAN_FEEDBACK_SCORE = "span_feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
@@ -88,6 +89,7 @@ public class StatsMapper {
         stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST_SUM, totalEstimatedCostSum.doubleValue()));
 
         addMapStats(row, USAGE, stats);
+        addMapStats(row, USAGE_SUM, stats);
         addMapStats(row, FEEDBACK_SCORE, stats);
         // Only add span feedback scores statistics for traces (not spans)
         if (entityCountLabel.equals(TRACE_COUNT) && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {

@@ -2324,6 +2324,7 @@ class TraceDAOImpl implements TraceDAO {
                 sum(metadata_count) AS metadata,
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
+                sumMap(s.usage) as usage_sum,
                 avgMap(f.feedback_scores) AS feedback_scores,
                 avgMap(sfs.span_feedback_scores) AS span_feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
