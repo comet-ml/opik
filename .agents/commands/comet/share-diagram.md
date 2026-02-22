@@ -84,7 +84,7 @@ Always include **Files Changed** section. Include at most 4 sections total.
 
 ### 4. Generate HTML Diagram
 
-- **Load the `diagram-generation` skill**: Use the style guide and template from `.claude/skills/diagram-generation/` (or `.agents/skills/diagram-generation/`)
+- **Load the `diagram-generation` skill**: Use the style guide and template from `.agents/skills/diagram-generation/`
 - **Fill template sections**:
   - Title: `OPIK-{TICKET} — {Jira Title}`
   - Subtitle: One-line summary of the change
@@ -180,7 +180,7 @@ The command is successful when:
 ## Notes
 
 - Diagrams are **local artifacts** — the `diagrams/` folder is gitignored
-- The same diagram-generation logic lives in `.claude/skills/diagram-generation/` (shared skill)
+- The diagram-generation logic lives in `.agents/skills/diagram-generation/` (shared skill)
 - The "Copy as image" button uses the browser Canvas API — requires opening in a modern browser
 - When run without a PR, the diagram reflects local uncommitted + committed changes vs main
 - Diagrams should be concise and visual — prefer boxes and flows over paragraphs of text
