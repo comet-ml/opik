@@ -56,29 +56,10 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     sortable: true,
   },
   {
-    id: COLUMN_ID_ID,
-    label: "ID",
+    id: "enabled",
+    label: "Status",
     type: COLUMN_TYPE.string,
-    cell: IdCell as never,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-    sortable: true,
-  },
-  {
-    id: "created_at",
-    label: "Created",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-    sortable: true,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
+    cell: StatusCell as never,
   },
   {
     id: "sampling_rate",
@@ -93,10 +74,29 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
   },
   {
-    id: "enabled",
-    label: "Status",
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.last_updated_at),
+    sortable: true,
+  },
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
     type: COLUMN_TYPE.string,
-    cell: StatusCell as never,
+    cell: IdCell as never,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+    accessorFn: (row) => formatDate(row.created_at),
+    sortable: true,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
   },
 ];
 
@@ -107,12 +107,10 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "last_updated_at",
-  "created_by",
-  "created_at",
+  "enabled",
   "sampling_rate",
   "scope",
-  "enabled",
+  "last_updated_at",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
