@@ -44,8 +44,9 @@ This workflow will:
 
 #### Ticket Context
 - **Parse branch name**: Extract `OPIK-<number>` from current branch (format: `<username>/OPIK-<number>-<description>`)
-- **If on `main`**: Check if a ticket number was provided as input. If not, ask the user for one.
-- **Fetch Jira ticket**: Get summary, description, issue type, status, priority, labels, comments
+- **If ticket not found in branch name** (including `main`, `NA` branches like `user/NA-some-task`, or other non-standard formats): Check if a ticket number was provided as input. If not, ask the user for one.
+- **If no ticket number available**: Skip Jira fetch entirely — generate diagram from code diff alone, using the branch description as the title.
+- **Fetch Jira ticket** (if ticket found): Get summary, description, issue type, status, priority, labels, comments
 - **Build ticket context**: Title, type, key requirements, acceptance criteria
 
 #### Code Changes
@@ -121,12 +122,13 @@ Render the diagram to PNG and display it inline in chat.
 
 **Note**: Playwright MCP blocks `file://` URLs, so serve the HTML over a local HTTP server.
 
-1. **Start server**: `python3 -m http.server 8787` in the `diagrams/` directory (run in background)
+1. **Start server**: `python3 -m http.server 8787 --bind 127.0.0.1` in the `diagrams/` directory (run in background)
 2. **Navigate**: `browser_navigate` to `http://localhost:8787/opik-{TICKET_NUMBER}-diagram.html`
 3. **Hide button**: `browser_evaluate` with `document.querySelector('.copy-btn').style.display = 'none'` — prevents the fixed-position button from appearing in the screenshot
 4. **Snapshot**: `browser_snapshot` to get the element ref for `#diagram`
 5. **Screenshot**: `browser_take_screenshot` targeting the `#diagram` element ref
-   - Save as `diagrams/opik-{TICKET_NUMBER}-diagram.png`
+   - Use an **absolute path** for the filename: `{REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.png`
+   - Playwright saves relative to its own CWD, so absolute paths ensure the PNG lands in `diagrams/`
 6. **Close & cleanup**: `browser_close`, then kill the HTTP server process
 7. **Display**: Use the `Read` tool on the PNG — it renders as an image inline in the chat
 
