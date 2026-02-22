@@ -40,6 +40,24 @@ npm install langfuse-vercel
 
 Create or update your `.env` file with the following variables:
 
+Intent:
+Configure Mastra OTLP export so agent/workflow spans are routed to Opik.
+
+Applies when:
+Mastra telemetry is enabled with `export.type = "otlp"`.
+
+Required fields:
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_HEADERS` (auth/routing for your deployment mode)
+
+Optional fields:
+- `projectName` in OTLP headers (recommended)
+- additional OTEL resource/sampling env vars
+
+Minimal valid input:
+- endpoint + headers for your Opik mode
+- telemetry enabled in Mastra config
+
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
         ```bash wordWrap
@@ -57,7 +75,7 @@ Create or update your `.env` file with the following variables:
             environment variable:
 
             ```bash wordWrap
-            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
             ```
 
             You can also update the `Comet-Workspace` parameter to a different
@@ -80,7 +98,7 @@ Create or update your `.env` file with the following variables:
             environment variable:
 
             ```bash wordWrap
-            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
             ```
 
             You can also update the `Comet-Workspace` parameter to a different
@@ -160,6 +178,18 @@ With this setup, your Mastra application will automatically trace:
 - **Tool executions**: Function calls and their results
 - **Workflow steps**: Individual steps in complex workflows
 - **Memory operations**: Context and memory updates
+
+## Validation
+
+1. Run the Mastra dev server and execute one agent chat.
+2. Confirm OTLP export requests are sent to your configured endpoint.
+3. Verify the trace in Opik under the expected workspace/project.
+
+## Source references
+
+- [Mastra docs](https://mastra.ai/)
+- [Mastra telemetry docs](https://mastra.ai/en/docs/observability/overview)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
 
 ## Further improvements
 

@@ -24,6 +24,26 @@ const result = await generateText({
 
 To collect the traces in Opik, you need to add the `OpikExporter` to your application, first you have to set your environment variables
 
+Intent:
+Use `OpikExporter` as the OTEL trace exporter for AI SDK telemetry.
+
+Applies when:
+You are using `generateText`/`streamText` with `experimental_telemetry`.
+
+Required fields:
+- `OPIK_API_KEY`
+- `OPIK_WORKSPACE` (Cloud/Enterprise)
+- `OPIK_PROJECT_NAME`
+
+Optional fields:
+- `OPIK_URL_OVERRIDE` (required for non-default deployment URLs)
+- `OPIK_LOG_LEVEL`
+
+Deployment endpoint examples:
+- Opik Cloud: `OPIK_URL_OVERRIDE=https://www.comet.com/opik/api`
+- Enterprise: `OPIK_URL_OVERRIDE=https://<comet-deployment-url>/opik/api`
+- Self-hosted: `OPIK_URL_OVERRIDE=http://localhost:5173/api`
+
 ```bash filename=".env"
 OPIK_API_KEY="<opik-api-key>"
 OPIK_URL_OVERRIDE=https://www.comet.com/opik/api # in case you are using the Cloud version
@@ -167,3 +187,15 @@ Use the logger level to see the more verbose logs of the exporter.
 ```bash filename=".env"
 OPIK_LOG_LEVEL=DEBUG
 ```
+
+## Validation
+
+1. Run one AI SDK request with `experimental_telemetry` enabled.
+2. Confirm `OpikExporter` initializes without auth errors.
+3. Verify traces in the target Opik workspace/project.
+
+## Source references
+
+- [Vercel AI SDK telemetry](https://sdk.vercel.ai/docs/ai-sdk-core/telemetry)
+- [Next.js OpenTelemetry guide](https://nextjs.org/docs/app/building-your-application/optimizing/open-telemetry)
+- [Opik Vercel exporter package](https://www.npmjs.com/package/opik-vercel)

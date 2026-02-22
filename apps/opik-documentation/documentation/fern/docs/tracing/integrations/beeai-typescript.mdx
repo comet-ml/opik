@@ -50,6 +50,24 @@ yarn add beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrument
 
 Configure your environment variables based on your Opik deployment:
 
+Intent:
+Route BeeAI OpenInference spans to Opik through OTLP.
+
+Applies when:
+You run BeeAI (TypeScript) with `@arizeai/openinference-instrumentation-beeai`.
+
+Required fields:
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_HEADERS` (`Authorization`, `Comet-Workspace` for Cloud/Enterprise)
+
+Optional fields:
+- `projectName` in `OTEL_EXPORTER_OTLP_HEADERS` (recommended)
+- additional OpenTelemetry env vars for sampling/resource labels
+
+Minimal valid input:
+- endpoint for your deployment mode
+- matching headers for auth and routing
+
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
         ```bash wordWrap
@@ -177,6 +195,19 @@ async function main() {
 // Run the example
 main();
 ```
+
+## Validation
+
+1. Start the app and run one agent request.
+2. Confirm OTLP export succeeds.
+3. Verify the trace in Opik under the expected workspace/project.
+
+## Source references
+
+- [BeeAI framework](https://beeai.dev/)
+- [OpenInference BeeAI instrumentation](https://www.npmjs.com/package/@arizeai/openinference-instrumentation-beeai)
+- [OpenTelemetry JS OTLP exporter](https://opentelemetry.io/docs/languages/js/exporters/)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
 
 
 ## Further improvements
