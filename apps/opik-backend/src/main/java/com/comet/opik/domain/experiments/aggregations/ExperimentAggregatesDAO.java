@@ -130,7 +130,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 status,
                 experiment_scores
-            FROM experiments FINAL
+            FROM experiments
             WHERE workspace_id = :workspace_id
             AND id = :experiment_id
             SETTINGS log_comment = '<log_comment>'
@@ -871,7 +871,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("prompt_versions", defaultIfNull(experimentData.promptVersions(), Map.of()))
                     .bind("optimization_id", defaultIfNull(experimentData.optimizationId(), ""))
                     .bind("dataset_version_id", defaultIfNull(experimentData.datasetVersionId(), ""))
-                    .bind("tags", experimentData.tags().toArray(new String[0]))
+                    .bind("tags", defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
                     .bind("type", experimentData.type())
                     .bind("status", experimentData.status())
                     .bind("experiment_scores_keys", experimentScoresArrays.keys())

@@ -8,7 +8,6 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
-    com.clickhouse.client.http.ClickHouseHttpClient: DEBUG
     com.comet.opik.infrastructure.llm: INFO
 
 # Description: state database configuration
