@@ -202,6 +202,33 @@ const ProjectsPage: React.FunctionComponent = () => {
             : "-",
       },
       {
+        id: "usage_sum.total_tokens",
+        label: "Total tokens (sum)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage_sum && isNumber(row.usage_sum.total_tokens)
+            ? formatNumericData(row.usage_sum.total_tokens)
+            : "-",
+      },
+      {
+        id: "usage_sum.prompt_tokens",
+        label: "Input tokens (sum)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage_sum && isNumber(row.usage_sum.prompt_tokens)
+            ? formatNumericData(row.usage_sum.prompt_tokens)
+            : "-",
+      },
+      {
+        id: "usage_sum.completion_tokens",
+        label: "Output tokens (sum)",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) =>
+          row.usage_sum && isNumber(row.usage_sum.completion_tokens)
+            ? formatNumericData(row.usage_sum.completion_tokens)
+            : "-",
+      },
+      {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
