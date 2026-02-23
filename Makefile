@@ -25,6 +25,18 @@ define link_agent_config
 	fi
 endef
 
+define clean_synced_files
+	@if [ -d "$(AI_DIR)/$(1)" ]; then \
+		find "$(AI_DIR)/$(1)" $(2) 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/$(1)/}; \
+			dest_rel=$$rel; \
+			$(3) \
+			dest="$(CLAUDE_DIR)/$(4)/$$dest_rel"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
+		done; \
+	fi
+endef
+
 help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
@@ -112,38 +124,11 @@ clean-agents:
 	@[ -L ".codex" ] && rm -f .codex && echo "Removed .codex symlink" || true
 	@[ -f "AGENTS.override.md" ] && rm -f AGENTS.override.md && echo "Removed AGENTS.override.md" || true
 	@[ -d "$(AI_DIR)/generated/codex" ] && rm -rf "$(AI_DIR)/generated/codex" && echo "Removed $(AI_DIR)/generated/codex" || true
-	@# Clean rules: only delete .claude/rules/*.md that have .agents/rules/*.mdc source
-	@if [ -d "$(AI_DIR)/rules" ]; then \
-		find $(AI_DIR)/rules -name "*.mdc" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/rules/}; \
-			dest="$(CLAUDE_DIR)/rules/$${rel%.mdc}.md"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
-		done; \
-	fi
-	@# Clean commands: only delete files that exist in .agents/commands/
-	@if [ -d "$(AI_DIR)/commands" ]; then \
-		find $(AI_DIR)/commands -name "*.md" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/commands/}; \
-			dest="$(CLAUDE_DIR)/commands/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
-		done; \
-	fi
-	@# Clean skills: only delete directories/files that exist in .agents/skills/
-	@if [ -d "$(AI_DIR)/skills" ]; then \
-		find $(AI_DIR)/skills -type f 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/skills/}; \
-			dest="$(CLAUDE_DIR)/skills/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
-		done; \
-	fi
-	@# Clean agents: only delete files that exist in .agents/agents/
-	@if [ -d "$(AI_DIR)/agents" ]; then \
-		find $(AI_DIR)/agents -name "*.md" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/agents/}; \
-			dest="$(CLAUDE_DIR)/agents/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
-		done; \
-	fi
+	@# Clean synced files from Claude surfaces using shared deletion helper.
+	$(call clean_synced_files,rules,-name "*.mdc",dest_rel=$${dest_rel%.mdc}.md;,rules)
+	$(call clean_synced_files,commands,-name "*.md",:;,commands)
+	$(call clean_synced_files,skills,-type f,:;,skills)
+	$(call clean_synced_files,agents,-name "*.md",:;,agents)
 	@# Clean up empty directories
 	@find $(CLAUDE_DIR) -type d -empty -delete 2>/dev/null || true
 	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
@@ -181,22 +166,11 @@ precommit-sdks:
 		--base-ref "$(SDK_DIFF_BASE)" \
 		--label "Python SDK files"
 	$(MAKE) -C sdks/opik_optimizer precommit SDK_DIFF_BASE="$(SDK_DIFF_BASE)"
-	@base_ref="$(SDK_DIFF_BASE)"; \
-	ts_files=$$(git diff --name-only --diff-filter=ACM | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
-	if [ -z "$$ts_files" ]; then \
-		if ! git rev-parse --verify "$$base_ref" >/dev/null 2>&1; then \
-			case "$$base_ref" in \
-				origin/*) \
-					base_branch=$${base_ref#origin/}; \
-					git fetch -q origin "$$base_branch:refs/remotes/origin/$$base_branch" || true; \
-					;; \
-			esac; \
-		fi; \
-		if git rev-parse --verify "$$base_ref" >/dev/null 2>&1; then \
-			merge_base=$$(git merge-base HEAD "$$base_ref"); \
-			ts_files=$$(git diff --name-only --diff-filter=ACM "$$merge_base...HEAD" | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
-		fi; \
-	fi; \
+	@ts_files=$$(./scripts/run-precommit-changed-files.sh \
+		--pathspec sdks/typescript/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
+		--label "TypeScript SDK files" \
+		--print-files | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
 	if [ -n "$$ts_files" ]; then \
 		echo "TypeScript SDK source files changed. Running lint and typecheck..."; \
 		cd sdks/typescript && npm run lint && npm run typecheck; \
