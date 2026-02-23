@@ -2,10 +2,12 @@ import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
+import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
 import { Trace } from "@/tracer/Trace";
+import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
-import { getProjectUrl } from "@/utils/url";
+import { getProjectUrlByTraceId } from "@/utils/url";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -37,13 +39,31 @@ import {
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
+  searchThreadsWithFilters,
+  searchSpansWithFilters,
   searchAndWaitForDone,
   parseFilterString,
+  parseThreadFilterString,
+  parseSpanFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
+import {
+  AnnotationQueueNotFoundError,
+  TracesAnnotationQueue,
+  ThreadsAnnotationQueue,
+} from "@/annotation-queue";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
+}
+
+interface AnnotationQueueOptions {
+  name: string;
+  projectName?: string;
+  description?: string;
+  instructions?: string;
+  commentsEnabled?: boolean;
+  feedbackDefinitionNames?: string[];
 }
 
 export const clients: OpikClient[] = [];
@@ -101,16 +121,12 @@ export class OpikClient {
     clients.push(this);
   }
 
-  private displayTraceLog = (projectName: string) => {
+  private displayTraceLog = (traceId: string, projectName: string) => {
     if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
     }
 
-    const projectUrl = getProjectUrl({
-      apiUrl: this.config.apiUrl,
-      projectName,
-      workspaceName: this.config.workspaceName,
-    });
+    const projectUrl = getProjectUrlByTraceId(traceId, this.config.apiUrl);
 
     logger.info(
       `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
@@ -134,7 +150,7 @@ export class OpikClient {
 
     this.traceBatchQueue.create(trace.data);
     logger.debug("Trace added to the queue with ID:", trace.data.id);
-    this.displayTraceLog(projectName);
+    this.displayTraceLog(trace.data.id, projectName);
 
     return trace;
   };
@@ -283,6 +299,265 @@ export class OpikClient {
     }
   };
 
+
+
+  private async getProjectIdByName(projectName: string): Promise<string> {
+    const project = await this.api.projects.retrieveProject({
+      name: projectName,
+    });
+
+    if (!project?.id) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+    return project.id;
+  }
+
+  private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    options: AnnotationQueueOptions,
+    QueueClass: (new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T) & {
+      readonly SCOPE: "trace" | "thread";
+    }
+  ): Promise<T> {
+    const {
+      name,
+      projectName,
+      description,
+      instructions,
+      commentsEnabled,
+      feedbackDefinitionNames,
+    } = options;
+
+    const scope = QueueClass.SCOPE;
+
+    logger.debug(`Creating ${scope} annotation queue "${name}"`);
+
+    const targetProjectName = projectName ?? this.config.projectName;
+
+    try {
+      const projectId = await this.getProjectIdByName(targetProjectName);
+      const queueId = generateId();
+
+      await this.api.annotationQueues.createAnnotationQueue({
+        id: queueId,
+        projectId,
+        name,
+        scope,
+        description,
+        instructions,
+        commentsEnabled,
+        feedbackDefinitionNames,
+      });
+
+      logger.debug(`Created ${scope} annotation queue "${name}" with ID "${queueId}"`);
+
+      return new QueueClass(
+        {
+          id: queueId,
+          name,
+          projectId,
+          scope,
+          description,
+          instructions,
+          commentsEnabled,
+          feedbackDefinitionNames,
+        },
+        this
+      );
+    } catch (error) {
+      logger.error(`Failed to create ${scope} annotation queue "${name}"`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new traces annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created TracesAnnotationQueue object
+   */
+  public createTracesAnnotationQueue = async (options: AnnotationQueueOptions): Promise<TracesAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, TracesAnnotationQueue);
+  };
+
+  /**
+   * Creates a new threads annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created ThreadsAnnotationQueue object
+   */
+  public createThreadsAnnotationQueue = async (options: AnnotationQueueOptions): Promise<ThreadsAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, ThreadsAnnotationQueue);
+  };
+
+  private async fetchAnnotationQueueById<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    id: string,
+    expectedScope: "trace" | "thread",
+    QueueClass: new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T
+  ): Promise<T> {
+    logger.debug(`Getting ${expectedScope} annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
+
+      if (response.scope !== expectedScope) {
+        throw new Error(`Annotation queue "${id}" is not a ${expectedScope} queue (scope: ${response.scope})`);
+      }
+
+      return new QueueClass(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        if (error.statusCode === 404) {
+          throw new AnnotationQueueNotFoundError(id);
+        }
+        logger.error(`Failed to get ${expectedScope} annotation queue with ID "${id}"`, { error });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves a traces annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The TracesAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a traces queue
+   */
+  public getTracesAnnotationQueue = async (id: string): Promise<TracesAnnotationQueue> => {
+    return this.fetchAnnotationQueueById(id, "trace", TracesAnnotationQueue);
+  };
+
+  /**
+   * Retrieves a threads annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The ThreadsAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a threads queue
+   */
+  public getThreadsAnnotationQueue = async (id: string): Promise<ThreadsAnnotationQueue> => {
+    return this.fetchAnnotationQueueById(id, "thread", ThreadsAnnotationQueue);
+  };
+
+  /**
+   * Retrieves all traces annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of TracesAnnotationQueue objects
+   */
+  public getTracesAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<TracesAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("trace", options);
+    return queues.map(queueData => new TracesAnnotationQueue(queueData, this));
+  };
+
+  /**
+   * Retrieves all threads annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of ThreadsAnnotationQueue objects
+   */
+  public getThreadsAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<ThreadsAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("thread", options);
+    return queues.map(queueData => new ThreadsAnnotationQueue(queueData, this));
+  };
+
+  private async getAnnotationQueuesByScope(
+    scope: "trace" | "thread",
+    options?: {
+      projectName?: string;
+      maxResults?: number;
+    }
+  ): Promise<OpikApi.AnnotationQueuePublic[]> {
+    const { projectName, maxResults = 1000 } = options ?? {};
+
+    logger.debug(
+      `Getting ${scope} annotation queues (project: ${projectName ?? "all"}, limit: ${maxResults})`
+    );
+
+    try {
+      let filters: string | undefined;
+
+      if (projectName) {
+        const projectId = await this.getProjectIdByName(projectName);
+        filters = JSON.stringify([
+          { field: "project_id", operator: "=", value: projectId },
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      } else {
+        filters = JSON.stringify([
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      }
+
+      const response = await this.api.annotationQueues.findAnnotationQueues({
+        size: maxResults,
+        filters,
+      });
+
+      const queues = response.content || [];
+      logger.info(`Retrieved ${queues.length} ${scope} annotation queues`);
+      return queues;
+    } catch (error) {
+      logger.error(`Failed to retrieve ${scope} annotation queues`, { error });
+      throw error;
+    }
+  }
+
+  private async deleteAnnotationQueueById(id: string, scope: "traces" | "threads"): Promise<void> {
+    logger.debug(`Deleting ${scope} annotation queue with ID "${id}"`);
+
+    try {
+      await this.api.annotationQueues.deleteAnnotationQueueBatch({
+        ids: [id],
+      });
+
+      logger.debug(`Successfully deleted ${scope} annotation queue with ID "${id}"`);
+    } catch (error) {
+      logger.error(`Failed to delete ${scope} annotation queue with ID "${id}"`, {
+        error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes a traces annotation queue by its ID.
+   *
+   * @param id - The ID of the traces annotation queue to delete
+   */
+  public deleteTracesAnnotationQueue = async (id: string): Promise<void> => {
+    return this.deleteAnnotationQueueById(id, "traces");
+  };
+
+  /**
+   * Deletes a threads annotation queue by its ID.
+   *
+   * @param id - The ID of the threads annotation queue to delete
+   */
+  public deleteThreadsAnnotationQueue = async (id: string): Promise<void> => {
+    return this.deleteAnnotationQueueById(id, "threads");
+  };
+
   /**
    * Creates a new experiment with the given dataset name and optional parameters
    *
@@ -292,6 +567,7 @@ export class OpikClient {
    * @param prompts Optional array of Prompt objects to link with the experiment
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
+   * @param datasetVersionId Optional ID of the dataset version to link the experiment to
    * @returns The created Experiment object
    */
   public createExperiment = async ({
@@ -301,6 +577,7 @@ export class OpikClient {
     prompts,
     type = ExperimentType.Regular,
     optimizationId,
+    datasetVersionId,
   }: {
     datasetName: string;
     name?: string;
@@ -308,6 +585,7 @@ export class OpikClient {
     prompts?: Prompt[];
     type?: ExperimentType;
     optimizationId?: string;
+    datasetVersionId?: string;
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -325,7 +603,7 @@ export class OpikClient {
     const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
-      this.api.experiments.createExperiment({
+      await this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
@@ -333,9 +611,10 @@ export class OpikClient {
         promptVersions,
         type,
         optimizationId,
+        datasetVersionId,
       });
 
-      logger.debug("Experiment added to the queue with id:", id);
+      logger.debug("Experiment created with id:", id);
       return experiment;
     } catch (error) {
       logger.error(`Failed to create experiment for dataset "${datasetName}"`, {
@@ -874,15 +1153,18 @@ export class OpikClient {
    * Supported OQL format: `<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*`
    *
    * Supported columns:
-   * - `id`, `name`: String fields
+   * - `id`, `name`, `description`: String fields
+   * - `created_by`, `last_updated_by`: String fields
+   * - `template_structure`: String field (e.g., "text" or "chat")
+   * - `created_at`, `last_updated_at`: Date/time fields (ISO 8601 format)
    * - `tags`: List field (use "contains" operator only)
-   * - `created_by`: String field
+   * - `version_count`: Number field
    *
    * Supported operators by column:
-   * - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
-   * - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
-   * - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
-   * - `tags`: contains (only)
+   * - String fields (`id`, `name`, `description`, `created_by`, `last_updated_by`, `template_structure`): =, !=, contains, not_contains, starts_with, ends_with, >, <
+   * - Date/time fields (`created_at`, `last_updated_at`): =, >, <, >=, <=
+   * - Number fields (`version_count`): =, !=, >, <, >=, <=
+   * - List fields (`tags`): contains
    *
    * @returns Promise resolving to array of matching latest prompt versions
    * @throws Error if OQL filter syntax is invalid
@@ -902,6 +1184,15 @@ export class OpikClient {
    *
    * // Filter by creator
    * const prompts = await client.searchPrompts('created_by = "user@example.com"');
+   *
+   * // Filter by template structure
+   * const chatPrompts = await client.searchPrompts('template_structure = "chat"');
+   *
+   * // Filter by date range
+   * const recentPrompts = await client.searchPrompts('created_at >= "2024-01-01T00:00:00Z"');
+   *
+   * // Filter by version count
+   * const multiVersion = await client.searchPrompts('version_count > 5');
    * ```
    */
   public searchPrompts = async (
@@ -910,10 +1201,10 @@ export class OpikClient {
     logger.debug("Searching prompts", { filterString });
 
     try {
-      // Parse OQL filter string to JSON (aligned with Python SDK)
+      // Parse OQL filter string to JSON
       let filters: string | undefined;
       if (filterString) {
-        const oql = new OpikQueryLanguage(filterString);
+        const oql = OpikQueryLanguage.forPrompts(filterString);
         const filterExpressions = oql.getFilterExpressions();
         filters = filterExpressions
           ? JSON.stringify(filterExpressions)
@@ -1035,14 +1326,25 @@ export class OpikClient {
    * });
    * ```
    */
-  public searchTraces = async (options?: {
-    projectName?: string;
-    filterString?: string;
-    maxResults?: number;
-    truncate?: boolean;
-    waitForAtLeast?: number;
-    waitForTimeout?: number;
-  }): Promise<OpikApi.TracePublic[]> => {
+  private async executeSearch<T, TFilter>(
+    resourceType: "traces" | "threads" | "spans",
+    options: {
+      projectName?: string;
+      filterString?: string;
+      maxResults?: number;
+      truncate?: boolean;
+      waitForAtLeast?: number;
+      waitForTimeout?: number;
+    },
+    parseFilters: (filterString?: string) => TFilter[] | null,
+    searchWithFilters: (
+      api: OpikApiClientTemp,
+      projectName: string,
+      filters: TFilter[] | null,
+      maxResults: number,
+      truncate: boolean
+    ) => Promise<T[]>
+  ): Promise<T[]> {
     const {
       projectName,
       filterString,
@@ -1050,9 +1352,9 @@ export class OpikClient {
       truncate = true,
       waitForAtLeast,
       waitForTimeout = 60,
-    } = options ?? {};
+    } = options;
 
-    logger.debug("Searching traces", {
+    logger.debug(`Searching ${resourceType}`, {
       projectName,
       filterString,
       maxResults,
@@ -1061,15 +1363,11 @@ export class OpikClient {
       waitForTimeout,
     });
 
-    // Parse filters
-    const filters = parseFilterString(filterString);
-
-    // Determine project name
+    const filters = parseFilters(filterString);
     const targetProject = projectName ?? this.config.projectName;
 
-    // Create search function
     const searchFn = () =>
-      searchTracesWithFilters(
+      searchWithFilters(
         this.api,
         targetProject,
         filters,
@@ -1077,7 +1375,6 @@ export class OpikClient {
         truncate
       );
 
-    // Execute with or without polling
     if (waitForAtLeast === undefined) {
       return await searchFn();
     }
@@ -1085,18 +1382,207 @@ export class OpikClient {
     const result = await searchAndWaitForDone(
       searchFn,
       waitForAtLeast,
-      waitForTimeout * 1000, // Convert to ms
-      5000 // 5 second poll interval
+      waitForTimeout * 1000,
+      5000
     );
 
     if (result.length < waitForAtLeast) {
       throw new SearchTimeoutError(
-        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} traces, but only ${result.length} were found.`
+        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} ${resourceType}, but only ${result.length} were found.`
       );
     }
 
     return result;
+  }
+
+  public searchTraces = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TracePublic[]> => {
+    return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
+      "traces",
+      options ?? {},
+      parseFilterString,
+      searchTracesWithFilters
+    );
   };
+
+  /**
+   * Search for threads in a project with optional filtering.
+   *
+   * Threads represent conversations or sessions that group related traces together.
+   * This method allows you to search and filter threads using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
+   * @param options.maxResults - Maximum number of threads to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many threads are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of threads
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all threads in a project
+   * const threads = await client.searchThreads({ projectName: "My Project" });
+   *
+   * // Filter by status
+   * const activeThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'status = "active"'
+   * });
+   *
+   * // Filter by feedback score
+   * const highQualityThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'feedback_scores.quality > 0.8'
+   * });
+   *
+   * // Wait for at least 5 threads
+   * const threads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchThreads = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TraceThread[]> => {
+    return this.executeSearch<OpikApi.TraceThread, OpikApi.TraceThreadFilter>(
+      "threads",
+      options ?? {},
+      parseThreadFilterString,
+      searchThreadsWithFilters
+    );
+  };
+
+  /**
+   * Search for spans in a project with optional filtering.
+   *
+   * Spans represent individual operations or steps within traces, such as LLM calls or function executions.
+   * This method allows you to search and filter spans using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: model, provider, type, metadata, feedback_scores, usage, duration, etc.
+   *   Examples: 'model = "gpt-4"', 'provider = "openai"', 'type = "llm"', 'metadata.version = "1.0"'
+   * @param options.maxResults - Maximum number of spans to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many spans are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of spans
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all spans in a project
+   * const spans = await client.searchSpans({ projectName: "My Project" });
+   *
+   * // Filter by model
+   * const gpt4Spans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'model = "gpt-4"'
+   * });
+   *
+   * // Filter by provider and type
+   * const openaiLLMSpans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'provider = "openai" and type = "llm"'
+   * });
+   *
+   * // Filter by metadata
+   * const prodSpans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'metadata.environment = "production"'
+   * });
+   *
+   * // Wait for at least 5 spans
+   * const spans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchSpans = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.SpanPublic[]> => {
+    return this.executeSearch<OpikApi.SpanPublic, OpikApi.SpanFilterPublic>(
+      "spans",
+      options ?? {},
+      parseSpanFilterString,
+      searchSpansWithFilters
+    );
+  };
+
+  private logFeedbackScores(
+    scores: FeedbackScoreData[],
+    batchQueue: TraceFeedbackScoresBatchQueue | SpanFeedbackScoresBatchQueue
+  ): void {
+    for (const score of scores) {
+      batchQueue.create({
+        ...score,
+        projectName: score.projectName ?? this.config.projectName,
+        source: FeedbackScoreBatchItemSource.Sdk,
+      });
+    }
+  }
+
+  /**
+   * Log feedback scores to existing traces in batch.
+   *
+   * @param scores - Array of feedback score data with trace IDs
+   *
+   * @example
+   * ```typescript
+   * client.logTracesFeedbackScores([
+   *   { id: "trace-id-1", name: "quality", value: 0.9, reason: "Good response" },
+   *   { id: "trace-id-2", name: "relevance", value: 0.8 }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logTracesFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.traceFeedbackScoresBatchQueue);
+  }
+
+  /**
+   * Log feedback scores to existing spans in batch.
+   *
+   * @param scores - Array of feedback score data with span IDs
+   *
+   * @example
+   * ```typescript
+   * client.logSpansFeedbackScores([
+   *   { id: "span-id-1", name: "accuracy", value: 0.95 },
+   *   { id: "span-id-2", name: "completeness", value: 0.85, reason: "Missing details" }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logSpansFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
+  }
 
   public flush = async () => {
     logger.debug("Starting flush operation");

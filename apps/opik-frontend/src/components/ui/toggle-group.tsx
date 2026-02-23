@@ -18,6 +18,7 @@ const toggleGroupVariants = cva(
     variants: {
       variant: {
         default: "border border-border p-[3px]",
+        secondary: "border border-border p-[3px]",
         outline: "",
         ghost: "border border-border p-1",
       },

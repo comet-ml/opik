@@ -4,19 +4,20 @@ import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { cn, formatNumericData } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
+  formatScoreDisplay,
 } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
-import { ThreadStatus } from "@/types/thread";
 import { ROW_HEIGHT } from "@/types/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
@@ -61,9 +62,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
-  const isEditingEnabled =
-    (!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
-    enableUserFeedbackEditing;
+  // Editing is now enabled for all threads regardless of status
+  const isEditingEnabled = enableUserFeedbackEditing;
 
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
@@ -119,7 +119,7 @@ const FeedbackScoreAggregationCell = <TData,>(
   context: CellContext<TData, string>,
 ) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { accessorFn, dataFormatter = formatNumericData } = (custom ??
+  const { accessorFn, dataFormatter = formatScoreDisplay } = (custom ??
     {}) as CustomMeta;
 
   const rowId = context.row.id;
@@ -138,7 +138,13 @@ const FeedbackScoreAggregationCell = <TData,>(
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="truncate text-light-slate">{value}</span>
+      {isNumber(rawValue) ? (
+        <TooltipWrapper content={String(rawValue)}>
+          <span className="truncate text-light-slate">{value}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate text-light-slate">{value}</span>
+      )}
     </CellWrapper>
   );
 };

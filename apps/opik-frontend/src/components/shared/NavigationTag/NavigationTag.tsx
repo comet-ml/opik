@@ -13,6 +13,7 @@ type NavigationTagProps = {
   search?: Record<string, string | number | string[] | Filter[]>;
   tooltipContent?: string;
   className?: string;
+  isSmall?: boolean;
 };
 
 const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
@@ -22,6 +23,7 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
   search,
   tooltipContent,
   className,
+  isSmall = false,
 }) => {
   const resourceLabel = RESOURCE_MAP[resource].label;
   const defaultTooltipContent = `Navigate to ${resourceLabel}: ${name}`;
@@ -38,6 +40,7 @@ const NavigationTag: React.FunctionComponent<NavigationTagProps> = ({
       iconsSize={3}
       gapSize={1}
       asTag
+      isSmall={isSmall}
     />
   );
 };

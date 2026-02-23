@@ -71,7 +71,6 @@ class LlmProviderAnthropic implements LlmProviderService {
         if (request.maxCompletionTokens() == null) {
             throw new BadRequestException(ERROR_NO_COMPLETION_TOKENS);
         }
-
     }
 
     @Override

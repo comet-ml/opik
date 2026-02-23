@@ -41,13 +41,13 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -447,7 +447,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         List.of(), // No added items
                                         List.of(patchedItemWithId), // Single edited item
                                         Set.of(), // No deleted items
-                                        unchangedUuids)
+                                        unchangedUuids,
+                                        Set.of())
                                         .map(itemsTotal -> {
                                             log.info("Applied patch delta to dataset '{}': itemsTotal '{}'",
                                                     datasetId, itemsTotal);
@@ -460,6 +461,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     baseVersionId,
                                                     null, // No tags
                                                     "Updated 1 item",
+                                                    null, // Inherit evaluators from base version
+                                                    null, // Inherit execution policy from base version
+                                                    false, // Don't clear execution policy
                                                     null, // No batch group ID
                                                     workspaceId,
                                                     userName);
@@ -639,7 +643,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                             List.of(), // No added items
                                                             List.of(), // No edited items (already done via batch update)
                                                             batchUpdate.ids(), // Exclude updated items from copy
-                                                            unchangedUuids)
+                                                            unchangedUuids,
+                                                            Set.of())
                                                     .flatMap(unchangedCount -> createVersionMetadata(
                                                             datasetId, newVersionId, baseVersionId,
                                                             updatedCount, unchangedCount, false,
@@ -761,6 +766,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 baseVersionId,
                 null, // No tags
                 changeDescription,
+                null, // Inherit evaluators from base version
+                null, // Inherit execution policy from base version
+                false, // Don't clear execution policy
                 null, // No batch group ID
                 workspaceId,
                 userName);
@@ -1105,6 +1113,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId, // Pass batch group ID
                                         workspaceId,
                                         userName);
@@ -1230,7 +1241,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 List.of(), // No added items
                 List.of(), // No edited items
                 deletedIds,
-                unchangedUuids)
+                unchangedUuids,
+                Set.of())
                 .map(itemsTotal -> {
                     log.info("Applied deletion delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -1242,6 +1254,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             baseVersionId,
                             null, // No tags
                             null, // No change description (auto-generated)
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -1445,6 +1460,37 @@ class DatasetItemServiceImpl implements DatasetItemService {
             // The baseVersion is the version ID directly (not a hash or tag)
             UUID baseVersionId = changes.baseVersion();
 
+            // No base version: create the first version (metadata only, no item delta)
+            if (baseVersionId == null) {
+                if (!override) {
+                    return Mono.error(new BadRequestException(
+                            "baseVersion is required. Use override=true to create the first version without a base."));
+                }
+                if (versionService.hasVersions(workspaceId, datasetId)) {
+                    return Mono.error(new BadRequestException(
+                            "baseVersion is required when the dataset already has versions."));
+                }
+                boolean hasItems = (changes.addedItems() != null && !changes.addedItems().isEmpty())
+                        || (changes.editedItems() != null && !changes.editedItems().isEmpty())
+                        || (changes.deletedIds() != null && !changes.deletedIds().isEmpty());
+                if (hasItems) {
+                    return Mono.error(new BadRequestException(
+                            "addedItems, editedItems, and deletedIds must be empty when baseVersion is null."));
+                }
+                UUID newVersionId = idGenerator.generateId();
+                return Mono.fromCallable(() -> {
+                    DatasetVersion version = versionService.createVersionFromDelta(
+                            datasetId, newVersionId, 0, null,
+                            changes.tags(), changes.changeDescription(),
+                            changes.evaluators(), changes.executionPolicy(),
+                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
+                            null, workspaceId, userName);
+                    log.info("Created first version '{}' for dataset '{}' with hash '{}'",
+                            version.id(), datasetId, version.versionHash());
+                    return version;
+                });
+            }
+
             // Verify the base version exists and get its item count
             DatasetVersion baseVersion = versionService.getVersionById(workspaceId, datasetId, baseVersionId);
             int baseVersionItemCount = baseVersion.itemsTotal();
@@ -1469,15 +1515,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
             List<DatasetItem> addedItems = prepareAddedItems(changes, datasetId);
             Set<UUID> deletedRowIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
-            // Prepare edited items and map deleted row IDs to stable IDs (both reactive)
-            Mono<List<DatasetItem>> editedItemsMono = prepareEditedItemsWithMerge(changes, datasetId,
-                    baseVersionId);
+            // Resolve edited item row IDs to stable dataset_item_ids (no fetch needed)
+            List<DatasetItemEdit> editedItemEdits = changes.editedItems() != null ? changes.editedItems() : List.of();
+            Set<UUID> editedRowIds = editedItemEdits.stream()
+                    .map(DatasetItemEdit::id)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            Mono<Map<UUID, UUID>> editMappingsMono = resolveEditMappings(editedRowIds);
             Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
 
-            return Mono.zip(editedItemsMono, deletedItemIdsMono)
+            return Mono.zip(editMappingsMono, deletedItemIdsMono)
                     .flatMap(tuple -> {
-                        List<DatasetItem> editedItems = tuple.getT1();
+                        Map<UUID, UUID> rowIdToDatasetItemId = tuple.getT1();
                         Set<UUID> deletedIds = tuple.getT2();
+
+                        Set<UUID> editedDatasetItemIds = new HashSet<>(rowIdToDatasetItemId.values());
 
                         // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
                         // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
@@ -1488,21 +1541,25 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // However, we reverse the unchanged UUID pool to maintain original order
                         List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
-
-                        List<UUID> editedUuids = generateUuidPool(idGenerator, editedItems.size());
+                        List<UUID> editedUuids = generateUuidPool(idGenerator, editedItemEdits.size());
                         List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                        // Assign row IDs to edited and added items
-                        List<DatasetItem> editedItemsWithIds = withAssignedRowIds(editedItems, editedUuids);
                         List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
-                        // Apply delta changes via DAO
-                        return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                addedItemsWithIds, editedItemsWithIds, deletedIds, unchangedUuids)
+                        // Edit items via INSERT...SELECT (merge happens in SQL, not Java)
+                        Mono<Long> editedCountMono = versionDao.editItemsViaSelectInsert(
+                                datasetId, baseVersionId, newVersionId,
+                                editedItemEdits, rowIdToDatasetItemId, editedUuids);
+
+                        // Apply delta for added items + copy unchanged (exclude edited + deleted)
+                        return editedCountMono
+                                .flatMap(editedCount -> versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                        addedItemsWithIds, List.of(), deletedIds, unchangedUuids,
+                                        editedDatasetItemIds)
+                                        .map(otherCount -> editedCount + otherCount))
                                 .map(itemsTotal -> {
                                     log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
-                                    // Create version metadata
                                     DatasetVersion version = versionService.createVersionFromDelta(
                                             datasetId,
                                             newVersionId,
@@ -1510,6 +1567,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             baseVersionId,
                                             changes.tags(),
                                             changes.changeDescription(),
+                                            changes.evaluators(),
+                                            changes.executionPolicy(),
+                                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
                                             null, // No batch group ID
                                             workspaceId,
                                             userName);
@@ -1545,113 +1605,28 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .toList();
     }
 
-    /**
-     * Prepares edited items by fetching existing items and merging partial changes.
-     * The frontend may send partial updates (e.g., only the 'data' field), so we need to
-     * fetch the existing item and merge the changes to preserve fields like 'source', 'tags', etc.
-     */
-    private Mono<List<DatasetItem>> prepareEditedItemsWithMerge(DatasetItemChanges changes, UUID datasetId,
-            UUID baseVersionId) {
-        if (changes.editedItems() == null || changes.editedItems().isEmpty()) {
-            return Mono.just(List.of());
+    private Mono<Map<UUID, UUID>> resolveEditMappings(Set<UUID> editedRowIds) {
+        if (editedRowIds.isEmpty()) {
+            return Mono.just(Map.of());
         }
 
-        // Extract row IDs from the edited items (the frontend sends 'id' which is the row ID)
-        Set<UUID> rowIds = changes.editedItems().stream()
-                .map(DatasetItemEdit::id)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        if (rowIds.isEmpty()) {
-            return Mono.error(new ClientErrorException(
-                    Response.status(Response.Status.BAD_REQUEST)
-                            .entity(new ErrorMessage(
-                                    List.of("Edited items must have an id or datasetItemId")))
-                            .build()));
-        }
-
-        // First, map row IDs to stable dataset_item_ids and fetch existing items
-        return versionDao.mapRowIdsToDatasetItemIds(rowIds)
+        return versionDao.mapRowIdsToDatasetItemIds(editedRowIds)
                 .collectList()
                 .flatMap(mappings -> {
-                    if (mappings.isEmpty()) {
-                        log.warn("No items found for provided row IDs: {}", rowIds);
-                        return Mono.error(new ClientErrorException(
-                                Response.status(Response.Status.NOT_FOUND)
-                                        .entity(new ErrorMessage(List.of("Items not found for the provided IDs")))
-                                        .build()));
-                    }
-
-                    // Create map from row ID to mapping for quick lookup
-                    Map<UUID, DatasetItemVersionDAO.DatasetItemIdMapping> rowIdToMapping = mappings.stream()
+                    Map<UUID, UUID> map = mappings.stream()
                             .collect(Collectors.toMap(
                                     DatasetItemVersionDAO.DatasetItemIdMapping::rowId,
-                                    Function.identity()));
+                                    DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId));
 
-                    // Get the stable dataset_item_ids to fetch the full items
-                    Set<UUID> datasetItemIds = mappings.stream()
-                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
+                    Set<UUID> missing = editedRowIds.stream()
+                            .filter(id -> !map.containsKey(id))
                             .collect(Collectors.toSet());
 
-                    // Fetch the existing items from the base version
-                    return versionDao.getItemsByDatasetItemIds(datasetId, baseVersionId, datasetItemIds)
-                            .collectList()
-                            .map(existingItems -> {
-                                // Create map from dataset_item_id to existing item
-                                Map<UUID, DatasetItem> existingItemMap = existingItems.stream()
-                                        .collect(Collectors.toMap(
-                                                DatasetItem::datasetItemId,
-                                                Function.identity()));
-
-                                // Merge partial changes with existing items
-                                return changes.editedItems().stream()
-                                        .map(editItem -> {
-                                            UUID rowId = editItem.id();
-                                            DatasetItemVersionDAO.DatasetItemIdMapping mapping = rowIdToMapping
-                                                    .get(rowId);
-                                            if (mapping == null) {
-                                                throw new ClientErrorException(
-                                                        Response.status(Response.Status.NOT_FOUND)
-                                                                .entity(new ErrorMessage(List.of(
-                                                                        "Item not found for ID: " + rowId)))
-                                                                .build());
-                                            }
-
-                                            DatasetItem existingItem = existingItemMap.get(mapping.datasetItemId());
-                                            if (existingItem == null) {
-                                                throw new ClientErrorException(
-                                                        Response.status(Response.Status.NOT_FOUND)
-                                                                .entity(new ErrorMessage(List.of(
-                                                                        "Item not found: " + mapping.datasetItemId())))
-                                                                .build());
-                                            }
-
-                                            // Merge: use edit values if present, otherwise use existing
-                                            return mergeEditWithExisting(existingItem, editItem,
-                                                    mapping.datasetItemId(), datasetId);
-                                        })
-                                        .toList();
-                            });
+                    if (!missing.isEmpty()) {
+                        return Mono.error(failWithNotFound("Items not found for IDs: " + missing));
+                    }
+                    return Mono.just(map);
                 });
-    }
-
-    /**
-     * Merges a DatasetItemEdit (partial update) with an existing item.
-     * Fields from the edit override the existing item only if they are non-null.
-     */
-    private DatasetItem mergeEditWithExisting(DatasetItem existingItem, DatasetItemEdit editItem,
-            UUID datasetItemId, UUID datasetId) {
-        return existingItem.toBuilder()
-                .datasetItemId(datasetItemId) // Set stable ID
-                .datasetId(datasetId)
-                .data(editItem.data() != null ? editItem.data() : existingItem.data())
-                // Source, traceId, spanId are always preserved from existing item
-                .tags(editItem.tags() != null ? editItem.tags() : existingItem.tags())
-                // Always preserve original creation time
-                .lastUpdatedAt(existingItem.lastUpdatedAt() != null
-                        ? existingItem.lastUpdatedAt()
-                        : existingItem.lastUpdatedAt())
-                .build();
     }
 
     /**
@@ -1969,6 +1944,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             null, // No base version for first version
                             null, // No tags
                             changeDescription,
+                            null, // Inherit evaluators from base version
+                            null, // Inherit execution policy from base version
+                            false, // Don't clear execution policy
                             batchGroupId, // Include batch group ID if provided
                             workspaceId,
                             userName);
@@ -2037,7 +2015,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                     // Apply delta changes - no deletions in PUT flow
                     return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                            addedItemsWithIds, editedItems, Set.of(), unchangedUuids)
+                            addedItemsWithIds, editedItems, Set.of(), unchangedUuids,
+                            Set.of())
                             .map(itemsTotal -> {
                                 log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -2054,6 +2033,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         baseVersionId,
                                         null, // No tags
                                         changeDescription,
+                                        null, // Inherit evaluators from base version
+                                        null, // Inherit execution policy from base version
+                                        false, // Don't clear execution policy
                                         batchGroupId, // Include batch group ID if provided
                                         workspaceId,
                                         userName);

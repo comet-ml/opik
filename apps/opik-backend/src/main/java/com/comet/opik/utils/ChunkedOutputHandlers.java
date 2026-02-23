@@ -20,7 +20,8 @@ public class ChunkedOutputHandlers {
             return;
         }
         try {
-            chunkedOutput.write(JsonUtils.writeValueAsString(item));
+            // Add "data: " prefix for SSE format compatibility with OpenAI SDK and LiteLLM
+            chunkedOutput.write("data: " + JsonUtils.writeValueAsString(item));
         } catch (IOException ioException) {
             throw new UncheckedIOException(ioException);
         }
@@ -28,6 +29,10 @@ public class ChunkedOutputHandlers {
 
     public void handleClose() {
         try {
+            // Send the [DONE] marker to signal end of stream per OpenAI SSE format
+            if (!chunkedOutput.isClosed()) {
+                chunkedOutput.write("data: [DONE]");
+            }
             chunkedOutput.close();
         } catch (IOException ioException) {
             log.error("Failed to close output stream", ioException);

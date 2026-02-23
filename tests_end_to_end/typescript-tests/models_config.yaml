@@ -35,9 +35,9 @@ providers:
         test_online_scoring: true
       - name: "GPT 4o"
         ui_selector: "GPT 4o"
-        enabled: true
-        test_playground: true
-        test_online_scoring: true
+        enabled: false
+        test_playground: false
+        test_online_scoring: false
       - name: "GPT 4o Mini"
         ui_selector: "GPT 4o Mini"
         enabled: true

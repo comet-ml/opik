@@ -2,15 +2,19 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContext;
@@ -37,6 +41,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 workspace_id,
                 timeout_mark_thread_as_inactive,
                 truncation_on_tables,
+                color_map,
                 created_at,
                 last_updated_at,
                 created_by,
@@ -46,6 +51,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 new_config.workspace_id,
                 new_config.timeout_mark_thread_as_inactive,
                 new_config.truncation_on_tables,
+                new_config.color_map,
                 if(empty(wc.workspace_id), new_config.created_at, wc.created_at),
                 new_config.last_updated_at,
                 if(empty(wc.workspace_id), new_config.created_by, wc.created_by),
@@ -55,6 +61,7 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                     :workspace_id AS workspace_id,
                     :timeout_seconds AS timeout_mark_thread_as_inactive,
                     :truncation_on_tables AS truncation_on_tables,
+                    :color_map AS color_map,
                     now64(9) AS created_at,
                     now64(6) AS last_updated_at,
                     :user_name AS created_by,
@@ -66,7 +73,8 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
     private static final String GET_CONFIGURATION_SQL = """
             SELECT
                 timeout_mark_thread_as_inactive,
-                truncation_on_tables
+                truncation_on_tables,
+                color_map
             FROM workspace_configurations final
             WHERE workspace_id = :workspace_id
             """;
@@ -75,6 +83,9 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
             DELETE FROM workspace_configurations
             WHERE workspace_id = :workspace_id
             """;
+
+    private static final TypeReference<Map<String, String>> COLOR_MAP_TYPE_REF = new TypeReference<>() {
+    };
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
@@ -96,6 +107,12 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
                 statement.bind("truncation_on_tables", configuration.truncationOnTables());
             } else {
                 statement.bindNull("truncation_on_tables", Boolean.class);
+            }
+
+            if (configuration.colorMap() != null && !configuration.colorMap().isEmpty()) {
+                statement.bind("color_map", JsonUtils.writeValueAsString(configuration.colorMap()));
+            } else {
+                statement.bind("color_map", "");
             }
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
@@ -120,9 +137,15 @@ class WorkspaceConfigurationDAOImpl implements WorkspaceConfigurationDAO {
 
                         Boolean truncationOnTables = row.get("truncation_on_tables", Boolean.class);
 
+                        String colorMapJson = row.get("color_map", String.class);
+                        Map<String, String> colorMap = StringUtils.isNotEmpty(colorMapJson)
+                                ? JsonUtils.readValue(colorMapJson, COLOR_MAP_TYPE_REF)
+                                : null;
+
                         return WorkspaceConfiguration.builder()
                                 .timeoutToMarkThreadAsInactive(timeout)
                                 .truncationOnTables(truncationOnTables)
+                                .colorMap(colorMap)
                                 .build();
                     })));
         });

@@ -13,6 +13,7 @@ import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Label } from "@/components/ui/label";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { supportsGeminiThinkingLevel } from "@/lib/modelUtils";
 
 interface geminiModelConfigsProps {
   configs: LLMGeminiConfigsType;
@@ -25,9 +26,8 @@ const GeminiModelConfigs = ({
   model,
   onChange,
 }: geminiModelConfigsProps) => {
-  const isGemini3Pro = model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO;
+  const hasThinkingLevel = supportsGeminiThinkingLevel(model);
   const isGemini3Flash = model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH;
-  const hasThinkingLevel = isGemini3Pro || isGemini3Flash;
 
   // Get appropriate options based on model
   // Flash supports all 4 levels (minimal, low, medium, high)

@@ -4077,4 +4077,45 @@ class PromptResourceTest {
             });
         }
     }
+
+    @Nested
+    @DisplayName("Prompt Last Updated At")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptLastUpdatedAt {
+
+        @Test
+        @DisplayName("when creating a new prompt version, then prompt lastUpdatedAt is updated")
+        void createPromptVersion__thenPromptLastUpdatedAtIsUpdated() throws InterruptedException {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            Prompt createdPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            Instant initialLastUpdatedAt = createdPrompt.lastUpdatedAt();
+
+            Thread.sleep(10);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .createdBy(USER)
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            Prompt updatedPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+
+            assertThat(updatedPrompt.lastUpdatedAt()).isAfter(initialLastUpdatedAt);
+        }
+    }
 }

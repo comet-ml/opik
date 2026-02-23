@@ -228,6 +228,44 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
 
 </CodeBlocks>
 
+### Filtering dataset items
+
+You can evaluate only a subset of your dataset items by using the `dataset_filter_string` parameter. This is useful when you want to run experiments on specific categories of data:
+
+<CodeBlocks>
+    ```python title="Python" language="python"
+    import opik
+    from opik.evaluation import evaluate_prompt
+
+    # Create or get a dataset
+    opik_client = opik.Opik()
+    dataset = opik_client.get_or_create_dataset("my_dataset")
+
+    # Evaluate only items with specific tags
+    evaluate_prompt(
+        dataset=dataset,
+        messages=[
+            {"role": "user", "content": "Translate the following text to French: {{input}}"},
+        ],
+        model="gpt-3.5-turbo",
+        dataset_filter_string='tags contains "production"',
+    )
+
+    # Evaluate items matching multiple conditions
+    evaluate_prompt(
+        dataset=dataset,
+        messages=[
+            {"role": "user", "content": "Answer the question: {{question}}"},
+        ],
+        model="gpt-4",
+        dataset_filter_string='data.category = "finance" AND data.difficulty = "hard"',
+    )
+    ```
+
+</CodeBlocks>
+
+The filter uses Opik Query Language (OQL) syntax. For more details on filter syntax and supported columns, see [Filtering syntax](/evaluation/manage_datasets#filter-syntax).
+
 ## Next steps
 
 To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm) function.

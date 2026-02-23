@@ -46,7 +46,7 @@ import AddDatasetItemSidebar from "./AddDatasetItemSidebar";
 import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
@@ -86,11 +86,15 @@ const transformDataColumnFilters = (filters: Filters): Filters => {
 const getRowId = (d: DatasetItem) => d.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at", "tags"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
+  "created_at",
+  "tags",
+];
 
 const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
@@ -339,16 +343,27 @@ const DatasetItemsPage = () => {
   });
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = dynamicDatasetColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          accessorFn: (row) => get(row, ["data", label], ""),
-          cell: AutodetectCell as never,
-        }) as ColumnData<DatasetItem>,
-    );
+    const retVal: ColumnData<DatasetItem>[] = [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: LinkCell as never,
+        customMeta: {
+          asId: true,
+        },
+      },
+      ...dynamicDatasetColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            accessorFn: (row) => get(row, ["data", label], ""),
+            cell: AutodetectCell as never,
+          }) as ColumnData<DatasetItem>,
+      ),
+    ];
 
     retVal.push({
       id: "tags",
@@ -415,27 +430,22 @@ const DatasetItemsPage = () => {
   );
 
   const columns = useMemo(() => {
+    const convertedColumns = convertColumnDataToColumn<
+      DatasetItem,
+      DatasetItem
+    >(columnsData, {
+      columnsOrder,
+      selectedColumns,
+    });
+
     return [
       generateSelectColumDef<DatasetItem>(),
-      mapColumnDataFields<DatasetItem, DatasetItem>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-      }),
-      ...convertColumnDataToColumn<DatasetItem, DatasetItem>(columnsData, {
-        columnsOrder,
-        selectedColumns,
-      }),
+      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
       generateActionsColumDef({
         cell: DatasetItemRowActionsCell,
       }),
     ];
-  }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
+  }, [columnsData, columnsOrder, selectedColumns, handleRowClick]);
 
   const columnsToExport = useMemo(() => {
     return columns

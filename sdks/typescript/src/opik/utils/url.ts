@@ -8,8 +8,8 @@
 export const URL_PATHS = {
   REDIRECT_BASE: "v1/session/redirect",
   EXPERIMENTS: "api/v1/session/redirect/experiments/",
-  PROJECTS: "v1/session/redirect/projects/",
-  DATASETS: "v1/session/redirect/datasets/",
+  PROJECTS: "api/v1/session/redirect/projects/",
+  DATASETS: "api/v1/session/redirect/datasets/",
   PROJECT_BY_NAME: "redirect/projects",
 };
 

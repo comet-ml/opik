@@ -1,5 +1,6 @@
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "../../dataset/Dataset";
+import { DatasetVersion } from "../../dataset/DatasetVersion";
 import { Experiment } from "../../experiment/Experiment";
 import { BaseMetric } from "../metrics/BaseMetric";
 import {
@@ -22,12 +23,16 @@ import { SpanType } from "@/rest_api/api";
 import { getSourceObjValue } from "@/utils/common";
 import ora from "ora";
 
+type DatasetOrVersion<T extends DatasetItemData> =
+  | Dataset<T>
+  | DatasetVersion<T>;
+
 /**
  * Core class that handles the evaluation process
  */
 export class EvaluationEngine<T = Record<string, unknown>> {
   private readonly client: OpikClient;
-  private readonly dataset: Dataset<
+  private readonly dataset: DatasetOrVersion<
     T extends DatasetItemData ? T : DatasetItemData & T
   >;
   private readonly task: EvaluationTask<T>;
@@ -121,6 +126,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         new ExperimentItemReferences({
           datasetItemId: datasetItem.id,
           traceId: this.rootTrace.data.id,
+          projectName: this.rootTrace.data.projectName,
         })
       );
 

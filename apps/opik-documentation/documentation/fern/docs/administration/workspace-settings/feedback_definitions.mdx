@@ -1,0 +1,46 @@
+---
+description: Configure custom feedback types for evaluating LLM outputs
+headline: Feedback definitions | Opik Documentation
+og:description: Create and manage custom labels to systematically collect and analyze
+  structured feedback on LLM outputs with Opik.
+og:site_name: Opik Documentation
+og:title: Feedback Definitions - Opik
+title: Feedback Definitions
+---
+
+Feedback definitions allow you to create custom labels to systematically collect and analyze structured feedback on your LLM outputs.
+
+## Using Feedback Definitions
+
+Once created, feedback definitions appear in two places:
+
+1. **Trace and thread sidebars** — Add scores when reviewing individual items.
+2. **Annotation queues** — Pick which definitions annotators see when you create a queue.
+
+<Frame>
+  <img src="/img/administration/annotation_queue.png" alt="Annotation Queue Feedback Selection" />
+</Frame>
+
+<Tip>
+You can also log feedback scores programmatically using the SDK. See the [SDK documentation](/reference/overview) for details.
+</Tip>
+
+## Creating a Feedback Definition
+
+<Frame>
+  <img src="/img/configuration/new_feedback_definition.png" alt="New Feedback Definition Modal" />
+</Frame>
+
+1. Click **Create new feedback definition**
+2. Enter a **Name** for your feedback definition
+3. Select the **Type**: Categorical or Numerical
+4. Define the **Values** (for Categorical) or **Range** (for Numerical)
+
+## Common Feedback Types
+
+| Feedback Type | Type | Values |
+| --- | --- | --- |
+| Thumbs Up / Down | Categorical | thumbs up, thumbs down |
+| Usefulness | Categorical | Useful, Neutral, Not useful |
+| Hallucination | Categorical | Yes, No |
+| Correct | Categorical | Good, Bad |

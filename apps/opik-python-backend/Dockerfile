@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ##############################################################
 # Runtime stage - minimal packages only
-FROM docker:28.4.0
+FROM docker:29.2.1
 
 # First upgrading to latest available versions to mitigate CVEs
 RUN apk add --no-cache --upgrade libexpat

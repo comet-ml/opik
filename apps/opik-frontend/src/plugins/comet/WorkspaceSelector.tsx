@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, ChevronLeft, ChevronUp, Settings2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -16,11 +16,12 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/ui/use-toast";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useUser from "@/plugins/comet/useUser";
@@ -63,15 +64,13 @@ const WorkspaceLink: React.FC<WorkspaceLinkProps> = ({
 
 const WorkspaceSelector: React.FC = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOrgSubmenuOpen, setIsOrgSubmenuOpen] = useState(false);
 
   const { data: user } = useUser();
-  const { data: allWorkspaces, isLoading } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
+  const { data: userInvitedWorkspaces, isLoading } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
   const { data: organizations } = useOrganizations({
@@ -108,21 +107,18 @@ const WorkspaceSelector: React.FC = () => {
 
   const handleChangeOrganization = useCallback(
     (newOrganization: Organization) => {
-      // First try to find workspaces from userInvitedWorkspaces
-      let newOrganizationWorkspaces =
+      const newOrganizationWorkspaces =
         userInvitedWorkspaces?.filter(
           (workspace) => workspace.organizationId === newOrganization.id,
         ) || [];
 
-      // If no invited workspaces found, fall back to allWorkspaces
       if (newOrganizationWorkspaces.length === 0) {
-        newOrganizationWorkspaces =
-          allWorkspaces?.filter(
-            (workspace) => workspace.organizationId === newOrganization.id,
-          ) || [];
+        toast({
+          description: `You are not part of any workspaces in ${newOrganization.name}, please ask to be invited to one`,
+          variant: "destructive",
+        });
+        return;
       }
-
-      if (newOrganizationWorkspaces.length === 0) return;
 
       const newWorkspace =
         newOrganizationWorkspaces.find((workspace) => workspace.default) ||
@@ -135,7 +131,7 @@ const WorkspaceSelector: React.FC = () => {
         });
       }
     },
-    [navigate, userInvitedWorkspaces, allWorkspaces],
+    [navigate, userInvitedWorkspaces, toast],
   );
 
   const handleOrgSettingsClick = useCallback(() => {
@@ -147,32 +143,27 @@ const WorkspaceSelector: React.FC = () => {
     }
   }, [currentOrganization, workspaceName]);
 
-  // Filter out default workspace from selectable options
-  const selectableWorkspaces = useMemo(() => {
-    if (!allWorkspaces) return [];
-    return allWorkspaces.filter(
-      (workspace) => workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
+  // Filter member workspaces (workspaces user is invited to) by current organization
+  // Excludes default workspace from selectable options
+  const memberWorkspaces = useMemo(() => {
+    if (!userInvitedWorkspaces || !currentOrganization) return [];
+    return userInvitedWorkspaces.filter(
+      (workspace) =>
+        workspace.organizationId === currentOrganization.id &&
+        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
     );
-  }, [allWorkspaces]);
-
-  // Get workspaces for current organization
-  const currentOrgWorkspaces = useMemo(() => {
-    if (!selectableWorkspaces || !currentOrganization) return [];
-    return selectableWorkspaces.filter(
-      (workspace) => workspace.organizationId === currentOrganization.id,
-    );
-  }, [selectableWorkspaces, currentOrganization]);
+  }, [userInvitedWorkspaces, currentOrganization]);
 
   // Filter workspaces by search query
   const filteredWorkspaces = useMemo(() => {
-    if (!search) return currentOrgWorkspaces;
+    if (!search) return memberWorkspaces;
 
     const searchLower = toLower(search);
-    return currentOrgWorkspaces.filter((workspace) => {
+    return memberWorkspaces.filter((workspace) => {
       const displayName = calculateWorkspaceName(workspace.workspaceName);
       return toLower(displayName).includes(searchLower);
     });
-  }, [currentOrgWorkspaces, search]);
+  }, [memberWorkspaces, search]);
 
   // Sort workspaces and organizations
   const sortedWorkspaces = useMemo(
@@ -187,10 +178,9 @@ const WorkspaceSelector: React.FC = () => {
 
   // Simple computed values - no memoization needed
   const hasMultipleOrganizations = organizations && organizations.length > 1;
-  const hasSelectableWorkspaces = currentOrgWorkspaces.length > 0;
+  const hasMemberWorkspaces = memberWorkspaces.length > 0;
   // Show dropdown if there are workspaces to select OR if user can switch orgs
-  const shouldShowDropdown =
-    hasSelectableWorkspaces || hasMultipleOrganizations;
+  const shouldShowDropdown = hasMemberWorkspaces || hasMultipleOrganizations;
   const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   // Loading state
@@ -203,7 +193,7 @@ const WorkspaceSelector: React.FC = () => {
   }
 
   // Not logged in or missing data - show simple link
-  if (!user?.loggedIn || !allWorkspaces || !organizations) {
+  if (!user?.loggedIn || !organizations) {
     return <WorkspaceLink workspaceName={workspaceName} />;
   }
 
@@ -268,15 +258,7 @@ const WorkspaceSelector: React.FC = () => {
                   <DropdownMenuSubTrigger className="size-6 justify-center p-0 text-light-slate [&>svg]:ml-0" />
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[244px] p-1">
-                      <div className="flex items-center gap-1 p-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-2xs"
-                          onClick={() => setIsOrgSubmenuOpen(false)}
-                          className="shrink-0 text-muted-slate hover:bg-primary-foreground hover:text-muted-slate"
-                        >
-                          <ChevronLeft className="size-3.5" />
-                        </Button>
+                      <div className="flex items-center gap-1 p-2 pl-8">
                         <span className="comet-body-s-accented text-foreground">
                           Switch organization
                         </span>
@@ -370,14 +352,11 @@ const WorkspaceSelector: React.FC = () => {
 
           {/* Manage Workspaces */}
           <DropdownMenuSeparator className="my-1" />
-          <div className="flex items-center justify-center py-1">
-            <a
-              href={buildUrl("account-settings/workspaces", workspaceName)}
-              className="comet-body-xs flex h-6 cursor-pointer items-center text-primary hover:underline"
-            >
+          <ListAction asChild>
+            <a href={buildUrl("account-settings/workspaces", workspaceName)}>
               Manage workspaces
             </a>
-          </div>
+          </ListAction>
         </DropdownMenuContent>
       </DropdownMenu>
     </WorkspaceLink>

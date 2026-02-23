@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
+import { WORKSPACE_USERS_ROLES_QUERY_KEY } from "./useWorkspaceUsersRoles";
 
 export interface UpdateWorkspaceUserRoleVariables {
   userName: string;
@@ -43,7 +44,7 @@ export function useUpdateWorkspaceUserRoleMutation() {
       toast({ description: "User role has been successfully updated." });
       queryClient.invalidateQueries({
         queryKey: [
-          "workspace-users-roles",
+          WORKSPACE_USERS_ROLES_QUERY_KEY,
           { workspaceId: variables.workspaceId },
         ],
       });

@@ -3,9 +3,10 @@ import { CellContext } from "@tanstack/react-table";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 
-import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import PercentageTrend from "@/components/shared/PercentageTrend/PercentageTrend";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type CustomMeta = {
   scoreMap: Record<string, { score: number; percentage?: number }>;
@@ -22,9 +23,13 @@ const ObjectiveScoreCell = (context: CellContext<unknown, unknown>) => {
       tableMetadata={context.table.options.meta}
       className="gap-2"
     >
-      {isNumber(scoreMap[id]?.score)
-        ? formatNumericData(scoreMap[id]?.score)
-        : "-"}
+      {isNumber(scoreMap[id]?.score) ? (
+        <TooltipWrapper content={String(scoreMap[id]?.score)}>
+          <span>{formatScoreDisplay(scoreMap[id]?.score)}</span>
+        </TooltipWrapper>
+      ) : (
+        "-"
+      )}
       <PercentageTrend percentage={scoreMap[id]?.percentage} />
     </CellWrapper>
   );

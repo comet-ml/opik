@@ -26,12 +26,13 @@ Feedback & Evaluation Clients
 .. toctree::
    :maxdepth: 1
    
+   annotation_queues
    feedback_definitions
    automation_rule_evaluators
    optimizations
 
-These clients manage evaluation and feedback systems: defining feedback score types,
-setting up automated evaluation rules, and running optimization experiments.
+These clients manage evaluation and feedback systems: annotation queues for human review,
+defining feedback score types, setting up automated evaluation rules, and running optimization experiments.
 
 Content & Asset Clients
 -----------------------

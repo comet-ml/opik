@@ -11,6 +11,7 @@ import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
 
 export enum OPTIMIZATION_ALGORITHMS {
   fewShotOptimizer = "FewShotBayesianOptimizer",
@@ -374,7 +375,7 @@ const AddOptimizationDialog: React.FunctionComponent<
               optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
             />
             <div className="comet-body-s mt-4 text-foreground-secondary">
-              2. Install the SDK
+              {INSTALL_SDK_SECTION_TITLE}
             </div>
             <CodeHighlighter data={section1} />
             <div className="comet-body-s mt-4 text-foreground-secondary">

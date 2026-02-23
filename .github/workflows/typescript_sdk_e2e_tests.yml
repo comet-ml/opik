@@ -17,6 +17,7 @@ env:
   OPIK_SENTRY_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   OPIK_URL_OVERRIDE: http://localhost:5173/api
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
@@ -43,6 +44,8 @@ jobs:
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
+          # Avoid Buildx Bake concurrent image export collisions in CI.
+          COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --build --guardrails
@@ -69,7 +72,7 @@ jobs:
         working-directory: sdks/typescript
         run: |
           # once OPIK-3910 is fixed we can revert to npm run test:integration
-          npm run test:ci
+          npm run test:integration
 
       - name: Keep BE log in case of failure
         if: failure()

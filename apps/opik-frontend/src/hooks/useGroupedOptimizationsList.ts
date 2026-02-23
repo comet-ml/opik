@@ -50,6 +50,8 @@ type UseGroupedOptimizationsListResponse = {
     total: number;
   };
   isPending: boolean;
+  isPlaceholderData: boolean;
+  isFetching: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
 
@@ -122,6 +124,8 @@ export default function useGroupedOptimizationsList(
   const {
     data: datasetsRowData,
     isPending: isDatasetsPending,
+    isPlaceholderData: isDatasetsPlaceholderData,
+    isFetching: isDatasetsFetching,
     refetch: refetchDatasetsRowData,
   } = useDatasetsList(
     {
@@ -290,9 +294,16 @@ export default function useGroupedOptimizationsList(
     (optimizationsResponse.length > 0 &&
       optimizationsResponse.some((r) => r.isPending));
 
+  const isPlaceholderData = isFilteredByDataset
+    ? false
+    : isDatasetsPlaceholderData;
+  const isFetching = isFilteredByDataset ? false : isDatasetsFetching;
+
   return {
     data,
     isPending,
+    isPlaceholderData,
+    isFetching,
     refetch,
   } as UseGroupedOptimizationsListResponse;
 }

@@ -1,0 +1,48 @@
+Here are the most relevant improvements we've made since the last release:
+
+## 🛠️ SDK Improvements
+
+We've significantly expanded the capabilities of both our Python and TypeScript SDKs, making it easier to integrate Opik into your workflows programmatically.
+
+**What's new:**
+
+- **Annotation Queue Support** - Both Python and TypeScript SDKs now support annotation queues, allowing you to programmatically manage and interact with your annotation workflows
+- **Dataset Versioning** - Full dataset versioning support is now available in both SDKs, giving you better control over your data lifecycle and experiment reproducibility
+- **Dataset Filtering (TypeScript)** - Filter dataset items directly from the TypeScript SDK for more efficient data retrieval
+- **Opik Query Language (TypeScript)** - The TypeScript SDK now supports Opik Query Language (OQL), enabling powerful and flexible querying of your data
+- **Feedback Scores Logging (TypeScript)** - Log feedback scores directly from the TypeScript SDK to track model quality metrics
+- **Thread Search (TypeScript)** - Search through conversation threads programmatically with the new `searchThreads` functionality
+
+👉 [Annotation Queues](https://www.comet.com/docs/opik/evaluation/annotation_queues#managing-queues-programmatically) | [Opik Query Language](https://www.comet.com/docs/opik/reference/typescript-sdk/opik-query-language) | [Dataset Versioning](https://www.comet.com/docs/opik/reference/typescript-sdk/evaluation/datasets#working-with-dataset-versions)
+
+## 🔌 LLM Provider & Integration Updates
+
+We've expanded our LLM provider support and improved integrations to give you more flexibility in your AI workflows.
+
+**What's new:**
+
+- **Ollama Provider Support** - Ollama is now available as a native provider in the Playground, enabling local LLM inference directly within Opik
+- **Claude Opus 4.6 Support** - Full support for Anthropic's latest Claude Opus 4.6 model
+- **LangChain Tool Descriptions** - Tool descriptions are now automatically extracted and added to tool spans in the LangChain integration, providing better visibility into your agent's tool usage
+
+👉 [AI Providers Documentation](https://www.comet.com/docs/opik/administration/workspace-settings/ai_providers)
+
+## ✨ Product & UX Improvements
+
+We've made several improvements to make your day-to-day workflow smoother and more intuitive.
+
+**What's improved:**
+
+- **Unified Logs View** - Traces, threads, and spans are now merged into a single Logs tab, providing a streamlined view of all your observability data in one place
+- **Image Attachments in Threads** - View image attachments directly within the thread view for better context when reviewing conversations
+- **Inline Feedback Definition Creation** - Create new feedback definitions directly from the annotation queue form without leaving your workflow
+- **Improved Table Loading** - Enhanced loading state UX across tables for a smoother experience when working with large datasets
+- **Expanded Feedback Scores** - The feedback scores section in experiment items sidebar is now expanded by default for quicker access
+- **Organization & Workspace Selectors** - New organization and workspace selectors in the sidebar and breadcrumbs make it easier to navigate between different contexts
+- **Playground Prompt Metadata** - Traces generated from the Opik Playground now include prompt metadata for better traceability
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/1.9.101...1.10.10)
+
+_Releases_: `1.9.102`, `1.9.103`, `1.9.104`, `1.10.0`, `1.10.1`, `1.10.2`, `1.10.3`, `1.10.4`, `1.10.5`, `1.10.6`, `1.10.7`, `1.10.8`, `1.10.9`, `1.10.10`

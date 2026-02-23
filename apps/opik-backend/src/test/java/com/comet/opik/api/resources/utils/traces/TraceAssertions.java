@@ -27,7 +27,7 @@ public class TraceAssertions {
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
             "spanCount", "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
-            "providers"};
+            "providers", "experiment"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
@@ -99,6 +99,8 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.PROVIDERS, it -> it.toBuilder().providers(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.EXPERIMENT, it -> it.toBuilder().experiment(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.TTFT, it -> it.toBuilder().ttft(null).build());
     }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {
@@ -135,16 +137,20 @@ public class TraceAssertions {
                 .toList();
 
         assertThat(actualTraces)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                .containsExactlyElementsOf(preparedExpectedTraces);
+                .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                .ignoringFields(IGNORED_FIELDS_TRACES)
+                .isEqualTo(preparedExpectedTraces);
 
         assertIgnoredFields(actualTraces, preparedExpectedTraces, user);
 
         if (!unexpectedTraces.isEmpty()) {
             var preparedUnexpectedTraces = prepareTracesForAssertion(unexpectedTraces);
             assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .doesNotContainAnyElementsOf(preparedUnexpectedTraces);
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .isNotEqualTo(preparedUnexpectedTraces);
         }
     }
 

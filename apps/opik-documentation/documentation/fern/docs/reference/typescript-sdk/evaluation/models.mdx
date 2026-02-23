@@ -13,7 +13,7 @@ The TypeScript SDK provides flexible model configuration through direct integrat
 
 The TypeScript SDK supports three ways to configure models for evaluation and prompt generation:
 
-1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-4o"`, `"claude-3-5-sonnet-latest"`)
+1. **Model ID strings** - Simple string identifiers (e.g., `"gpt-5-nano"`, `"claude-3-5-sonnet-latest"`)
 2. **LanguageModel instances** - Pre-configured Vercel AI SDK models with custom settings
 3. **OpikBaseModel implementations** - Custom model integrations for unsupported providers
 
@@ -31,7 +31,7 @@ import { Hallucination } from "opik";
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
 });
 
 // Anthropic model
@@ -49,7 +49,7 @@ await evaluatePrompt({
 });
 
 // Use in metrics
-const metric = new Hallucination({ model: "gpt-4o" });
+const metric = new Hallucination({ model: "gpt-5-nano" });
 ```
 
 ### Using LanguageModel Instances
@@ -61,7 +61,7 @@ import { openai } from "@ai-sdk/openai";
 import { evaluatePrompt } from "opik";
 
 // Create a LanguageModel instance
-const customModel = openai("gpt-4o");
+const customModel = openai("gpt-5-nano");
 
 await evaluatePrompt({
   dataset,
@@ -80,7 +80,7 @@ All LLM Judge metrics support these generation parameters directly in the constr
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.3, // Control randomness (0.0-2.0)
   seed: 42, // For reproducible outputs
   maxTokens: 1000, // Maximum response length
@@ -100,7 +100,7 @@ For advanced generation parameters, use `modelSettings`:
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.5,
   modelSettings: {
     topP: 0.9, // Nucleus sampling
@@ -123,12 +123,12 @@ import { Hallucination, AnswerRelevance } from "opik";
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.7,
   seed: 42,
   scoringMetrics: [
     new Hallucination({
-      model: "gpt-4o",
+      model: "gpt-5-nano",
       temperature: 0.3, // Full parameter support in metrics
       seed: 12345,
       maxTokens: 1000,
@@ -148,9 +148,9 @@ OpenAI models are supported through the `@ai-sdk/openai` package.
 **Example model IDs**:
 
 ```typescript
-"gpt-4o";
-"gpt-4o-mini";
-"gpt-4-turbo";
+"gpt-5-nano";
+"gpt-5-mini";
+"gpt-5";
 ```
 
 **Usage**:
@@ -161,7 +161,7 @@ import { evaluatePrompt } from "opik";
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
 });
 ```
 
@@ -226,7 +226,7 @@ import { evaluatePrompt } from "opik";
 import { Hallucination } from "opik";
 
 // Create models with advanced configuration
-const genModel = openai("gpt-4o-mini", {
+const genModel = openai("gpt-5-nano", {
   structuredOutputs: true, // Provider-specific feature
 });
 
@@ -253,7 +253,7 @@ LLM Judge metrics accept model configuration:
 import { Hallucination, AnswerRelevance } from "opik";
 
 // Use different models for different metrics
-const hallucinationMetric = new Hallucination({ model: "gpt-4o" });
+const hallucinationMetric = new Hallucination({ model: "gpt-5-nano" });
 const relevanceMetric = new AnswerRelevance({
   model: "claude-3-5-sonnet-latest",
 });
@@ -261,7 +261,7 @@ const relevanceMetric = new AnswerRelevance({
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   scoringMetrics: [hallucinationMetric, relevanceMetric],
 });
 ```
@@ -273,14 +273,14 @@ import { openai } from "@ai-sdk/openai";
 import { Hallucination } from "opik";
 
 // Create model for metric evaluation
-const judgeModel = openai("gpt-4o");
+const judgeModel = openai("gpt-5-nano");
 
 const metric = new Hallucination({ model: judgeModel });
 
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   scoringMetrics: [metric],
 });
 ```
@@ -377,20 +377,20 @@ The SDK automatically resolves models in this order:
 1. **If a string is provided**: Auto-detects provider and creates appropriate model
 2. **If LanguageModel is provided**: Uses the instance directly
 3. **If OpikBaseModel is provided**: Uses the custom implementation
-4. **If undefined**: Defaults to `"gpt-4o"`
+4. **If undefined**: Defaults to `"gpt-5-nano"`
 
 ```typescript
 // String → Auto-detected as OpenAI
-model: "gpt-4o";
+model: "gpt-5-nano";
 
 // LanguageModel → Used directly
 import { openai } from "@ai-sdk/openai";
-model: openai("gpt-4o");
+model: openai("gpt-5-nano");
 
 // Custom implementation
 model: new CustomProviderModel("my-model", apiKey, baseUrl);
 
-// Undefined → Defaults to "gpt-4o"
+// Undefined → Defaults to "gpt-5-nano"
 model: undefined;
 ```
 
@@ -403,7 +403,7 @@ For most use cases, use model ID strings directly:
 ```typescript
 import { Hallucination } from "opik";
 
-const metric = new Hallucination({ model: "gpt-4o" });
+const metric = new Hallucination({ model: "gpt-5-nano" });
 ```
 
 The Opik SDK handles model configuration internally for optimal evaluation performance.
@@ -413,12 +413,12 @@ The Opik SDK handles model configuration internally for optimal evaluation perfo
 Choose models based on task requirements:
 
 ```typescript
-// Complex reasoning: GPT-4o, Claude Sonnet
-model: "gpt-4o";
+// Complex reasoning: GPT-5, Claude Sonnet
+model: "gpt-5";
 model: "claude-3-5-sonnet-latest";
 
-// Fast responses: GPT-4o-mini, Gemini Flash
-model: "gpt-4o-mini";
+// Fast responses: GPT-5-nano, Gemini Flash
+model: "gpt-5-nano";
 model: "gemini-2.0-flash";
 
 // Long context: Claude, Gemini
@@ -434,9 +434,9 @@ Optimize costs by using different models:
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o-mini", // Cheaper for generation
+  model: "gpt-5-nano", // Cheaper for generation
   scoringMetrics: [
-    new Hallucination({ model: "gpt-4o" }), // More accurate for evaluation
+    new Hallucination({ model: "gpt-5-mini" }), // More accurate for evaluation
   ],
 });
 ```
@@ -464,7 +464,7 @@ Use appropriate worker counts to avoid rate limits:
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   taskWorkers: 5, // Limit parallel requests
 });
 ```
@@ -500,7 +500,7 @@ class MyModel extends OpikBaseModel {
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   taskWorkers: 3, // Reduce from default 10
 });
 ```

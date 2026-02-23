@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
@@ -22,8 +22,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/components/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TagList from "../TagList/TagList";
-import InputOutputTab from "./InputOutputTab";
-import MetadataTab from "./MatadataTab";
+import MessagesTab from "./MessagesTab";
+import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
 import PromptsTab from "./PromptsTab";
 import { formatDuration, formatDate } from "@/lib/date";
@@ -40,8 +40,10 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import { detectLLMMessages } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -66,6 +68,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   isSpansLazyLoading,
   search,
 }) => {
+  const rootScrollRef = useRef<HTMLDivElement>(null);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
 
@@ -86,28 +89,54 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
 
-  const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
+  const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
+
+  // Show Messages tab when at least one field is supported and neither is invalid
+  const canShowMessagesTab = useMemo(() => {
+    const input = detectLLMMessages(transformedInput, { fieldType: "input" });
+    const output = detectLLMMessages(transformedOutput, {
+      fieldType: "output",
+    });
+
+    const hasValid = input.supported || output.supported;
+    const hasInvalid =
+      (!input.supported && !input.empty) ||
+      (!output.supported && !output.empty);
+
+    return hasValid && !hasInvalid;
+  }, [transformedInput, transformedOutput]);
+
+  const defaultTab = canShowMessagesTab ? "messages" : "details";
+
+  const [tab, setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab =
-    (tab === "graph" && !hasSpanAgentGraph) ||
-    (tab === "prompts" && !hasPrompts)
-      ? "input"
-      : tab;
+  const selectedTab = useMemo(() => {
+    if (!tab) return defaultTab;
+
+    // Normalize legacy tab values
+    const legacyTabMap: Record<string, string> = {
+      input: canShowMessagesTab ? "messages" : "details",
+      metadata: "details",
+    };
+    const normalizedTab = legacyTabMap[tab] ?? tab;
+
+    // Fall back when a tab is not available
+    if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
+    if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
+    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
+
+    return normalizedTab;
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
   const isTrace = type === TRACE_TYPE_FOR_TREE;
 
-  /**
-   * Type guard function to safely check if data is a Trace.
-   * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
-   */
-  const isTraceType = (data: Trace | Span): data is Trace => {
-    return type === TRACE_TYPE_FOR_TREE;
-  };
+  const isTraceType = (data: Trace | Span): data is Trace =>
+    type === TRACE_TYPE_FOR_TREE;
 
   const traceData = isTraceType(data) ? data : undefined;
   const hasSpanFeedbackScores = Boolean(
@@ -118,23 +147,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const onDeleteFeedbackScore = useCallback(
     (name: string, author?: string, spanIdToDelete?: string) => {
-      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
-      if (spanIdToDelete) {
-        feedbackScoreDeleteMutation.mutate({
-          traceId,
-          spanId: spanIdToDelete,
-          name,
-          author,
-        });
-      } else {
-        // Regular deletion (trace or single span)
-        feedbackScoreDeleteMutation.mutate({
-          traceId,
-          spanId,
-          name,
-          author,
-        });
-      }
+      feedbackScoreDeleteMutation.mutate({
+        traceId,
+        spanId: spanIdToDelete ?? spanId,
+        name,
+        author,
+      });
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -162,7 +180,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
 
   return (
-    <div className="size-full max-w-full overflow-auto">
+    <div ref={rootScrollRef} className="size-full max-w-full overflow-auto">
       {graphData && (
         <div className="h-72 min-w-[400px] max-w-full overflow-x-hidden border-b p-4">
           <AgentGraphTab data={graphData} />
@@ -222,14 +240,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
             {!isUndefined(estimatedCost) && (
               <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost)}`}
+                content={`Estimated cost ${formatCost(estimatedCost, {
+                  modifier: "full",
+                })}`}
               >
                 <div
                   className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-cost"
                 >
                   <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost, { modifier: "short" })}
+                  {formatCost(estimatedCost)}
                 </div>
               </TooltipWrapper>
             )}
@@ -298,10 +318,19 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           />
         </div>
 
-        <Tabs defaultValue="input" value={selectedTab!} onValueChange={setTab}>
+        <Tabs
+          defaultValue={defaultTab}
+          value={selectedTab!}
+          onValueChange={setTab}
+        >
           <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="input">
-              Input/Output
+            {canShowMessagesTab && (
+              <TabsTrigger variant="underline" value="messages">
+                Messages
+              </TabsTrigger>
+            )}
+            <TabsTrigger variant="underline" value="details">
+              Details
             </TabsTrigger>
             <TabsTrigger variant="underline" value="feedback_scores">
               Feedback scores
@@ -309,9 +338,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="ml-1"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="metadata">
-              Metadata
             </TabsTrigger>
             {hasPrompts && (
               <TabsTrigger variant="underline" value="prompts">
@@ -324,8 +350,19 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               </TabsTrigger>
             )}
           </TabsList>
-          <TabsContent value="input">
-            <InputOutputTab
+          {canShowMessagesTab && (
+            <TabsContent value="messages">
+              <MessagesTab
+                transformedInput={transformedInput}
+                transformedOutput={transformedOutput}
+                media={media}
+                isLoading={isSpanInputOutputLoading}
+                scrollContainerRef={rootScrollRef}
+              />
+            </TabsContent>
+          )}
+          <TabsContent value="details">
+            <DetailsTab
               data={data}
               isLoading={isSpanInputOutputLoading}
               search={search}
@@ -360,9 +397,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               )}
             </div>
-          </TabsContent>
-          <TabsContent value="metadata">
-            <MetadataTab data={data} search={search} />
           </TabsContent>
           {hasPrompts && (
             <TabsContent value="prompts">

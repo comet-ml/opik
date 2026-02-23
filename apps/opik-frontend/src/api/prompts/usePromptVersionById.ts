@@ -1,4 +1,9 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import {
+  QueryFunctionContext,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback } from "react";
 import api, { PROMPTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { PromptVersion } from "@/types/prompts";
 
@@ -29,4 +34,19 @@ export default function usePromptVersionById(
     queryFn: (context) => getPromptVersionById(context, params),
     ...options,
   });
+}
+
+export function useFetchPromptVersion() {
+  const queryClient = useQueryClient();
+
+  return useCallback(
+    async (params: UsePromptVersionByIdParams): Promise<PromptVersion> => {
+      return queryClient.fetchQuery({
+        queryKey: ["prompt-version", params],
+        queryFn: (context) => getPromptVersionById(context, params),
+        staleTime: 5 * 60 * 1000,
+      });
+    },
+    [queryClient],
+  );
 }

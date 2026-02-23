@@ -19,7 +19,6 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_METADATA_ID,
 } from "@/types/shared";
-import { ThreadStatus } from "@/types/thread";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import {
   TRACE_FILTER_COLUMNS,
@@ -52,7 +51,6 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
   });
 
   const filters = (controllerField.value as Filter[]) || [];
-  const isThreadMetric = filterType === "thread";
   const isSpanMetric = filterType === "span";
 
   const filterColumns = useMemo(() => {
@@ -121,22 +119,9 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             placeholder: "Select score",
           },
         },
-        ...(isThreadMetric
-          ? {
-              status: {
-                keyComponentProps: {
-                  options: [
-                    { value: ThreadStatus.INACTIVE, label: "Inactive" },
-                    { value: ThreadStatus.ACTIVE, label: "Active" },
-                  ],
-                  placeholder: "Select status",
-                },
-              },
-            }
-          : {}),
       },
     }),
-    [projectId, isThreadMetric, dataType],
+    [projectId, dataType],
   );
 
   useEffect(() => {

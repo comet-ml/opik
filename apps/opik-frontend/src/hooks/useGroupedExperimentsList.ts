@@ -97,6 +97,7 @@ type UseGroupedExperimentsListResponse = {
   };
   isPending: boolean;
   isPlaceholderData: boolean;
+  isFetching: boolean;
   refetch: (options?: RefetchOptions) => Promise<unknown>;
 };
 
@@ -367,6 +368,7 @@ export default function useGroupedExperimentsList(
     data: groupsData,
     isPending: isGroupsPending,
     isPlaceholderData: isGroupsPlaceholderData,
+    isFetching: isGroupsFetching,
     refetch: refetchGroups,
   } = useExperimentsGroups(
     {
@@ -438,24 +440,25 @@ export default function useGroupedExperimentsList(
     },
   );
 
-  const { data, isPending, isPlaceholderData, refetch } = useExperimentsList(
-    {
-      workspaceName: params.workspaceName,
-      filters: filtersWithoutProjectId,
-      sorting: params.sorting,
-      search: params.search,
-      promptId: params.promptId,
-      projectId,
-      projectDeleted,
-      page: params.page,
-      size: params.size,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval,
-      enabled: !hasGroups,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useExperimentsList(
+      {
+        workspaceName: params.workspaceName,
+        filters: filtersWithoutProjectId,
+        sorting: params.sorting,
+        search: params.search,
+        promptId: params.promptId,
+        projectId,
+        projectDeleted,
+        page: params.page,
+        size: params.size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval,
+        enabled: !hasGroups,
+      },
+    );
 
   const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
 
@@ -544,6 +547,7 @@ export default function useGroupedExperimentsList(
         queryKey: ["experiments", queryParams],
         queryFn: (context: QueryFunctionContext) =>
           getExperimentsList(context, queryParams),
+        placeholderData: () => experimentsCache.current[id],
         refetchInterval,
       };
     }),
@@ -706,10 +710,21 @@ export default function useGroupedExperimentsList(
     (isGroupingByDataset && isDatasetsPending) ||
     (isGroupingByProject && isProjectsPending);
 
+  // For grouped mode, check if the groups query is fetching or any expanded group queries are fetching
+  const groupedIsFetching =
+    isGroupsFetching ||
+    Object.values(experimentsResponses).some((r) => r.isFetching);
+
+  // For grouped mode, check if any query is showing placeholder data
+  const groupedIsPlaceholderData =
+    isGroupsPlaceholderData ||
+    Object.values(experimentsResponses).some((r) => r.isPlaceholderData);
+
   return {
     data: transformedData,
     isPending: hasGroups ? groupedIsPending : isPending,
-    isPlaceholderData: hasGroups ? isGroupsPlaceholderData : isPlaceholderData,
+    isPlaceholderData: hasGroups ? groupedIsPlaceholderData : isPlaceholderData,
+    isFetching: hasGroups ? groupedIsFetching : isFetching,
     refetch: hasGroups ? groupedRefetch : refetch,
   };
 }

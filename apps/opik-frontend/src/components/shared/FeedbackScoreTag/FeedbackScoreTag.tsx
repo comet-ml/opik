@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
+import isNumber from "lodash/isNumber";
 import { CircleX, MessageSquareMore } from "lucide-react";
 
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import { generateTagVariant } from "@/lib/traces";
 import { cn } from "@/lib/utils";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import FeedbackScoreReasonTooltip from "./FeedbackScoreReasonTooltip";
 import MultiValueFeedbackScoreHoverCard from "./MultiValueFeedbackScoreHoverCard";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
@@ -13,10 +14,13 @@ import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
   categoryOptionLabelRenderer,
+  formatScoreDisplay,
 } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type FeedbackScoreTagProps = {
   label: string;
+  colorKey?: string;
   value: number | string;
   onDelete?: (name: string) => void;
   className?: string;
@@ -31,6 +35,7 @@ type FeedbackScoreTagProps = {
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   label,
+  colorKey,
   value,
   reason,
   onDelete,
@@ -42,10 +47,13 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   color: customColor,
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
+  const { getColor } = useWorkspaceColorMap();
+
+  const effectiveColorKey = colorKey ?? label;
 
   const color = useMemo(
-    () => customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
-    [customColor, label],
+    () => customColor || getColor(effectiveColorKey),
+    [customColor, effectiveColorKey, getColor],
   );
 
   const isRemovable = isFunction(onDelete);
@@ -70,20 +78,31 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     </FeedbackScoreReasonTooltip>
   ) : null;
 
-  // Determine what to display as the value
-  // For categorical scores, use categoryOptionLabelRenderer to show "CategoryName (value)"
-  // For regular scores, show the value directly
+  const formattedValue = formatScoreDisplay(value);
+
   const displayValue = category
-    ? categoryOptionLabelRenderer(category, value)
-    : value;
+    ? categoryOptionLabelRenderer(category, formattedValue)
+    : formattedValue;
+
+  const fullPrecisionDisplayValue = isNumber(value)
+    ? category
+      ? categoryOptionLabelRenderer(category, value)
+      : String(value)
+    : undefined;
+
+  const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
+  const showFullPrecisionTooltip =
+    !isMultiValue && fullPrecisionDisplayValue !== undefined;
 
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (
     <div className="flex max-w-full items-center gap-1.5">
       {/* Icon - rounded div for all feedback scores */}
-      <div
-        className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-        style={{ "--bg-color": color } as React.CSSProperties}
+      <ColorIndicator
+        label={label}
+        colorKey={effectiveColorKey}
+        color={color}
+        variant="square"
       />
 
       {/* Label */}
@@ -95,12 +114,18 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       </div>
 
       {/* Value */}
-      <span
-        data-testid="feedback-score-tag-value"
-        className="comet-body-s-accented min-w-0 truncate"
+      <TooltipWrapper
+        content={
+          showFullPrecisionTooltip ? fullPrecisionDisplayValue : undefined
+        }
       >
-        {displayValue}
-      </span>
+        <span
+          data-testid="feedback-score-tag-value"
+          className="comet-body-s-accented shrink-0"
+        >
+          {displayValue}
+        </span>
+      </TooltipWrapper>
     </div>
   );
 

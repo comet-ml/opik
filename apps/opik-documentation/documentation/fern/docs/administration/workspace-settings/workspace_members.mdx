@@ -1,0 +1,95 @@
+---
+headline: Workspace Members | Opik Documentation
+og:description: Manage workspace members, invite users, and control workspace access in Opik.
+og:site_name: Opik Documentation
+og:title: 'Opik Workspace Members: Managing Workspace Access'
+subtitle: Invite users, manage members, and control workspace-level access
+title: Workspace Members
+---
+
+<Note>
+Workspace Members is available on Opik Cloud and Enterprise plans. This feature is not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable this feature for your Opik deployment.
+</Note>
+
+## Overview
+
+Workspace members management allows workspace owners to view members, invite new users, remove users, and assign workspace roles.
+
+## Accessing Workspace Members
+
+1. Navigate to your workspace in Opik
+2. Click on **Configuration** in the left sidebar
+3. Select the **Members** tab
+
+<Note>
+The Members tab is only visible to workspace owners.
+</Note>
+
+## Viewing Workspace Members
+
+The members table displays:
+
+| Column | Description |
+| --- | --- |
+| **Name / Username** | The member's display name or username |
+| **Email** | The member's email address |
+| **Joined** | When the member joined the workspace |
+| **Workspace role** | The member's role in this workspace |
+
+## Adding Users
+
+To invite new users:
+
+1. Click the **Add users** button in the top-right corner
+2. Search for users by username or email address
+3. Select the user(s) you want to add
+4. Click to confirm the invitation
+
+**Add existing organization members:**
+- Search by username to find users already in your organization
+- They are immediately added to the workspace
+
+<Note>
+Username search only returns users who are already members of your organization.
+</Note>
+
+**Invite by email:**
+- Enter an email address for someone not yet in the organization
+- They'll receive an email invitation
+- Once they accept and join the organization, they're added to the workspace
+
+<Tip>
+Users invited by email appear with their email address until they accept and create an account.
+</Tip>
+
+## Changing a Member's Role
+
+1. Find the member in the table
+2. Click on their current role in the **Workspace role** column
+3. Select a new role from the dropdown
+4. The change takes effect immediately
+
+<Warning>
+Organization admins always have full access to all workspaces, regardless of their assigned workspace role.
+</Warning>
+
+For details on available roles and permissions, see [Roles and Permissions](/administration/roles_and_permissions).
+
+## Removing Members
+
+To remove a member from the workspace:
+
+1. Find the member in the table
+2. Click the actions menu (three dots) on their row
+3. Select **Remove from workspace**
+4. Confirm the removal
+
+<Warning>
+Removed users lose access immediately. Their historical data (traces, experiments) is retained. You cannot remove yourself from a workspace.
+</Warning>
+
+## Related Documentation
+
+- [Roles and Permissions](/administration/roles_and_permissions) - Detailed permissions model and custom roles
+- [Users](/administration/admin-dashboard/users) - Organization-level user management
+- [Workspaces](/administration/admin-dashboard/workspaces) - Workspace concepts and hierarchy

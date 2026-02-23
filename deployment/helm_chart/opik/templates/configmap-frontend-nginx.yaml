@@ -41,6 +41,12 @@ data:
       server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
       keepalive 16;
     }
+    {{- if (index .Values.component "ai-backend").enabled }}
+    upstream ai-backend {
+      server {{ include "opik.name" $ }}-ai-backend:{{- range (index .Values.component "ai-backend").service.ports }}{{- if eq .name "http" }}{{ .port }}{{- end }}{{- end }};
+      keepalive 16;
+    }
+    {{- end }}
     {{- if .Values.localFE }}
     upstream local-fe {
       server {{ .Values.localFEAddress }};
@@ -53,6 +59,22 @@ data:
       {{- range $k,$v := .rules }}
       {{ $k }} {{ $v | squote }};
       {{- end}}
+    }
+    {{- end }}
+    {{- with .Values.component.frontend.cacheControl }}
+    map $uri $cache_control_header {
+      {{- range . }}
+      {{ .pattern }} {{ .value | squote }};
+      {{- end }}
+    }
+    {{- else }}
+    {{- /* Fallback to hardcoded defaults if cacheControl is not defined (backward compatibility) */ -}}
+    map $uri $cache_control_header {
+      ~assets/.*\.(js|css)$              "public, max-age=604800, immutable";
+      ~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$ "public, max-age=2592000";
+      ~assets/.*\.(woff|woff2|ttf|eot)$  "public, max-age=2592000";
+      ~assets/.*\.json$                  "public, max-age=86400";
+      default                            "no-cache, must-revalidate";
     }
     {{- end }}
 
@@ -75,16 +97,32 @@ data:
         add_header X-Opik-Nginx "frontend" always;
         # Add trace ID header for OpenTelemetry
         add_header X-Trace-ID $otel_trace_id always;
-        
-        # Security headers (OWASP recommendations)
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "DENY" always;
-        add_header X-XSS-Protection "0" always;
-        {{- if .Values.component.frontend.csp.enabled }}
-        add_header Content-Security-Policy "default-src 'self'; script-src {{ .Values.component.frontend.csp.scriptSrc | join " " }}; style-src {{ .Values.component.frontend.csp.styleSrc | join " " }}; img-src {{ .Values.component.frontend.csp.imgSrc | join " " }}; media-src {{ .Values.component.frontend.csp.mediaSrc | join " " }}; font-src {{ .Values.component.frontend.csp.fontSrc | join " " }}; connect-src {{ .Values.component.frontend.csp.connectSrc | join " " }}; object-src 'none'; base-uri 'self'; frame-ancestors {{ .Values.component.frontend.csp.frameAncestors | join " " }};" always;
+        # Cache control header (from map variable)
+        add_header Cache-Control $cache_control_header always;
+        {{- /* CSP header - honor legacy csp.enabled flag for backward compatibility */ -}}
+        {{- $cspEnabled := true -}}
+        {{- if hasKey .Values.component.frontend "csp" -}}
+          {{- if hasKey .Values.component.frontend.csp "enabled" -}}
+            {{- $cspEnabled = .Values.component.frontend.csp.enabled -}}
+          {{- end -}}
+        {{- end -}}
+        {{- if and $cspEnabled .Values.component.frontend.contentSecurityPolicy }}
+        # Content Security Policy (CSP)
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" .Values.component.frontend.contentSecurityPolicy }}" always;
         {{- end }}
+        {{- /* Backward compatibility: support deprecated hstsEnabled flag */ -}}
         {{- if .Values.component.frontend.hstsEnabled }}
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        {{- end }}
+        {{- /* Extra server headers (includes OWASP security headers by default) */ -}}
+        {{- range $name, $value := .Values.component.frontend.extraServerHeaders }}
+        {{- if kindIs "slice" $value }}
+        {{- range $value }}
+        add_header {{ $name }} {{ . | squote }} always;
+        {{- end }}
+        {{- else }}
+        add_header {{ $name }} {{ $value | squote }} always;
+        {{- end }}
         {{- end }}
         
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
@@ -108,7 +146,7 @@ data:
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
-            {{ $k }} {{ $v }};
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
 
             proxy_http_version 1.1;
@@ -137,6 +175,26 @@ data:
             rewrite ^(.*)$ $1/ permanent;
         }
 
+        {{- if (index .Values.component "ai-backend").enabled }}
+        location @ai-backend {
+            rewrite ^{{ $rootPath }}(/opik-ai/.*)$ $1 break;
+            proxy_pass http://ai-backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.aiBackendUpstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+        }
+        location ^~ {{ $rootPath }}/opik-ai/ {
+          try_files /dev/null @ai-backend;
+        }
+        {{- end }}
+
         {{- if not .Values.standalone }}
         location = {{ $rootPath }} {
             return 308 {{ $rootPath }}/;
@@ -156,9 +214,6 @@ data:
 
             try_files $uri $uri/ {{ $rootPath }}/index.html;
 
-            if ($uri = {{ $rootPath }}/index.html) {
-                add_header Cache-Control "no-cache";
-            }
             {{- end }}
         }
     {{- range $k, $v := .Values.component.frontend.throttling }}

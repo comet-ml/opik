@@ -35,9 +35,11 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -100,9 +102,11 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -143,6 +147,7 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
         experiment_config=None,
         prompts=None,
         tags=None,
+        dataset_version_id=None,
     )
 
 
@@ -156,9 +161,11 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -224,9 +231,11 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -266,6 +275,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
         experiment_config=None,
         prompts=None,
         tags=None,
+        dataset_version_id=None,
     )
 
 
@@ -279,9 +289,11 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -379,9 +391,11 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -451,9 +465,11 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -502,6 +518,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
         },
         prompts=None,
         tags=None,
+        dataset_version_id=None,
     )
 
 
@@ -517,9 +534,11 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -592,9 +611,11 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -641,6 +662,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
         },
         prompts=None,
         tags=None,
+        dataset_version_id=None,
     )
 
 
@@ -656,9 +678,11 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
             "id",
             "name",
             "dataset_items_count",
+            "get_version_info",
         ]
     )
     mock_dataset.name = "the-dataset-name"
+    mock_dataset.get_version_info.return_value = None
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(

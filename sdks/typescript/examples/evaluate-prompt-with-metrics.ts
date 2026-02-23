@@ -93,14 +93,14 @@ Your response should be {{expected_tone}}.`,
   // Step 3: Set up evaluation metrics
   // Usefulness metric - evaluates how helpful and relevant the response is
   const usefulnessMetric = new Usefulness({
-    model: "gpt-4o", // Default model, can be customized
+    model: "gpt-5-nano", // Default model, can be customized
     temperature: 0.3, // Lower temperature for more consistent evaluations
     seed: 42, // For reproducible results
   });
 
   // Moderation metric - checks for content safety and policy violations
   const moderationMetric = new Moderation({
-    model: "gpt-4o",
+    model: "gpt-5-nano",
     temperature: 0.2, // Even lower for stricter moderation
     seed: 42,
   });
@@ -116,7 +116,7 @@ Your response should be {{expected_tone}}.`,
         content: prompt.prompt, // Using the prompt template from Prompt management
       },
     ],
-    model: "gpt-4o", // Model used for generating responses
+    model: "gpt-5-nano", // Model used for generating responses
     scoringMetrics: [usefulnessMetric, moderationMetric],
     experimentName: "customer-support-v1-evaluation",
     projectName: "customer-support-assistant",
@@ -183,7 +183,7 @@ Please provide a professional, helpful, and {{expected_tone}} response that:
         content: improvedPrompt.prompt,
       },
     ],
-    model: "gpt-4o",
+    model: "gpt-5-nano",
     scoringMetrics: [usefulnessMetric, moderationMetric],
     experimentName: "customer-support-v2-evaluation",
     projectName: "customer-support-assistant",

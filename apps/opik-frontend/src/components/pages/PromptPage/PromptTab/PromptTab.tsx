@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -22,8 +22,6 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
-import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
@@ -89,14 +87,19 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   const displayText = activeVersion?.template || "";
 
-  const {
-    images: extractedImages,
-    videos: extractedVideos,
-    audios: extractedAudios,
-  } = useMemo(() => {
-    const content = parsePromptVersionContent(activeVersion);
-    return parseLLMMessageContent(content);
-  }, [activeVersion]);
+  const versionTags = activeVersion?.tags || [];
+
+  const updateVersionTags = useCallback(
+    (tags: string[]) => {
+      if (!activeVersion?.id) return;
+      updateVersionsMutation.mutate({
+        versionIds: [activeVersion.id],
+        tags,
+        mergeTags: false,
+      });
+    },
+    [activeVersion?.id, updateVersionsMutation],
+  );
 
   const isChatPrompt = useMemo(() => {
     return prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -136,58 +139,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
-          <TagListRenderer
-            tags={activeVersion?.tags || []}
-            onAddTag={(newTag) => {
-              if (!activeVersion?.id) return;
-              const updatedTags = [...(activeVersion.tags || []), newTag];
-              updateVersionsMutation.mutate({
-                versionIds: [activeVersion.id],
-                tags: updatedTags,
-                mergeTags: false,
-              });
-            }}
-            onDeleteTag={(tagToDelete) => {
-              if (!activeVersion?.id) return;
-              const updatedTags = (activeVersion.tags || []).filter(
-                (t) => t !== tagToDelete,
-              );
-              updateVersionsMutation.mutate({
-                versionIds: [activeVersion.id],
-                tags: updatedTags,
-                mergeTags: false,
-              });
-            }}
-            align="start"
-            tooltipText="Version tags list"
-            placeholderText="New version tag"
-            addButtonText="Add version tag"
-            tagType="version tag"
-          />
-
-          <div className="mt-4 flex items-center gap-2">
-            <p className="comet-body-s-accented text-foreground">
-              {isChatPrompt ? "Chat messages" : "Prompt"}
-            </p>
-            {!isChatPrompt && (
-              <CopyButton
-                text={displayText}
-                message="Prompt copied to clipboard"
-                tooltipText="Copy prompt"
-                variant="ghost"
-                size="icon-xs"
-              />
-            )}
-          </div>
           {isChatPrompt ? (
-            <ChatPromptView template={activeVersion?.template || ""} />
+            <ChatPromptView template={displayText} />
           ) : (
-            <TextPromptView
-              template={displayText}
-              extractedImages={extractedImages}
-              extractedVideos={extractedVideos}
-              extractedAudios={extractedAudios}
-            />
+            <TextPromptView template={displayText} />
           )}
           {activeVersion?.metadata && (
             <>
@@ -211,6 +166,19 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               </div>
             </>
           )}
+
+          <TagListRenderer
+            tags={versionTags}
+            onAddTag={(newTag) => updateVersionTags([...versionTags, newTag])}
+            onDeleteTag={(tag) =>
+              updateVersionTags(versionTags.filter((t) => t !== tag))
+            }
+            align="start"
+            tooltipText="Version tags list"
+            placeholderText="New version tag"
+            addButtonText="Add version tag"
+            tagType="version tag"
+          />
         </div>
         <div className="w-[380px] shrink-0">
           <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">

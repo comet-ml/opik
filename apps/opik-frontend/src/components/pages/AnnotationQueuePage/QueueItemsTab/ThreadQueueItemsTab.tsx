@@ -27,13 +27,8 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
   generateActionsColumDef,
@@ -50,14 +45,14 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -104,12 +99,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
   },
   {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
-    cell: ThreadStatusCell as never,
-  },
-  {
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
@@ -150,6 +139,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
 ];
 
 const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+    sortable: true,
+  },
   ...SHARED_COLUMNS,
   {
     id: `${COLUMN_USAGE_ID}.total_tokens`,
@@ -196,16 +192,18 @@ const FILTER_COLUMNS: ColumnData<Thread>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "first_message",
   "last_message",
   "comments",
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "queue-thread-columns-width";
 const COLUMNS_ORDER_KEY = "queue-thread-columns-order";
 const COLUMNS_SORT_KEY = "queue-thread-columns-sort";
@@ -281,7 +279,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useThreadsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useThreadsList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -317,15 +315,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             placeholder: "Select score",
           },
         },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
-          },
-        },
       },
     }),
     [annotationQueue.feedback_definition_names],
@@ -354,6 +343,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
             statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+            statisticDataFormater: formatScoreDisplay,
           }) as ColumnData<Thread>,
       ),
     ];
@@ -367,9 +357,13 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -407,24 +401,18 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   );
 
   const columns = useMemo(() => {
-    return [
-      generateSelectColumDef<Thread>(),
-      mapColumnDataFields<Thread, Thread>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
-      ...convertColumnDataToColumn<Thread, Thread>(DEFAULT_COLUMNS, {
+    const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
+      DEFAULT_COLUMNS,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    return [
+      generateSelectColumDef<Thread>(),
+      ...convertedColumns,
       ...convertColumnDataToColumn<Thread, Thread>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -438,7 +426,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
       }),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnsOrder,
     selectedColumns,
@@ -551,6 +538,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

@@ -468,6 +468,7 @@ class TracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -499,6 +500,9 @@ class TracesClient:
 
         last_updated_at : typing.Optional[dt.datetime]
 
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
+
         thread_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
@@ -527,6 +531,7 @@ class TracesClient:
             tags=tags,
             error_info=error_info,
             last_updated_at=last_updated_at,
+            ttft=ttft,
             thread_id=thread_id,
             request_options=request_options,
         )
@@ -605,6 +610,7 @@ class TracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -636,6 +642,8 @@ class TracesClient:
 
         thread_id : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -661,6 +669,7 @@ class TracesClient:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data
@@ -2036,6 +2045,7 @@ class AsyncTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -2066,6 +2076,9 @@ class AsyncTracesClient:
         error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
+
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
 
         thread_id : typing.Optional[str]
 
@@ -2098,6 +2111,7 @@ class AsyncTracesClient:
             tags=tags,
             error_info=error_info,
             last_updated_at=last_updated_at,
+            ttft=ttft,
             thread_id=thread_id,
             request_options=request_options,
         )
@@ -2182,6 +2196,7 @@ class AsyncTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2213,6 +2228,8 @@ class AsyncTracesClient:
 
         thread_id : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2241,6 +2258,7 @@ class AsyncTracesClient:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data

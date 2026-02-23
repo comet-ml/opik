@@ -13,6 +13,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import attachment as rest_api_attachment
 from opik.rest_api import core as rest_api_core
 from opik import url_helpers
+from .. import rest_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,7 +79,9 @@ class AttachmentClient:
         Returns:
             List[RESTAttachmentDetails]: List of attachment detail objects containing metadata about each attachment.
         """
-        project_id = self._resolve_project_id(project_name)
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
         url_override_path = base64.b64encode(self._url_override.encode("utf-8")).decode(
             "utf-8"
         )
@@ -214,7 +217,3 @@ class AttachmentClient:
             rest_client=self._rest_client,
             upload_httpx_client=self._rest_httpx_client,
         )
-
-    def _resolve_project_id(self, project_name: str) -> str:
-        project = self._rest_client.projects.retrieve_project(name=project_name)
-        return project.id

@@ -18,7 +18,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useAppStore from "@/store/AppStore";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import useChartConfig from "@/hooks/useChartConfig";
 import { formatDate } from "@/lib/date";
 import { CHART_TYPE } from "@/constants/chart";
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
@@ -31,6 +31,11 @@ import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
+import {
+  renderScoreTooltipValue,
+  getScoreDisplayName,
+} from "@/lib/feedback-scores";
+import { SCORE_TYPE_FEEDBACK, SCORE_TYPE_EXPERIMENT } from "@/types/shared";
 
 const MAX_EXPERIMENTS_LIMIT = 100;
 const MAX_SELECTED_EXPERIMENTS = 10;
@@ -45,6 +50,7 @@ type DataRecord = {
 type ChartData = {
   data: DataRecord[];
   lines: string[];
+  labelsMap?: Record<string, string>;
 };
 
 const shouldIncludeScore = (
@@ -86,6 +92,7 @@ function transformGroupedExperimentsToChartData(
 
   const data: DataRecord[] = [];
   const allLines: string[] = [];
+  const labelsMap: Record<string, string> = {};
   const isMultiLevel = validGroups.length > 1;
 
   const processGroup = (
@@ -115,17 +122,24 @@ function transformGroupedExperimentsToChartData(
           value.aggregations.experiment_scores || [];
 
         aggregatedFeedbackScores.forEach((score) => {
-          const scoreName = `${score.name} (avg)`;
           if (shouldIncludeScore(score.name, feedbackScores)) {
-            scores[scoreName] = score.value;
-            allLines.push(scoreName);
+            scores[score.name] = score.value;
+            allLines.push(score.name);
+            labelsMap[score.name] = getScoreDisplayName(
+              score.name,
+              SCORE_TYPE_FEEDBACK,
+            );
           }
         });
 
         aggregatedExperimentScores.forEach((score) => {
+          const scoreName = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_EXPERIMENT,
+          );
           if (shouldIncludeScore(score.name, feedbackScores)) {
-            scores[score.name] = score.value;
-            allLines.push(score.name);
+            scores[scoreName] = score.value;
+            allLines.push(scoreName);
           }
         });
 
@@ -146,6 +160,7 @@ function transformGroupedExperimentsToChartData(
   return {
     data,
     lines: uniq(allLines),
+    labelsMap,
   };
 }
 
@@ -154,22 +169,27 @@ function transformUngroupedExperimentsToChartData(
   feedbackScores?: string[],
 ): ChartData {
   const allLines: string[] = [];
+  const labelsMap: Record<string, string> = {};
 
   const data: DataRecord[] = experiments.map((experiment) => {
     const scores: Record<string, number> = {};
 
     (experiment.feedback_scores || []).forEach((score) => {
-      const scoreName = `${score.name} (avg)`;
       if (shouldIncludeScore(score.name, feedbackScores)) {
-        scores[scoreName] = score.value;
-        allLines.push(scoreName);
+        scores[score.name] = score.value;
+        allLines.push(score.name);
+        labelsMap[score.name] = getScoreDisplayName(
+          score.name,
+          SCORE_TYPE_FEEDBACK,
+        );
       }
     });
 
     (experiment.experiment_scores || []).forEach((score) => {
+      const scoreName = getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT);
       if (shouldIncludeScore(score.name, feedbackScores)) {
-        scores[score.name] = score.value;
-        allLines.push(score.name);
+        scores[scoreName] = score.value;
+        allLines.push(scoreName);
       }
     });
 
@@ -184,6 +204,7 @@ function transformUngroupedExperimentsToChartData(
   return {
     data,
     lines: uniq(allLines),
+    labelsMap,
   };
 }
 
@@ -386,10 +407,23 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       ? `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`
       : undefined;
 
-  const { transformedData, chartConfig } = useMemo(() => {
-    if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
-      const entityLabels = createUniqueEntityLabels(chartData.data);
-      const data = chartData.lines.map((scoreName) => {
+  const isRadarOrBar =
+    chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar;
+
+  const entityLabels = useMemo(
+    () => createUniqueEntityLabels(chartData.data),
+    [chartData.data],
+  );
+
+  const chartLines = isRadarOrBar ? entityLabels : chartData.lines;
+  const chartConfig = useChartConfig(
+    chartLines,
+    isRadarOrBar ? undefined : chartData.labelsMap,
+  );
+
+  const transformedData = useMemo(() => {
+    if (isRadarOrBar) {
+      return chartData.lines.map((scoreName) => {
         const point: Record<string, string | number> = { name: scoreName };
         chartData.data.forEach((record, index) => {
           if (record.scores[scoreName] !== undefined) {
@@ -398,25 +432,16 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         });
         return point;
       });
-
-      return {
-        transformedData: data,
-        chartConfig: getDefaultHashedColorsChartConfig(entityLabels),
-      };
     }
 
-    const flatData = chartData.data.map((record) => ({
+    return chartData.data.map((record) => ({
       name: record.entityName,
       entityId: record.entityId,
       entityName: record.entityName,
       createdDate: record.createdDate,
       ...record.scores,
     }));
-    return {
-      transformedData: flatData,
-      chartConfig: getDefaultHashedColorsChartConfig(chartData.lines),
-    };
-  }, [chartData, chartType]);
+  }, [chartData, isRadarOrBar, entityLabels]);
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -489,6 +514,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           xAxisKey="name"
+          renderTooltipValue={renderScoreTooltipValue}
           className="size-full"
         />
       );
@@ -501,6 +527,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           angleAxisKey="name"
+          renderTooltipValue={renderScoreTooltipValue}
           showLegend
           className="size-full"
         />
@@ -513,6 +540,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         config={chartConfig}
         data={transformedData}
         xAxisKey="name"
+        renderTooltipValue={renderScoreTooltipValue}
         renderTooltipHeader={renderHeader}
         showArea={false}
         connectNulls={false}

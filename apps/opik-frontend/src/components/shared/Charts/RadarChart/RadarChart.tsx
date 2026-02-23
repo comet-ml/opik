@@ -121,7 +121,7 @@ const RadarChart: React.FunctionComponent<RadarChartProps> = ({
             }
           />
           {lines.map((line) => {
-            const isActive = config[line].label === activeLine;
+            const isActive = line === activeLine;
             let strokeOpacity = 1;
 
             if (activeLine) {
@@ -131,7 +131,7 @@ const RadarChart: React.FunctionComponent<RadarChartProps> = ({
             return (
               <Radar
                 key={line}
-                name={config[line].label as string}
+                name={line}
                 dataKey={line}
                 stroke={config[line].color || ""}
                 fill={config[line].color || ""}

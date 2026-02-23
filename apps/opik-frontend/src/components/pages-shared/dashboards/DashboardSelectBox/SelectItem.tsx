@@ -5,7 +5,7 @@ import {
   Copy,
   MoreVertical,
   Pencil,
-  Trash2,
+  Trash,
 } from "lucide-react";
 
 import {
@@ -160,9 +160,9 @@ export const SelectItem: React.FC<SelectItemProps> = ({
                 e.stopPropagation();
                 onDelete?.(dashboard);
               }}
-              className="text-destructive focus:bg-transparent focus:text-destructive"
+              variant="destructive"
             >
-              <Trash2 className="mr-2 size-4" />
+              <Trash className="mr-2 size-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

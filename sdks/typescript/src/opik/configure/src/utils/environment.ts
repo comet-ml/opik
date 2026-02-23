@@ -1,4 +1,5 @@
-import readEnv from 'read-env';
+// @ts-expect-error - read-env lacks proper ESM type exports; runtime exports readEnv as named export
+import { readEnv } from 'read-env';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { IS_DEV } from '../lib/constants';

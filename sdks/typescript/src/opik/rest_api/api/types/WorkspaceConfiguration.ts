@@ -5,4 +5,6 @@ export interface WorkspaceConfiguration {
     timeoutToMarkThreadAsInactive?: string;
     /** Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled). */
     truncationOnTables?: boolean;
+    /** Workspace-level color map. Maps label names to hex color values (e.g. #FF0000). Max 10000 entries. */
+    colorMap?: Record<string, string>;
 }

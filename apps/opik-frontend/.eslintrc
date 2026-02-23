@@ -41,13 +41,14 @@
     "@typescript-eslint/no-non-null-assertion": "off",
     "tailwindcss/classnames-order": ["warn", {
       "prependCustom": true,
-      "whitelist": ["comet-.+", "dark", "light", "mermaid"]
+      "whitelist": ["comet-.+", "static-code-.+", "dark", "light", "mermaid"]
     }],
     "tailwindcss/no-custom-classname": [
       "warn",
       {
         "whitelist": [
           "comet-.+",
+          "static-code-.+",
           "dark",
           "light",
           "mermaid",

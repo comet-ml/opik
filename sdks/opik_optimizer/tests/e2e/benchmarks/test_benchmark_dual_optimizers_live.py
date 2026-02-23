@@ -86,7 +86,7 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
             ),
         },
     )
-    monkeypatch.setattr(benchmark_config, "MODELS", ["openai/gpt-4o-mini"])
+    monkeypatch.setattr(benchmark_config, "MODELS", ["openai/gpt-5-nano"])
 
 
 def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,14 +130,14 @@ def test_dual_optimizer_run_live(
         BenchmarkTaskSpec(
             dataset_name="tiny_test",
             optimizer_name="few_shot",
-            model_name="openai/gpt-4o-mini",
+            model_name="openai/gpt-5-nano",
             test_mode=True,
             optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
         ),
         BenchmarkTaskSpec(
             dataset_name="tiny_test",
             optimizer_name="evolutionary_optimizer",
-            model_name="openai/gpt-4o-mini",
+            model_name="openai/gpt-5-nano",
             test_mode=True,
             optimizer_prompt_params={
                 "max_trials": 1,
@@ -150,7 +150,7 @@ def test_dual_optimizer_run_live(
     runner.run_benchmarks(
         demo_datasets=["tiny_test"],
         optimizers=["few_shot", "evolutionary_optimizer"],
-        models=["openai/gpt-4o-mini"],
+        models=["openai/gpt-5-nano"],
         retry_failed_run_id=None,
         resume_run_id=None,
         task_specs=tasks,

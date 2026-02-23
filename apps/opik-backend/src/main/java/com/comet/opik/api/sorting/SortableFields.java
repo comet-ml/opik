@@ -19,6 +19,7 @@ public class SortableFields {
     public static final String END_TIME = "end_time";
     public static final String DURATION = "duration";
     public static final String DURATION_AGG = "duration.*";
+    public static final String TTFT = "ttft";
     public static final String METADATA = "metadata";
     public static final String USAGE = "usage.*";
     public static final String TAGS = "tags";
@@ -50,6 +51,7 @@ public class SortableFields {
     public static final String INPUT_WILDCARD = "input.*"; // JSON fields - use JSONExtractRaw, not parameter binding
     public static final String METADATA_WILDCARD = "metadata.*"; // JSON fields - use JSONExtractRaw, not parameter binding (metadata field already exists above)
     public static final String COMMENTS = "comments";
+    public static final String EXPERIMENT_ID = "experiment_id";
     public static final String ENABLED = "enabled";
     public static final String SAMPLING_RATE = "sampling_rate";
     public static final String COMMIT = "commit";

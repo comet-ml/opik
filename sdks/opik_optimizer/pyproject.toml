@@ -1,6 +1,6 @@
 [project]
 name = "opik_optimizer"
-version = "3.0.1"
+version = "3.0.2"
 description = "Open-source automatic agent and prompt optimization toolkit with Opik"
 authors = [
     {name = "Comet ML", email = "support@comet.com"}

@@ -2,6 +2,7 @@ import React from "react";
 import { Loader2 } from "lucide-react";
 
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import { ScoreData } from "./PlaygroundOutputScores";
 
 interface MetricTagProps {
@@ -27,10 +28,7 @@ const MetricTag: React.FC<MetricTagProps> = ({ metricName, color, score }) => {
 
   return (
     <div className="flex h-6 items-center gap-1.5 rounded-md border border-border px-2">
-      <div
-        className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-        style={{ "--bg-color": color } as React.CSSProperties}
-      />
+      <ColorIndicator label={metricName} color={color} variant="square" />
       <span className="comet-body-s-accented truncate text-muted-slate">
         {metricName}
       </span>

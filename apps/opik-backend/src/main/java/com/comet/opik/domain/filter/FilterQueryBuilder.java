@@ -72,6 +72,8 @@ public class FilterQueryBuilder {
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
     private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
+    private static final String NEW_DURATION_ANALYTICS_DB = "duration";
+    private static final String TTFT_ANALYTICS_DB = "ttft";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
     private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
     private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
@@ -294,6 +296,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.SPAN_FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(TraceField.TTFT, TTFT_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
@@ -341,6 +344,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.TTFT, TTFT_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .put(SpanField.TRACE_ID, TRACE_ID_DB)
@@ -476,7 +480,7 @@ public class FilterQueryBuilder {
                     .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(ExperimentsComparisonValidKnownField.CREATED_BY, CREATED_BY_DB)
                     .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
-                    .put(ExperimentsComparisonValidKnownField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.DURATION, NEW_DURATION_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
@@ -500,6 +504,7 @@ public class FilterQueryBuilder {
                 TraceField.METADATA,
                 TraceField.TAGS,
                 TraceField.DURATION,
+                TraceField.TTFT,
                 TraceField.THREAD_ID,
                 TraceField.GUARDRAILS,
                 TraceField.VISIBILITY_MODE,
@@ -537,6 +542,7 @@ public class FilterQueryBuilder {
                 SpanField.USAGE_PROMPT_TOKENS,
                 SpanField.USAGE_TOTAL_TOKENS,
                 SpanField.DURATION,
+                SpanField.TTFT,
                 SpanField.ERROR_INFO,
                 SpanField.TYPE,
                 SpanField.TRACE_ID));

@@ -6,6 +6,8 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .dataset_item_source import DatasetItemSource
+from .evaluator_item import EvaluatorItem
+from .execution_policy import ExecutionPolicy
 from .experiment_item import ExperimentItem
 from .json_node import JsonNode
 
@@ -18,6 +20,8 @@ class DatasetItem(UniversalBaseModel):
     source: DatasetItemSource
     data: JsonNode
     tags: typing.Optional[typing.List[str]] = None
+    evaluators: typing.Optional[typing.List[EvaluatorItem]] = None
+    execution_policy: typing.Optional[ExecutionPolicy] = None
     experiment_items: typing.Optional[typing.List[ExperimentItem]] = None
     dataset_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None

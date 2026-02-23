@@ -5,6 +5,8 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .evaluator_item_public import EvaluatorItemPublic
+from .execution_policy_public import ExecutionPolicyPublic
 
 
 class DatasetVersionPublic(UniversalBaseModel):
@@ -44,6 +46,12 @@ class DatasetVersionPublic(UniversalBaseModel):
 
     change_description: typing.Optional[str] = None
     metadata: typing.Optional[typing.Dict[str, str]] = None
+    evaluators: typing.Optional[typing.List[EvaluatorItemPublic]] = pydantic.Field(default=None)
+    """
+    Default evaluators for items in this version
+    """
+
+    execution_policy: typing.Optional[ExecutionPolicyPublic] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

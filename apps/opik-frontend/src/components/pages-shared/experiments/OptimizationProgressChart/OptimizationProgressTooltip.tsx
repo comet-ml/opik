@@ -1,6 +1,7 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
 import sortBy from "lodash/sortBy";
+import { formatScoreChartValue } from "@/lib/feedback-scores";
 import { getPayloadConfigFromPayload, useChart } from "@/components/ui/chart";
 import {
   Tooltip,
@@ -95,7 +96,7 @@ const OptimizationProgressTooltip = React.forwardRef<
                       {!isUndefined(item.value) && (
                         <span className="comet-body-xs-accented">
                           {typeof item.value === "number"
-                            ? item.value.toLocaleString()
+                            ? formatScoreChartValue(item.value)
                             : item.value}
                         </span>
                       )}
@@ -134,7 +135,7 @@ const OptimizationProgressTooltip = React.forwardRef<
                             </div>
                             <span className="comet-body-xs">
                               {typeof score.value === "number"
-                                ? score.value.toLocaleString()
+                                ? formatScoreChartValue(score.value)
                                 : score.value}
                             </span>
                           </div>

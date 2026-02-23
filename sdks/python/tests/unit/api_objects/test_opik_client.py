@@ -1,9 +1,10 @@
 from typing import List
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, Mock
 
 from opik.api_objects import opik_client
+from opik.api_objects.dataset import Dataset
 from opik.message_processing import messages
 from opik.types import BatchFeedbackScoreDict
 
@@ -351,3 +352,31 @@ def test_opik_client__log_traces_feedback_scores__no_valid_scores():
 
         # Verify streamer.put was NOT called
         mock_streamer.put.assert_not_called()
+
+
+class TestOpikClientGetDataset:
+    """Tests for Opik.get_dataset() method with filter_string parameter."""
+
+    def test_get_dataset__no_filter__returns_dataset(self):
+        """Verify get_dataset without filter returns a Dataset object."""
+        opik_client_ = opik_client.Opik()
+
+        # Create a mock for the REST client response
+        mock_dataset_public = Mock()
+        mock_dataset_public.description = "Test description"
+        mock_dataset_public.dataset_items_count = 10
+
+        with patch.object(
+            opik_client_._rest_client.datasets,
+            "get_dataset_by_identifier",
+            return_value=mock_dataset_public,
+        ):
+            with patch.object(
+                opik_client_._rest_client.datasets,
+                "stream_dataset_items",
+                return_value=iter([]),
+            ):
+                result = opik_client_.get_dataset(name="test_dataset")
+
+        assert isinstance(result, Dataset)
+        assert result.name == "test_dataset"

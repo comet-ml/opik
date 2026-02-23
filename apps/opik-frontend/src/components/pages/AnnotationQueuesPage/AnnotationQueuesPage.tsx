@@ -29,6 +29,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
@@ -43,11 +44,7 @@ import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import {
   generateActionsColumDef,
@@ -130,6 +127,13 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: TextCell as never,
+    sortable: true,
+  },
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
@@ -173,11 +177,12 @@ const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
   "progress",
@@ -197,6 +202,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
 const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
@@ -257,9 +263,13 @@ export const AnnotationQueuesPage: React.FC = () => {
     defaultValue: ROW_HEIGHT.small,
   });
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
@@ -287,7 +297,12 @@ export const AnnotationQueuesPage: React.FC = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending: isLoading } = useAnnotationQueuesList(
+  const {
+    data,
+    isPending: isLoading,
+    isPlaceholderData,
+    isFetching,
+  } = useAnnotationQueuesList(
     {
       workspaceName,
       search: search as string,
@@ -337,18 +352,6 @@ export const AnnotationQueuesPage: React.FC = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<AnnotationQueue>(),
-      mapColumnDataFields<AnnotationQueue, AnnotationQueue>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.annotationQueue,
-        },
-      }),
       ...convertColumnDataToColumn<AnnotationQueue, AnnotationQueue>(
         DEFAULT_COLUMNS,
         {
@@ -472,6 +475,7 @@ export const AnnotationQueuesPage: React.FC = () => {
         noData={<DataTableNoData title={noDataText} />}
         onRowClick={handleRowClick}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

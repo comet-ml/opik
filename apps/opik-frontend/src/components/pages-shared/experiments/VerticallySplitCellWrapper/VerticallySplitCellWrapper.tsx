@@ -17,7 +17,7 @@ export type CustomMeta = {
   openTrace?: OnChangeFn<string>;
   experimentsIds: string[];
   experiments?: Experiment[];
-  feedbackKey?: string;
+  scoreName?: string;
   outputKey?: string;
 };
 

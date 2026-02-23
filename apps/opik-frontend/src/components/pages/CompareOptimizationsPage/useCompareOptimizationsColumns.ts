@@ -18,12 +18,11 @@ import { Experiment } from "@/types/datasets";
 import { Optimization } from "@/types/optimizations";
 import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 type ScoreData = {
   score: number;
@@ -32,7 +31,6 @@ type ScoreData = {
 
 type UseCompareOptimizationsColumnsParams = {
   optimization: Optimization | undefined;
-  optimizationId: string;
   scoreMap: Record<string, ScoreData>;
   columnsOrder: string[];
   selectedColumns: string[];
@@ -41,7 +39,6 @@ type UseCompareOptimizationsColumnsParams = {
 
 export const useCompareOptimizationsColumns = ({
   optimization,
-  optimizationId,
   scoreMap,
   columnsOrder,
   selectedColumns,
@@ -51,6 +48,13 @@ export const useCompareOptimizationsColumns = ({
     if (!optimization?.objective_name) return [];
 
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Trial",
+        type: COLUMN_TYPE.string,
+        cell: TextCell as never,
+        sortable: true,
+      },
       {
         id: COLUMN_ID_ID,
         label: "ID",
@@ -128,31 +132,13 @@ export const useCompareOptimizationsColumns = ({
 
   const columns = useMemo(() => {
     return [
-      mapColumnDataFields<Experiment, Experiment>({
-        id: COLUMN_NAME_ID,
-        label: "Trial",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.trial,
-          getParams: () => ({
-            optimizationId,
-          }),
-          getSearch: (data: Experiment) => ({
-            trials: [data.id],
-          }),
-        },
-      }),
       ...convertColumnDataToColumn<Experiment, Experiment>(columnsDef, {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
       }),
     ];
-  }, [columnsDef, columnsOrder, selectedColumns, sortableBy, optimizationId]);
+  }, [columnsDef, columnsOrder, selectedColumns, sortableBy]);
 
   return { columnsDef, columns };
 };

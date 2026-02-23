@@ -18,7 +18,7 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         )
         return dataset_obj, mock_rest_client
 
-    @patch("opik.api_objects.dataset.dataset.time.sleep")
+    @patch("opik.api_objects.rest_helpers.time.sleep")
     def test_insert__429_with_retry_after_header__retries_with_correct_delay(
         self, mock_sleep: Mock
     ) -> None:
@@ -45,7 +45,7 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2
         mock_sleep.assert_called_once_with(5.0)
 
-    @patch("opik.api_objects.dataset.dataset.time.sleep")
+    @patch("opik.api_objects.rest_helpers.time.sleep")
     def test_insert__429_without_header__uses_fallback_delay(
         self, mock_sleep: Mock
     ) -> None:
@@ -93,7 +93,7 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         # Should only try once for non-429 errors
         assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
 
-    @patch("opik.api_objects.dataset.dataset.time.sleep")
+    @patch("opik.api_objects.rest_helpers.time.sleep")
     def test_delete__429_with_retry_after_header__retries_with_correct_delay(
         self, mock_sleep: Mock
     ) -> None:
