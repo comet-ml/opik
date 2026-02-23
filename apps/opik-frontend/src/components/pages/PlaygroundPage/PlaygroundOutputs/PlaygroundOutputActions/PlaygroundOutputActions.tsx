@@ -437,8 +437,8 @@ const PlaygroundOutputActions = ({
                   id={plainDatasetId}
                   name={
                     createdExperiments.length === 1
-                      ? "Experiment"
-                      : "Experiments"
+                      ? "Go to experiment"
+                      : "Go to experiments"
                   }
                   className="h-8"
                   search={{
@@ -459,7 +459,7 @@ const PlaygroundOutputActions = ({
                   <NavigationTag
                     resource={RESOURCE_TYPE.traces}
                     id={playgroundProject.id}
-                    name="Traces"
+                    name="Go to traces"
                     className="h-8"
                     search={{
                       traces_filters: generateExperimentIdFilter(
