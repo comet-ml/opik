@@ -798,8 +798,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Same item in multiple versions should have different IDs")
-        void putItems__whenSameItemInMultipleVersions__thenGenerateNewIdsPerVersion() {
+        @DisplayName("Success: Same item in multiple versions should have stable IDs")
+        void putItems__whenSameItemInMultipleVersions__thenStableIdsAcrossVersions() {
             // Given - Create dataset with items (creates version 1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             var items = generateDatasetItems(2);
@@ -821,7 +821,6 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
             var v1Items = v1ItemsPage.content();
             var v1ItemIds = v1Items.stream().map(DatasetItem::id).toList();
-            var v1DatasetItemIds = v1Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // When - Add more items (creates version 2 on top of version 1)
             createDatasetItems(datasetId, 1);
@@ -836,20 +835,18 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
             var v2Items = v2ItemsPage.content();
             var v2ItemIds = v2Items.stream().map(DatasetItem::id).toList();
-            var v2DatasetItemIds = v2Items.stream().map(DatasetItem::datasetItemId).toList();
 
             // Then - Verify that:
             // 1. Each version has the expected number of items
             assertThat(v1Items).hasSize(2);
             assertThat(v2Items).hasSize(3); // 2 original + 1 new
 
-            // 2. Each version snapshot gets unique IDs
-            assertThat(v1ItemIds).doesNotContainAnyElementsOf(v2ItemIds)
-                    .as("Version 1 and version 2 should have different item IDs (unique per snapshot)");
+            // 2. Items carried over from v1 to v2 have stable IDs (not regenerated per version)
+            assertThat(v2ItemIds).containsAll(v1ItemIds)
+                    .as("Version 2 should contain all item IDs from version 1 (stable across versions)");
 
-            // 3. The datasetItemId field maintains the link between versions
-            assertThat(v2DatasetItemIds).containsAll(v1DatasetItemIds)
-                    .as("Version 2 should contain all datasetItemIds from version 1 (plus new ones)");
+            // 3. Version 2 has one additional item
+            assertThat(v2ItemIds).hasSize(3);
         }
     }
 
@@ -995,7 +992,7 @@ class DatasetVersionResourceTest {
             // Prepare changes: add 1 new item, edit 1 item, delete 1 item
             var newItem = generateDatasetItems(1).getFirst();
             var editedItem = DatasetItemEdit.builder()
-                    .id(itemToEdit.id()) // Row ID from API response
+                    .id(itemToEdit.id())
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
                             "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
                     .build();
@@ -1201,7 +1198,7 @@ class DatasetVersionResourceTest {
             var newItem = generateDatasetItems(1).getFirst();
 
             var editedItem = DatasetItemEdit.builder()
-                    .id(itemToEdit.id()) // Row ID from API response
+                    .id(itemToEdit.id())
                     .data(Map.of("edited", JsonUtils.getJsonNodeFromString("true"),
                             "description", JsonUtils.getJsonNodeFromString("\"Modified item data\"")))
                     .build();
@@ -1683,8 +1680,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: GET single item by row ID (id field) works with versioning")
-        void getItemById__whenUsingRowIdFromApiResponse__thenReturnsItem() {
+        @DisplayName("Success: GET single item by stable id works with versioning")
+        void getItemById__whenUsingIdFromApiResponse__thenReturnsItem() {
             // Given - Create dataset with items (auto-creates version 1)
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 3);
@@ -1695,15 +1692,14 @@ class DatasetVersionResourceTest {
             assertThat(items).hasSize(3);
 
             var itemFromList = items.getFirst();
-            var rowId = itemFromList.id();
+            var itemId = itemFromList.id();
 
-            // When - Get single item by row ID (what the frontend does)
-            var fetchedItem = datasetResourceClient.getDatasetItem(rowId, API_KEY, TEST_WORKSPACE);
+            // When - Get single item by id (stable dataset_item_id)
+            var fetchedItem = datasetResourceClient.getDatasetItem(itemId, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify item is returned correctly
             assertThat(fetchedItem).isNotNull();
-            assertThat(fetchedItem.id()).isEqualTo(rowId);
-            assertThat(fetchedItem.datasetItemId()).isEqualTo(itemFromList.datasetItemId());
+            assertThat(fetchedItem.id()).isEqualTo(itemId);
             assertThat(fetchedItem.datasetId()).isEqualTo(datasetId);
         }
 
@@ -1964,7 +1960,6 @@ class DatasetVersionResourceTest {
             var v1Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
 
-            // Select 3 items to batch update (using row IDs as frontend would)
             var itemsToUpdate = Set.of(
                     v1Items.get(0).id(),
                     v1Items.get(1).id(),
