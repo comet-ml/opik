@@ -86,16 +86,16 @@ This is a vital way to help us improve Opik!
 
 ## Project Setup and Architecture
 
-The Opik project is made up of five main sub-projects:
+Opik is a monorepo with multiple services and SDKs. Common contributor entry points are:
 
-- `apps/opik-documentation`: The Opik documentation website (this site!)
-- `sdks/python`: The Opik Python SDK
-- `sdks/typescript`: The Opik TypeScript SDK
-- `sdks/opik_optimizer`: The Opik Agent Optimizer SDK
-- `apps/opik-frontend`: The Opik frontend application
-- `apps/opik-backend`: The Opik backend server
+- `apps/opik-backend`: Core Java backend API/services
+- `apps/opik-frontend`: React frontend application
+- `apps/opik-documentation`: Documentation website and docs source
+- `apps/opik-ai-backend`, `apps/opik-guardrails-backend`, `apps/opik-python-backend`, `apps/opik-sandbox-executor-python`: supporting backends and runtime services
+- `sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`: SDKs and optimizer tooling
+- `tests_end_to_end`: E2E suites and helper services
 
-Opik relies on: Clickhouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
+Opik relies on: ClickHouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
 
 The local development environment uses convenient scripts (`./opik.sh` for Linux/Mac, `.\opik.ps1` for Windows) that manage Docker Compose automatically. Please see instructions in the [deployment/docker-compose/README.md](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) on GitHub for advanced usage.
 
