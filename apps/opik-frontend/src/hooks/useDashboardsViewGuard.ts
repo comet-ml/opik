@@ -1,25 +1,25 @@
 import { useEffect } from "react";
-import useUserPermission from "@/plugins/comet/useUserPermission";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 
-export interface DashboardsViewGuardProps {
+interface UseDashboardsViewGuardParams {
   view: VIEW_TYPE | null;
   setView: (view: VIEW_TYPE) => void;
 }
 
-const DashboardsViewGuard: React.FC<DashboardsViewGuardProps> = ({
+const useDashboardsViewGuard = ({
   view,
   setView,
-}) => {
-  const { canViewDashboards } = useUserPermission();
+}: UseDashboardsViewGuardParams) => {
+  const {
+    permissions: { canViewDashboards },
+  } = usePermissions();
 
   useEffect(() => {
     if (view === VIEW_TYPE.DASHBOARDS && canViewDashboards === false) {
       setView(VIEW_TYPE.DETAILS);
     }
   }, [view, canViewDashboards, setView]);
-
-  return null;
 };
 
-export default DashboardsViewGuard;
+export default useDashboardsViewGuard;

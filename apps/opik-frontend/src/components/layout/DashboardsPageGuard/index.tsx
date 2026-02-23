@@ -1,16 +1,17 @@
-import usePluginsStore from "@/store/PluginsStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const DashboardsPageGuard = () => {
-  const DashboardsPageGuardPlugin = usePluginsStore(
-    (state) => state.DashboardsPageGuard,
+  const {
+    permissions: { canViewDashboards },
+  } = usePermissions();
+
+  return (
+    <NoAccessPageGuard
+      resourceName="dashboards"
+      canViewPage={canViewDashboards}
+    />
   );
-
-  if (DashboardsPageGuardPlugin) {
-    return <DashboardsPageGuardPlugin />;
-  }
-
-  return <NoAccessPageGuard resourceName="dashboards" canViewPage />;
 };
 
 export default DashboardsPageGuard;

@@ -20,7 +20,7 @@ import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector";
 import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
 import { PROJECT_TAB } from "@/constants/traces";
-import usePluginsStore from "@/store/PluginsStore";
+import useDashboardsViewGuard from "@/hooks/useDashboardsViewGuard";
 import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const TracesPage = () => {
@@ -29,10 +29,6 @@ const TracesPage = () => {
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
-  );
-
-  const DashboardsViewGuard = usePluginsStore(
-    (state) => state.DashboardsViewGuard,
   );
 
   const { data: project } = useProjectById(
@@ -57,6 +53,8 @@ const TracesPage = () => {
   });
 
   const { view, setView } = useViewQueryParam();
+
+  useDashboardsViewGuard({ view, setView });
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
@@ -118,9 +116,6 @@ const TracesPage = () => {
 
   return (
     <>
-      {DashboardsViewGuard && (
-        <DashboardsViewGuard view={view} setView={setView} />
-      )}
       <PageBodyScrollContainer>
         <PageBodyStickyContainer
           className="mb-4 mt-6 flex items-center justify-between"

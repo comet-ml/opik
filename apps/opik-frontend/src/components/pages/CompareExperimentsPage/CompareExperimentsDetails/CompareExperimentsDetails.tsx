@@ -25,7 +25,7 @@ import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector";
 import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
-import usePluginsStore from "@/store/PluginsStore";
+import useDashboardsViewGuard from "@/hooks/useDashboardsViewGuard";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -56,9 +56,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     },
   );
 
-  const DashboardsViewGuard = usePluginsStore(
-    (state) => state.DashboardsViewGuard,
-  );
+  useDashboardsViewGuard({ view, setView: onViewChange });
 
   useEffect(() => {
     title && setBreadcrumbParam("compare", "compare", title);
@@ -187,64 +185,59 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   return (
-    <>
-      {DashboardsViewGuard && (
-        <DashboardsViewGuard view={view} setView={onViewChange} />
-      )}
-      <div className="pb-4 pt-6">
-        <div className="mb-4 flex min-h-8 items-center justify-between">
-          <h1 className="comet-title-l truncate break-words">{title}</h1>
-          <div className="flex shrink-0 items-center gap-2">
-            {isCompare &&
-              view !== VIEW_TYPE.DASHBOARDS &&
-              renderCompareFeedbackScoresButton()}
-            {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
-              <Separator orientation="vertical" className="mx-2 h-6" />
-            )}
-            <ViewSelector value={view} onChange={onViewChange} />
-          </div>
-        </div>
-        <div className="mb-1 flex gap-2 overflow-x-auto">
-          {!isCompare && (
-            <DateTag
-              date={experiment?.created_at}
-              resource={RESOURCE_TYPE.experiment}
-            />
+    <div className="pb-4 pt-6">
+      <div className="mb-4 flex min-h-8 items-center justify-between">
+        <h1 className="comet-title-l truncate break-words">{title}</h1>
+        <div className="flex shrink-0 items-center gap-2">
+          {isCompare &&
+            view !== VIEW_TYPE.DASHBOARDS &&
+            renderCompareFeedbackScoresButton()}
+          {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
+            <Separator orientation="vertical" className="mx-2 h-6" />
           )}
-          <NavigationTag
-            id={experiment?.dataset_id}
-            name={experiment?.dataset_name}
-            resource={RESOURCE_TYPE.dataset}
-          />
-          {experiment?.prompt_versions &&
-            experiment.prompt_versions.length > 0 && (
-              <NavigationTag
-                id={experiment.prompt_versions[0].prompt_id}
-                name={experiment.prompt_versions[0].prompt_name}
-                resource={RESOURCE_TYPE.prompt}
-              />
-            )}
-          {!isCompare && experiment?.project_id && (
-            <NavigationTag
-              resource={RESOURCE_TYPE.traces}
-              id={experiment.project_id}
-              name="Traces"
-              search={experimentTracesSearch}
-              tooltipContent="View all traces for this experiment"
-            />
-          )}
+          <ViewSelector value={view} onChange={onViewChange} />
         </div>
-        {!isCompare && experiment && (
-          <ExperimentTagsList
-            tags={experiment?.tags ?? []}
-            experimentId={experiment.id}
-            experiment={experiment}
+      </div>
+      <div className="mb-1 flex gap-2 overflow-x-auto">
+        {!isCompare && (
+          <DateTag
+            date={experiment?.created_at}
+            resource={RESOURCE_TYPE.experiment}
           />
         )}
-        {renderSubSection()}
-        {renderCharts()}
+        <NavigationTag
+          id={experiment?.dataset_id}
+          name={experiment?.dataset_name}
+          resource={RESOURCE_TYPE.dataset}
+        />
+        {experiment?.prompt_versions &&
+          experiment.prompt_versions.length > 0 && (
+            <NavigationTag
+              id={experiment.prompt_versions[0].prompt_id}
+              name={experiment.prompt_versions[0].prompt_name}
+              resource={RESOURCE_TYPE.prompt}
+            />
+          )}
+        {!isCompare && experiment?.project_id && (
+          <NavigationTag
+            resource={RESOURCE_TYPE.traces}
+            id={experiment.project_id}
+            name="Traces"
+            search={experimentTracesSearch}
+            tooltipContent="View all traces for this experiment"
+          />
+        )}
       </div>
-    </>
+      {!isCompare && experiment && (
+        <ExperimentTagsList
+          tags={experiment?.tags ?? []}
+          experimentId={experiment.id}
+          experiment={experiment}
+        />
+      )}
+      {renderSubSection()}
+      {renderCharts()}
+    </div>
   );
 };
 
