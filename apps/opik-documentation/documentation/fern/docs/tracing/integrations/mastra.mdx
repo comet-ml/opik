@@ -41,7 +41,7 @@ npm install langfuse-vercel
 Create or update your `.env` file with the following variables:
 
 Intent:
-Configure Mastra OTLP export so agent/workflow spans are routed to Opik.
+Configure Mastra OTLP export so agent/workflow spans are routed to Opik. These settings are additive and do not introduce breaking changes to existing OTEL configuration.
 
 Applies when:
 Mastra telemetry is enabled with `export.type = "otlp"`.
