@@ -9,7 +9,7 @@ import { COLUMN_DATASET_ID, COLUMN_METADATA_ID } from "@/types/shared";
 const DEFAULT_TITLE = "Experiment metrics";
 
 const GROUP_FIELD_LABELS: Record<string, string> = {
-  [COLUMN_DATASET_ID]: "Dataset",
+  [COLUMN_DATASET_ID]: "Evaluation suite",
   [COLUMN_METADATA_ID]: "Configuration",
 };
 

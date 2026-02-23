@@ -1,10 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
 import copy from "clipboard-copy";
-import isBoolean from "lodash/isBoolean";
-import isFunction from "lodash/isFunction";
 import { Copy } from "lucide-react";
 
 import NoData from "@/components/shared/NoData/NoData";
@@ -13,12 +10,11 @@ import ShareURLButton from "@/components/shared/ShareURLButton/ShareURLButton";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ExperimentsCompare } from "@/types/datasets";
-import { OnChangeFn } from "@/types/shared";
+import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import { COLUMN_TYPE } from "@/types/shared";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
 type CompareExperimentsPanelProps = {
@@ -31,6 +27,7 @@ type CompareExperimentsPanelProps = {
   onClose: () => void;
   onRowChange?: (shift: number) => void;
   isTraceDetailsOpened: boolean;
+  datasetId?: string;
 };
 
 const CompareExperimentsPanel: React.FunctionComponent<
@@ -45,10 +42,12 @@ const CompareExperimentsPanel: React.FunctionComponent<
   onClose,
   onRowChange,
   isTraceDetailsOpened,
+  datasetId: datasetIdProp,
 }) => {
   const { toast } = useToast();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const datasetId = useDatasetIdFromCompareExperimentsURL();
+  const datasetIdFromURL = useDatasetIdFromCompareExperimentsURL();
+  const datasetId = datasetIdProp ?? datasetIdFromURL;
 
   // Fetch non-truncated data for the sidebar
   const { data: nonTruncatedData } = useCompareExperimentsList(
@@ -82,7 +81,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   const experimentItems = useMemo(() => {
     return sortBy(activeExperimentsCompare?.experiment_items || [], (e) =>
-      findIndex(experimentsIds, (id) => e.id === id),
+      experimentsIds.indexOf(e.id),
     );
   }, [activeExperimentsCompare?.experiment_items, experimentsIds]);
 
@@ -110,9 +109,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
 
   const horizontalNavigation = useMemo(
     () =>
-      isBoolean(hasNextRow) &&
-      isBoolean(hasPreviousRow) &&
-      isFunction(onRowChange)
+      hasNextRow != null && hasPreviousRow != null && onRowChange
         ? {
             onChange: onRowChange,
             hasNext: hasNextRow,
