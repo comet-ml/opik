@@ -15,7 +15,7 @@ import { Filters } from "@/types/filters";
 import {
   useBulkEditItems,
   useIsAllItemsSelected,
-} from "@/store/DatasetDraftStore";
+} from "@/store/EvaluationSuiteDraftStore";
 import { generateBatchGroupId } from "@/lib/utils";
 
 type AddTagDialogProps = {
@@ -84,7 +84,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
           onSuccess: () => {
             toast({
               title: "Success",
-              description: `Tag "${newTag}" added to ${effectiveCount} dataset items`,
+              description: `Tag "${newTag}" added to ${effectiveCount} evaluation suite items`,
             });
 
             if (onSuccess) {
@@ -104,7 +104,9 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add tag to {effectiveCount} dataset items</DialogTitle>
+          <DialogTitle>
+            Add tag to {effectiveCount} evaluation suite items
+          </DialogTitle>
         </DialogHeader>
         {isOverLimit && (
           <div className="mb-2 text-sm text-destructive">

@@ -48,14 +48,6 @@ export const RESOURCE_MAP = {
     color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
-    url: "/$workspaceName/datasets/$datasetId/items",
-    icon: Database,
-    param: "datasetId",
-    deleted: "Deleted dataset",
-    label: "dataset",
-    color: "var(--color-yellow)",
-  },
-  [RESOURCE_TYPE.evaluationSuite]: {
     url: "/$workspaceName/evaluation-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
@@ -64,11 +56,11 @@ export const RESOURCE_MAP = {
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {
-    url: "/$workspaceName/datasets/$datasetId/items",
+    url: "/$workspaceName/evaluation-suites/$suiteId/items",
     icon: Database,
-    param: "datasetId",
-    deleted: "Deleted dataset item",
-    label: "dataset item",
+    param: "suiteId",
+    deleted: "Deleted evaluation suite item",
+    label: "evaluation suite item",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {
@@ -136,6 +128,14 @@ export const RESOURCE_MAP = {
     color: "var(--color-green)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
   },
+  [RESOURCE_TYPE.evaluationSuite]: {
+    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+    icon: Database,
+    param: "suiteId",
+    deleted: "Deleted evaluation suite",
+    label: "evaluation suite",
+    color: "var(--color-yellow)",
+  },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
     icon: MessagesSquare,
@@ -147,7 +147,7 @@ export const RESOURCE_MAP = {
   },
 };
 
-type ResourceLinkProps = {
+interface ResourceLinkProps {
   name?: string;
   id: string;
   resource: RESOURCE_TYPE;
@@ -162,9 +162,9 @@ type ResourceLinkProps = {
   isSmall?: boolean;
   isDeleted?: boolean;
   className?: string;
-};
+}
 
-const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
+function ResourceLink({
   resource,
   name,
   id,
@@ -179,7 +179,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   isSmall = false,
   isDeleted = false,
   className,
-}) => {
+}: ResourceLinkProps): React.ReactElement {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const props = RESOURCE_MAP[resource];
   const linkParams: Record<string, string> = {
@@ -265,6 +265,6 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
       )}
     </Link>
   );
-};
+}
 
 export default ResourceLink;

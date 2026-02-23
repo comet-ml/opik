@@ -1,8 +1,11 @@
 import React, { useCallback, useMemo } from "react";
 import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
-import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { ExecutionPolicy, DEFAULT_EXECUTION_POLICY } from "@/types/evaluation-suites";
+import { DatasetItem, DatasetItemColumn, Evaluator } from "@/types/datasets";
+import {
+  DEFAULT_EXECUTION_POLICY,
+  ExecutionPolicy,
+} from "@/types/evaluation-suites";
 import {
   DatasetItemEditorAutosaveProvider,
   useDatasetItemEditorAutosaveContext,
@@ -35,18 +38,28 @@ interface EvaluationSuiteItemPanelProps {
   suitePolicy?: ExecutionPolicy;
 }
 
-const truncateId = (id: string): string => {
+function truncateId(id: string): string {
   if (id.length <= 12) return id;
   return `${id.slice(0, 4)}...${id.slice(-4)}`;
-};
+}
 
-const EvaluationSuiteItemPanelLayout: React.FC<{
+interface EvaluationSuiteItemPanelLayoutProps {
   datasetItemId: string;
-  datasetId: string;
   isOpen: boolean;
   onClose: () => void;
+  itemEvaluators?: Evaluator[];
   suitePolicy: ExecutionPolicy;
-}> = ({ datasetItemId, datasetId, isOpen, onClose, suitePolicy }) => {
+  savedItemPolicy?: ExecutionPolicy;
+}
+
+function EvaluationSuiteItemPanelLayout({
+  datasetItemId,
+  isOpen,
+  onClose,
+  itemEvaluators,
+  suitePolicy,
+  savedItemPolicy,
+}: EvaluationSuiteItemPanelLayoutProps): React.ReactElement {
   const {
     isPending,
     handleDelete,
@@ -138,23 +151,24 @@ const EvaluationSuiteItemPanelLayout: React.FC<{
 
           <div className="flex flex-col gap-6 p-6 pt-4">
             <ItemDescriptionSection itemId={datasetItemId} />
+            <ItemContextSection />
             <ItemExecutionPolicySection
               itemId={datasetItemId}
               suitePolicy={suitePolicy}
+              savedItemPolicy={savedItemPolicy}
             />
             <ItemBehaviorsSection
               itemId={datasetItemId}
-              datasetId={datasetId}
+              itemEvaluators={itemEvaluators}
             />
-            <ItemContextSection />
           </div>
         </div>
       )}
     </ResizableSidePanel>
   );
-};
+}
 
-const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
+function EvaluationSuiteItemPanel({
   datasetItemId,
   datasetId,
   columns,
@@ -163,7 +177,15 @@ const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
   rows,
   setActiveRowId,
   suitePolicy = DEFAULT_EXECUTION_POLICY,
-}) => {
+}: EvaluationSuiteItemPanelProps): React.ReactElement {
+  const activeRow = useMemo(
+    () => rows.find((r) => r.id === datasetItemId),
+    [rows, datasetItemId],
+  );
+
+  const itemEvaluators = activeRow?.evaluators;
+  const itemExecutionPolicy = activeRow?.execution_policy;
+
   return (
     <DatasetItemEditorAutosaveProvider
       datasetItemId={datasetItemId}
@@ -174,13 +196,14 @@ const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
     >
       <EvaluationSuiteItemPanelLayout
         datasetItemId={datasetItemId}
-        datasetId={datasetId}
         isOpen={isOpen}
         onClose={onClose}
+        itemEvaluators={itemEvaluators}
         suitePolicy={suitePolicy}
+        savedItemPolicy={itemExecutionPolicy}
       />
     </DatasetItemEditorAutosaveProvider>
   );
-};
+}
 
 export default EvaluationSuiteItemPanel;

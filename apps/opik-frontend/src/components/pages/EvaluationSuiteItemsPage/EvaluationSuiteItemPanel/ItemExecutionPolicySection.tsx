@@ -1,108 +1,158 @@
-import React, { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ExecutionPolicy } from "@/types/evaluation-suites";
+import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/evaluation-suites";
 import {
-  useItemExecutionPolicy,
-  useSetItemExecutionPolicy,
+  useEditItem,
+  useEditedDatasetItemById,
 } from "@/store/EvaluationSuiteDraftStore";
+import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
+import { cn } from "@/lib/utils";
 
 interface ItemExecutionPolicySectionProps {
   itemId: string;
   suitePolicy: ExecutionPolicy;
+  savedItemPolicy?: ExecutionPolicy;
 }
 
-const ItemExecutionPolicySection: React.FC<ItemExecutionPolicySectionProps> = ({
+function ItemExecutionPolicySection({
   itemId,
   suitePolicy,
-}) => {
-  const itemPolicy = useItemExecutionPolicy(itemId);
-  const setItemExecutionPolicy = useSetItemExecutionPolicy();
+  savedItemPolicy,
+}: ItemExecutionPolicySectionProps) {
+  const editedItem = useEditedDatasetItemById(itemId);
+  const editItem = useEditItem();
+  const lastOverrideRef = useRef<ExecutionPolicy | undefined>(undefined);
 
-  const isOverridden = itemPolicy !== null;
-  const currentPolicy = itemPolicy ?? suitePolicy;
+  const itemPolicy = editedItem?.execution_policy ?? savedItemPolicy;
+  const isOverridden = itemPolicy != null;
+  const currentPolicy = isOverridden ? itemPolicy : suitePolicy;
 
   const handleToggle = useCallback(
     (checked: boolean) => {
-      if (checked) {
-        setItemExecutionPolicy(itemId, { ...suitePolicy });
-      } else {
-        setItemExecutionPolicy(itemId, null);
+      if (!checked) {
+        lastOverrideRef.current = currentPolicy;
       }
-    },
-    [itemId, suitePolicy, setItemExecutionPolicy],
-  );
-
-  const handleRunsChange = useCallback(
-    (value: string) => {
-      const runs = Math.max(1, parseInt(value, 10) || 1);
-      setItemExecutionPolicy(itemId, {
-        runs_per_item: runs,
-        pass_threshold: Math.min(currentPolicy.pass_threshold, runs),
+      editItem(itemId, {
+        execution_policy: checked
+          ? lastOverrideRef.current ?? savedItemPolicy ?? { ...suitePolicy }
+          : undefined,
       });
     },
-    [itemId, currentPolicy, setItemExecutionPolicy],
+    [itemId, suitePolicy, savedItemPolicy, currentPolicy, editItem],
   );
 
-  const handleThresholdChange = useCallback(
-    (value: string) => {
-      const threshold = Math.max(1, parseInt(value, 10) || 1);
-      setItemExecutionPolicy(itemId, {
-        ...currentPolicy,
-        pass_threshold: Math.min(threshold, currentPolicy.runs_per_item),
+  const onRunsCommit = useCallback(
+    (runs: number) => {
+      editItem(itemId, {
+        execution_policy: {
+          runs_per_item: runs,
+          pass_threshold: Math.min(currentPolicy.pass_threshold, runs),
+        },
       });
     },
-    [itemId, currentPolicy, setItemExecutionPolicy],
+    [itemId, currentPolicy, editItem],
   );
+
+  const onThresholdCommit = useCallback(
+    (threshold: number) => {
+      editItem(itemId, {
+        execution_policy: {
+          ...currentPolicy,
+          pass_threshold: threshold,
+        },
+      });
+    },
+    [itemId, currentPolicy, editItem],
+  );
+
+  const runsInput = useClampedIntegerInput({
+    value: currentPolicy.runs_per_item,
+    min: 1,
+    max: MAX_RUNS_PER_ITEM,
+    onCommit: onRunsCommit,
+  });
+
+  const thresholdInput = useClampedIntegerInput({
+    value: currentPolicy.pass_threshold,
+    min: 1,
+    max: currentPolicy.runs_per_item,
+    onCommit: onThresholdCommit,
+  });
 
   return (
     <div>
       <h3 className="comet-body-s-accented mb-2">Execution policy</h3>
-      <p className="comet-body-xs mb-3 text-muted-slate">
-        Suite default: {suitePolicy.runs_per_item} run
-        {suitePolicy.runs_per_item !== 1 ? "s" : ""},{" "}
-        {suitePolicy.pass_threshold} to pass
-      </p>
-
-      <div className="mb-3 flex items-center gap-2">
+      <div className="flex h-8 items-center gap-3">
         <Switch
-          id={`override-policy-${itemId}`}
+          size="xs"
           checked={isOverridden}
           onCheckedChange={handleToggle}
         />
-        <Label htmlFor={`override-policy-${itemId}`}>
-          Override suite default
-        </Label>
-      </div>
+        <span className="comet-body-xs text-muted-slate">
+          Override global settings
+        </span>
 
-      {isOverridden && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={`item-runs-${itemId}`}>Runs per item</Label>
-            <Input
-              id={`item-runs-${itemId}`}
-              type="number"
-              min={1}
-              value={currentPolicy.runs_per_item}
-              onChange={(e) => handleRunsChange(e.target.value)}
-            />
+        {isOverridden ? (
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Input
+                dimension="sm"
+                className={cn(
+                  "w-14 [&::-webkit-inner-spin-button]:appearance-none",
+                  {
+                    "border-destructive": runsInput.isInvalid,
+                  },
+                )}
+                type="number"
+                min={1}
+                max={MAX_RUNS_PER_ITEM}
+                value={runsInput.displayValue}
+                onChange={runsInput.onChange}
+                onFocus={runsInput.onFocus}
+                onBlur={runsInput.onBlur}
+              />
+              <span className="comet-body-s text-muted-slate">
+                runs per item
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                dimension="sm"
+                className={cn(
+                  "w-14 [&::-webkit-inner-spin-button]:appearance-none",
+                  {
+                    "border-destructive": thresholdInput.isInvalid,
+                  },
+                )}
+                type="number"
+                min={1}
+                max={currentPolicy.runs_per_item}
+                value={thresholdInput.displayValue}
+                onChange={thresholdInput.onChange}
+                onFocus={thresholdInput.onFocus}
+                onBlur={thresholdInput.onBlur}
+              />
+              <span className="comet-body-s text-muted-slate">
+                required to pass
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor={`item-threshold-${itemId}`}>Pass threshold</Label>
-            <Input
-              id={`item-threshold-${itemId}`}
-              type="number"
-              min={1}
-              max={currentPolicy.runs_per_item}
-              value={currentPolicy.pass_threshold}
-              onChange={(e) => handleThresholdChange(e.target.value)}
-            />
+        ) : (
+          <div className="ml-auto flex items-center gap-2">
+            <span className="comet-body-s text-muted-slate">
+              {suitePolicy.runs_per_item} run
+              {suitePolicy.runs_per_item !== 1 ? "s" : ""} per item,{" "}
+              {suitePolicy.pass_threshold} required to pass
+            </span>
+            <span className="comet-body-xs text-light-slate">
+              (suite default)
+            </span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
-};
+}
 
 export default ItemExecutionPolicySection;

@@ -83,8 +83,9 @@ import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { EXPERIMENT_TYPE } from "@/types/datasets";
+
+const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -108,9 +109,6 @@ const GeneralDatasetsTab: React.FC = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
-  const isDatasetVersioningEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
-  );
 
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
@@ -173,7 +171,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Dataset",
+        label: "Evaluation suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -182,19 +180,15 @@ const GeneralDatasetsTab: React.FC = () => {
           resource: RESOURCE_TYPE.dataset,
         },
       },
-      ...(isDatasetVersioningEnabled
-        ? [
-            {
-              id: "dataset_version",
-              label: "Dataset version",
-              type: COLUMN_TYPE.string,
-              iconType: "version" as const,
-              accessorFn: (row: GroupedExperiment) =>
-                row.dataset_version_summary?.version_name || "",
-              cell: DatasetVersionCell as never,
-            },
-          ]
-        : []),
+      {
+        id: "dataset_version",
+        label: "Evaluation suite version",
+        type: COLUMN_TYPE.string,
+        iconType: "version" as const,
+        accessorFn: (row: GroupedExperiment) =>
+          row.dataset_version_summary?.version_name || "",
+        cell: DatasetVersionCell as never,
+      },
       {
         id: COLUMN_PROJECT_ID,
         label: "Project",
@@ -299,6 +293,25 @@ const GeneralDatasetsTab: React.FC = () => {
         },
       },
       {
+        id: "pass_rate",
+        label: "Pass rate",
+        type: COLUMN_TYPE.string,
+        accessorFn: (row: GroupedExperiment) => {
+          const record = row as unknown as Record<string, unknown>;
+          const passRate = record.pass_rate as number | undefined;
+          const passedCount = record.passed_count as number | undefined;
+          const totalCount = record.total_count as number | undefined;
+
+          if (passRate == null || passedCount == null || totalCount == null) {
+            return undefined;
+          }
+
+          return `${(passRate * 100).toFixed(
+            1,
+          )}% (${passedCount}/${totalCount})`;
+        },
+      },
+      {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback Scores",
         type: COLUMN_TYPE.numberDictionary,
@@ -336,7 +349,7 @@ const GeneralDatasetsTab: React.FC = () => {
         cell: CodeCell as never,
       },
     ];
-  }, [isDatasetVersioningEnabled]);
+  }, []);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
@@ -359,7 +372,8 @@ const GeneralDatasetsTab: React.FC = () => {
       groupLimit,
       filters,
       sorting: sortedColumns,
-      groups: groups,
+      groups,
+      types: ALL_EXPERIMENT_TYPES,
       search: search!,
       page: page!,
       size: size!,
@@ -379,9 +393,10 @@ const GeneralDatasetsTab: React.FC = () => {
     [data?.flattenGroups],
   );
 
-  const aggregationMap = useMemo(() => {
-    return data?.aggregationMap ?? {};
-  }, [data?.aggregationMap]);
+  const aggregationMap = useMemo(
+    () => data?.aggregationMap ?? {},
+    [data?.aggregationMap],
+  );
 
   useExperimentsAutoExpandingLogic({
     groups,
@@ -494,7 +509,7 @@ const GeneralDatasetsTab: React.FC = () => {
           id: datasetId,
           name: [
             {
-              label: "Dataset",
+              label: "Evaluation suite",
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -535,7 +550,7 @@ const GeneralDatasetsTab: React.FC = () => {
                   label: calculateGroupLabel(groups[index]),
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted dataset"
+                      ? "Deleted evaluation suite"
                       : label || value || "Undefined",
                 };
               }),

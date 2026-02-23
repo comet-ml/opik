@@ -53,8 +53,12 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
 
   const isValid = Boolean(data.length);
   const isEdit = Boolean(datasetItem);
-  const title = isEdit ? "Edit dataset item" : "Create a new dataset item";
-  const submitText = isEdit ? "Update dataset item" : "Create dataset item";
+  const title = isEdit
+    ? "Edit evaluation suite item"
+    : "Create a new evaluation suite item";
+  const submitText = isEdit
+    ? "Update evaluation suite item"
+    : "Create evaluation suite item";
 
   const submitHandler = useCallback(() => {
     const valid = isValidJsonObject(data);
@@ -98,7 +102,8 @@ const AddEditDatasetItemDialog: React.FunctionComponent<
             <Description>
               {
                 EXPLAINERS_MAP[
-                  EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item
+                  EXPLAINER_ID
+                    .what_format_is_this_to_add_my_evaluation_suite_item
                 ].description
               }
             </Description>

@@ -1,9 +1,14 @@
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import { Dataset } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { formatDate } from "@/lib/date";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+
+export const TYPE_LABELS: Record<string, string> = {
+  [DATASET_TYPE.EVALUATION_SUITE]: "Evaluation suite",
+  [DATASET_TYPE.DATASET]: "Dataset",
+};
 
 export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
   {
@@ -11,6 +16,13 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     label: "Name",
     type: COLUMN_TYPE.string,
     cell: TextCell as never,
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) =>
+      TYPE_LABELS[row.type ?? DATASET_TYPE.DATASET] ?? "Dataset",
   },
   {
     id: "id",
@@ -67,6 +79,11 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.category,
+  },
+  {
     id: "id",
     label: "ID",
     type: COLUMN_TYPE.string,
@@ -83,6 +100,11 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     iconType: "tags",
   },
   {
+    id: "last_created_experiment_at",
+    label: "Most recent experiment",
+    type: COLUMN_TYPE.time,
+  },
+  {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
@@ -91,7 +113,6 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
   },
   {
     id: "created_by",
@@ -102,8 +123,9 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
+  "type",
   "description",
   "dataset_items_count",
   "most_recent_experiment_at",
-  "created_at",
+  "last_updated_at",
 ];

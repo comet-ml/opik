@@ -35,7 +35,7 @@ const DatasetActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteDatasetsHandler}
         title={`Delete ${entityName}`}
-        description={`Deleting these ${entityName} will also remove all their items. Any experiments linked to them will be moved to a 'Deleted datasets' group. This action cannot be undone. Are you sure you want to continue?`}
+        description={`Deleting these ${entityName} will also remove all their items. Any experiments linked to them will be moved to a 'Deleted evaluation suites' group. This action cannot be undone. Are you sure you want to continue?`}
         confirmText={`Delete ${entityName}`}
         confirmButtonVariant="destructive"
       />

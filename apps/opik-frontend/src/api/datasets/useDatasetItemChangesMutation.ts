@@ -84,6 +84,9 @@ const useDatasetItemChangesMutation = (
       queryClient.invalidateQueries({
         queryKey: ["dataset", { datasetId: variables.datasetId }],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-versions"],
+      });
     },
   });
 };

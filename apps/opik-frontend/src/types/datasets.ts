@@ -42,6 +42,8 @@ export interface DatasetVersion {
   change_description?: string;
   metadata?: Record<string, unknown>;
   tags?: string[];
+  evaluators?: Evaluator[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   created_by: string;
   last_updated_at: string;

@@ -34,13 +34,14 @@ import useAppStore from "@/store/AppStore";
 import useModelSelection from "@/hooks/useModelSelection";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 
+import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
+
 const DATASET_EXPANSION_PROGRESS_MESSAGES = [
   "Initializing AI generation...",
-  "Analyzing dataset patterns...",
+  "Analyzing evaluation suite patterns...",
   "Generating synthetic samples...",
   "Finalizing generated data...",
 ];
-import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
 
 const DATASET_EXPANSION_LAST_PICKED_MODEL = "opik-dataset-expansion-model";
 const SAMPLE_COUNT_MIN = 1;
@@ -152,7 +153,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
       .slice(0, 3)
       .map((item) => JSON.stringify(item.data, null, 2));
 
-    let prompt = `You are a synthetic data generator for machine learning datasets. Generate ${sampleCount} new dataset samples that follow the same JSON structure and patterns as the examples provided.\n\nEXAMPLES:\n`;
+    let prompt = `You are a synthetic data generator for machine learning evaluation suites. Generate ${sampleCount} new evaluation suite samples that follow the same JSON structure and patterns as the examples provided.\n\nEXAMPLES:\n`;
 
     exampleJsons.forEach((example, i) => {
       prompt += `Example ${i + 1}:\n${example}\n\n`;
@@ -215,7 +216,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
 
     if (!sampleData?.content?.length) {
       setValidationError(
-        "Dataset analysis is still in progress. Please wait for it to complete.",
+        "Evaluation suite analysis is still in progress. Please wait for it to complete.",
       );
       return false;
     }
@@ -284,7 +285,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
           <p className="comet-body-s my-4 text-muted-foreground">
             This will generate synthetic samples based on your existing data
             patterns. The generated samples will be available for review before
-            adding to your dataset.
+            adding to your evaluation suite.
           </p>
         </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col gap-4">
@@ -303,10 +304,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 <Spinner size="small" className="text-primary" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-primary">
-                    Analyzing dataset structure
+                    Analyzing evaluation suite structure
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Analyzing dataset structure and field patterns
+                    Analyzing evaluation suite structure and field patterns
                   </div>
                 </div>
               </div>
@@ -330,10 +331,11 @@ const DatasetExpansionDialog: React.FunctionComponent<
             sampleData.content.length === 0 && (
               <Alert variant="callout" size="sm">
                 <AlertTriangle className="size-4" />
-                <AlertTitle>No dataset samples found</AlertTitle>
+                <AlertTitle>No evaluation suite samples found</AlertTitle>
                 <AlertDescription>
-                  This dataset appears to be empty. Add some sample data to your
-                  dataset first before trying to expand it with AI.
+                  This evaluation suite appears to be empty. Add some sample
+                  data to your evaluation suite first before trying to expand it
+                  with AI.
                 </AlertDescription>
               </Alert>
             )}
@@ -365,7 +367,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                             htmlFor="fields"
                             className="text-sm font-medium"
                           >
-                            Detected dataset structure
+                            Detected evaluation suite structure
                           </Label>
                           <TooltipWrapper
                             content="Choose which fields to maintain consistency for"

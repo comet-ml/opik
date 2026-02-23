@@ -13,13 +13,14 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset, DATASET_TYPE } from "@/types/datasets";
+import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog";
 import DatasetActionsPanel from "@/components/shared/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/components/shared/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { buildDocsUrl } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID } from "@/types/shared";
@@ -35,6 +36,7 @@ import {
   DEFAULT_COLUMNS,
   DEFAULT_SELECTED_COLUMNS,
   FILTERS_COLUMNS,
+  TYPE_LABELS,
 } from "@/components/pages/EvaluationSuitesPage/columns";
 
 const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({
@@ -90,7 +92,6 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
   const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
     {
       workspaceName,
-      type: DATASET_TYPE.EVALUATION_SUITE,
       filters,
       sorting: sortedColumns,
       search: search!,
@@ -137,6 +138,23 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const filtersConfig = useMemo(
+    () => ({
+      rowsMap: {
+        type: {
+          keyComponentProps: {
+            options: Object.entries(TYPE_LABELS).map(([value, label]) => ({
+              value,
+              label,
+            })),
+            placeholder: "Select type",
+          },
+        },
+      },
+    }),
+    [],
+  );
+
   const selectedRows: Dataset[] = useMemo(() => {
     return datasets.filter((row) => rowSelection[row.id]);
   }, [rowSelection, datasets]);
@@ -149,7 +167,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
+      generateActionsColumDef<Dataset>({
         cell: EvaluationSuiteRowActionsCell,
       }),
     ];
@@ -205,8 +223,17 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         </h1>
       </div>
       <div className="comet-body-s mb-4 text-muted-slate">
-        Evaluation suites provide regression testing for your LLM applications,
-        letting you define reusable test sets with expected behaviors.
+        An evaluation suite is a collection of input and additional context and
+        the corresponding behaviors that define how to evaluate your
+        agent&apos;s performance.{" "}
+        <a
+          href={buildDocsUrl("/evaluation/manage_evaluation_suites")}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary"
+        >
+          Read more
+        </a>
       </div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
         <div className="flex items-center gap-2">
@@ -221,6 +248,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
             columns={FILTERS_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            config={filtersConfig as never}
             layout="icon"
           />
         </div>

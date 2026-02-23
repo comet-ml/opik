@@ -25,7 +25,9 @@ import {
   DatasetItemWithDraft,
   DATASET_ITEM_DRAFT_STATUS,
   DATASET_STATUS,
+  DATASET_TYPE,
 } from "@/types/datasets";
+import { ExecutionPolicy } from "@/types/evaluation-suites";
 import { Filters } from "@/types/filters";
 import {
   COLUMN_DATA_ID,
@@ -37,7 +39,8 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import EvaluationSuiteItemPanel from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemPanel/EvaluationSuiteItemPanel";
-import { createBehaviorsCountCell } from "./BehaviorsCountCell";
+import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
+import { BehaviorsCountCell } from "./BehaviorsCountCell";
 import { ExecutionPolicyCell } from "./ExecutionPolicyCell";
 import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
@@ -61,7 +64,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { transformDataColumnFilters } from "@/lib/dataset-items";
 import { useEvaluationSuiteItemsWithDraft } from "./hooks/useMergedEvaluationSuiteItems";
 import {
@@ -78,33 +80,57 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
+export const SUITE_DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_ID_ID,
   "description",
+  "data",
   "expected_behaviors",
+  "execution_policy",
+  "tags",
+  "created_at",
+];
+
+export const DATASET_DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "created_at",
   "tags",
 ];
 
-const SELECTED_COLUMNS_KEY = "evaluation-suite-items-selected-columns";
-const COLUMNS_WIDTH_KEY = "evaluation-suite-items-columns-width";
-const COLUMNS_ORDER_KEY = "evaluation-suite-items-columns-order";
-const DYNAMIC_COLUMNS_KEY = "evaluation-suite-items-dynamic-columns";
-const PAGINATION_SIZE_KEY = "evaluation-suite-items-pagination-size";
-const ROW_HEIGHT_KEY = "evaluation-suite-items-row-height";
+const SUITE_SELECTED_COLUMNS_KEY = "evaluation-suite-items-selected-columns";
+const DATASET_SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
+const SUITE_COLUMNS_WIDTH_KEY = "evaluation-suite-items-columns-width";
+const DATASET_COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
+const SUITE_COLUMNS_ORDER_KEY = "evaluation-suite-items-columns-order";
+const DATASET_COLUMNS_ORDER_KEY = "dataset-items-columns-order";
+const SUITE_DYNAMIC_COLUMNS_KEY = "evaluation-suite-items-dynamic-columns";
+const DATASET_DYNAMIC_COLUMNS_KEY = "dataset-items-dynamic-columns";
+const SUITE_PAGINATION_SIZE_KEY = "evaluation-suite-items-pagination-size";
+const DATASET_PAGINATION_SIZE_KEY = "dataset-items-pagination-size";
+const SUITE_ROW_HEIGHT_KEY = "evaluation-suite-items-row-height";
+const DATASET_ROW_HEIGHT_KEY = "dataset-items-row-height";
 const POLLING_INTERVAL_MS = 3000;
+
+const DRAFT_STATUS_BORDER_CLASSES: Record<string, string> = {
+  [DATASET_ITEM_DRAFT_STATUS.added]: "border-l-2 border-l-green-500",
+  [DATASET_ITEM_DRAFT_STATUS.edited]: "border-l-2 border-l-amber-500",
+};
 
 interface EvaluationSuiteItemsTabProps {
   datasetId: string;
   datasetName?: string;
   datasetStatus?: DATASET_STATUS;
+  datasetType?: DATASET_TYPE;
+  suitePolicy?: ExecutionPolicy;
 }
 
-const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
+function EvaluationSuiteItemsTab({
   datasetId,
   datasetName,
   datasetStatus,
-}) => {
+  datasetType,
+  suitePolicy,
+}: EvaluationSuiteItemsTabProps): React.ReactElement | null {
+  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const { isProcessing, showSuccessMessage } = useDatasetLoadingStatus({
     datasetStatus,
   });
@@ -132,7 +158,9 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
-    localStorageKey: PAGINATION_SIZE_KEY,
+    localStorageKey: isEvaluationSuite
+      ? SUITE_PAGINATION_SIZE_KEY
+      : DATASET_PAGINATION_SIZE_KEY,
     queryKey: "size",
     defaultValue: 10,
     queryParamConfig: NumberParam,
@@ -146,7 +174,9 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
   >({
-    localStorageKey: ROW_HEIGHT_KEY,
+    localStorageKey: isEvaluationSuite
+      ? SUITE_ROW_HEIGHT_KEY
+      : DATASET_ROW_HEIGHT_KEY,
     queryKey: "height",
     defaultValue: ROW_HEIGHT.small,
     queryParamConfig: StringParam,
@@ -219,14 +249,18 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    isEvaluationSuite
+      ? SUITE_SELECTED_COLUMNS_KEY
+      : DATASET_SELECTED_COLUMNS_KEY,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: isEvaluationSuite
+        ? SUITE_DEFAULT_SELECTED_COLUMNS
+        : DATASET_DEFAULT_SELECTED_COLUMNS,
     },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    isEvaluationSuite ? SUITE_COLUMNS_ORDER_KEY : DATASET_COLUMNS_ORDER_KEY,
     {
       defaultValue: [],
     },
@@ -234,16 +268,20 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >(COLUMNS_WIDTH_KEY, {
+  >(isEvaluationSuite ? SUITE_COLUMNS_WIDTH_KEY : DATASET_COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
 
+  const itemLabel = isEvaluationSuite
+    ? "evaluation suite items"
+    : "dataset items";
+
   const noDataText = useMemo(() => {
     if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
-      return "All evaluation suite items on this page have been deleted";
+      return `All ${itemLabel} on this page have been deleted`;
     }
-    return "There are no evaluation suite items yet";
-  }, [isDraftMode, deletedIds.size, totalCount]);
+    return `There are no ${itemLabel} yet`;
+  }, [isDraftMode, deletedIds.size, totalCount, itemLabel]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {
@@ -320,7 +358,7 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   const dynamicDatasetColumns = useMemo(
     () =>
       datasetColumns.map<DynamicColumn>((c) => ({
-        id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
+        id: `${COLUMN_DATA_ID}.${c.name}`,
         label: c.name,
         columnType: mapDynamicColumnTypesToColumnType(c.types),
       })),
@@ -333,53 +371,73 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
   );
 
   useDynamicColumnsCache({
-    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsKey: isEvaluationSuite
+      ? SUITE_DYNAMIC_COLUMNS_KEY
+      : DATASET_DYNAMIC_COLUMNS_KEY,
     dynamicColumnsIds,
     setSelectedColumns,
   });
 
-  const behaviorsCountCell = useMemo(
-    () => createBehaviorsCountCell(datasetId),
-    [datasetId],
-  );
-
   const columnsData = useMemo((): ColumnData<DatasetItem>[] => {
-    return [
+    const cols: ColumnData<DatasetItem>[] = [
       {
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
       },
-      ...dynamicDatasetColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            accessorFn: (row) => get(row, ["data", label], ""),
-            cell: AutodetectCell as never,
-          }) as ColumnData<DatasetItem>,
-      ),
-      {
-        id: "description",
-        label: "Description",
-        type: COLUMN_TYPE.string,
-        accessorFn: (row) =>
-          (row.data as Record<string, unknown> | undefined)?.description ?? "",
-      },
-      {
-        id: "expected_behaviors",
-        label: "Expected behaviors",
-        type: COLUMN_TYPE.string,
-        cell: behaviorsCountCell as never,
-      },
-      {
-        id: "execution_policy",
-        label: "Execution policy",
-        type: COLUMN_TYPE.string,
-        cell: ExecutionPolicyCell as never,
-      },
+    ];
+
+    if (isEvaluationSuite) {
+      // Single "data" column for evaluation suites
+      cols.push(
+        {
+          id: "data",
+          label: "Data",
+          type: COLUMN_TYPE.dictionary,
+          accessorFn: (row) => row.data,
+          cell: AutodetectCell as never,
+          size: 400,
+        },
+        {
+          id: "description",
+          label: "Description",
+          type: COLUMN_TYPE.string,
+          accessorFn: (row) =>
+            (row.data as Record<string, unknown> | undefined)?.description ??
+            "",
+        },
+        {
+          id: "expected_behaviors",
+          label: "Evaluators",
+          type: COLUMN_TYPE.string,
+          cell: BehaviorsCountCell as never,
+        },
+        {
+          id: "execution_policy",
+          label: "Execution policy",
+          type: COLUMN_TYPE.string,
+          cell: ExecutionPolicyCell as never,
+        },
+      );
+    } else {
+      // Dynamic per-field columns for legacy datasets
+      cols.push(
+        ...dynamicDatasetColumns.map(
+          ({ label, id, columnType }) =>
+            ({
+              id,
+              label,
+              type: columnType,
+              accessorFn: (row) => get(row, ["data", label], ""),
+              cell: AutodetectCell as never,
+            }) as ColumnData<DatasetItem>,
+        ),
+      );
+    }
+
+    // Common trailing columns
+    cols.push(
       {
         id: "tags",
         label: "Tags",
@@ -405,8 +463,10 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
         label: "Created by",
         type: COLUMN_TYPE.string,
       },
-    ];
-  }, [dynamicDatasetColumns, behaviorsCountCell]);
+    );
+
+    return cols;
+  }, [isEvaluationSuite, dynamicDatasetColumns]);
 
   const filtersColumnData = useMemo(
     () => [
@@ -445,12 +505,7 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
         return "border-l-2 border-l-transparent";
       }
 
-      const DRAFT_STATUS_STYLES: Record<string, string> = {
-        [DATASET_ITEM_DRAFT_STATUS.added]: "border-l-2 border-l-green-500",
-        [DATASET_ITEM_DRAFT_STATUS.edited]: "border-l-2 border-l-amber-500",
-      };
-
-      return DRAFT_STATUS_STYLES[draftStatus] ?? "border-l-2";
+      return DRAFT_STATUS_BORDER_CLASSES[draftStatus] ?? "border-l-2";
     },
     [],
   );
@@ -502,7 +557,7 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
       setOpenAddSidebar(true);
     } else {
       setOpenDialog(true);
-      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+      resetDialogKeyRef.current += 1;
     }
   }, [data?.total]);
 
@@ -594,7 +649,9 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
             size="sm"
             onClick={handleNewDatasetItemClick}
           >
-            Create evaluation suite item
+            {isEvaluationSuite
+              ? "Create evaluation suite item"
+              : "Create dataset item"}
           </Button>
         </div>
       </div>
@@ -602,15 +659,27 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
         <StatusMessage
           icon={Loader2}
           iconClassName="animate-spin"
-          title="Your evaluation suite is still loading"
-          description="Some results or counts may update as more data becomes available. You can continue exploring while the full evaluation suite loads."
+          title={
+            isEvaluationSuite
+              ? "Your evaluation suite is still loading"
+              : "Your dataset is still loading"
+          }
+          description={
+            isEvaluationSuite
+              ? "Some results or counts may update as more data becomes available. You can continue exploring while the full evaluation suite loads."
+              : "Some results or counts may update as more data becomes available. You can continue exploring while the full dataset loads."
+          }
           className="mb-4"
         />
       )}
       {showSuccessMessage && (
         <StatusMessage
           icon={Check}
-          title="Your evaluation suite fully loaded"
+          title={
+            isEvaluationSuite
+              ? "Your evaluation suite fully loaded"
+              : "Your dataset fully loaded"
+          }
           description="All items are now available."
           className="mb-4"
         />
@@ -642,7 +711,7 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
             <Button variant="link">
               <a
                 href={buildDocsUrl(
-                  "/evaluation/manage_datasets",
+                  "/evaluation/manage_evaluation_suites",
                   "#insert-items",
                 )}
                 target="_blank"
@@ -664,22 +733,35 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
               pageChange={setPage}
               size={size as number}
               sizeChange={setSize}
-              total={data?.total ?? 0}
+              total={totalCount}
               isLoadingTotal={isProcessing}
               disabled={isDraftMode}
             />
           </div>
         </TooltipWrapper>
       </div>
-      <EvaluationSuiteItemPanel
-        datasetItemId={activeRowId as string}
-        datasetId={datasetId}
-        columns={datasetColumns}
-        onClose={handleClose}
-        isOpen={Boolean(activeRowId)}
-        rows={rows}
-        setActiveRowId={setActiveRowId}
-      />
+      {isEvaluationSuite ? (
+        <EvaluationSuiteItemPanel
+          datasetItemId={activeRowId as string}
+          datasetId={datasetId}
+          columns={datasetColumns}
+          onClose={handleClose}
+          isOpen={Boolean(activeRowId)}
+          rows={rows}
+          setActiveRowId={setActiveRowId}
+          suitePolicy={suitePolicy}
+        />
+      ) : (
+        <DatasetItemEditor
+          datasetItemId={activeRowId as string}
+          datasetId={datasetId}
+          columns={datasetColumns}
+          onClose={handleClose}
+          isOpen={Boolean(activeRowId)}
+          rows={rows}
+          setActiveRowId={setActiveRowId}
+        />
+      )}
 
       <AddEditDatasetItemDialog
         key={resetDialogKeyRef.current}
@@ -695,6 +777,6 @@ const EvaluationSuiteItemsTab: React.FC<EvaluationSuiteItemsTabProps> = ({
       />
     </>
   );
-};
+}
 
 export default EvaluationSuiteItemsTab;

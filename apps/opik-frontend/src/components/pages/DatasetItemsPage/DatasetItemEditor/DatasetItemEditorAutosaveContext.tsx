@@ -4,8 +4,7 @@ import { DatasetField } from "./hooks/useDatasetItemData";
 import { useDatasetItemNavigation } from "./hooks/useDatasetItemNavigation";
 import { useDatasetItemData } from "./hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./hooks/useDatasetItemFormState";
-import { useAutosave } from "./hooks/useAutosave";
-import { useEditItem, useDeleteItem } from "@/store/DatasetDraftStore";
+import { useEditItem, useDeleteItem } from "@/store/EvaluationSuiteDraftStore";
 import { prepareFormDataForSave } from "./hooks/useDatasetItemFormHelpers";
 
 interface DatasetItemEditorAutosaveContextValue {
@@ -53,16 +52,14 @@ interface DatasetItemEditorAutosaveProviderProps {
   children: React.ReactNode;
 }
 
-export const DatasetItemEditorAutosaveProvider: React.FC<
-  DatasetItemEditorAutosaveProviderProps
-> = ({
+export function DatasetItemEditorAutosaveProvider({
   datasetItemId,
   datasetId,
   columns,
   rows = [],
   setActiveRowId = () => {},
   children,
-}) => {
+}: DatasetItemEditorAutosaveProviderProps): React.ReactElement {
   // Fetch dataset item data and parse fields
   const { fields, datasetItem, isPending } = useDatasetItemData({
     datasetItemId,
@@ -78,18 +75,12 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   const editItem = useEditItem();
   const deleteItem = useDeleteItem();
 
-  // Autosave (not used in draft mode, but keeping for compatibility)
-  const {
-    isAutoSaving,
-    lastSavedAt,
-    hasError,
-    flushPendingSave,
-    resetSaveState,
-  } = useAutosave({
-    datasetId,
-    datasetItemId,
-    debounceMs: 1000,
-  });
+  // Draft mode doesn't use autosave — provide no-op defaults
+  const isAutoSaving = false;
+  const lastSavedAt = null;
+  const hasError = false;
+  const flushPendingSave = useCallback(() => {}, []);
+  const resetSaveState = useCallback(() => {}, []);
 
   // Tag handlers - use draft store
   const handleAddTag = useCallback(
@@ -126,18 +117,12 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
     [deleteItem, datasetItemId],
   );
 
-  // Navigation - no unsaved changes confirmation needed for autosave
-  const handleBeforeNavigate = useCallback(() => {
-    flushPendingSave();
-    resetSaveState();
-  }, [flushPendingSave, resetSaveState]);
-
+  // Navigation - draft mode has no unsaved changes to confirm or flush
   const { horizontalNavigation } = useDatasetItemNavigation({
     activeRowId: datasetItemId || "",
     rows,
     setActiveRowId,
-    checkUnsavedChanges: (action: () => void) => action(), // No confirmation needed
-    onBeforeNavigate: handleBeforeNavigate,
+    checkUnsavedChanges: (action: () => void) => action(),
   });
 
   const contextValue: DatasetItemEditorAutosaveContextValue = useMemo(
@@ -184,15 +169,14 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
       {children}
     </DatasetItemEditorAutosaveContext.Provider>
   );
-};
+}
 
-export const useDatasetItemEditorAutosaveContext =
-  (): DatasetItemEditorAutosaveContextValue => {
-    const context = useContext(DatasetItemEditorAutosaveContext);
-    if (!context) {
-      throw new Error(
-        "useDatasetItemEditorAutosaveContext must be used within DatasetItemEditorAutosaveProvider",
-      );
-    }
-    return context;
-  };
+export function useDatasetItemEditorAutosaveContext(): DatasetItemEditorAutosaveContextValue {
+  const context = useContext(DatasetItemEditorAutosaveContext);
+  if (!context) {
+    throw new Error(
+      "useDatasetItemEditorAutosaveContext must be used within DatasetItemEditorAutosaveProvider",
+    );
+  }
+  return context;
+}

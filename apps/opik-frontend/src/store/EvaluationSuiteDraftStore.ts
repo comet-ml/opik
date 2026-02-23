@@ -1,12 +1,7 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import { DatasetItem, Evaluator } from "@/types/datasets";
-import {
-  BehaviorDisplayRow,
-  ExecutionPolicy,
-  MetricType,
-  LLMJudgeConfig,
-} from "@/types/evaluation-suites";
+import { DatasetItem } from "@/types/datasets";
+import { BehaviorDisplayRow, ExecutionPolicy } from "@/types/evaluation-suites";
 
 interface EvaluationSuiteDraftState {
   addedItems: Map<string, DatasetItem>;
@@ -19,13 +14,10 @@ interface EvaluationSuiteDraftState {
   deletedBehaviorIds: Set<string>;
 
   executionPolicy: ExecutionPolicy | null;
-  originalExecutionPolicy: ExecutionPolicy | null;
 
   itemAddedBehaviors: Map<string, Map<string, BehaviorDisplayRow>>;
   itemEditedBehaviors: Map<string, Map<string, Partial<BehaviorDisplayRow>>>;
   itemDeletedBehaviorIds: Map<string, Set<string>>;
-
-  itemExecutionPolicies: Map<string, ExecutionPolicy | null>;
 
   addItem: (item: Omit<DatasetItem, "id">) => void;
   bulkAddItems: (items: Omit<DatasetItem, "id">[]) => void;
@@ -34,18 +26,10 @@ interface EvaluationSuiteDraftState {
   bulkDeleteItems: (ids: string[]) => void;
   bulkEditItems: (ids: string[], changes: Partial<DatasetItem>) => void;
   setIsAllItemsSelected: (value: boolean) => void;
-  getChangesSummary: () => { added: number; edited: number; deleted: number };
-  getChangesPayload: () => {
-    addedItems: DatasetItem[];
-    editedItems: Partial<DatasetItem>[];
-    deletedIds: string[];
-  };
-
   addBehavior: (behavior: Omit<BehaviorDisplayRow, "id">) => string;
   editBehavior: (id: string, changes: Partial<BehaviorDisplayRow>) => void;
   deleteBehavior: (id: string) => void;
   setExecutionPolicy: (policy: ExecutionPolicy) => void;
-  setOriginalExecutionPolicy: (policy: ExecutionPolicy) => void;
 
   addItemBehavior: (
     itemId: string,
@@ -57,21 +41,8 @@ interface EvaluationSuiteDraftState {
     changes: Partial<BehaviorDisplayRow>,
   ) => void;
   deleteItemBehavior: (itemId: string, behaviorId: string) => void;
-  setItemExecutionPolicy: (
-    itemId: string,
-    policy: ExecutionPolicy | null,
-  ) => void;
 
   clearDraft: () => void;
-  getFullChangesPayload: (
-    originalEvaluators: BehaviorDisplayRow[],
-  ) => {
-    addedItems: DatasetItem[];
-    editedItems: Partial<DatasetItem>[];
-    deletedIds: string[];
-    evaluators: Evaluator[];
-    execution_policy: ExecutionPolicy | null;
-  };
 }
 
 function createInitialState() {
@@ -84,79 +55,13 @@ function createInitialState() {
     editedBehaviors: new Map<string, Partial<BehaviorDisplayRow>>(),
     deletedBehaviorIds: new Set<string>(),
     executionPolicy: null as ExecutionPolicy | null,
-    originalExecutionPolicy: null as ExecutionPolicy | null,
-    itemAddedBehaviors: new Map<
-      string,
-      Map<string, BehaviorDisplayRow>
-    >(),
+    itemAddedBehaviors: new Map<string, Map<string, BehaviorDisplayRow>>(),
     itemEditedBehaviors: new Map<
       string,
       Map<string, Partial<BehaviorDisplayRow>>
     >(),
     itemDeletedBehaviorIds: new Map<string, Set<string>>(),
-    itemExecutionPolicies: new Map<string, ExecutionPolicy | null>(),
   };
-}
-
-function behaviorRowToEvaluator(row: BehaviorDisplayRow): Evaluator {
-  return {
-    name: row.name,
-    type: row.metric_type,
-    config: row.metric_config as unknown as Record<string, unknown>,
-  };
-}
-
-function applyBehaviorEdits(
-  originalRows: BehaviorDisplayRow[],
-  added: Map<string, BehaviorDisplayRow>,
-  edited: Map<string, Partial<BehaviorDisplayRow>>,
-  deleted: Set<string>,
-): BehaviorDisplayRow[] {
-  const surviving = originalRows
-    .filter((row) => !deleted.has(row.id))
-    .map((row) => {
-      const edits = edited.get(row.id);
-      return edits ? { ...row, ...edits } : row;
-    });
-
-  return [...surviving, ...added.values()];
-}
-
-function reconstructEvaluators(
-  originalRows: BehaviorDisplayRow[],
-  added: Map<string, BehaviorDisplayRow>,
-  edited: Map<string, Partial<BehaviorDisplayRow>>,
-  deleted: Set<string>,
-): Evaluator[] {
-  const allRows = applyBehaviorEdits(originalRows, added, edited, deleted);
-
-  const evaluatorGroups = new Map<string, BehaviorDisplayRow[]>();
-  const standalone: BehaviorDisplayRow[] = [];
-
-  for (const row of allRows) {
-    if (row.evaluatorId && row.metric_type === MetricType.LLM_AS_JUDGE) {
-      const group = evaluatorGroups.get(row.evaluatorId) ?? [];
-      group.push(row);
-      evaluatorGroups.set(row.evaluatorId, group);
-    } else {
-      standalone.push(row);
-    }
-  }
-
-  const evaluators: Evaluator[] = standalone.map(behaviorRowToEvaluator);
-
-  for (const [, group] of evaluatorGroups) {
-    const assertions = group.flatMap(
-      (r) => (r.metric_config as LLMJudgeConfig).assertions ?? [],
-    );
-    evaluators.push({
-      name: group[0].name.replace(/ \(\d+\)$/, ""),
-      type: MetricType.LLM_AS_JUDGE,
-      config: { assertions },
-    });
-  }
-
-  return evaluators;
 }
 
 function cloneNestedMap<V>(
@@ -167,16 +72,6 @@ function cloneNestedMap<V>(
   const inner = new Map(outerClone.get(key) ?? new Map<string, V>());
   outerClone.set(key, inner);
   return { outerClone, inner };
-}
-
-function hasExecutionPolicyChanged(state: EvaluationSuiteDraftState): boolean {
-  const { executionPolicy, originalExecutionPolicy } = state;
-  if (executionPolicy === null || originalExecutionPolicy === null) return false;
-
-  return (
-    executionPolicy.runs_per_item !== originalExecutionPolicy.runs_per_item ||
-    executionPolicy.pass_threshold !== originalExecutionPolicy.pass_threshold
-  );
 }
 
 function hasNonEmptyEntries(map: Map<string, { size: number }>): boolean {
@@ -190,8 +85,7 @@ function hasItemLevelChanges(state: EvaluationSuiteDraftState): boolean {
   return (
     hasNonEmptyEntries(state.itemAddedBehaviors) ||
     hasNonEmptyEntries(state.itemEditedBehaviors) ||
-    hasNonEmptyEntries(state.itemDeletedBehaviorIds) ||
-    state.itemExecutionPolicies.size > 0
+    hasNonEmptyEntries(state.itemDeletedBehaviorIds)
   );
 }
 
@@ -292,26 +186,6 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
       set({ isAllItemsSelected: value });
     },
 
-    getChangesSummary: () => {
-      const state = get();
-      return {
-        added: state.addedItems.size,
-        edited: state.editedItems.size,
-        deleted: state.deletedIds.size,
-      };
-    },
-
-    getChangesPayload: () => {
-      const state = get();
-      return {
-        addedItems: Array.from(state.addedItems.values()),
-        editedItems: Array.from(state.editedItems.entries()).map(
-          ([id, changes]) => ({ id, ...changes }),
-        ),
-        deletedIds: Array.from(state.deletedIds),
-      };
-    },
-
     addBehavior: (behavior) => {
       const id = uuidv4();
       set((state) => {
@@ -356,8 +230,6 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
     },
 
     setExecutionPolicy: (policy) => set({ executionPolicy: policy }),
-    setOriginalExecutionPolicy: (policy) =>
-      set({ originalExecutionPolicy: policy }),
 
     addItemBehavior: (itemId, behavior) => {
       const id = uuidv4();
@@ -407,8 +279,10 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
           return { itemAddedBehaviors: outerClone };
         }
 
-        const { outerClone: editedOuter, inner: editedInner } =
-          cloneNestedMap(state.itemEditedBehaviors, itemId);
+        const { outerClone: editedOuter, inner: editedInner } = cloneNestedMap(
+          state.itemEditedBehaviors,
+          itemId,
+        );
         editedInner.delete(behaviorId);
 
         const deletedOuter = new Map(state.itemDeletedBehaviorIds);
@@ -425,45 +299,8 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
       });
     },
 
-    setItemExecutionPolicy: (itemId, policy) => {
-      set((state) => {
-        const next = new Map(state.itemExecutionPolicies);
-        if (policy === null) {
-          next.delete(itemId);
-        } else {
-          next.set(itemId, policy);
-        }
-        return { itemExecutionPolicies: next };
-      });
-    },
-
     clearDraft: () => {
       set(createInitialState());
-    },
-
-    getFullChangesPayload: (originalEvaluators) => {
-      const state = get();
-
-      const evaluators = reconstructEvaluators(
-        originalEvaluators,
-        state.addedBehaviors,
-        state.editedBehaviors,
-        state.deletedBehaviorIds,
-      );
-
-      const executionPolicyChanged = hasExecutionPolicyChanged(state);
-
-      return {
-        addedItems: Array.from(state.addedItems.values()),
-        editedItems: Array.from(state.editedItems.entries()).map(
-          ([id, changes]) => ({ id, ...changes }),
-        ),
-        deletedIds: Array.from(state.deletedIds),
-        evaluators,
-        execution_policy: executionPolicyChanged
-          ? state.executionPolicy
-          : null,
-      };
     },
   }),
 );
@@ -481,15 +318,11 @@ export const selectHasBehaviorChanges = (
   state.addedBehaviors.size > 0 ||
   state.editedBehaviors.size > 0 ||
   state.deletedBehaviorIds.size > 0 ||
-  hasExecutionPolicyChanged(state) ||
+  state.executionPolicy !== null ||
   hasItemLevelChanges(state);
 
 export const selectHasDraft = (state: EvaluationSuiteDraftState): boolean =>
   selectIsDraftMode(state) || selectHasBehaviorChanges(state);
-
-export const selectAddedItemById =
-  (id: string) => (state: EvaluationSuiteDraftState) =>
-    state.addedItems.get(id);
 
 // Item CRUD hooks
 
@@ -507,13 +340,6 @@ export const useBulkEditItems = () =>
   useEvaluationSuiteDraftStore((state) => state.bulkEditItems);
 export const useClearDraft = () =>
   useEvaluationSuiteDraftStore((state) => state.clearDraft);
-export const useGetChangesSummary = () =>
-  useEvaluationSuiteDraftStore((state) => state.getChangesSummary);
-export const useGetChangesPayload = () =>
-  useEvaluationSuiteDraftStore((state) => state.getChangesPayload);
-export const useGetFullChangesPayload = () =>
-  useEvaluationSuiteDraftStore((state) => state.getFullChangesPayload);
-
 export const useAddedItems = () =>
   useEvaluationSuiteDraftStore((state) => state.addedItems);
 export const useEditedItems = () =>
@@ -544,12 +370,8 @@ export const useDeleteBehavior = () =>
   useEvaluationSuiteDraftStore((state) => state.deleteBehavior);
 export const useSetExecutionPolicy = () =>
   useEvaluationSuiteDraftStore((state) => state.setExecutionPolicy);
-export const useSetOriginalExecutionPolicy = () =>
-  useEvaluationSuiteDraftStore((state) => state.setOriginalExecutionPolicy);
 export const useBehaviorsExecutionPolicy = () =>
   useEvaluationSuiteDraftStore((state) => state.executionPolicy);
-export const useOriginalExecutionPolicy = () =>
-  useEvaluationSuiteDraftStore((state) => state.originalExecutionPolicy);
 export const useAddedBehaviors = () =>
   useEvaluationSuiteDraftStore((state) => state.addedBehaviors);
 export const useEditedBehaviors = () =>
@@ -577,10 +399,6 @@ export const useItemDeletedBehaviorIds = (itemId: string) =>
   useEvaluationSuiteDraftStore(
     (state) => state.itemDeletedBehaviorIds.get(itemId) ?? EMPTY_SET,
   );
-export const useItemExecutionPolicy = (itemId: string) =>
-  useEvaluationSuiteDraftStore(
-    (state) => state.itemExecutionPolicies.get(itemId) ?? null,
-  );
 
 export const useAddItemBehavior = () =>
   useEvaluationSuiteDraftStore((state) => state.addItemBehavior);
@@ -588,7 +406,12 @@ export const useEditItemBehavior = () =>
   useEvaluationSuiteDraftStore((state) => state.editItemBehavior);
 export const useDeleteItemBehavior = () =>
   useEvaluationSuiteDraftStore((state) => state.deleteItemBehavior);
-export const useSetItemExecutionPolicy = () =>
-  useEvaluationSuiteDraftStore((state) => state.setItemExecutionPolicy);
+
+export const useItemAddedBehaviorsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemAddedBehaviors);
+export const useItemEditedBehaviorsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemEditedBehaviors);
+export const useItemDeletedBehaviorIdsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemDeletedBehaviorIds);
 
 export default useEvaluationSuiteDraftStore;

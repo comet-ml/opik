@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Plus, X } from "lucide-react";
+
 import {
   Dialog,
   DialogContent,
@@ -10,101 +15,141 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import TextareaAutosize from "react-textarea-autosize";
+import { cn } from "@/lib/utils";
+import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import MetricConfigForm from "./MetricConfigForm";
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   MetricType,
-  MetricConfig,
   LLMJudgeConfig,
-  METRIC_TYPE_LABELS,
   BehaviorDisplayRow,
-  generateBehaviorName,
 } from "@/types/evaluation-suites";
 
-interface AddEditBehaviorDialogProps {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  behavior?: BehaviorDisplayRow;
-  onSubmit: (behavior: Omit<BehaviorDisplayRow, "id">) => void;
+function createSchema(existingNames: string[]) {
+  return z.object({
+    name: z
+      .string()
+      .min(1, "Name is required")
+      .superRefine((val, ctx) => {
+        const trimmed = val.trim().toLowerCase();
+        if (existingNames.some((n) => n.toLowerCase() === trimmed)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "An evaluator with this name already exists",
+          });
+        }
+      }),
+    assertions: z
+      .array(z.object({ value: z.string() }))
+      .min(1)
+      .refine((arr) => arr.some((a) => a.value.trim().length > 0), {
+        message: "At least one assertion is required",
+      }),
+  });
 }
 
-const DEFAULT_CONFIGS: Record<MetricType, MetricConfig> = {
-  [MetricType.LLM_AS_JUDGE]: { assertions: [""] },
-  [MetricType.CONTAINS]: { value: "", case_sensitive: false },
-  [MetricType.EQUALS]: { value: "", case_sensitive: false },
-  [MetricType.LEVENSHTEIN_RATIO]: { threshold: 0.8 },
-  [MetricType.HALLUCINATION]: { threshold: 0.8 },
-  [MetricType.MODERATION]: { threshold: 0.8 },
+type EvaluatorFormType = z.infer<ReturnType<typeof createSchema>>;
+
+const DEFAULT_FORM_VALUES: EvaluatorFormType = {
+  name: "",
+  assertions: [{ value: "" }],
 };
 
-const AddEditBehaviorDialog: React.FC<AddEditBehaviorDialogProps> = ({
+interface AddEditEvaluatorDialogProps {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  evaluator?: BehaviorDisplayRow;
+  onSubmit: (evaluator: Omit<BehaviorDisplayRow, "id">) => void;
+  existingNames?: string[];
+}
+
+function AddEditEvaluatorDialog({
   open,
   setOpen,
-  behavior,
+  evaluator,
   onSubmit,
-}) => {
-  const isEdit = Boolean(behavior);
+  existingNames = [],
+}: AddEditEvaluatorDialogProps) {
+  const isEdit = Boolean(evaluator);
+  const lastAppendedIndexRef = useRef<number | null>(null);
+  const textareaRefsMap = useRef<Map<number, HTMLTextAreaElement>>(new Map());
 
-  const [name, setName] = useState("");
-  const [nameManuallySet, setNameManuallySet] = useState(false);
-  const [metricType, setMetricType] = useState<MetricType>(
-    MetricType.LLM_AS_JUDGE,
+  const filteredNames = useMemo(
+    () =>
+      evaluator
+        ? existingNames.filter(
+            (n) => n.toLowerCase() !== evaluator.name.toLowerCase(),
+          )
+        : existingNames,
+    [existingNames, evaluator],
   );
-  const [config, setConfig] = useState<MetricConfig>(
-    DEFAULT_CONFIGS[MetricType.LLM_AS_JUDGE],
-  );
+
+  const schema = useMemo(() => createSchema(filteredNames), [filteredNames]);
+
+  const form = useForm<EvaluatorFormType>({
+    resolver: zodResolver(schema),
+    defaultValues: DEFAULT_FORM_VALUES,
+    mode: "onChange",
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "assertions",
+  });
 
   useEffect(() => {
-    if (open) {
-      if (behavior) {
-        setName(behavior.name);
-        setNameManuallySet(true);
-        setMetricType(behavior.metric_type);
-        setConfig(behavior.metric_config);
-      } else {
-        setName("");
-        setNameManuallySet(false);
-        setMetricType(MetricType.LLM_AS_JUDGE);
-        setConfig(DEFAULT_CONFIGS[MetricType.LLM_AS_JUDGE]);
+    if (!open) return;
+
+    if (evaluator) {
+      const assertions = (evaluator.config as LLMJudgeConfig).assertions ?? [];
+      form.reset({
+        name: evaluator.name,
+        assertions:
+          assertions.length > 0
+            ? assertions.map((a) => ({ value: a }))
+            : DEFAULT_FORM_VALUES.assertions,
+      });
+    } else {
+      form.reset(DEFAULT_FORM_VALUES);
+    }
+
+    lastAppendedIndexRef.current = null;
+    textareaRefsMap.current.clear();
+  }, [open, evaluator, form]);
+
+  useEffect(() => {
+    if (lastAppendedIndexRef.current !== null) {
+      const textarea = textareaRefsMap.current.get(
+        lastAppendedIndexRef.current,
+      );
+      if (textarea) {
+        textarea.focus();
+        lastAppendedIndexRef.current = null;
       }
     }
-  }, [open, behavior]);
+  }, [fields.length]);
 
-  useEffect(() => {
-    if (!nameManuallySet) {
-      setName(generateBehaviorName(metricType, config));
-    }
-  }, [metricType, config, nameManuallySet]);
-
-  const handleMetricTypeChange = (type: MetricType) => {
-    setMetricType(type);
-    setConfig(DEFAULT_CONFIGS[type]);
-    setNameManuallySet(false);
+  const appendAndFocus = () => {
+    lastAppendedIndexRef.current = fields.length;
+    append({ value: "" });
   };
 
-  const handleNameChange = (value: string) => {
-    setName(value);
-    setNameManuallySet(value.length > 0);
-  };
+  const handleFormSubmit = (data: EvaluatorFormType) => {
+    const trimmedAssertions = data.assertions
+      .map((a) => a.value.trim())
+      .filter((v) => v.length > 0);
 
-  const isValid =
-    metricType !== MetricType.LLM_AS_JUDGE ||
-    (config as LLMJudgeConfig).assertions?.[0]?.trim().length > 0;
-
-  const handleSubmit = () => {
-    const finalName =
-      name.trim() || generateBehaviorName(metricType, config);
     onSubmit({
-      name: finalName,
-      metric_type: metricType,
-      metric_config: config,
+      name: data.name.trim(),
+      type: MetricType.LLM_AS_JUDGE,
+      config: { assertions: trimmedAssertions },
     });
     setOpen(false);
   };
@@ -112,62 +157,114 @@ const AddEditBehaviorDialog: React.FC<AddEditBehaviorDialogProps> = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit behavior" : "Add new behavior"}
-          </DialogTitle>
-        </DialogHeader>
-        <DialogAutoScrollBody>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label>Metric type</Label>
-              <Select
-                value={metricType}
-                onValueChange={(v) => handleMetricTypeChange(v as MetricType)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(METRIC_TYPE_LABELS).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleFormSubmit)}
+            className="grid gap-4"
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {isEdit ? "Edit evaluator" : "Add new evaluator"}
+              </DialogTitle>
+            </DialogHeader>
+            <DialogAutoScrollBody>
+              <div className="flex flex-col">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem className="pb-4">
+                      <Label>Name</Label>
+                      <FormControl>
+                        <Input placeholder="Enter evaluator name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="flex flex-col gap-2 pb-4">
+                  <Label>Assertions</Label>
+                  {fields.map((fieldItem, index) => (
+                    <div key={fieldItem.id} className="flex items-start gap-2">
+                      <FormField
+                        control={form.control}
+                        name={`assertions.${index}.value`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormControl>
+                              <TextareaAutosize
+                                placeholder="e.g. Response should be factually accurate and cite sources"
+                                className={cn(
+                                  TEXT_AREA_CLASSES,
+                                  "min-h-0 resize-none",
+                                )}
+                                minRows={1}
+                                maxRows={6}
+                                {...field}
+                                ref={(el) => {
+                                  field.ref(el);
+                                  if (el) {
+                                    textareaRefsMap.current.set(index, el);
+                                  } else {
+                                    textareaRefsMap.current.delete(index);
+                                  }
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {fields.length > 1 && (
+                        <div className="flex pt-1">
+                          <Button
+                            type="button"
+                            variant="minimal"
+                            size="icon-xs"
+                            onClick={() => remove(index)}
+                          >
+                            <X />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <MetricConfigForm
-              metricType={metricType}
-              config={config}
-              onChange={setConfig}
-            />
-
-            <div className="flex flex-col gap-2">
-              <Label>
-                Name{" "}
-                <span className="text-muted-slate">(optional)</span>
-              </Label>
-              <Input
-                placeholder={generateBehaviorName(metricType, config)}
-                value={nameManuallySet ? name : ""}
-                onChange={(e) => handleNameChange(e.target.value)}
-              />
-            </div>
-          </div>
-        </DialogAutoScrollBody>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button disabled={!isValid} onClick={handleSubmit}>
-            {isEdit ? "Save behavior" : "Add behavior"}
-          </Button>
-        </DialogFooter>
+                  <FormField
+                    control={form.control}
+                    name="assertions"
+                    render={() => (
+                      <FormItem>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    onClick={appendAndFocus}
+                  >
+                    <Plus className="mr-1 size-4" />
+                    Add assertion
+                  </Button>
+                </div>
+              </div>
+            </DialogAutoScrollBody>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={!form.formState.isValid}>
+                {isEdit ? "Save evaluator" : "Add evaluator"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
-};
+}
 
-export default AddEditBehaviorDialog;
+export default AddEditEvaluatorDialog;

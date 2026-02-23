@@ -1,4 +1,3 @@
-import React from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -21,21 +20,15 @@ type RemoveDatasetItemsDialogProps = {
   confirmText?: string;
 };
 
-const RemoveDatasetItemsDialog: React.FunctionComponent<
-  RemoveDatasetItemsDialogProps
-> = ({
+const RemoveDatasetItemsDialog = ({
   open,
   setOpen,
   onConfirm,
-  title = "Remove dataset items",
-  description = "The items will be deleted from your current dataset view. The changes won't take effect until you save and create a new version.",
-  confirmText = "Remove dataset items",
-}) => {
+  title = "Remove evaluation suite items",
+  description = "The items will be deleted from your current evaluation suite view. The changes won't take effect until you save and create a new version.",
+  confirmText = "Remove evaluation suite items",
+}: RemoveDatasetItemsDialogProps) => {
   const [dontAskAgain, setDontAskAgain] = useDatasetItemDeletePreference();
-
-  const handleConfirm = () => {
-    onConfirm();
-  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -46,16 +39,12 @@ const RemoveDatasetItemsDialog: React.FunctionComponent<
 
         <div className="flex flex-col gap-3">
           <div className="comet-body-s text-muted-slate">{description}</div>
-          <Label
-            key="dont-show-again"
-            className="flex cursor-pointer items-center gap-2"
-          >
+          <Label className="flex cursor-pointer items-center gap-2">
             <Checkbox
               id="dont-show-again"
               checked={dontAskAgain}
               onCheckedChange={(v) => setDontAskAgain(v === true)}
             />
-
             <div className="comet-body-s text-muted-slate">
               Don&apos;t show this message again
             </div>
@@ -64,12 +53,10 @@ const RemoveDatasetItemsDialog: React.FunctionComponent<
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" variant="destructive" onClick={handleConfirm}>
+            <Button type="submit" variant="destructive" onClick={onConfirm}>
               {confirmText}
             </Button>
           </DialogClose>

@@ -1,36 +1,41 @@
-import { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { X, Check, GitCommitVertical } from "lucide-react";
 import { AxiosError } from "axios";
+import { Blocks, Check, Code2, GitCommitVertical, X } from "lucide-react";
 
-import Loader from "@/components/shared/Loader/Loader";
-import DateTag from "@/components/shared/DateTag/DateTag";
 import useDatasetById from "@/api/datasets/useDatasetById";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import EvaluationSuiteItemsTab from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsTab/EvaluationSuiteItemsTab";
-import VersionHistoryTab from "@/components/pages/DatasetItemsPage/VersionHistoryTab/VersionHistoryTab";
-import AddVersionDialog from "@/components/pages/DatasetItemsPage/VersionHistoryTab/AddVersionDialog";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { Button } from "@/components/ui/button";
-import { Tag } from "@/components/ui/tag";
-import { DATASET_STATUS } from "@/types/datasets";
-import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
-import {
-  useHasDraft,
-  useClearDraft,
-  useGetFullChangesPayload,
-} from "@/store/EvaluationSuiteDraftStore";
-import useNavigationBlocker from "@/hooks/useNavigationBlocker";
-import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
-import OverrideVersionDialog from "@/components/pages/DatasetItemsPage/OverrideVersionDialog";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
+import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
+import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
+import EvaluationSuiteItemsTab from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsTab/EvaluationSuiteItemsTab";
+import EvaluatorsSection from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/EvaluatorsSection";
+import AddVersionDialog from "@/components/pages/DatasetItemsPage/VersionHistoryTab/AddVersionDialog";
+import VersionHistoryTab from "@/components/pages/DatasetItemsPage/VersionHistoryTab/VersionHistoryTab";
+import OverrideVersionDialog from "@/components/pages/DatasetItemsPage/OverrideVersionDialog";
+import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import DateTag from "@/components/shared/DateTag/DateTag";
+import Loader from "@/components/shared/Loader/Loader";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tag } from "@/components/ui/tag";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
-import BehaviorsSection from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/BehaviorsSection";
+import useLoadPlayground from "@/hooks/useLoadPlayground";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
+import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useEvaluationSuiteSavePayload } from "@/hooks/useEvaluationSuiteSavePayload";
+import { useSuiteIdFromURL } from "@/hooks/useSuiteIdFromURL";
+import { useClearDraft, useHasDraft } from "@/store/EvaluationSuiteDraftStore";
+import { DATASET_STATUS, DATASET_TYPE } from "@/types/datasets";
+import UseEvaluationSuiteDropdown from "./UseEvaluationSuiteDropdown";
 
 const POLLING_INTERVAL_MS = 3000;
 
-const EvaluationSuiteItemsPage = () => {
+function EvaluationSuiteItemsPage(): React.ReactElement {
   const suiteId = useSuiteIdFromURL();
 
   const [tab, setTab] = useQueryParam("tab", StringParam);
@@ -44,8 +49,12 @@ const EvaluationSuiteItemsPage = () => {
 
   const hasDraft = useHasDraft();
   const clearDraft = useClearDraft();
-  const getFullChangesPayload = useGetFullChangesPayload();
+  const { buildPayload } = useEvaluationSuiteSavePayload(suiteId);
   const { toast } = useToast();
+  const { navigate: navigateToExperiment } = useNavigateToExperiment();
+  const { loadPlayground } = useLoadPlayground();
+
+  const { mutate: updateSuite } = useDatasetUpdateMutation();
 
   const { data: suite, isPending } = useDatasetById(
     { datasetId: suiteId },
@@ -59,7 +68,17 @@ const EvaluationSuiteItemsPage = () => {
     },
   );
 
+  const datasetType = suite?.type;
+  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const latestVersion = suite?.latest_version;
+
+  const { data: versionsData } = useDatasetVersionsList(
+    { datasetId: suiteId, page: 1, size: 1 },
+    { enabled: isEvaluationSuite },
+  );
+  const latestVersionData = versionsData?.content?.[0];
+  const versionEvaluators = latestVersionData?.evaluators ?? [];
+  const versionExecutionPolicy = latestVersionData?.execution_policy;
 
   useEffect(() => {
     return clearDraft;
@@ -74,13 +93,50 @@ const EvaluationSuiteItemsPage = () => {
     cancelText: "Stay",
   });
 
-  const showSuccessToast = () => {
-    toast({
-      title: "New version created",
-      description:
-        "Your evaluation suite changes have been saved as a new version.",
-    });
-  };
+  const showSuccessToast = useCallback(
+    (versionId?: string) => {
+      toast({
+        title: "New version created",
+        description:
+          "Your evaluation suite changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
+        actions: [
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="comet-body-s-accented gap-1.5 px-0"
+            altText="Run experiment in the SDK"
+            key="sdk"
+            onClick={() =>
+              navigateToExperiment({
+                newExperiment: true,
+                datasetName: suite?.name,
+              })
+            }
+          >
+            <Code2 className="size-4" />
+            Run experiment in the SDK
+          </ToastAction>,
+          <ToastAction
+            variant="link"
+            size="sm"
+            className="comet-body-s-accented gap-1.5 px-0"
+            altText="Run experiment in the Playground"
+            key="playground"
+            onClick={() =>
+              loadPlayground({
+                datasetId: suiteId,
+                datasetVersionId: versionId,
+              })
+            }
+          >
+            <Blocks className="size-4" />
+            Run experiment in the Playground
+          </ToastAction>,
+        ],
+      });
+    },
+    [toast, navigateToExperiment, loadPlayground, suite?.name, suiteId],
+  );
 
   const changesMutation = useDatasetItemChangesMutation({
     onConflict: () => {
@@ -88,40 +144,14 @@ const EvaluationSuiteItemsPage = () => {
     },
   });
 
-  const buildMutationPayload = (
-    tags?: string[],
-    changeDescription?: string,
-    override = false,
-  ) => {
-    // Pass empty array as originalEvaluators — BE evaluator endpoints
-    // don't exist yet; once OPIK-4224 lands, original evaluators will
-    // come from the dataset version query and be passed here.
-    const changes = getFullChangesPayload([]);
-    return {
-      datasetId: suiteId,
-      payload: {
-        added_items: changes.addedItems,
-        edited_items: changes.editedItems,
-        deleted_ids: changes.deletedIds,
-        base_version: suite?.latest_version?.id ?? "",
-        tags,
-        change_description: changeDescription,
-        evaluators:
-          changes.evaluators.length > 0 ? changes.evaluators : undefined,
-        execution_policy: changes.execution_policy ?? undefined,
-      },
-      override,
-    };
-  };
-
   const handleSaveChanges = (tags?: string[], changeDescription?: string) => {
     if (changesMutation.isPending) return;
 
-    changesMutation.mutate(buildMutationPayload(tags, changeDescription), {
-      onSuccess: () => {
+    changesMutation.mutate(buildPayload({ tags, changeDescription }), {
+      onSuccess: (version) => {
         clearDraft();
         setAddVersionDialogOpen(false);
-        showSuccessToast();
+        showSuccessToast(version?.id);
       },
       onError: (error) => {
         if ((error as AxiosError).response?.status === 409) {
@@ -135,18 +165,14 @@ const EvaluationSuiteItemsPage = () => {
     if (!pendingVersionData) return;
 
     changesMutation.mutate(
-      buildMutationPayload(
-        pendingVersionData.tags,
-        pendingVersionData.changeDescription,
-        true,
-      ),
+      buildPayload({ ...pendingVersionData, override: true }),
       {
-        onSuccess: () => {
+        onSuccess: (version) => {
           clearDraft();
           setAddVersionDialogOpen(false);
           setOverrideDialogOpen(false);
           setPendingVersionData(null);
-          showSuccessToast();
+          showSuccessToast(version?.id);
         },
       },
     );
@@ -155,6 +181,26 @@ const EvaluationSuiteItemsPage = () => {
   const handleDiscardChanges = () => {
     clearDraft();
     setDiscardDialogOpen(false);
+  };
+
+  const handleAddTag = (newTag: string) => {
+    updateSuite({
+      dataset: {
+        ...suite,
+        id: suiteId,
+        tags: [...(suite?.tags ?? []), newTag],
+      },
+    });
+  };
+
+  const handleDeleteTag = (tag: string) => {
+    updateSuite({
+      dataset: {
+        ...suite,
+        id: suiteId,
+        tags: (suite?.tags ?? []).filter((t) => t !== tag),
+      },
+    });
   };
 
   if (isPending) {
@@ -217,6 +263,13 @@ const EvaluationSuiteItemsPage = () => {
                 </Button>
               </>
             )}
+            {isEvaluationSuite && (
+              <UseEvaluationSuiteDropdown
+                datasetName={suite?.name}
+                datasetId={suiteId}
+                datasetVersionId={latestVersion?.id}
+              />
+            )}
           </div>
         </div>
         {suite?.description && (
@@ -249,6 +302,14 @@ const EvaluationSuiteItemsPage = () => {
               ))}
             </>
           )}
+          <Separator orientation="vertical" className="ml-1.5 mt-1 h-4" />
+          <TagListRenderer
+            tags={suite?.tags ?? []}
+            onAddTag={handleAddTag}
+            onDeleteTag={handleDeleteTag}
+            align="start"
+            className="min-h-0 w-auto"
+          />
         </div>
       </div>
       <Tabs value={tab || "items"} onValueChange={setTab}>
@@ -256,9 +317,11 @@ const EvaluationSuiteItemsPage = () => {
           <TabsTrigger variant="underline" value="items">
             Items
           </TabsTrigger>
-          <TabsTrigger variant="underline" value="behaviors">
-            Behaviors
-          </TabsTrigger>
+          {isEvaluationSuite && (
+            <TabsTrigger variant="underline" value="evaluators">
+              Evaluators
+            </TabsTrigger>
+          )}
           <TabsTrigger variant="underline" value="version-history">
             Version history
           </TabsTrigger>
@@ -268,17 +331,24 @@ const EvaluationSuiteItemsPage = () => {
             datasetId={suiteId}
             datasetName={suite?.name}
             datasetStatus={suite?.status}
+            datasetType={datasetType}
+            suitePolicy={versionExecutionPolicy}
           />
         </TabsContent>
-        <TabsContent value="behaviors">
-          <BehaviorsSection datasetId={suiteId} />
-        </TabsContent>
+        {isEvaluationSuite && (
+          <TabsContent value="evaluators">
+            <EvaluatorsSection
+              serverEvaluators={versionEvaluators}
+              serverExecutionPolicy={versionExecutionPolicy}
+            />
+          </TabsContent>
+        )}
         <TabsContent value="version-history">
           <VersionHistoryTab datasetId={suiteId} />
         </TabsContent>
       </Tabs>
     </div>
   );
-};
+}
 
 export default EvaluationSuiteItemsPage;

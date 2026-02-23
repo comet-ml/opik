@@ -69,25 +69,17 @@ const MetricConfigForm: React.FC<MetricConfigFormProps> = ({
       );
     }
     case MetricType.CONTAINS:
-      return renderStringMatchFields(
-        config as StringMatchConfig,
-        onChange,
-        {
-          label: "Value",
-          placeholder: "Text that output must contain",
-          checkboxId: "case-sensitive-contains",
-        },
-      );
+      return renderStringMatchFields(config as StringMatchConfig, onChange, {
+        label: "Value",
+        placeholder: "Text that output must contain",
+        checkboxId: "case-sensitive-contains",
+      });
     case MetricType.EQUALS:
-      return renderStringMatchFields(
-        config as StringMatchConfig,
-        onChange,
-        {
-          label: "Expected value",
-          placeholder: "Exact expected value",
-          checkboxId: "case-sensitive-equals",
-        },
-      );
+      return renderStringMatchFields(config as StringMatchConfig, onChange, {
+        label: "Expected value",
+        placeholder: "Exact expected value",
+        checkboxId: "case-sensitive-equals",
+      });
     case MetricType.LEVENSHTEIN_RATIO:
     case MetricType.HALLUCINATION:
     case MetricType.MODERATION: {

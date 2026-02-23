@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Blocks, ChevronDown, Code2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,29 +12,25 @@ import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperi
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 
-export type UseDatasetDropdownProps = {
+export interface UseEvaluationSuiteDropdownProps {
   datasetName?: string;
   datasetId?: string;
   datasetVersionId?: string;
   disabled?: boolean;
-};
+}
 
-const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
+function UseEvaluationSuiteDropdown({
   datasetName = "",
   datasetId = "",
   datasetVersionId,
   disabled = false,
-}) => {
+}: UseEvaluationSuiteDropdownProps) {
   const resetKeyRef = useRef(0);
   const [openExperimentDialog, setOpenExperimentDialog] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
   const { loadPlayground, isPlaygroundEmpty, isPendingProviderKeys } =
     useLoadPlayground();
-
-  const handleRunExperimentClick = () => {
-    setOpenExperimentDialog(true);
-  };
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
@@ -47,7 +43,7 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
     if (isPlaygroundEmpty) {
       handleLoadPlayground();
     } else {
-      resetKeyRef.current = resetKeyRef.current + 1;
+      resetKeyRef.current += 1;
       setOpenConfirmDialog(true);
     }
   };
@@ -64,14 +60,14 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
         open={openConfirmDialog}
         setOpen={setOpenConfirmDialog}
         onConfirm={handleLoadPlayground}
-        title="Load dataset into playground"
-        description="Loading this dataset into the Playground will replace any unsaved changes. This action cannot be undone."
-        confirmText="Load dataset"
+        title="Load evaluation suite into playground"
+        description="Loading this evaluation suite into the Playground will replace any unsaved changes. This action cannot be undone."
+        confirmText="Load evaluation suite"
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={disabled}>
-            Use dataset
+            Use evaluation suite
             <ChevronDown className="ml-2 size-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -84,19 +80,21 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
             <div className="comet-body-s flex flex-col">
               <span>Open in Playground</span>
               <span className="text-light-slate">
-                Test prompts over your dataset and run evaluations interactively
+                Test prompts over your evaluation suite and run evaluations
+                interactively
               </span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={handleRunExperimentClick}
+            onClick={() => setOpenExperimentDialog(true)}
             disabled={disabled}
           >
             <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />
             <div className="comet-body-s flex flex-col">
               <span>Run an experiment</span>
               <span className="text-light-slate">
-                Use this dataset to run an experiment using the Python SDK
+                Use this evaluation suite to run an experiment using the Python
+                SDK
               </span>
             </div>
           </DropdownMenuItem>
@@ -104,6 +102,6 @@ const UseDatasetDropdown: React.FunctionComponent<UseDatasetDropdownProps> = ({
       </DropdownMenu>
     </>
   );
-};
+}
 
-export default UseDatasetDropdown;
+export default UseEvaluationSuiteDropdown;

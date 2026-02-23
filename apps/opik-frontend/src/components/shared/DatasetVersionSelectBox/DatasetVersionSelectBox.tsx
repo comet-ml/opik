@@ -28,7 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import AddEditEvaluationSuiteDialog from "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog";
 import useDatasetVersionSelect, {
   DEFAULT_LOADED_DATASETS,
 } from "./useDatasetVersionSelect";
@@ -58,10 +58,10 @@ function DatasetEmptyState() {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
       <div className="comet-body-s-accented pb-1 text-foreground">
-        No datasets available
+        No evaluation suites available
       </div>
       <div className="comet-body-s text-muted-slate">
-        Create a dataset with examples to evaluate your prompt on.
+        Create an evaluation suite with examples to evaluate your prompt on.
       </div>
     </div>
   );
@@ -175,7 +175,7 @@ function DatasetVersionSelectBox({
 
           {isEmpty ? (
             <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
-              <TooltipWrapper content="This dataset is empty">
+              <TooltipWrapper content="This evaluation suite is empty">
                 <Info className="size-3.5 text-light-slate" />
               </TooltipWrapper>
             </div>
@@ -296,7 +296,9 @@ function DatasetVersionSelectBox({
           open={isSelectOpen}
           disabled={disabled}
         >
-          <TooltipWrapper content={displayValue ?? "Select a dataset"}>
+          <TooltipWrapper
+            content={displayValue ?? "Select an evaluation suite"}
+          >
             <SelectTrigger
               className={cn(
                 "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
@@ -311,7 +313,7 @@ function DatasetVersionSelectBox({
                   <div className="flex w-full items-center text-light-slate">
                     <Database className="mr-2 size-4" />
                     <span className="truncate font-normal">
-                      Select a dataset
+                      Select an evaluation suite
                     </span>
                   </div>
                 }
@@ -341,7 +343,7 @@ function DatasetVersionSelectBox({
                 <Input
                   ref={inputRef}
                   className="outline-0"
-                  placeholder="Search datasets"
+                  placeholder="Search evaluation suites"
                   value={search}
                   variant="ghost"
                   onChange={(e) => setSearch(e.target.value)}
@@ -376,12 +378,11 @@ function DatasetVersionSelectBox({
           </Button>
         )}
       </div>
-      <AddEditDatasetDialog
+      <AddEditEvaluationSuiteDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
         setOpen={setIsDialogOpen}
         onDatasetCreated={handleDatasetCreated}
-        csvRequired
       />
     </>
   );

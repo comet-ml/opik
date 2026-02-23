@@ -1,17 +1,22 @@
-import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { BehaviorDisplayRow } from "@/types/evaluation-suites";
-import BehaviorNameCell from "./BehaviorNameCell";
 import MetricTypeCell from "./MetricTypeCell";
+import ExpectedBehaviorCell from "./ExpectedBehaviorCell";
 
-export const BEHAVIOR_COLUMNS: ColumnData<BehaviorDisplayRow>[] = [
+export const EVALUATOR_COLUMNS: ColumnData<BehaviorDisplayRow>[] = [
   {
-    id: "name",
+    id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: BehaviorNameCell as never,
   },
   {
-    id: "metric_type",
+    id: "assertions",
+    label: "Assertions",
+    type: COLUMN_TYPE.string,
+    cell: ExpectedBehaviorCell as never,
+  },
+  {
+    id: "type",
     label: "Metric type",
     type: COLUMN_TYPE.string,
     cell: MetricTypeCell as never,

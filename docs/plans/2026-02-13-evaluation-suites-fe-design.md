@@ -46,12 +46,11 @@ General dataset pages remain **completely untouched** — zero regression risk. 
 ```
 Evaluation (section)
 ├── Experiments          → /$workspaceName/experiments
-├── Evaluation suites    → /$workspaceName/evaluation-suites     (NEW, always visible)
-├── Datasets             → /$workspaceName/datasets              (EXISTING, only if user has general datasets)
+├── Evaluation suites    → /$workspaceName/evaluation-suites     (REPLACES "Datasets")
 └── Annotation queues    → /$workspaceName/annotation-queues
 ```
 
-Sidebar logic: fetch datasets, if any have `type='dataset'` show "Datasets" entry. Otherwise hide it.
+Sidebar logic: "Datasets" entry is **replaced** by "Evaluation suites". The old "Datasets" route still works for direct links but has no sidebar entry.
 
 ### Routes
 
@@ -74,13 +73,9 @@ Existing routes (general datasets, untouched):
 - Suites list: `{workspace} / Evaluation suites`
 - Suite detail: `{workspace} / Evaluation suites / {suite name}` — no trailing `/items`
 
-### Experiments page tabs
+### Experiments page
 
-```
-Experiments page
-├── Tab: "Evaluation suites"    (default)
-└── Tab: "General datasets"     (only if user has general datasets)
-```
+Single unified table — no tabs. All experiments (from both evaluation suites and general datasets) appear in one table. Column set adapts based on experiment type (e.g., pass rate column for evaluation suite experiments, feedback scores column for legacy experiments if they exist in workspace).
 
 ---
 
@@ -91,53 +86,54 @@ Experiments page
 ```
 components/pages/
   EvaluationSuitesPage/                        # List of all evaluation suites
-    EvaluationSuitesPage.tsx                   # Sub-header includes "Read more" link to docs
-    columns.tsx                                # Name, Description, Item count,
-                                               # Most recent experiment, Pass rate, Last updated
-    EvaluationSuiteRowActionsCell.tsx           # Edit, delete, duplicate (later)
+    EvaluationSuitesPage.tsx                   # Sub-header: "An evaluation suite is a collection
+                                               # of input and additional context and the
+                                               # corresponding behaviors that define how to
+                                               # evaluate your agent's performance."
+                                               # "Read more" link to docs
+    columns.tsx                                # Name, Type, Description, Item count,
+                                               # Most recent experiment, Last updated
+    EvaluationSuiteRowActionsCell.tsx           # Edit, delete
     AddEditEvaluationSuiteDialog.tsx            # Create/edit suite name + description
 
   EvaluationSuiteItemsPage/                    # Single suite detail page
     EvaluationSuiteItemsPage.tsx               # Main shell — tabs + draft flow
-    BehaviorsSection/                          # Above items table
-      BehaviorsSection.tsx                     # Suite-level evaluators list + add/edit/delete
+    EvaluatorsSection/                         # Above items table
+      EvaluatorsSection.tsx                    # Suite-level evaluators list + add/edit/delete
       ExecutionPolicyDropdown.tsx              # Settings2 icon → w-72 dropdown with
                                                # runs_per_item + pass_threshold inputs
-      AddEditBehaviorDialog.tsx                # Centered modal: metric type selector + config form
+      AddEditEvaluatorDialog.tsx               # Centered modal: metric type selector + config form
                                                # + optional name field with auto-default
       MetricConfigForm.tsx                     # Dynamic form per metric type (switch on 6 types)
     EvaluationSuiteItemsTab/                   # Items table tab
       EvaluationSuiteItemsTab.tsx
-      columns.tsx                              # Description, Context, Expected behaviors,
+      columns.tsx                              # Description, Data (JSON), Evaluators,
                                                # Execution policy (auto-show), Last updated
     EvaluationSuiteItemPanel/                  # Click on item → side panel (right)
       EvaluationSuiteItemPanel.tsx             # Three sections: top/middle/bottom
                                                # Title: "Evaluation suite item" (no item ID)
                                                # Changes feed into parent draft (no own save btn)
       ItemDescriptionSection.tsx               # Multi-line textarea for description
-      ItemExecutionPolicySection.tsx           # Read-only suite default + "Override" toggle
-      ItemBehaviorsSection.tsx                 # Two subsections: suite (read-only) + item (editable)
-      ItemContextSection.tsx                   # Reuses DatasetItemEditorForm pattern
-                                               # (TextareaAutosize + CodeMirror per field type)
+      ItemExecutionPolicySection.tsx           # Item-level execution policy fields
+      ItemEvaluatorsSection.tsx                # Flat list: all evaluators (editable)
+      ItemDataSection.tsx                      # Single JSON data field (CodeMirror)
     VersionHistoryTab/                         # Reuse existing pattern
 
   ExperimentsPage/
-    ExperimentsPage.tsx                        # Add tab navigation
-    GeneralDatasetsTab/                        # Extract current content
-    EvaluationSuitesTab/                       # Simplified experiments table
-      EvaluationSuitesTab.tsx
-      columns.tsx                              # Suite name, Created, Duration avg,
-                                               # Cost avg, Pass rate
+    ExperimentsPage.tsx                        # Unified single table (no tabs)
+    columns.tsx                                # Evaluation suite, Created, Duration avg,
+                                               # Cost avg, Pass rate,
+                                               # Feedback Scores (only if legacy experiments exist)
 
   EvaluationSuiteExperimentPage/               # Results for one experiment
     EvaluationSuiteExperimentPage.tsx          # Top section + items table
     ExperimentItemsTable/
-      columns.tsx                              # Context, Duration, Cost, Passed
+      columns.tsx                              # Description, Data (JSON), Duration, Cost, Passed
       PassedCell.tsx                           # Yes/No/Skipped + (2/3) for multi-run
-      BehaviorsBreakdownTooltip.tsx            # Per-behavior pass/fail on hover
+      AssertionsBreakdownTooltip.tsx           # Per-assertion pass/fail on hover
     ExperimentItemSidebar/
       ExperimentItemSidebar.tsx                # Left (context) + right (results)
-      BehaviorsResultsTable.tsx                # Behavior / Passed / Reason
+      AssertionsResultsTable.tsx               # Assertion / Passed / Reason
       MultiRunTabs.tsx                         # Run 1 / Run 2 / ... tabs
       PassFailBadge.tsx                        # Green PASSED / Red FAILED label
 ```
@@ -250,8 +246,8 @@ enum ExperimentItemStatus {
   SKIPPED = "skipped",  // Item incompatible with prompt — skipped, not failed
 }
 
-interface BehaviorResult {
-  behavior_name: string;
+interface AssertionResult {
+  assertion: string;
   passed: boolean;
   pass_score?: number;  // 0-1 float from LLM-as-Judge, used by optimizer. Display deferred to later phase.
   reason?: string;
@@ -309,8 +305,8 @@ On save: submit all changes as batch, create new version. Same conflict resoluti
 
 All changes across the suite detail page participate in a **single unified draft**:
 - Item changes (add/edit/delete)
-- Behavior changes at suite level (add/edit/delete)
-- Behavior changes at item level (add/edit/delete via side panel)
+- Evaluator changes at suite level (add/edit/delete)
+- Evaluator changes at item level (add/edit/delete via side panel)
 - Execution policy changes (suite-level or item-level overrides)
 
 **Draft indicators:**
@@ -320,19 +316,19 @@ All changes across the suite detail page participate in a **single unified draft
 - Leaving the page without saving triggers the "Unsaved changes" confirmation dialog
 
 **Item side panel interaction:**
-- Changes made in the side panel (description, behaviors, context, execution policy) automatically feed into the parent draft
+- Changes made in the side panel (description, evaluators, data, execution policy) automatically feed into the parent draft
 - No separate save/cancel buttons in the side panel itself
 - Closing the side panel returns to the page with draft still active
 
 ---
 
-## 4. Evaluators/Behaviors UI
+## 4. Evaluators UI
 
-### Suite-level behaviors section
+### Suite-level evaluators section
 
 Rendered above the items table on `EvaluationSuiteItemsPage`. Has a title and subtitle:
-- **Title:** "Evaluation suite behaviors"
-- **Subtitle:** "Define behaviors that will be evaluated on all the items in the evaluation suite"
+- **Title:** "Evaluation suite evaluators"
+- **Subtitle:** "Define evaluators that will be evaluated on all the items in the evaluation suite"
 
 Three parts:
 
@@ -342,10 +338,10 @@ Three parts:
 - Two number inputs inside:
   - `Runs per item` (default: 1, min: 1)
   - `Pass threshold` (default: 1, min: 1, max: runs_per_item)
-- Validation: runs_per_item >= 1, pass_threshold >= 1 AND <= runs_per_item
+- Validation: runs_per_item >= 1, pass_threshold > 0 AND <= runs_per_item
 - Changes mark draft dirty
 
-**Behaviors table** — all suite-level evaluators:
+**Evaluators table** — all suite-level evaluators:
 
 | Name | Metric type | Actions |
 |---|---|---|
@@ -360,12 +356,12 @@ Three parts:
   - LLM as Judge: full assertion text
 - LLM-as-Judge assertions displayed as **separate rows** (one per assertion) for edit/delete UX, but stored as a **single evaluator** in the backend — see "LLM-as-Judge aggregation" below
 - No visual grouping for LLM-Judge rows — aggregation is invisible to the user
-- **Empty state:** Section title/subtitle visible + "Add new behavior" button. No table rendered when empty.
+- **Empty state:** Section title/subtitle visible + "Add new evaluator" button. No table rendered when empty.
 
-**"Add new behavior" button → AddEditBehaviorDialog (centered modal):**
+**"Add new evaluator" button → AddEditEvaluatorDialog (centered modal):**
 
-- **Title:** "Add new behavior" (create) / "Edit behavior" (edit)
-- **Save button:** "Add behavior" / "Save behavior"
+- **Title:** "Add new evaluator" (create) / "Edit evaluator" (edit)
+- **Save button:** "Add evaluator" / "Save evaluator"
 - **Edit flow:** Same dialog reused with pre-filled values
 
 Three fields:
@@ -381,7 +377,7 @@ Three fields:
 
 | Metric type | Config form |
 |---|---|
-| LLM as a Judge | Text area: "Expected behavior" (single assertion text) |
+| LLM as a Judge | Text area: "Assertion" (single assertion text) |
 | Contains | Text input: "Value" + Checkbox: "Case sensitive" |
 | Equals | Text input: "Expected value" + Checkbox: "Case sensitive" |
 | Levenshtein Ratio | Number input: "Pass threshold" (0-1) — score >= threshold = pass |
@@ -390,22 +386,22 @@ Three fields:
 
 MetricConfigForm uses a switch on metric_type — only 6 types in Phase 1. Designed to be extensible for additional types (not_contains, json_schema, semantic_similarity, tool_call).
 
-All behavior changes (add/edit/delete) feed into the unified draft — no immediate API calls.
+All evaluator changes (add/edit/delete) feed into the unified draft — no immediate API calls.
 
 ### LLM-as-Judge aggregation (important FE logic)
 
-Per the PRD: "all the 'LLM as a Judge' behaviors should be aggregated into a single evaluator with multiple `expected_behaviors` when passed to the backend."
+Per the PRD: "all the 'LLM as a Judge' evaluators should be aggregated into a single evaluator with multiple `assertions` when passed to the backend."
 
 FE handles this as follows:
-- **Display:** Each LLM-as-Judge assertion shown as a separate row in the behaviors table (for individual edit/delete).
+- **Display:** Each LLM-as-Judge assertion shown as a separate row in the evaluators table (for individual edit/delete).
 - **On save:** FE aggregates all LLM-as-Judge rows into a **single** `dataset_evaluator` (or `dataset_item_evaluator`) record with `metric_config: { assertions: ["assertion 1", "assertion 2", ...] }`.
 - **On load:** FE splits the single aggregated record back into multiple display rows.
 
 This means the `LLMJudgeConfig` type stores an array of assertions, not a single string.
 
-### Item-level behaviors
+### Item-level evaluators
 
-Same `AddEditBehaviorDialog` reused, targeting `dataset_item_evaluators` endpoint. Same LLM-as-Judge aggregation logic applies per item.
+Same `AddEditEvaluatorDialog` reused, targeting `dataset_item_evaluators` endpoint. Same LLM-as-Judge aggregation logic applies per item.
 
 ### Item side panel (click on item row)
 
@@ -414,30 +410,25 @@ Opens as a **side panel** from the right (consistent with existing dataset item 
 **Top section:**
 - Title: "Evaluation suite item" (no item ID shown)
 - **Description:** multi-line textarea, editable
-- **Execution policy:** shows suite default as read-only context: *"Suite default: 1 run, 1 to pass"*
-  - Below that, a toggle: **"Override suite default"**
-  - Off (default): no fields shown, item uses suite policy
-  - On: reveals `Runs per item` and `Pass threshold` inputs
-  - Helper text below each field:
-    - "Runs per item" → *"The number of times the item will be evaluated"*
-    - "Pass threshold" → *"The number of times the item is required to pass the evaluation to be considered as 'passed'"*
+- **Execution policy:** item-level fields shown directly:
+  - `Runs per item` number input
+    - Helper text: *"The number of times the item will be evaluated"*
+  - `Pass threshold` number input
+    - Helper text: *"The number of times the item is required to pass the evaluation to be considered as 'passed'"*
 
-**Middle section — "Expected behaviors":**
+**Middle section — "Evaluators":**
 
-Two separate subsections:
-1. **"Suite behaviors" (read-only)** — shows inherited suite-level behaviors, visually grayed out / locked. Not editable from the item panel.
-2. **"Item behaviors" (editable)** — item-specific behaviors with add/edit/delete. Same "Add new behavior" button and `AddEditBehaviorDialog` as suite level.
+Flat list of all evaluators for this item (editable). Shows existing evaluators with edit/delete. "Add new evaluator" button reuses `AddEditEvaluatorDialog`.
 
-**Bottom section — "Context":**
+**Bottom section — "Data":**
 
-Reuses the existing dataset item editor pattern (`DatasetItemEditorForm`):
-- Auto-detect field types: simple values → `TextareaAutosize`, complex objects/arrays → `CodeMirror` with JSON syntax highlighting
-- Same Zod validation (complex fields must be valid JSON objects/arrays)
-- Same stringify (display) → parse (save) pipeline
+Single JSON data field rendered with `CodeMirror` (JSON syntax highlighting). Contains the full `data` object of the dataset item.
 
 ### Items table columns
 
-"Expected behaviors" column shows a count: `3 behaviors` — clickable, opens item side panel.
+"Evaluators" column shows a count: `3 evaluators` — clickable, opens item side panel.
+
+"Data" column shows truncated JSON. Hovering shows a dialog with the formatted JSON.
 
 "Execution policy" column: **hidden by default**. Auto-shows **only when >= 1 item has an execution policy override** different from suite default. When visible:
 - Items using suite default: empty / dash
@@ -447,49 +438,58 @@ Reuses the existing dataset item editor pattern (`DatasetItemEditorForm`):
 
 | Location | Display | Editable? |
 |---|---|---|
-| Suite behaviors section header | Settings2 dropdown with `Runs per item` and `Pass threshold` | Yes — changes mark draft dirty |
+| Suite evaluators section header | Settings2 dropdown with `Runs per item` and `Pass threshold` | Yes — changes mark draft dirty |
 | Items table column | Compact override value or dash (hidden if no overrides) | No — click opens side panel |
-| Item side panel | Read-only suite default + "Override" toggle + inputs | Yes — changes mark draft dirty |
+| Item side panel | Item-level `Runs per item` and `Pass threshold` inputs | Yes — changes mark draft dirty |
 
 ---
 
 ## 5. Experiment Results — Pass/Fail & Multi-Run
 
-### Experiments list (Evaluation Suites tab)
+### Dataset feedback score charts
 
-Flat table, no grouping, no charts:
+Adapt existing charts to show a single line of aggregated score based on pass rate:
+- **Calculation logic:**
+  - For each item run: `passed` = if all assertions passed → 1, else 0
+  - For each item: `passed` = if sum of `passed` for all item runs >= `pass_threshold` → 1, else 0
+  - `experiment_score` = `avg(passed)` calculated based on all items
 
-| Evaluation suite | Created | Duration (avg.) | Cost per trace (avg.) | Pass rate |
-|---|---|---|---|---|
-| Refund Policy Tests | Feb 13, 2026 | 2.3s | $0.012 | 76.2% (16/21) |
-| ~~Onboarding Flow~~ (deleted) | Feb 10, 2026 | 1.5s | $0.009 | 100% (5/5) |
+### Experiments list (unified table)
+
+Single table with all experiments. Column set adapts by experiment type:
+
+| Evaluation suite | Created | Duration (avg.) | Cost per trace (avg.) | Pass rate | Feedback Scores |
+|---|---|---|---|---|---|
+| Refund Policy Tests | Feb 13, 2026 | 2.3s | $0.012 | 76.2% (16/21) | — |
+| ~~Onboarding Flow~~ (deleted) | Feb 10, 2026 | 1.5s | $0.009 | 100% (5/5) | — |
+| Legacy Dataset Exp | Feb 8, 2026 | 1.2s | $0.008 | — | 0.85 |
 
 - Pass rate format: `percentage (passed/total)`.
+- **Feedback Scores column:** only shown if legacy (general dataset) experiments exist in workspace.
 - If the evaluation suite has been deleted, show the suite name with strikethrough and a "(deleted)" indicator. Past experiment results remain accessible.
+- Clicking on an experiment navigates to the experiment results view.
 
 ### Experiment results page
 
-**Top section:**
-- Suite name + creation date as main identifier
-- Pass rate display
-- No Details/Dashboards toggle
+**Top section:** Keep existing experiment page top section as-is (no changes to header layout or Details/Dashboards toggle).
 
 **Items table:**
 
-| Context | Duration | Estimated cost | Passed |
-|---|---|---|---|
-| `{"user_tier": "premium", ...}` | 2.1s | $0.011 | Yes |
-| `{"user_tier": "free", ...}` | 2.4s | $0.013 | No |
-| `{"user_tier": "enterprise", ...}` | 1.9s | $0.010 | Yes (2/3) |
+| Description | Data | Duration | Estimated cost | Passed |
+|---|---|---|---|---|
+| User asks about refunds | `{"user_tier": "premium", ...}` | 2.1s | $0.011 | Yes |
+| Free tier billing question | `{"user_tier": "free", ...}` | 2.4s | $0.013 | No |
+| Enterprise onboarding | `{"user_tier": "enterprise", ...}` | 1.9s | $0.010 | Yes (2/3) |
 
 **Passed column:**
 - Single run: `Yes` (green), `No` (red), or `Skipped` (gray — item incompatible with prompt)
 - Multi-run: `Yes (2/3)` or `No (1/3)`
-- Hover tooltip: per-behavior breakdown table
-  - Single run: Behavior / Passed columns
-  - Multi-run: Behavior / Passed? (1) / Passed? (2) / Passed? (3) columns (header format matches PRD)
+- Pass logic: if sum of `passed` for all item runs >= `pass_threshold` → Yes, else No
+- Hover tooltip: per-assertion breakdown table
+  - Single run: Assertion / Passed columns
+  - Multi-run: Assertion / Passed? (1) / Passed? (2) / Passed? (3) columns (header format matches PRD)
 
-**Context column:** truncated JSON, click opens read-only formatted dialog.
+**Data column:** truncated JSON, clicking/hovering opens a read-only dialog with formatted JSON.
 
 ### Experiment item sidebar
 
@@ -497,13 +497,13 @@ Flat table, no grouping, no charts:
 - Item data fields, default YAML view
 - No "?" tooltip icon
 
-**Right pane — "Experiment results":**
+**Right pane:**
 - PASSED/FAILED badge (green/red) next to title
 - Output section (trace output)
-- "Expected behaviors (n)" table: Behavior / Passed / Reason columns
+- "Assertions (n)" table: Assertion / Passed / Reason columns
 - No "Your scores" tab, no "Comments" section
 
-**Multi-run:** Run 1 / Run 2 / ... / Run N tab navigation above output. Each tab shows that run's output + behavior results. Top-level badge reflects item-level result.
+**Multi-run:** Run 1 / Run 2 / ... / Run N tab navigation above output. Each tab shows that run's output + assertion results. Top-level badge reflects item-level result.
 
 ---
 
@@ -515,7 +515,7 @@ Flat table, no grouping, no charts:
 - [x] Create `EvaluationSuiteItemsPage` shell with renamed text (tabs: Items, Version history — stubs)
 - [x] Create `EvaluationSuitePage` layout component (breadcrumbs, redirect `/$suiteId` → `/$suiteId/items`)
 - [x] Register new routes in router (`/evaluation-suites`, `/$suiteId`, `/$suiteId/items`)
-- [x] Add "Evaluation suites" sidebar entry with `ListChecks` icon
+- [x] Add "Evaluation suites" sidebar entry with `ListChecks` icon replacing "Datasets"
 - [x] Conditionally show "Datasets" sidebar entry based on `hasGeneralDatasets` check
 
 **BE dependency:** None.
@@ -535,14 +535,15 @@ Flat table, no grouping, no charts:
 
 - [x] `DATASET_TYPE` enum added to `types/datasets.ts` (`DATASET`, `EVALUATION_SUITE`)
 - [x] `DatasetsPage` filters to `type=dataset`
-- [x] Sidebar: show/hide "Datasets" based on actual data (`hasGeneralDatasets`)
+- [x] Sidebar: "Evaluation suites" replaces "Datasets" entry (old "Datasets" route still accessible via direct link)
 - [x] Experiments page: tab navigation with "Evaluation suites" (default) and "General datasets" tabs
 - [x] `EvaluationSuitesTab` on Experiments page — functional with columns, search, pagination
 - [x] `GeneralDatasetsTab` extracted from old ExperimentsPage — fully functional
 
 **Remaining Phase 2 items (not yet done):**
 - [ ] `AddEditEvaluationSuiteDialog` create mutation sends `type=evaluation_suite` in payload
-- [ ] `EvaluationSuitesTab` filters experiments by `dataset_type=evaluation_suite` (has TODO comment)
+- [ ] Experiments page: migrate from tabs to **unified single table** (all experiments in one table, column set adapts by type)
+- [ ] Add `Type` column to suites list table
 
 **BE dependency:** `type` field migration, list endpoint filter support, experiments endpoint dataset type filter.
 
@@ -558,32 +559,30 @@ Flat table, no grouping, no charts:
 
 ### Phase 3 — Evaluators & execution policy (needs BE: new endpoints)
 
-- [ ] `BehaviorsSection`: execution policy form, behaviors table, add/edit/delete dialog with metric type selector + config form
-- [ ] `EvaluationSuiteItemDialog`: three-section layout (description + policy / item behaviors / context)
-- [ ] Items table: new default columns (description, context, expected behaviors, execution policy)
+- [ ] `EvaluatorsSection`: execution policy form, evaluators table, add/edit/delete dialog with metric type selector + config form
+- [ ] `EvaluationSuiteItemPanel`: three-section layout (description + policy / item evaluators / data)
+- [ ] Items table: new default columns (description, data, evaluators, execution policy)
 - [ ] `EvaluationSuiteDraftStore`: tracks item + evaluator + policy changes
 - [ ] `description` field on items rendered and editable
+- [ ] "Run an experiment" dialog: remove left pane "Select evaluators" and metrics parts for evaluation suites
 
 **BE dependency:** `dataset_evaluators` and `dataset_item_evaluators` CRUD endpoints, `default_execution_policy` on datasets, `description` + `execution_policy` on dataset_items.
 
 ### Phase 4 — Experiment results with pass/fail (needs BE + SDK)
 
-- [ ] `EvaluationSuitesTab` on Experiments page: pass rate column functional
-- [ ] `EvaluationSuiteExperimentPage`: suite name + date header, items table with Passed column
-- [ ] `PassedCell` + `BehaviorsBreakdownTooltip`: pass/fail with per-behavior hover
+- [ ] Unified experiments table: pass rate column functional, feedback scores column for legacy experiments
+- [ ] Dataset feedback score charts adapted for pass rate aggregation
+- [ ] `EvaluationSuiteExperimentPage`: items table with Description, Data, Passed columns
+- [ ] `PassedCell` + `AssertionsBreakdownTooltip`: pass/fail with per-assertion hover
 - [ ] Multi-run: `Yes (2/3)` format, per-run tooltip
-- [ ] `ExperimentItemSidebar`: PASSED/FAILED badge, behaviors results table, multi-run tabs
-- [ ] Pass rate column on suites list page
+- [ ] `ExperimentItemSidebar`: PASSED/FAILED badge, assertions results table, multi-run tabs
 
 **BE dependency:** `run_number` on experiment_items, `execution_policy` on experiments, computed `passed`/`pass_rate` fields.
 **SDK dependency:** Multi-run execution, metric serialization, LLM-as-Judge evaluator populating results.
 
 ### Phase 5 — Polish & lower priority
 
-- [ ] Duplicate suite action
-- [ ] Duplicate item action
-- [ ] "Run an experiment" dialog simplified for suites
-- [ ] Demo/seed data update
+- [ ] Demo/seed data update (use evaluation suites for default data)
 
 ---
 
@@ -591,9 +590,8 @@ Flat table, no grouping, no charts:
 
 1. **Pass/fail computation** — Does BE return computed `passed` on experiment items and `pass_rate` on experiments? Or does FE compute from raw feedback scores + policy?
 2. **Metric config schema** — Is there a BE-provided schema per metric_type, or does FE hardcode the 6 Phase 1 config shapes?
-3. **LLM-as-Judge result storage** — Are per-assertion results stored as separate FeedbackScores or one structured score? FE needs per-assertion `passed`, `pass_score`, and `reason` to render the behaviors breakdown table.
-4. **Dataset duplication endpoint** — Will BE provide this, or does FE implement as fetch + re-create?
-5. **Sidebar dataset type check** — Can the datasets list endpoint return a count by type efficiently, or should FE fetch the full list?
-6. **Skipped items** — When an item is incompatible with the prompt and gets skipped, how is this represented in experiment_items? Is there a status field, or is the item simply absent?
-7. **Online evaluation metrics integration** — Can we reuse the existing automation rules/online scoring system as metric sources in the "Add behavior" dialog? What endpoint returns available online evaluators?
-8. **LLM-as-Judge aggregation on save** — FE will aggregate multiple LLM-as-Judge assertions into a single evaluator record. Does BE expect `metric_config: { assertions: [...] }` format, or a different shape?
+3. **LLM-as-Judge result storage** — Are per-assertion results stored as separate FeedbackScores or one structured score? FE needs per-assertion `passed`, `pass_score`, and `reason` to render the assertions breakdown table.
+4. **Skipped items** — When an item is incompatible with the prompt and gets skipped, how is this represented in experiment_items? Is there a status field, or is the item simply absent?
+5. **Online evaluation metrics integration** — Can we reuse the existing automation rules/online scoring system as metric sources in the "Add evaluator" dialog? What endpoint returns available online evaluators?
+6. **LLM-as-Judge aggregation on save** — FE will aggregate multiple LLM-as-Judge assertions into a single evaluator record. Does BE expect `metric_config: { assertions: [...] }` format, or a different shape?
+7. **Chart aggregation data** — Does BE return pre-computed experiment scores for charting, or does FE compute `avg(passed)` from individual item results?

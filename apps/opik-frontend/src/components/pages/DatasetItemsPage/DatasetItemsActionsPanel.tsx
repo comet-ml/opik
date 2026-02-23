@@ -20,7 +20,7 @@ import {
   useBulkDeleteItems,
   useBulkAddItems,
   useIsAllItemsSelected,
-} from "@/store/DatasetDraftStore";
+} from "@/store/EvaluationSuiteDraftStore";
 import { useToast } from "@/components/ui/use-toast";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
 
@@ -146,7 +146,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     (extension = "csv") => {
       return `${slugify(datasetName, {
         lower: true,
-      })}-dataset-items.${extension}`;
+      })}-evaluation-suite-items.${extension}`;
     },
     [datasetName],
   );

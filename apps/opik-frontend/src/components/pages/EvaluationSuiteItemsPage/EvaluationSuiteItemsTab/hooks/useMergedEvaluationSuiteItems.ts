@@ -4,6 +4,9 @@ import {
   useDeletedIds,
   useEditedItems,
   useIsDraftMode,
+  useItemAddedBehaviorsMap,
+  useItemEditedBehaviorsMap,
+  useItemDeletedBehaviorIdsMap,
 } from "@/store/EvaluationSuiteDraftStore";
 import useDatasetItemsList, {
   UseDatasetItemsListParams,
@@ -11,6 +14,18 @@ import useDatasetItemsList, {
 } from "@/api/datasets/useDatasetItemsList";
 import { QueryConfig } from "@/api/api";
 import { mergeItemsWithDraftChanges } from "@/lib/dataset-items";
+import {
+  DATASET_ITEM_DRAFT_STATUS,
+  DatasetItemWithDraft,
+} from "@/types/datasets";
+
+function hasNonEmptyInner(
+  map: Map<string, { size: number }>,
+  id: string,
+): boolean {
+  const inner = map.get(id);
+  return inner != null && inner.size > 0;
+}
 
 export const useEvaluationSuiteItemsWithDraft = (
   params: UseDatasetItemsListParams,
@@ -20,20 +35,46 @@ export const useEvaluationSuiteItemsWithDraft = (
   const draftAddedItems = useAddedItems();
   const draftEditedItems = useEditedItems();
   const draftDeletedIds = useDeletedIds();
+  const itemAddedBehaviors = useItemAddedBehaviorsMap();
+  const itemEditedBehaviors = useItemEditedBehaviorsMap();
+  const itemDeletedBehaviorIds = useItemDeletedBehaviorIdsMap();
 
   const query = useDatasetItemsList(params, options);
 
   const mergedContent = useMemo(() => {
     const apiItems = query.data?.content ?? [];
 
-    if (!isDraftMode) {
-      return apiItems;
+    let items: DatasetItemWithDraft[];
+
+    if (isDraftMode) {
+      items = mergeItemsWithDraftChanges(apiItems, {
+        addedItems: draftAddedItems,
+        editedItems: draftEditedItems,
+        deletedIds: draftDeletedIds,
+      });
+    } else {
+      items = apiItems;
     }
 
-    return mergeItemsWithDraftChanges(apiItems, {
-      addedItems: draftAddedItems,
-      editedItems: draftEditedItems,
-      deletedIds: draftDeletedIds,
+    // Mark items with item-level behavior changes as edited
+    return items.map((item) => {
+      if (
+        item.draftStatus === DATASET_ITEM_DRAFT_STATUS.added ||
+        item.draftStatus === DATASET_ITEM_DRAFT_STATUS.edited
+      ) {
+        return item;
+      }
+
+      const hasBehaviorChanges =
+        hasNonEmptyInner(itemAddedBehaviors, item.id) ||
+        hasNonEmptyInner(itemEditedBehaviors, item.id) ||
+        hasNonEmptyInner(itemDeletedBehaviorIds, item.id);
+
+      if (hasBehaviorChanges) {
+        return { ...item, draftStatus: DATASET_ITEM_DRAFT_STATUS.edited };
+      }
+
+      return item;
     });
   }, [
     query.data?.content,
@@ -41,6 +82,9 @@ export const useEvaluationSuiteItemsWithDraft = (
     draftAddedItems,
     draftEditedItems,
     draftDeletedIds,
+    itemAddedBehaviors,
+    itemEditedBehaviors,
+    itemDeletedBehaviorIds,
   ]);
 
   return {

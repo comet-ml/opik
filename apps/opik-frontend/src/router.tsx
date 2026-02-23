@@ -10,9 +10,6 @@ import {
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
-import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
-import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
-import DatasetsPage from "@/components/pages/DatasetsPage/DatasetsPage";
 import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
 import HomePage from "@/components/pages/HomePage/HomePage";
@@ -47,7 +44,6 @@ import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 import EvaluationSuitesPage from "@/components/pages/EvaluationSuitesPage/EvaluationSuitesPage";
 import EvaluationSuitePage from "@/components/pages/EvaluationSuitePage/EvaluationSuitePage";
 import EvaluationSuiteItemsPage from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
-import EvaluationSuiteExperimentPage from "@/components/pages/EvaluationSuiteExperimentPage/EvaluationSuiteExperimentPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -329,45 +325,59 @@ const evaluationSuiteItemsRoute = createRoute({
   component: EvaluationSuiteItemsPage,
 });
 
-const evaluationSuiteExperimentRoute = createRoute({
-  path: "/$suiteId/experiments/$experimentId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuiteExperimentPage,
-  staticData: {
-    param: "experimentId",
-  },
-});
-
-// ----------- datasets
+// ----------- datasets (legacy redirects)
 const datasetsRoute = createRoute({
   path: "/datasets",
   getParentRoute: () => workspaceRoute,
-  staticData: {
-    title: "Datasets",
-  },
 });
 
 const datasetsListRoute = createRoute({
   path: "/",
   getParentRoute: () => datasetsRoute,
-  component: DatasetsPage,
+  component: () => (
+    <Navigate
+      to="/$workspaceName/evaluation-suites"
+      params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
+    />
+  ),
 });
 
 const datasetRoute = createRoute({
   path: "/$datasetId",
   getParentRoute: () => datasetsRoute,
-  component: DatasetPage,
-  staticData: {
-    param: "datasetId",
+});
+
+const datasetRedirectRoute = createRoute({
+  path: "/",
+  getParentRoute: () => datasetRoute,
+  component: () => {
+    const { datasetId } = datasetRoute.useParams();
+    return (
+      <Navigate
+        to="/$workspaceName/evaluation-suites/$suiteId"
+        params={{
+          workspaceName: useAppStore.getState().activeWorkspaceName,
+          suiteId: datasetId,
+        }}
+      />
+    );
   },
 });
 
 const datasetItemsRoute = createRoute({
   path: "/items",
   getParentRoute: () => datasetRoute,
-  component: DatasetItemsPage,
-  staticData: {
-    title: "Items",
+  component: () => {
+    const { datasetId } = datasetRoute.useParams();
+    return (
+      <Navigate
+        to="/$workspaceName/evaluation-suites/$suiteId/items"
+        params={{
+          workspaceName: useAppStore.getState().activeWorkspaceName,
+          suiteId: datasetId,
+        }}
+      />
+    );
   },
 });
 
@@ -540,10 +550,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       evaluationSuitesRoute.addChildren([
         evaluationSuitesListRoute,
-        evaluationSuiteRoute.addChildren([
-          evaluationSuiteItemsRoute,
-        ]),
-        evaluationSuiteExperimentRoute,
+        evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
@@ -556,7 +563,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,
-        datasetRoute.addChildren([datasetItemsRoute]),
+        datasetRoute.addChildren([datasetRedirectRoute, datasetItemsRoute]),
       ]),
       promptsRoute.addChildren([promptsListRoute, promptRoute]),
       redirectRoute.addChildren([

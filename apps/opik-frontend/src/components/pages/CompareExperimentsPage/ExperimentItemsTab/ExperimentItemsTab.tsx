@@ -76,6 +76,8 @@ import {
 import useExperimentItemsState from "@/components/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/components/pages-shared/experiments/useExperimentItemsData";
 import useExperimentItemsSidebar from "@/components/pages-shared/experiments/useExperimentItemsSidebar";
+import PassedCell from "@/components/pages/EvaluationSuiteExperimentPage/PassedCell";
+import EvaluationSuiteExperimentPanel from "@/components/pages/EvaluationSuiteExperimentPage/ExperimentItemSidebar/EvaluationSuiteExperimentPanel";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -85,13 +87,14 @@ const calculateVerticalAlignment = (count: number) =>
 const columnHelper = createColumnHelper<ExperimentsCompare>();
 
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
+const COLUMN_PASSED_ID = "passed";
 const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "ID (Dataset item)",
+    label: "ID (Evaluation suite item)",
     type: COLUMN_TYPE.string,
   },
   {
@@ -116,7 +119,7 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   },
 ];
 
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
 };
@@ -130,13 +133,18 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
   experiments?: Experiment[];
+  isEvalSuite?: boolean;
+  datasetId?: string;
 };
 
 const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   experimentsIds = [],
   experiments,
+  isEvalSuite,
+  datasetId: datasetIdProp,
 }) => {
-  const datasetId = useDatasetIdFromCompareExperimentsURL();
+  const datasetIdFromURL = useDatasetIdFromCompareExperimentsURL();
+  const datasetId = datasetIdProp ?? datasetIdFromURL;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const truncationEnabled = useTruncationEnabled();
 
@@ -213,6 +221,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const experimentsCount = experimentsIds.length;
   const noDataText = "There is no data for the selected experiments";
+
+  const columnPinning = useMemo<ColumnPinningState>(
+    () => ({
+      left: [COLUMN_SELECT_ID],
+      right: isEvalSuite ? [COLUMN_PASSED_ID] : [],
+    }),
+    [isEvalSuite],
+  );
 
   const filtersConfig = useMemo(
     () => ({
@@ -387,13 +403,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       }),
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
+        label: "ID (Evaluation suite item)",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
         size: 180,
         sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_evaluation_suite_item],
       }),
     ];
 
@@ -402,7 +418,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: "Dataset",
+            header: "Evaluation suite",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -487,9 +503,22 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
+    if (isEvalSuite) {
+      retVal.push(
+        mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
+          id: COLUMN_PASSED_ID,
+          label: "Passed",
+          type: COLUMN_TYPE.string,
+          cell: PassedCell as never,
+          size: 100,
+        }),
+      );
+    }
+
     return retVal;
   }, [
     experimentsCount,
+    isEvalSuite,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,
@@ -522,7 +551,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...sortBy(dynamicDatasetColumns, "label").map(
         ({ id, label, columnType }) => ({
           id,
-          label: `${label} (Dataset)`,
+          label: `${label} (Evaluation suite)`,
           type: columnType,
         }),
       ),
@@ -545,15 +574,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   );
 
   const getRowHeightStyle = useCallback(
-    (height: ROW_HEIGHT) => {
-      let retVal = calculateHeightStyle(height);
-
-      if (experimentsCount > 1) {
-        retVal = calculateLineHeight(height, experimentsCount);
-      }
-
-      return retVal;
-    },
+    (height: ROW_HEIGHT) =>
+      experimentsCount > 1
+        ? calculateLineHeight(height, experimentsCount)
+        : calculateHeightStyle(height),
     [experimentsCount],
   );
 
@@ -596,6 +620,31 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
 
+  const sharedPanelProps = useMemo(
+    () => ({
+      experimentsCompareId: activeRowId,
+      experimentsCompare: activeRow,
+      experimentsIds,
+      hasPreviousRow: hasPrevious,
+      hasNextRow: hasNext,
+      openTrace: setTraceId as OnChangeFn<string>,
+      onClose: handleClose,
+      onRowChange: handleRowChange,
+      isTraceDetailsOpened: Boolean(traceId),
+    }),
+    [
+      activeRowId,
+      activeRow,
+      experimentsIds,
+      hasPrevious,
+      hasNext,
+      setTraceId,
+      handleClose,
+      handleRowChange,
+      traceId,
+    ],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -617,7 +666,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search dataset items"
+            placeholder="Search evaluation suite items"
             className="w-[320px]"
             dimension="sm"
           />
@@ -669,7 +718,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         getRowHeightStyle={getRowHeightStyle}
-        columnPinning={DEFAULT_COLUMN_PINNING}
+        columnPinning={columnPinning}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
@@ -692,17 +741,14 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
-      <CompareExperimentsPanel
-        experimentsCompareId={activeRowId}
-        experimentsCompare={activeRow}
-        experimentsIds={experimentsIds}
-        hasPreviousRow={hasPrevious}
-        hasNextRow={hasNext}
-        openTrace={setTraceId as OnChangeFn<string>}
-        onClose={handleClose}
-        onRowChange={handleRowChange}
-        isTraceDetailsOpened={Boolean(traceId)}
-      />
+      {isEvalSuite ? (
+        <EvaluationSuiteExperimentPanel
+          {...sharedPanelProps}
+          datasetId={datasetId!}
+        />
+      ) : (
+        <CompareExperimentsPanel {...sharedPanelProps} />
+      )}
       <TraceDetailsPanel
         traceId={traceId!}
         spanId={spanId!}

@@ -54,9 +54,7 @@ const BehaviorsBreakdownTooltip = ({
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b text-muted-slate">
-                <th className="px-3 py-1.5 text-left font-medium">
-                  Behavior
-                </th>
+                <th className="px-3 py-1.5 text-left font-medium">Evaluator</th>
                 {behaviorsByRun.map((_, runIdx) => (
                   <th
                     key={runIdx}

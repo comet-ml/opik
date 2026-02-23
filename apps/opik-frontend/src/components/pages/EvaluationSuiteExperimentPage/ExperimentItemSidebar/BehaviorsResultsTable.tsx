@@ -15,12 +15,12 @@ const BehaviorsResultsTable: React.FunctionComponent<
   return (
     <div className="mt-4">
       <h4 className="comet-body-s-accented mb-2">
-        Expected behaviors ({behaviors.length})
+        Evaluator results ({behaviors.length})
       </h4>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-slate">
-            <th className="pb-1.5 text-left font-medium">Behavior</th>
+            <th className="pb-1.5 text-left font-medium">Evaluator</th>
             <th className="w-16 pb-1.5 text-center font-medium">Passed</th>
             <th className="pb-1.5 text-left font-medium">Reason</th>
           </tr>
