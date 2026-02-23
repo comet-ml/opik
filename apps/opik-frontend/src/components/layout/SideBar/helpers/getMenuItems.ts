@@ -61,16 +61,18 @@ const getMenuItems = ({
       id: "evaluation",
       label: "Evaluation",
       items: [
-        canViewExperiments
-          ? {
-              id: "experiments" as const,
-              path: "/$workspaceName/experiments" as const,
-              type: MENU_ITEM_TYPE.router,
-              icon: FlaskConical,
-              label: "Experiments" as const,
-              count: "experiments" as const,
-            }
-          : null,
+        ...(canViewExperiments
+          ? [
+              {
+                id: "experiments" as const,
+                path: "/$workspaceName/experiments" as const,
+                type: MENU_ITEM_TYPE.router,
+                icon: FlaskConical,
+                label: "Experiments" as const,
+                count: "experiments" as const,
+              },
+            ]
+          : []),
         {
           id: "datasets",
           path: "/$workspaceName/datasets",
