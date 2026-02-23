@@ -33,7 +33,7 @@
         <redisson.version>3.52.0</redisson.version>
         <opentelmetry.version>2.25.0</opentelmetry.version>
         <aws.java.sdk.version>2.41.5</aws.java.sdk.version>
-        <json-path.version>2.10.0</json-path.version>
+        <json-path.version>3.0.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
