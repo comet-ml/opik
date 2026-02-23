@@ -67,7 +67,9 @@ spec:
         templates:
           podTemplate: {{ .Values.clickhouse.templates.podTemplate }}
           serviceTemplate: {{ .Values.clickhouse.templates.serviceTemplate }}
+          {{- if .Values.clickhouse.templates.clusterServiceTemplate }}
           clusterServiceTemplate: {{ .Values.clickhouse.templates.clusterServiceTemplate }}
+          {{- end }}
           replicaServiceTemplate: {{ .Values.clickhouse.templates.replicaServiceTemplate }}
           volumeClaimTemplate: {{ .Values.clickhouse.templates.volumeClaimTemplate }}
   templates:

@@ -171,7 +171,7 @@ class ExperimentAggregatesIntegrationTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("countFilterScenarios")
     @DisplayName("ExperimentDAO.FIND_COUNT matches FIND_COUNT_FROM_AGGREGATES")
-    void testExperimentCountWithAggregates(
+    void experimentCountMatchesAggregates(
             String scenarioName,
             Function<CountTestData, ExperimentSearchCriteria> criteriaBuilder) {
 
@@ -365,7 +365,7 @@ class ExperimentAggregatesIntegrationTest {
 
     @Test
     @DisplayName("ExperimentDAO.FIND calculated values match experiment_aggregates stored values")
-    void testExperimentDaoFindWithAggregates() {
+    void experimentDaoFindMatchesAggregates() {
         // Given: Create experiment with known test data
         // Given: Create test data
         List<Project> projects = IntStream.range(0, 5)

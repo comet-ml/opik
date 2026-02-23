@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiaghora:000059_create_experiment_aggregates_and_experiment_item_aggregates_tables
+--changeset thiaghora:000060_create_experiment_aggregates_and_experiment_item_aggregates_tables
 --comment: Create experiment_aggregates and experiment_item_aggregates tables for storing aggregated metrics at the experiment and experiment item level, respectively.
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
@@ -58,31 +58,31 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggrega
     `last_updated_at` DateTime64(9, 'UTC') DEFAULT now64(9) CODEC(Delta, ZSTD(3)),
     `created_by` String DEFAULT '' CODEC(ZSTD(3)),
     `last_updated_by` String DEFAULT '' CODEC(ZSTD(3))
-)
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/experiment_item_aggregates', '{replica}', last_updated_at)
-ORDER BY (workspace_id, experiment_id, id)
-SETTINGS index_granularity = 8192;
+    )
+    ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/experiment_item_aggregates', '{replica}', last_updated_at)
+    ORDER BY (workspace_id, experiment_id, id)
+    SETTINGS index_granularity = 8192;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_aggregates_dataset_id dataset_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_dataset_id dataset_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_aggregates_optimization_id optimization_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_optimization_id optimization_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_aggregates_dataset_version_id dataset_version_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_dataset_version_id dataset_version_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_item_aggregates_dataset_item_id dataset_item_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_dataset_item_id dataset_item_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_item_aggregates_trace_id trace_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_trace_id trace_id TYPE minmax GRANULARITY 4;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-ADD INDEX idx_experiment_item_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_dataset_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_project_id;

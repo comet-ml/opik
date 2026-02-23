@@ -17,6 +17,7 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.domain.DatasetItemResultMapper;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.ExperimentSearchCriteriaBinder;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GroupingQueryBuilder;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -74,7 +75,7 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @ImplementedBy(ExperimentAggregatesDAOImpl.class)
 public interface ExperimentAggregatesDAO {
 
-    Mono<Void> populateExperimentAggregate(UUID experimentId);
+    Mono<Void> populateExperimentAggregate(@NonNull UUID experimentId);
 
     Mono<BatchResult> populateExperimentItemAggregates(UUID experimentId, UUID cursor, int limit);
 
@@ -110,6 +111,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+
+    /**
+     * Filter strategies used for experiment aggregates search binding.
+     * Reused across all experiment search operations to avoid repeated allocations.
+     */
+    private static final List<FilterStrategy> FILTER_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+            FilterStrategy.EXPERIMENT_SCORES,
+            FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
 
     public static final String SELECT_EXPERIMENT_BY_ID = """
             SELECT
@@ -164,7 +176,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 type,
                 status,
                 experiment_scores
-            FROM experiments FINAL
+            FROM experiments
             WHERE workspace_id = :workspace_id
             AND id = :experiment_id
             SETTINGS log_comment = '<log_comment>'
@@ -1117,59 +1129,44 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     @Override
     public Mono<Void> populateExperimentAggregate(UUID experimentId) {
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get("workspaceId");
+        return getExperimentData(experimentId)
+                .flatMap(experimentData -> {
+                    // First check if experiment has any items
+                    return getExperimentItemsCount(experimentId)
+                            .flatMap(itemsCount -> {
+                                if (itemsCount == 0) {
+                                    // Handle experiments with zero items - insert empty aggregate row
+                                    return insertExperimentAggregate(
+                                            experimentData,
+                                            createEmptyTraceAggregations(experimentId),
+                                            createEmptySpanAggregations(experimentId),
+                                            createEmptyFeedbackScoreAggregations(experimentId),
+                                            0L);
+                                }
 
-            log.info("Populating experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                    experimentId, workspaceId);
+                                // Get project_id for experiments with items
+                                return getProjectId(experimentId)
+                                        .flatMap(projectId -> {
+                                            // Fetch aggregations using project_id for filtering
+                                            return Mono.zip(
+                                                    getTraceAggregations(experimentId, projectId),
+                                                    getSpanAggregations(experimentId, projectId),
+                                                    getFeedbackScoreAggregations(experimentId, projectId))
+                                                    .flatMap(tuple -> {
+                                                        var traceAgg = tuple.getT1();
+                                                        var spanAgg = tuple.getT2();
+                                                        var feedbackAgg = tuple.getT3();
 
-            return getExperimentData(experimentId)
-                    .flatMap(experimentData -> {
-                        // First check if experiment has any items
-                        return getExperimentItemsCount(experimentId)
-                                .flatMap(itemsCount -> {
-                                    if (itemsCount == 0) {
-                                        // Handle experiments with zero items - insert empty aggregate row
-                                        log.info("Experiment '{}' has no items, inserting empty aggregate",
-                                                experimentId);
-                                        return insertExperimentAggregate(
-                                                experimentData,
-                                                createEmptyTraceAggregations(experimentId),
-                                                createEmptySpanAggregations(experimentId),
-                                                createEmptyFeedbackScoreAggregations(experimentId),
-                                                0L);
-                                    }
-
-                                    // Get project_id for experiments with items
-                                    return getProjectId(experimentId)
-                                            .flatMap(projectId -> {
-                                                // Fetch aggregations using project_id for filtering
-                                                return Mono.zip(
-                                                        getTraceAggregations(experimentId, projectId),
-                                                        getSpanAggregations(experimentId, projectId),
-                                                        getFeedbackScoreAggregations(experimentId, projectId))
-                                                        .flatMap(tuple -> {
-                                                            var traceAgg = tuple.getT1();
-                                                            var spanAgg = tuple.getT2();
-                                                            var feedbackAgg = tuple.getT3();
-
-                                                            return insertExperimentAggregate(
-                                                                    experimentData,
-                                                                    traceAgg,
-                                                                    spanAgg,
-                                                                    feedbackAgg,
-                                                                    itemsCount);
-                                                        });
-                                            });
-                                });
-                    })
-                    .doOnSuccess(v -> log.info(
-                            "Successfully populated experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                            experimentId, workspaceId))
-                    .doOnError(error -> log.error(
-                            "Failed to populate experiment_aggregates for experiment: '{}' in workspace: '{}'",
-                            experimentId, workspaceId, error));
-        });
+                                                        return insertExperimentAggregate(
+                                                                experimentData,
+                                                                traceAgg,
+                                                                spanAgg,
+                                                                feedbackAgg,
+                                                                itemsCount);
+                                                    });
+                                        });
+                            });
+                });
     }
 
     @Override
@@ -1178,16 +1175,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get("workspaceId");
 
-            log.info(
-                    "Populating experiment_item_aggregates for experiment: '{}' in workspace: '{}', cursorId: '{}', limit: '{}'",
-                    experimentId, workspaceId, cursorId, limit);
-
             return getExperimentItems(experimentId, cursorId, limit)
                     .collectList()
                     .flatMap(items -> {
                         if (items.isEmpty()) {
-                            log.info("No experiment items found for experiment: '{}', cursorId: '{}'",
-                                    experimentId, cursorId);
                             return Mono.just(new BatchResult(0L, null));
                         }
 
@@ -1215,13 +1206,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                                     spansData,
                                                     feedbackData).map(count -> new BatchResult(count, lastCursor));
                                         }));
-                    })
-                    .doOnSuccess(result -> log.info(
-                            "Successfully populated '{}' experiment_item_aggregates for experiment: '{}', cursorId: '{}', lastCursor: '{}'",
-                            result.processedCount(), experimentId, cursorId, result.lastCursor()))
-                    .doOnError(error -> log.error(
-                            "Failed to populate experiment_item_aggregates for experiment: '{}', cursorId: '{}'",
-                            experimentId, cursorId, error));
+                    });
         });
     }
 
@@ -1329,8 +1314,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             // Convert Maps to key/value arrays for ClickHouse mapFromArrays
             var experimentScoresArrays = mapToArrays(
                     defaultIfNull(experimentData.experimentScores(), Map.of()),
-                    String[]::new, BigDecimal[]::new,
-                    v -> BigDecimal.valueOf(v.doubleValue()));
+                    String[]::new, Double[]::new,
+                    v -> v.doubleValue());
             var durationPercentilesArrays = mapToArrays(
                     defaultIfNull(traceAgg.durationPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
@@ -1368,7 +1353,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("prompt_versions", defaultIfNull(experimentData.promptVersions(), Map.of()))
                     .bind("optimization_id", defaultIfNull(experimentData.optimizationId(), ""))
                     .bind("dataset_version_id", defaultIfNull(experimentData.datasetVersionId(), ""))
-                    .bind("tags", experimentData.tags().toArray(new String[0]))
+                    .bind("tags", defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
                     .bind("type", experimentData.type())
                     .bind("status", experimentData.status())
                     .bind("experiment_scores_keys", experimentScoresArrays.keys())
@@ -1415,11 +1400,33 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         }));
     }
 
-    private Flux<TraceData> getTracesData(String workspaceId, UUID experimentId, UUID projectId,
-            UUID cursor, int limit) {
+    /**
+     * Helper method to execute paginated queries with cursor-based pagination.
+     * Eliminates boilerplate for binding workspace_id, experiment_id, project_id, limit, and optional cursor.
+     *
+     * @param sqlTemplate   SQL template constant
+     * @param methodName    Method name for log comment
+     * @param workspaceId   Workspace ID
+     * @param experimentId  Experiment ID
+     * @param projectId     Project ID
+     * @param cursor        Optional cursor for pagination
+     * @param limit         Page size limit
+     * @param rowMapper     Function to map result row to target type
+     * @param <T>           Return type
+     * @return Flux of mapped results
+     */
+    private <T> Flux<T> streamWithExperimentPagination(
+            String sqlTemplate,
+            String methodName,
+            String workspaceId,
+            UUID experimentId,
+            UUID projectId,
+            UUID cursor,
+            int limit,
+            Function<Row, T> rowMapper) {
+
         return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_TRACES_DATA,
-                    "getTracesData", workspaceId, experimentId.toString())
+            var template = getSTWithLogComment(sqlTemplate, methodName, workspaceId, experimentId.toString())
                     .add("cursor", cursor != null);
 
             var statement = connection.createStatement(template.render())
@@ -1433,52 +1440,47 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             }
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapTraceData(row)));
+                    .flatMap(result -> result.map((row, metadata) -> rowMapper.apply(row)));
         });
+    }
+
+    private Flux<TraceData> getTracesData(String workspaceId, UUID experimentId, UUID projectId,
+            UUID cursor, int limit) {
+        return streamWithExperimentPagination(
+                GET_TRACES_DATA,
+                "getTracesData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapTraceData);
     }
 
     private Flux<SpanData> getSpansData(String workspaceId, UUID experimentId, UUID projectId,
             UUID cursor, int limit) {
-        return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_SPANS_DATA,
-                    "getSpansData", workspaceId, experimentId.toString())
-                    .add("cursor", cursor != null);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId)
-                    .bind("limit", limit);
-
-            if (cursor != null) {
-                statement.bind("cursor", cursor);
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapSpanData(row)));
-        });
+        return streamWithExperimentPagination(
+                GET_SPANS_DATA,
+                "getSpansData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapSpanData);
     }
 
     private Flux<FeedbackScoreData> getFeedbackScoresData(String workspaceId, UUID experimentId, UUID projectId,
             UUID cursor, int limit) {
-        return asyncTemplate.stream(connection -> {
-            var template = getSTWithLogComment(GET_FEEDBACK_SCORES_DATA,
-                    "getFeedbackScoresData", workspaceId, experimentId.toString())
-                    .add("cursor", cursor != null);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId)
-                    .bind("limit", limit);
-
-            if (cursor != null) {
-                statement.bind("cursor", cursor);
-            }
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapFeedbackScoreData(row)));
-        });
+        return streamWithExperimentPagination(
+                GET_FEEDBACK_SCORES_DATA,
+                "getFeedbackScoresData",
+                workspaceId,
+                experimentId,
+                projectId,
+                cursor,
+                limit,
+                this::mapFeedbackScoreData);
     }
 
     private void bindItemsParameters(Statement statement,
@@ -1696,7 +1698,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             return asyncTemplate.nonTransaction(connection -> {
 
-                var statement = connection.createStatement(SELECT_EXPERIMENT_BY_ID)
+                var template = getSTWithLogComment(SELECT_EXPERIMENT_BY_ID,
+                        "getExperimentFromAggregates", workspaceId, experimentId.toString());
+
+                var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
                         .bind("experiment_id", experimentId.toString());
 
@@ -1995,34 +2000,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private void bindSearchCriteria(Statement statement, ExperimentSearchCriteria criteria) {
-        Optional.ofNullable(criteria.datasetId())
-                .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.datasetIds())
-                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.promptId())
-                .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
-        Optional.ofNullable(criteria.optimizationId())
-                .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.experimentIds())
-                .filter(experimentIds -> experimentIds != null && !experimentIds.isEmpty())
-                .ifPresent(experimentIds -> statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new)));
-
-        // Bind filters (ONLY FEEDBACK_SCORES_AGGREGATED referenced here in ExperimentAggregatesDAO)
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
-                });
+        ExperimentSearchCriteriaBinder.bindSearchCriteria(
+                statement,
+                criteria,
+                filterQueryBuilder,
+                FILTER_STRATEGIES,
+                false // Don't bind entity_type for aggregates
+        );
     }
 
     private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {

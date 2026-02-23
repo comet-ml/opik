@@ -24,7 +24,7 @@ export const generateTracesURL = (
 ): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
   const queryParam = type === "traces" ? `trace=${id}` : `thread=${id}`;
-  const relativePath = `${workspace}/projects/${projectId}/traces?type=${type}&${queryParam}`;
+  const relativePath = `${workspace}/projects/${projectId}/traces?tab=logs&logsType=${type}&${queryParam}`;
 
   const normalizedBasePath =
     basePath === "/" ? "" : basePath.replace(/\/$/, "");
