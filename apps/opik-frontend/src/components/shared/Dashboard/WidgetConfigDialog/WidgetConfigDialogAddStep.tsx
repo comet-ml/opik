@@ -29,7 +29,7 @@ const CATEGORY_CONFIG: Record<
   },
 };
 
-export interface WidgetConfigDialogAddStepProps {
+interface WidgetConfigDialogAddStepProps {
   onSelectWidget: (widgetType: string) => void;
 }
 
