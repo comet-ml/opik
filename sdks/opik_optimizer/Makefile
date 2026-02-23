@@ -14,6 +14,8 @@ PIP ?= $(PYTHON) -m pip
 PRECOMMIT ?= $(VENV_PRECOMMIT)
 endif
 
+SDK_DIFF_BASE ?= origin/main
+
 define warn_if_no_venv
 @if [ ! -f "$(VENV_PY)" ]; then \
   echo "[warn] Virtual environment $(VENV) not found; using system-level interpreters/tools."; \
@@ -116,6 +118,7 @@ precommit:
 	"$$repo_root/scripts/run-precommit-changed-files.sh" \
 		--config sdks/opik_optimizer/.pre-commit-config.yaml \
 		--pathspec sdks/opik_optimizer/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
 		--label "Optimizer SDK files" \
 		--precommit-cmd "$(PRECOMMIT)"
 
