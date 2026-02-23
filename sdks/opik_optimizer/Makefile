@@ -112,16 +112,12 @@ profile:
 
 precommit:
 	$(call warn_if_no_venv)
-	# Use null-delimited, module-relative paths to avoid shell splitting issues.
-	@changed_files=$$(mktemp); \
-	git diff --name-only -z --relative --diff-filter=ACM -- . > "$$changed_files"; \
-	if [ ! -s "$$changed_files" ]; then \
-		echo "No changed files found. Pre-commit skipped."; \
-		rm -f "$$changed_files"; \
-		exit 0; \
-	fi; \
-	xargs -0 $(PRECOMMIT) run --files < "$$changed_files"; \
-	rm -f "$$changed_files"
+	@repo_root=$$(git rev-parse --show-toplevel); \
+	"$$repo_root/scripts/run-precommit-changed-files.sh" \
+		--config sdks/opik_optimizer/.pre-commit-config.yaml \
+		--pathspec sdks/opik_optimizer/ \
+		--label "Optimizer SDK files" \
+		--precommit-cmd "$(PRECOMMIT)"
 
 precommit-all:
 	$(call warn_if_no_venv)
