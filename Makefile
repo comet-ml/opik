@@ -171,14 +171,23 @@ hooks-remove:
 precommit-sdks:
 	@echo "Running SDK-level pre-commit checks on changed files..."
 	@cd sdks/python && \
-	if [ -n "$$(git diff --name-only --diff-filter=ACM)" ]; then \
+	changed_files=$$(mktemp); \
+	git diff --name-only -z --relative --diff-filter=ACM -- . > "$$changed_files"; \
+	if [ -s "$$changed_files" ]; then \
 		echo "Python SDK files changed. Running pre-commit..."; \
-		git diff --name-only -z --diff-filter=ACM | xargs -0 pre-commit run --config .pre-commit-config.yaml --files --; \
+		xargs -0 pre-commit run --config .pre-commit-config.yaml --files < "$$changed_files"; \
 	else \
 		echo "No Python SDK files changed. Skipping."; \
-	fi
+	fi; \
+	rm -f "$$changed_files"
 	$(MAKE) -C sdks/opik_optimizer precommit
-	@cd sdks/typescript && npm run lint && npm run typecheck
+	@ts_files=$$(git diff --name-only --diff-filter=ACM | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
+	if [ -n "$$ts_files" ]; then \
+		echo "TypeScript SDK source files changed. Running lint and typecheck..."; \
+		cd sdks/typescript && npm run lint && npm run typecheck; \
+	else \
+		echo "No TypeScript SDK source files changed. Skipping lint and typecheck."; \
+	fi
 
 # Run full all-file SDK checks
 precommit-sdks-all:
