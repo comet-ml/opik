@@ -257,23 +257,15 @@ def _patch_openai_audio(
         provider=provider,
     )
 
-    # Patch audio.speech.create (synchronous, returns HttpxBinaryResponseContent)
-    if hasattr(openai_client.audio, "speech") and hasattr(
-        openai_client.audio.speech, "create"
-    ):
-        decorator = tts_create_decorator_factory.track(
-            type="llm",
-            name="audio.speech.create",
-            project_name=project_name,
-        )
-        openai_client.audio.speech.create = decorator(openai_client.audio.speech.create)
+    if not hasattr(openai_client.audio, "speech"):
+        return
 
-    # Patch audio.speech.with_streaming_response.create
-    # (returns a context manager wrapping a streaming HTTP response)
-    if (
-        hasattr(openai_client.audio, "speech")
-        and hasattr(openai_client.audio.speech, "with_streaming_response")
-        and hasattr(openai_client.audio.speech.with_streaming_response, "create")
+    # Patch with_streaming_response.create BEFORE speech.create.
+    # with_streaming_response is a cached_property that captures speech.create at init time
+    # via functools.wraps. Patching speech.create first would cause functools.wraps to copy
+    # opik_tracked=True onto the streaming wrapper, making the idempotency check skip it.
+    if hasattr(openai_client.audio.speech, "with_streaming_response") and hasattr(
+        openai_client.audio.speech.with_streaming_response, "create"
     ):
         decorator = tts_streaming_decorator_factory.track(
             type="llm",
@@ -283,3 +275,12 @@ def _patch_openai_audio(
         openai_client.audio.speech.with_streaming_response.create = decorator(
             openai_client.audio.speech.with_streaming_response.create
         )
+
+    # Patch audio.speech.create (synchronous, returns HttpxBinaryResponseContent)
+    if hasattr(openai_client.audio.speech, "create"):
+        decorator = tts_create_decorator_factory.track(
+            type="llm",
+            name="audio.speech.create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = decorator(openai_client.audio.speech.create)
