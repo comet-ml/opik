@@ -18,5 +18,7 @@ export interface TraceExperimentItemBulkWriteView {
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoExperimentItemBulkWriteView;
     lastUpdatedAt?: Date;
+    /** Time to first token in milliseconds */
+    ttft?: number;
     threadId?: string;
 }

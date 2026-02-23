@@ -60,7 +60,6 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "description",
   "last_updated_at",
-  "created_at",
 ];
 
 const DashboardsPage: React.FunctionComponent = () => {

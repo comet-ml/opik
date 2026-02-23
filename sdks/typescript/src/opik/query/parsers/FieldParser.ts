@@ -8,28 +8,28 @@ import {
   validateFieldKey,
   validateClosingQuote,
 } from "../validators";
-import { COLUMNS } from "../constants";
 import type { FieldToken } from "../types";
+import type { OQLConfig } from "../configs";
 
 /**
  * Parses a field reference, which may include a key (e.g., "metadata.version")
  */
 export class FieldParser {
-  static parse(tokenizer: QueryTokenizer): FieldToken {
+  static parse(tokenizer: QueryTokenizer, config: OQLConfig): FieldToken {
     tokenizer.skipWhitespace();
 
     const field = this.parseFieldName(tokenizer);
-    validateFieldExists(field);
+    validateFieldExists(field, config);
 
     // Check if there's a key (dot notation)
     if (tokenizer.peekChar() === ".") {
-      return this.parseFieldWithKey(tokenizer, field);
+      return this.parseFieldWithKey(tokenizer, field, config);
     }
 
     return {
       type: "simple",
       field,
-      columnType: COLUMNS[field],
+      columnType: config.columns[field],
     };
   }
 
@@ -39,13 +39,14 @@ export class FieldParser {
 
   private static parseFieldWithKey(
     tokenizer: QueryTokenizer,
-    field: string
+    field: string,
+    config: OQLConfig
   ): FieldToken {
     // Skip the dot
     tokenizer.advance();
 
     const key = this.parseKey(tokenizer);
-    validateFieldKey(field, key);
+    validateFieldKey(field, key, config);
 
     // Special handling for usage fields - they become top-level fields
     if (field === "usage") {
@@ -53,7 +54,7 @@ export class FieldParser {
       return {
         type: "simple",
         field: fullField,
-        columnType: COLUMNS[fullField],
+        columnType: config.columns[fullField],
       };
     }
 
@@ -61,7 +62,7 @@ export class FieldParser {
       type: "nested",
       field,
       key,
-      columnType: COLUMNS[field],
+      columnType: config.columns[field],
     };
   }
 

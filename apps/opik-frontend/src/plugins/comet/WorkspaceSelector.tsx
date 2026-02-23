@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, ChevronLeft, ChevronUp, Settings2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -16,6 +16,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/components/ui/use-toast";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -257,15 +258,7 @@ const WorkspaceSelector: React.FC = () => {
                   <DropdownMenuSubTrigger className="size-6 justify-center p-0 text-light-slate [&>svg]:ml-0" />
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[244px] p-1">
-                      <div className="flex items-center gap-1 p-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-2xs"
-                          onClick={() => setIsOrgSubmenuOpen(false)}
-                          className="shrink-0 text-muted-slate hover:bg-primary-foreground hover:text-muted-slate"
-                        >
-                          <ChevronLeft className="size-3.5" />
-                        </Button>
+                      <div className="flex items-center gap-1 p-2 pl-8">
                         <span className="comet-body-s-accented text-foreground">
                           Switch organization
                         </span>
@@ -359,14 +352,11 @@ const WorkspaceSelector: React.FC = () => {
 
           {/* Manage Workspaces */}
           <DropdownMenuSeparator className="my-1" />
-          <div className="flex items-center justify-center py-1">
-            <a
-              href={buildUrl("account-settings/workspaces", workspaceName)}
-              className="comet-body-xs flex h-6 cursor-pointer items-center text-primary hover:underline"
-            >
+          <ListAction asChild>
+            <a href={buildUrl("account-settings/workspaces", workspaceName)}>
               Manage workspaces
             </a>
-          </div>
+          </ListAction>
         </DropdownMenuContent>
       </DropdownMenu>
     </WorkspaceLink>

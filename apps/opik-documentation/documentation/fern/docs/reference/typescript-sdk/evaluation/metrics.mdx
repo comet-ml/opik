@@ -249,7 +249,7 @@ Evaluates how relevant the output is to the input question:
 ```typescript
 import { AnswerRelevance } from "opik";
 
-// Using default model (gpt-4o)
+// Using default model (gpt-5-nano)
 const metric = new AnswerRelevance();
 
 // With custom model ID
@@ -259,7 +259,7 @@ const metricWithModel = new AnswerRelevance({
 
 // With LanguageModel instance
 import { openai } from "@ai-sdk/openai";
-const customModel = openai("gpt-4o");
+const customModel = openai("gpt-5-nano");
 const metricWithCustomModel = new AnswerRelevance({ model: customModel });
 
 // Usage
@@ -615,12 +615,12 @@ import { google } from "@ai-sdk/google";
 import { Hallucination } from "opik";
 
 // Using model ID string
-const metric1 = new Hallucination({ model: "gpt-4o" });
+const metric1 = new Hallucination({ model: "gpt-5-nano" });
 const metric2 = new Hallucination({ model: "claude-3-5-sonnet-latest" });
 const metric3 = new Hallucination({ model: "gemini-2.0-flash" });
 
 // Using LanguageModel instance
-const customModel = openai("gpt-4o");
+const customModel = openai("gpt-5-nano");
 const metric4 = new Hallucination({ model: customModel });
 ```
 
@@ -679,7 +679,7 @@ import { AnswerRelevance, Hallucination } from "opik";
 
 // Use GPT-4o for answer relevance
 const relevanceMetric = new AnswerRelevance({
-  model: openai("gpt-4o"),
+  model: openai("gpt-5-nano"),
 });
 
 // Use Claude for hallucination detection
@@ -703,7 +703,7 @@ For most use cases, use model ID strings directly:
 ```typescript
 import { Hallucination } from "opik";
 
-const metric = new Hallucination({ model: "gpt-4o" });
+const metric = new Hallucination({ model: "gpt-5-nano" });
 ```
 
 The Opik SDK handles model configuration internally for optimal evaluation performance.
@@ -732,11 +732,11 @@ await metric.score({
 Match model capabilities to metric requirements:
 
 ```typescript
-// Complex reasoning: Use GPT-4o or Claude Sonnet
-const complexMetric = new AnswerRelevance({ model: "gpt-4o" });
+// Complex reasoning: Use GPT-5 or Claude Sonnet
+const complexMetric = new AnswerRelevance({ model: "gpt-5" });
 
 // Simple checks: Use faster, cheaper models
-const simpleMetric = new Moderation({ model: "gpt-4o-mini" });
+const simpleMetric = new Moderation({ model: "gpt-5-nano" });
 ```
 
 ### 4. Handle Errors Gracefully
@@ -825,7 +825,7 @@ import { Hallucination, AnswerRelevance } from "opik";
 
 // Configure generation parameters
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.3, // Lower = more deterministic
   seed: 42, // For reproducible outputs
   maxTokens: 1000, // Maximum response length
@@ -854,7 +854,7 @@ For provider-specific advanced parameters, use `modelSettings`:
 import { Hallucination } from "opik";
 
 const metric = new Hallucination({
-  model: "gpt-4o",
+  model: "gpt-5-nano",
   temperature: 0.5,
   modelSettings: {
     topP: 0.9, // Nucleus sampling
@@ -874,7 +874,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
 
 // OpenAI with structured outputs
-const openaiModel = openai("gpt-4o", {
+const openaiModel = openai("gpt-5-nano", {
   structuredOutputs: true,
 });
 

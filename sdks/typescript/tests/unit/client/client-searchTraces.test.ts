@@ -200,7 +200,7 @@ describe("OpikClient searchTraces", () => {
 
       const result = await client.searchTraces({
         projectName: "custom-project",
-        filterString: 'status = "active" and duration > 100',
+        filterString: 'name = "test-trace" and duration > 100',
         maxResults: 50,
         truncate: false,
         waitForAtLeast: 3,

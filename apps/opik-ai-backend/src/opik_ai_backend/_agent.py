@@ -24,6 +24,7 @@ from opik.decorator.error_info_collector import collect
 from opik.integrations.adk import OpikTracer
 from opik.opik_context import update_current_span
 
+from .auth_dependencies import UserContext
 from .logger_config import logger
 from .opik_backend_client import OpikBackendClient
 from .trace_tools import get_span_details_impl, get_spans_data_impl, get_trace_data_impl
@@ -256,6 +257,7 @@ def get_runner(agent: Agent, session_service: BaseSessionService) -> Runner:
 async def get_agent(
     opik_client: OpikBackendClient,
     trace_id: str,
+    current_user: UserContext,
     opik_metadata: Optional[dict[str, Any]] = None,
 ) -> Agent:
     """Build an ADK Agent configured with trace-analysis tools and a pre-loaded system prompt.
@@ -263,6 +265,12 @@ async def get_agent(
     Fetches spans data for the trace and injects it into the system prompt so the LLM
     has full context from the first turn. If spans fail to load, the agent still works
     but with degraded context.
+
+    Args:
+        opik_client: Client for fetching trace/span data from Opik backend
+        trace_id: The trace ID to analyze
+        current_user: User authentication context (session token + workspace) to forward to AI proxy
+        opik_metadata: Optional metadata for internal Opik tracking
     """
     from .config import settings
 
@@ -304,7 +312,38 @@ async def get_agent(
     if settings.agent_reasoning_effort:
         model_kwargs["reasoning_effort"] = settings.agent_reasoning_effort
 
-    llm_model = LiteLlm(model_name, **model_kwargs)
+    # Forward user's auth credentials to the Opik AI proxy (same pattern as Playground)
+    # The proxy will authenticate the user and use their configured provider API key
+    extra_headers = {}
+    if current_user.workspace_name:
+        extra_headers["Comet-Workspace"] = current_user.workspace_name
+    if current_user.session_token:
+        extra_headers["Cookie"] = f"sessionToken={current_user.session_token}"
+
+    # Point LiteLLM at the Opik backend's ChatCompletions proxy at /v1/private/chat/completions
+    # LiteLLM has two transport paths:
+    #   - OpenAI client (httpx): appends /chat/completions to api_base
+    #   - aiohttp transport: uses api_base as-is
+    # To handle both consistently, we set api_base to {backend}/v1/private and also
+    # disable LiteLLM's aiohttp transport so it always uses the OpenAI client path.
+    proxy_base_url = f"{settings.agent_opik_url}/v1/private"
+    logger.info(
+        f"Configuring LiteLLM with proxy: model={model_name}, "
+        f"api_base={proxy_base_url}, workspace={current_user.workspace_name}, "
+        f"has_session_token={current_user.session_token is not None}"
+    )
+
+    import litellm
+
+    litellm.disable_aiohttp_transport = True
+
+    llm_model = LiteLlm(
+        model_name,
+        api_base=proxy_base_url,
+        api_key="not-checked",  # Required by OpenAI client lib, but proxy uses cookie auth
+        extra_headers=extra_headers,
+        **model_kwargs,
+    )
 
     # Build agent kwargs, conditionally adding callbacks if tracker is available
     agent_kwargs = {

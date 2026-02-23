@@ -11,7 +11,12 @@ import {
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import { SPANS_COLORS_MAP, TRACE_TYPE_FOR_TREE } from "@/constants/traces";
+import {
+  LOGS_TYPE,
+  PROJECT_TAB,
+  SPANS_COLORS_MAP,
+  TRACE_TYPE_FOR_TREE,
+} from "@/constants/traces";
 import { Button } from "@/components/ui/button";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
@@ -230,7 +235,8 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
                 to={`/$workspaceName/projects/$projectId/traces`}
                 params={{ workspaceName, projectId }}
                 search={{
-                  type: "spans",
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.spans,
                   spans_filters: combinedSpansFilters,
                 }}
               >

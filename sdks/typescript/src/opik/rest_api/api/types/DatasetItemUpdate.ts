@@ -12,6 +12,13 @@ export interface DatasetItemUpdate {
     expectedOutput?: string;
     metadata?: OpikApi.JsonNode;
     data?: OpikApi.JsonNode;
+    /** Dataset item description */
+    description?: string;
     /** Tags */
     tags?: string[];
+    /** Evaluators */
+    evaluators?: OpikApi.EvaluatorItem[];
+    executionPolicy?: OpikApi.ExecutionPolicy;
+    /** When true, clears the item-level execution policy (falls back to dataset-level) */
+    clearExecutionPolicy?: boolean;
 }

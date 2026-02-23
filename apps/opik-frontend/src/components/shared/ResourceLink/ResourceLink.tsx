@@ -21,6 +21,7 @@ import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { TagProps } from "@/components/ui/tag";
 import { Filter } from "@/types/filters";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export enum RESOURCE_TYPE {
   project,
@@ -125,6 +126,7 @@ export const RESOURCE_MAP = {
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
+    search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
   },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
@@ -133,6 +135,7 @@ export const RESOURCE_MAP = {
     deleted: "Deleted threads",
     label: "threads",
     color: "var(--thread-icon-text)",
+    search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.threads },
   },
 };
 
@@ -184,7 +187,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
     <Link
       to={props.url}
       params={linkParams}
-      search={search}
+      search={{ ...("search" in props ? props.search : {}), ...search }}
       onClick={(event) => event.stopPropagation()}
       className="max-w-full"
       disabled={deleted}
