@@ -73,7 +73,7 @@ public class TagOperations {
     }
 
     public static final int MAX_TAGS_PER_ITEM = 50;
-    static final String TAG_LIMIT_ERROR = "Tag limit exceeded: maximum " + MAX_TAGS_PER_ITEM + " tags per item";
+    public static final String TAG_LIMIT_ERROR = "Tag limit exceeded: maximum " + MAX_TAGS_PER_ITEM + " tags per item";
 
     /**
      * Maps a ClickHouse tag-limit throwIf error to a 422 response.

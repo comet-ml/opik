@@ -1557,9 +1557,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     throw new ClientErrorException(
                                             Response.status(422)
                                                     .entity(new ErrorMessage(List.of(
-                                                            "Tag limit exceeded: maximum "
-                                                                    + TagOperations.MAX_TAGS_PER_ITEM
-                                                                    + " tags per item")))
+                                                            TagOperations.TAG_LIMIT_ERROR)))
                                                     .build());
                                 });
 
