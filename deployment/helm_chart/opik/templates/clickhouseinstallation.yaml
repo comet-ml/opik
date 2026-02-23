@@ -34,7 +34,11 @@ spec:
         - '0.0.0.0/0'
       {{- end }}
       {{- range .Values.clickhouse.additionalUsers }}
-      {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
+      {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
+      {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ .secretname | default $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
+      {{- else }}
+      {{ .username }}/password: {{ .password }}
+      {{- end }}
       {{- if .profile }}
       {{ .username }}/profile: {{ .profile }}
       {{- end }}
