@@ -33,11 +33,8 @@ This repository is a multi-module Opik codebase. Main areas:
 - `cd tests_end_to_end/typescript-tests && TEST_SUITE=sanity npm test` — cross-stack Playwright sanity suite.
 
 ## Coding Style & Naming Conventions
-- Use existing formatters: Prettier/ESLint/Stylelint (frontend), Spotless (backend), and repository Python tooling.
-- Do not run blanket reformatting; prefer minimal, scoped edits.
-- Frontend: TypeScript + React with descriptive names (`camelCase` variables/functions, `PascalCase` components).
-- Backend: follow Java conventions, clear package boundaries, and existing test/data patterns.
-- Python: avoid abbreviations, use explicit naming, and keep private helpers clearly prefixed (`_name`).
+- Use existing module formatters/conventions and keep edits scoped; avoid blanket reformatting.
+- For detailed coding rules, defer to module-level `AGENTS.md` files and skill docs (for example `.agents/skills/python-sdk/good-code.md`) instead of duplicating style guidance here.
 
 ## Testing Guidelines
 - Frameworks: Vitest (frontend + TS SDK), Playwright (frontend E2E), Maven/JUnit (backend), pytest (Python SDK).
