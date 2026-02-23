@@ -34,6 +34,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -487,23 +488,17 @@ class PromptServiceImpl implements PromptService {
             return Mono.just(Map.of());
         }
 
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
-            return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-                return promptVersionDAO.findByIds(ids, workspaceId).stream()
-                        .collect(toMap(PromptVersion::id, promptVersion -> promptVersion.toBuilder()
-                                .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                                .build()));
-            });
-        })
+        return fetchVersionsByIds(ids)
+                .map(versions -> versions.entrySet().stream()
+                        .collect(toMap(Map.Entry::getKey, e -> e.getValue().toBuilder()
+                                .variables(getVariables(e.getValue().template(), e.getValue().type()))
+                                .build())))
                 .flatMap(versions -> {
                     if (versions.size() != ids.size()) {
                         return Mono.error(new NotFoundException(PROMPT_VERSION_NOT_FOUND));
                     }
                     return Mono.just(versions);
-                })
-                .subscribeOn(Schedulers.boundedElastic()));
+                });
     }
 
     public PromptVersion getVersionById(@NonNull String workspaceId, @NonNull UUID id) {
@@ -528,6 +523,24 @@ class PromptServiceImpl implements PromptService {
         }
 
         return TemplateParseUtils.extractVariables(template, type);
+    }
+
+    private Mono<Map<UUID, PromptVersion>> fetchVersionsByIds(Collection<UUID> ids) {
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+                    return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                            .collect(toMap(PromptVersion::id, Function.identity()));
+                })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private Mono<Map<UUID, Prompt>> fetchPromptsByIds(Set<UUID> ids) {
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                    PromptDAO promptDAO = handle.attach(PromptDAO.class);
+                    return promptDAO.findByIds(ids, workspaceId).stream()
+                            .collect(toMap(Prompt::id, Function.identity()));
+                })).subscribeOn(Schedulers.boundedElastic()));
     }
 
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
@@ -700,38 +713,27 @@ class PromptServiceImpl implements PromptService {
             return Mono.just(List.of());
         }
 
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
-            return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-                PromptDAO promptDAO = handle.attach(PromptDAO.class);
+        return fetchVersionsByIds(versionIds)
+                .flatMap(versionsById -> {
+                    Set<UUID> promptIds = versionsById.values().stream()
+                            .map(PromptVersion::promptId)
+                            .collect(toSet());
 
-                // Get versions indexed by id
-                Map<UUID, PromptVersion> versionsById = promptVersionDAO
-                        .findByIds(versionIds, workspaceId).stream()
-                        .collect(toMap(PromptVersion::id, Function.identity()));
+                    Mono<Map<UUID, Prompt>> promptsMono = promptIds.isEmpty()
+                            ? Mono.just(Map.of())
+                            : fetchPromptsByIds(promptIds);
 
-                // Get prompts by their IDs
-                Set<UUID> promptIds = versionsById.values().stream()
-                        .map(PromptVersion::promptId)
-                        .collect(toSet());
-                Map<UUID, Prompt> promptById = promptIds.isEmpty()
-                        ? Map.of()
-                        : promptDAO.findByIds(promptIds, workspaceId).stream()
-                                .collect(toMap(Prompt::id, Function.identity()));
-
-                // Assemble in input order, one entry per version ID
-                return versionIds.stream()
-                        .map(versionId -> {
-                            PromptVersion version = versionsById.get(versionId);
-                            return PromptVersionLink.builder()
-                                    .promptVersionId(versionId)
-                                    .commit(version != null ? version.commit() : null)
-                                    .prompt(version != null ? promptById.get(version.promptId()) : null)
-                                    .build();
-                        })
-                        .toList();
-            });
-        }).subscribeOn(Schedulers.boundedElastic()));
+                    return promptsMono.map(promptById -> versionIds.stream()
+                            .map(versionId -> {
+                                PromptVersion version = versionsById.get(versionId);
+                                return PromptVersionLink.builder()
+                                        .promptVersionId(versionId)
+                                        .commit(version != null ? version.commit() : null)
+                                        .prompt(version != null ? promptById.get(version.promptId()) : null)
+                                        .build();
+                            })
+                            .toList());
+                });
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
