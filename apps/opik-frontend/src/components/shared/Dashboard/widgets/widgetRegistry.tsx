@@ -9,8 +9,10 @@ import {
   WidgetResolver,
   WidgetComponents,
   WIDGET_CATEGORY,
+  WIDGET_TYPE,
 } from "@/types/dashboard";
 import { WIDGET_TYPES } from "@/lib/dashboard/utils";
+import { Permissions } from "@/types/permissions";
 import ProjectMetricsWidget from "./ProjectMetricsWidget/ProjectMetricsWidget";
 import ProjectMetricsEditor from "./ProjectMetricsWidget/ProjectMetricsEditor";
 import { widgetHelpers as projectMetricsHelpers } from "./ProjectMetricsWidget/helpers";
@@ -26,6 +28,14 @@ import { widgetHelpers as experimentsFeedbackScoresHelpers } from "./Experiments
 import ExperimentsLeaderboardWidget from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidget";
 import ExperimentsLeaderboardWidgetEditor from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor";
 import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLeaderboardWidget/helpers";
+
+export const DISABLED_EXPERIMENTS_TOOLTIP =
+  "You don't have permission to view experiments";
+
+const EXPERIMENT_WIDGET_TYPES = new Set<WIDGET_TYPE>([
+  WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES,
+  WIDGET_TYPES.EXPERIMENT_LEADERBOARD,
+]);
 
 export const widgetResolver: WidgetResolver = (
   type: string,
@@ -128,6 +138,31 @@ export const widgetResolver: WidgetResolver = (
         },
       };
   }
+};
+
+const isExperimentWidgetType = (widgetType: string): boolean => {
+  return EXPERIMENT_WIDGET_TYPES.has(widgetType as WIDGET_TYPE);
+};
+
+export const applyWidgetPermissions = (
+  components: WidgetComponents,
+  widgetType: string,
+  permissions: Permissions,
+): WidgetComponents => {
+  const { canViewExperiments } = permissions;
+
+  if (isExperimentWidgetType(widgetType) && !canViewExperiments) {
+    return {
+      ...components,
+      metadata: {
+        ...components.metadata,
+        disabled: true,
+        disabledTooltip: DISABLED_EXPERIMENTS_TOOLTIP,
+      },
+    };
+  }
+
+  return components;
 };
 
 export const getAllWidgetTypes = (): string[] => {
