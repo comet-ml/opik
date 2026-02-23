@@ -24,14 +24,15 @@ class TestConfigDecoratorValidation:
 
         assert dataclasses.is_dataclass(MyConfig)
 
-    def test_decorator_with_ttl__sets_ttl_internal_attr(self, mock_backend):
+    def test_decorator_with_ttl__sets_ttl_on_cache(self, mock_backend):
         @config_decorator(ttl_seconds=60)
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
 
         instance = MyConfig()
-        assert object.__getattribute__(instance, "__opik_ttl_seconds__") == 60
+        cache = object.__getattribute__(instance, "__opik_cache__")
+        assert cache._ttl_seconds == 60
 
 
 class TestConfigDecoratorInit:

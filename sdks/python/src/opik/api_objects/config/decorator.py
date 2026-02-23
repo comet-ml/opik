@@ -1,31 +1,14 @@
 import dataclasses
 import logging
-import time
 import typing
 
 from opik import context_storage
 from . import type_helpers
-from .client import ConfigClient, ConfigData
+from .cache import ConfigCache, DEFAULT_TTL_SECONDS
+from .client import ConfigClient
 from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
-
-_OPIK_INTERNAL_ATTRS = frozenset(
-    {
-        "__opik_config_id__",
-        "__opik_blueprint_id__",
-        "__opik_mask_id__",
-        "__opik_env__",
-        "__opik_ttl_seconds__",
-        "__opik_last_fetch__",
-        "__opik_field_types__",
-        "__opik_project_name__",
-        "__opik_values_cache__",
-        "__opik_description__",
-    }
-)
-
-DEFAULT_TTL_SECONDS = 300
 
 
 def config_decorator(
@@ -54,15 +37,12 @@ def config_decorator(
 
         def new_init(self: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
             original_init(self, *args, **kwargs)
-            object.__setattr__(self, "__opik_config_id__", None)
-            object.__setattr__(self, "__opik_blueprint_id__", None)
+            cache = ConfigCache(ttl_seconds=ttl_seconds)
+            object.__setattr__(self, "__opik_cache__", cache)
             object.__setattr__(self, "__opik_mask_id__", mask_id)
             object.__setattr__(self, "__opik_env__", env)
-            object.__setattr__(self, "__opik_ttl_seconds__", ttl_seconds)
-            object.__setattr__(self, "__opik_last_fetch__", None)
             object.__setattr__(self, "__opik_field_types__", field_types)
             object.__setattr__(self, "__opik_project_name__", project)
-            object.__setattr__(self, "__opik_values_cache__", {})
             object.__setattr__(self, "__opik_description__", description)
             _sync_config_with_backend(self)
 
@@ -128,18 +108,14 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
         logger.debug("Failed to sync config with backend", exc_info=True)
 
 
-def _apply_backend_values(instance: typing.Any, config_data: ConfigData) -> None:
-    object.__setattr__(instance, "__opik_config_id__", config_data.config_id)
-    object.__setattr__(instance, "__opik_blueprint_id__", config_data.blueprint_id)
-    object.__setattr__(instance, "__opik_last_fetch__", time.monotonic())
+def _apply_backend_values(instance: typing.Any, config_data: typing.Any) -> None:
+    cache: ConfigCache = object.__getattribute__(instance, "__opik_cache__")
+    cache.apply(config_data)
 
-    values_cache: typing.Dict[str, typing.Any] = {}
     field_types = object.__getattribute__(instance, "__opik_field_types__")
-    for key, value in config_data.values.items():
+    for key, value in cache.values.items():
         if key in field_types:
             object.__setattr__(instance, key, value)
-            values_cache[key] = value
-    object.__setattr__(instance, "__opik_values_cache__", values_cache)
 
 
 def _maybe_refetch(instance: typing.Any) -> None:
@@ -153,10 +129,8 @@ def _maybe_refetch(instance: typing.Any) -> None:
     if instance_mask is not None:
         return
 
-    ttl = object.__getattribute__(instance, "__opik_ttl_seconds__")
-    last_fetch = object.__getattribute__(instance, "__opik_last_fetch__")
-
-    if last_fetch is not None and (time.monotonic() - last_fetch) < ttl:
+    cache: ConfigCache = object.__getattribute__(instance, "__opik_cache__")
+    if not cache.is_stale():
         return
 
     try:
@@ -164,15 +138,14 @@ def _maybe_refetch(instance: typing.Any) -> None:
 
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
-        config_id = object.__getattribute__(instance, "__opik_config_id__")
         field_types = object.__getattribute__(instance, "__opik_field_types__")
         env_val = object.__getattribute__(instance, "__opik_env__")
 
-        if config_id is None:
+        if cache.config_id is None:
             return
 
         config_data = config_client.get_blueprint(
-            config_id=config_id,
+            config_id=cache.config_id,
             env=env_val,
             field_types=field_types,
         )
@@ -187,14 +160,14 @@ def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
 
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
-        config_id = object.__getattribute__(instance, "__opik_config_id__")
+        cache: ConfigCache = object.__getattribute__(instance, "__opik_cache__")
         field_types = object.__getattribute__(instance, "__opik_field_types__")
 
-        if config_id is None:
+        if cache.config_id is None:
             return
 
         config_data = config_client.get_blueprint(
-            config_id=config_id,
+            config_id=cache.config_id,
             mask_id=mask_id,
             field_types=field_types,
         )
@@ -209,15 +182,13 @@ def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
         if span_data is None:
             return
 
-        config_id = object.__getattribute__(instance, "__opik_config_id__")
-        blueprint_id = object.__getattribute__(instance, "__opik_blueprint_id__")
-        values_cache = object.__getattribute__(instance, "__opik_values_cache__")
+        cache: ConfigCache = object.__getattribute__(instance, "__opik_cache__")
 
         config_metadata = {
             "configuration": {
-                "config_id": config_id,
-                "blueprint_id": blueprint_id,
-                "values": {attr: values_cache[attr]} if attr in values_cache else {},
+                "config_id": cache.config_id,
+                "blueprint_id": cache.blueprint_id,
+                "values": {attr: cache.values[attr]} if attr in cache.values else {},
             }
         }
 
