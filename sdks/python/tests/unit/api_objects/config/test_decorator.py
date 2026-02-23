@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.config.decorator import config_decorator
+from opik.api_objects.span.span_data import SpanData
 
 
 class TestConfigDecoratorValidation:
@@ -156,6 +157,41 @@ class TestConfigDecoratorSpanMetadata:
             assert "config_id" in config
             assert "blueprint_id" in config
             assert "values" in config
+
+    def test_multiple_field_accesses__configuration_present_after_each(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(key="temp", type="number", value=0.8),
+                mock.Mock(key="max_tokens", type="number", value=2000),
+            ]
+        )
+
+        span_data = SpanData(
+            trace_id="trace-1",
+            metadata={"provider": "openai", "model": "gpt-4o"},
+        )
+
+        with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:
+            mock_cs.top_span_data.return_value = span_data
+
+            @config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                temp: float = 0.8
+                max_tokens: int = 2000
+
+            instance = MyConfig()
+            _ = instance.temp
+            assert span_data.metadata["provider"] == "openai"
+            assert "temp" in span_data.metadata["configuration"]["values"]
+            assert "max_tokens" not in span_data.metadata["configuration"]["values"]
+
+            _ = instance.max_tokens
+            assert span_data.metadata["provider"] == "openai"
+            assert "temp" in span_data.metadata["configuration"]["values"]
+            assert "max_tokens" in span_data.metadata["configuration"]["values"]
 
     def test_field_access_outside_span__no_injection(self, mock_backend):
         with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:

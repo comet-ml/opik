@@ -75,7 +75,7 @@ def config_decorator(
                 return original_getattribute(self, attr)
 
             _maybe_refetch(self)
-            _maybe_inject_span_metadata(self)
+            _maybe_inject_span_metadata(self, attr)
 
             return original_getattribute(self, attr)
 
@@ -203,7 +203,7 @@ def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
         logger.debug("Failed to refetch config with mask", exc_info=True)
 
 
-def _maybe_inject_span_metadata(instance: typing.Any) -> None:
+def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
     try:
         span_data = context_storage.top_span_data()
         if span_data is None:
@@ -217,7 +217,7 @@ def _maybe_inject_span_metadata(instance: typing.Any) -> None:
             "configuration": {
                 "config_id": config_id,
                 "blueprint_id": blueprint_id,
-                "values": dict(values_cache),
+                "values": {attr: values_cache[attr]} if attr in values_cache else {},
             }
         }
 
