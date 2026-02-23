@@ -6,7 +6,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionBatchUpdate;
-import com.comet.opik.api.PromptVersionIdsRequest;
+import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.PromptVersionUpdate;
@@ -4129,7 +4129,7 @@ class PromptResourceTest {
 
         private List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
                 String workspaceName) {
-            var request = PromptVersionIdsRequest.builder()
+            var request = PromptVersionCommitsRequest.builder()
                     .commits(commits)
                     .build();
 
@@ -4149,7 +4149,7 @@ class PromptResourceTest {
 
         @Test
         @DisplayName("Success: should return prompts for given commits")
-        void shouldReturnPromptsForCommits() {
+        void getPromptsByCommits() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -4184,18 +4184,18 @@ class PromptResourceTest {
 
             assertThat(result.get(0).promptVersionId()).isEqualTo(version1.id());
             assertThat(result.get(0).commit()).isEqualTo(version1.commit());
-            assertThat(result.get(0).prompt()).isNotNull();
-            assertThat(result.get(0).prompt().id()).isEqualTo(promptId1);
+            assertThat(result.get(0).promptId()).isEqualTo(promptId1);
+            assertThat(result.get(0).promptName()).isEqualTo(prompt1.name());
 
             assertThat(result.get(1).promptVersionId()).isEqualTo(version2.id());
             assertThat(result.get(1).commit()).isEqualTo(version2.commit());
-            assertThat(result.get(1).prompt()).isNotNull();
-            assertThat(result.get(1).prompt().id()).isEqualTo(promptId2);
+            assertThat(result.get(1).promptId()).isEqualTo(promptId2);
+            assertThat(result.get(1).promptName()).isEqualTo(prompt2.name());
         }
 
         @Test
         @DisplayName("Success: should preserve input order")
-        void shouldPreserveInputOrder() {
+        void getPromptsByCommitsPreservesInputOrder() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -4228,13 +4228,13 @@ class PromptResourceTest {
             assertThat(result.get(1).promptVersionId()).isEqualTo(version1.id());
             assertThat(result.get(1).commit()).isEqualTo(version1.commit());
             // Both should point to the same prompt
-            assertThat(result.get(0).prompt().id()).isEqualTo(promptId);
-            assertThat(result.get(1).prompt().id()).isEqualTo(promptId);
+            assertThat(result.get(0).promptId()).isEqualTo(promptId);
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
         }
 
         @Test
         @DisplayName("when commits not found, then return null prompt and version id")
-        void whenCommitsNotFound__thenReturnNullPromptAndVersionId() {
+        void getPromptsByCommitsWhenCommitsNotFoundReturnsNullPromptAndVersionId() {
             var unknownCommit1 = UUID.randomUUID().toString();
             var unknownCommit2 = UUID.randomUUID().toString();
 
@@ -4244,15 +4244,17 @@ class PromptResourceTest {
             assertThat(result).hasSize(2);
             assertThat(result.get(0).commit()).isEqualTo(unknownCommit1);
             assertThat(result.get(0).promptVersionId()).isNull();
-            assertThat(result.get(0).prompt()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
             assertThat(result.get(1).commit()).isEqualTo(unknownCommit2);
             assertThat(result.get(1).promptVersionId()).isNull();
-            assertThat(result.get(1).prompt()).isNull();
+            assertThat(result.get(1).promptId()).isNull();
+            assertThat(result.get(1).promptName()).isNull();
         }
 
         @Test
         @DisplayName("when mix of known and unknown commits, then return correct results")
-        void whenMixOfKnownAndUnknown__thenReturnCorrectResults() {
+        void getPromptsByCommitsWhenMixOfKnownAndUnknownReturnsCorrectResults() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -4276,21 +4278,21 @@ class PromptResourceTest {
 
             assertThat(result).hasSize(2);
 
-            // First entry: unknown commit - null prompt and version id
+            // First entry: unknown commit - null prompt fields
             assertThat(result.get(0).commit()).isEqualTo(unknownCommit);
             assertThat(result.get(0).promptVersionId()).isNull();
-            assertThat(result.get(0).prompt()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
 
-            // Second entry: known commit - has prompt and version id
+            // Second entry: known commit - has prompt fields
             assertThat(result.get(1).promptVersionId()).isEqualTo(version.id());
             assertThat(result.get(1).commit()).isEqualTo(version.commit());
-            assertThat(result.get(1).prompt()).isNotNull();
-            assertThat(result.get(1).prompt().id()).isEqualTo(promptId);
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
         }
 
         @Test
         @DisplayName("when empty list, then return empty result")
-        void whenEmptyList__thenReturnEmptyResult() {
+        void getPromptsByCommitsWhenEmptyListReturnsEmptyResult() {
             var result = getPromptsByCommits(List.of(), API_KEY, TEST_WORKSPACE);
 
             assertThat(result).isEmpty();

@@ -15,5 +15,6 @@ public record PromptVersionLink(
         @JsonView( {
                 Prompt.View.Public.class}) UUID promptVersionId,
         @JsonView({Prompt.View.Public.class}) String commit,
-        @JsonView({Prompt.View.Public.class}) Prompt prompt){
+        @JsonView({Prompt.View.Public.class}) UUID promptId,
+        @JsonView({Prompt.View.Public.class}) String promptName){
 }

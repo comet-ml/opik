@@ -13,6 +13,6 @@ import java.util.List;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record PromptVersionIdsRequest(
+public record PromptVersionCommitsRequest(
         @NotNull @Size(min = 0, max = 1000) List<@NotBlank String> commits) {
 }

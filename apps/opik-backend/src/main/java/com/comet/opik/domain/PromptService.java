@@ -30,6 +30,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.jdbi.v3.core.Handle;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -40,6 +41,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
@@ -524,13 +526,19 @@ class PromptServiceImpl implements PromptService {
         return TemplateParseUtils.extractVariables(template, type);
     }
 
-    private Mono<Map<UUID, PromptVersion>> fetchVersionsByIds(Collection<UUID> ids) {
+    private <T> Mono<T> readOnlyMono(BiFunction<Handle, String, T> action) {
         return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-                    return promptVersionDAO.findByIds(ids, workspaceId).stream()
-                            .collect(toMap(PromptVersion::id, Function.identity(), (existing, duplicate) -> existing));
-                })).subscribeOn(Schedulers.boundedElastic()));
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
+                        handle -> action.apply(handle, workspaceId)))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    private Mono<Map<UUID, PromptVersion>> fetchVersionsByIds(Collection<UUID> ids) {
+        return readOnlyMono((handle, workspaceId) -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                    .collect(toMap(PromptVersion::id, Function.identity(), (existing, duplicate) -> existing));
+        });
     }
 
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
@@ -688,13 +696,11 @@ class PromptServiceImpl implements PromptService {
             return Mono.just(Map.of());
         }
 
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                    PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-                    return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
-                            .collect(toMap(PromptVersionInfo::id, Function.identity()));
-                })).subscribeOn(Schedulers.boundedElastic()));
+        return readOnlyMono((handle, workspaceId) -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
+                    .collect(toMap(PromptVersionInfo::id, Function.identity()));
+        });
     }
 
     @Override
@@ -703,22 +709,21 @@ class PromptServiceImpl implements PromptService {
             return Mono.just(List.of());
         }
 
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                    PromptDAO promptDAO = handle.attach(PromptDAO.class);
+        return readOnlyMono((handle, workspaceId) -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-                    Map<String, PromptVersionLink> linksByCommit = promptDAO
-                            .findPromptsByCommits(commits, workspaceId).stream()
-                            .collect(toMap(PromptVersionLink::commit, Function.identity(),
-                                    (existing, duplicate) -> existing));
+            Map<String, PromptVersionLink> linksByCommit = promptDAO
+                    .findPromptsByCommits(commits, workspaceId).stream()
+                    .collect(toMap(PromptVersionLink::commit, Function.identity(),
+                            (existing, duplicate) -> existing));
 
-                    return commits.stream()
-                            .map(commit -> linksByCommit.getOrDefault(commit,
-                                    PromptVersionLink.builder()
-                                            .commit(commit)
-                                            .build()))
-                            .toList();
-                })).subscribeOn(Schedulers.boundedElastic()));
+            return commits.stream()
+                    .map(commit -> linksByCommit.getOrDefault(commit,
+                            PromptVersionLink.builder()
+                                    .commit(commit)
+                                    .build()))
+                    .toList();
+        });
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,

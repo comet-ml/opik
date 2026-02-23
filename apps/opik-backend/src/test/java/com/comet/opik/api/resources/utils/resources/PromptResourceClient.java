@@ -4,7 +4,7 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.PromptVersionIdsRequest;
+import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -93,7 +93,7 @@ public class PromptResourceClient {
     public List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
             String workspaceName) {
 
-        var request = PromptVersionIdsRequest.builder()
+        var request = PromptVersionCommitsRequest.builder()
                 .commits(commits)
                 .build();
 

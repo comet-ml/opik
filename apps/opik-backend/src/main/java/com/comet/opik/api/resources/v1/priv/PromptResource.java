@@ -8,7 +8,7 @@ import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
-import com.comet.opik.api.PromptVersionIdsRequest;
+import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
@@ -208,7 +208,7 @@ public class PromptResource {
     })
     @JsonView({Prompt.View.Public.class})
     public Response getPromptsByCommits(
-            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionCommitsRequest.class))) @Valid PromptVersionCommitsRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

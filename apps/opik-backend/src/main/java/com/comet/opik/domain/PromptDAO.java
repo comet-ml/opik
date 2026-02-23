@@ -205,14 +205,7 @@ interface PromptDAO {
                 pv.id AS prompt_version_id,
                 pv.commit,
                 p.id,
-                p.name,
-                p.description,
-                p.created_by,
-                p.last_updated_by,
-                p.created_at,
-                p.last_updated_at,
-                p.tags,
-                p.template_structure
+                p.name
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.commit IN (<commits>) AND pv.workspace_id = :workspace_id
