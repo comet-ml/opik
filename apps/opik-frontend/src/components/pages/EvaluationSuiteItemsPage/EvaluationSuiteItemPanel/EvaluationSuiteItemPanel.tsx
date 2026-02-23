@@ -9,7 +9,7 @@ import {
 import {
   DatasetItemEditorAutosaveProvider,
   useDatasetItemEditorAutosaveContext,
-} from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditorAutosaveContext";
+} from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditorAutosaveContext";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/components/ui/button";
 import {

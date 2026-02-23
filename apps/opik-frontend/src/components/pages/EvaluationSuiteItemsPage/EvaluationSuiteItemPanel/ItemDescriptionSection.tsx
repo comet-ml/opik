@@ -1,6 +1,6 @@
 import { useCallback, type ChangeEvent } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import { useDatasetItemEditorAutosaveContext } from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditorAutosaveContext";
+import { useDatasetItemEditorAutosaveContext } from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditorAutosaveContext";
 import { useEditItem } from "@/store/EvaluationSuiteDraftStore";
 import { TEXT_AREA_CLASSES } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";

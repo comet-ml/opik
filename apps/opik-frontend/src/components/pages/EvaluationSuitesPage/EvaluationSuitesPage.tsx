@@ -15,7 +15,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
-import AddEditEvaluationSuiteDialog from "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog";
+import AddEditEvaluationSuiteDialog from "@/components/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
 import DatasetActionsPanel from "@/components/shared/DatasetActionsPanel/DatasetActionsPanel";
 import { createDatasetRowActionsCell } from "@/components/shared/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/components/ui/button";

@@ -39,15 +39,15 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import EvaluationSuiteItemPanel from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemPanel/EvaluationSuiteItemPanel";
-import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
+import DatasetItemEditor from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditor";
 import { BehaviorsCountCell } from "./BehaviorsCountCell";
 import { ExecutionPolicyCell } from "./ExecutionPolicyCell";
-import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
-import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
+import DatasetItemsActionsPanel from "@/components/pages-shared/datasets/DatasetItemsActionsPanel";
+import { DatasetItemRowActionsCell } from "@/components/pages-shared/datasets/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/components/shared/SelectAllBanner/SelectAllBanner";
-import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
-import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
+import AddEditDatasetItemDialog from "@/components/pages-shared/datasets/AddEditDatasetItemDialog";
+import AddDatasetItemSidebar from "@/components/pages-shared/datasets/AddDatasetItemSidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";

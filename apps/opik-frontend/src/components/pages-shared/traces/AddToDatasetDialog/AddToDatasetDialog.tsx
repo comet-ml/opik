@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
-import AddEditEvaluationSuiteDialog from "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog";
+import AddEditEvaluationSuiteDialog from "@/components/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";

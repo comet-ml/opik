@@ -76,8 +76,8 @@ import {
 import useExperimentItemsState from "@/components/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/components/pages-shared/experiments/useExperimentItemsData";
 import useExperimentItemsSidebar from "@/components/pages-shared/experiments/useExperimentItemsSidebar";
-import PassedCell from "@/components/pages/EvaluationSuiteExperimentPage/PassedCell";
-import EvaluationSuiteExperimentPanel from "@/components/pages/EvaluationSuiteExperimentPage/ExperimentItemSidebar/EvaluationSuiteExperimentPanel";
+import PassedCell from "@/components/pages-shared/experiments/EvaluationSuiteExperiment/PassedCell";
+import EvaluationSuiteExperimentPanel from "@/components/pages-shared/experiments/EvaluationSuiteExperiment/ExperimentItemSidebar/EvaluationSuiteExperimentPanel";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 

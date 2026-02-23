@@ -4,7 +4,7 @@ import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { cn } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-import { useDatasetItemEditorAutosaveContext } from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditorAutosaveContext";
+import { useDatasetItemEditorAutosaveContext } from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditorAutosaveContext";
 
 const DEBOUNCE_MS = 400;
 

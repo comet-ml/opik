@@ -68,7 +68,7 @@ vi.mock("@/hooks/useNavigateToExperiment", () => ({
 
 // Mock the AddEditEvaluationSuiteDialog component
 vi.mock(
-  "@/components/pages/EvaluationSuitesPage/AddEditEvaluationSuiteDialog",
+  "@/components/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog",
   () => ({
     default: () => <div data-testid="add-edit-evaluation-suite-dialog" />,
   }),
