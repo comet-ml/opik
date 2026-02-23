@@ -1159,7 +1159,8 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
+                """ + TagOperations.tagUpdateFragment("tags") + """
+                as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
@@ -1176,8 +1177,7 @@ class ExperimentDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -2034,12 +2034,7 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
-            template.add("tags", true);
-            template.add("merge_tags", mergeTags);
-        }
+        TagOperations.configureTagTemplate(template, experimentUpdate, mergeTags);
 
         if (experimentUpdate.type() != null) {
             template.add("type", experimentUpdate.type().getValue());
@@ -2065,11 +2060,7 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
-            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
-        }
+        TagOperations.bindTagParams(statement, experimentUpdate);
 
         if (experimentUpdate.type() != null) {
             statement.bind("type", experimentUpdate.type().getValue());
