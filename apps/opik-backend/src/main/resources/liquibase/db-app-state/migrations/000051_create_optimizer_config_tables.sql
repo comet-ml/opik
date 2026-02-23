@@ -34,13 +34,13 @@ CREATE TABLE optimizer_config_values (
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36),
     config_id CHAR(36) NOT NULL,
-    key_name VARCHAR(255) NOT NULL,
-    value VARCHAR(150) NOT NULL,
+    key VARCHAR(255) NOT NULL,
+    value VARCHAR(255) NOT NULL,
     type ENUM('string', 'number', 'prompt', 'promptversion') NOT NULL DEFAULT 'string',
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
     CONSTRAINT optimizer_config_values_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, config_id, valid_from_blueprint_id, key_name)
+    CONSTRAINT optimizer_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, config_id, valid_from_blueprint_id, key)
 );
 
 CREATE TABLE optimizer_config_envs (
