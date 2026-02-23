@@ -21,8 +21,9 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector";
-import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import ViewSelector, {
+  VIEW_TYPE,
+} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 import useDashboardsViewGuard from "@/hooks/useDashboardsViewGuard";
