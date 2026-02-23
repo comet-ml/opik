@@ -202,24 +202,24 @@ public class PromptResource {
     }
 
     @POST
-    @Path("/retrieve-by-version-ids")
-    @Operation(operationId = "getPromptsByVersionIds", summary = "Get prompts by version ids", description = "Get prompts by prompt version ids", responses = {
+    @Path("/retrieve-by-commits")
+    @Operation(operationId = "getPromptsByCommits", summary = "Get prompts by commits", description = "Get prompts by prompt version commits", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
     })
     @JsonView({Prompt.View.Public.class})
-    public Response getPromptsByVersionIds(
+    public Response getPromptsByCommits(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionIdsRequest.class))) @Valid PromptVersionIdsRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting prompts by version ids, count '{}', on workspace_id '{}'",
-                request.promptVersionIds().size(), workspaceId);
+        log.info("Getting prompts by commits, count '{}', on workspace_id '{}'",
+                request.commits().size(), workspaceId);
 
-        var prompts = promptService.getByVersionIds(request.promptVersionIds())
+        var prompts = promptService.getByCommits(request.commits())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Got prompts by version ids, count '{}', on workspace_id '{}'",
+        log.info("Got prompts by commits, count '{}', on workspace_id '{}'",
                 prompts.size(), workspaceId);
 
         return Response.ok(prompts).build();

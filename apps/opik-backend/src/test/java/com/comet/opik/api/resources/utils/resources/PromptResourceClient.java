@@ -90,15 +90,15 @@ public class PromptResourceClient {
         }
     }
 
-    public List<PromptVersionLink> getPromptsByVersionIds(List<UUID> versionIds, String apiKey,
+    public List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
             String workspaceName) {
 
         var request = PromptVersionIdsRequest.builder()
-                .promptVersionIds(versionIds)
+                .commits(commits)
                 .build();
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI))
-                .path("retrieve-by-version-ids")
+                .path("retrieve-by-commits")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)

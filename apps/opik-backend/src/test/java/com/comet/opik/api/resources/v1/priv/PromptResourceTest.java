@@ -4125,16 +4125,16 @@ class PromptResourceTest {
     @Nested
     @DisplayName("Get Prompts By Version Ids")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class GetPromptsByVersionIds {
+    class GetPromptsByCommits {
 
-        private List<PromptVersionLink> getPromptsByVersionIds(List<UUID> versionIds, String apiKey,
+        private List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
                 String workspaceName) {
             var request = PromptVersionIdsRequest.builder()
-                    .promptVersionIds(versionIds)
+                    .commits(commits)
                     .build();
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("retrieve-by-version-ids")
+                    .path("retrieve-by-commits")
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
@@ -4148,8 +4148,8 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("Success: should return prompts for given version ids")
-        void shouldReturnPromptsForVersionIds() {
+        @DisplayName("Success: should return prompts for given commits")
+        void shouldReturnPromptsForCommits() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -4177,8 +4177,8 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             // Call the endpoint
-            var result = getPromptsByVersionIds(
-                    List.of(version1.id(), version2.id()), apiKey, workspaceName);
+            var result = getPromptsByCommits(
+                    List.of(version1.commit(), version2.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
 
@@ -4219,8 +4219,8 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             // Request in reverse order
-            var result = getPromptsByVersionIds(
-                    List.of(version2.id(), version1.id()), apiKey, workspaceName);
+            var result = getPromptsByCommits(
+                    List.of(version2.commit(), version1.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
             assertThat(result.get(0).promptVersionId()).isEqualTo(version2.id());
@@ -4233,25 +4233,25 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when version ids not found, then return null prompt and commit")
-        void whenVersionIdsNotFound__thenReturnNullPromptAndCommit() {
-            var unknownId1 = UUID.randomUUID();
-            var unknownId2 = UUID.randomUUID();
+        @DisplayName("when commits not found, then return null prompt and version id")
+        void whenCommitsNotFound__thenReturnNullPromptAndVersionId() {
+            var unknownCommit1 = UUID.randomUUID().toString();
+            var unknownCommit2 = UUID.randomUUID().toString();
 
-            var result = getPromptsByVersionIds(
-                    List.of(unknownId1, unknownId2), API_KEY, TEST_WORKSPACE);
+            var result = getPromptsByCommits(
+                    List.of(unknownCommit1, unknownCommit2), API_KEY, TEST_WORKSPACE);
 
             assertThat(result).hasSize(2);
-            assertThat(result.get(0).promptVersionId()).isEqualTo(unknownId1);
-            assertThat(result.get(0).commit()).isNull();
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit1);
+            assertThat(result.get(0).promptVersionId()).isNull();
             assertThat(result.get(0).prompt()).isNull();
-            assertThat(result.get(1).promptVersionId()).isEqualTo(unknownId2);
-            assertThat(result.get(1).commit()).isNull();
+            assertThat(result.get(1).commit()).isEqualTo(unknownCommit2);
+            assertThat(result.get(1).promptVersionId()).isNull();
             assertThat(result.get(1).prompt()).isNull();
         }
 
         @Test
-        @DisplayName("when mix of known and unknown version ids, then return correct results")
+        @DisplayName("when mix of known and unknown commits, then return correct results")
         void whenMixOfKnownAndUnknown__thenReturnCorrectResults() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
@@ -4269,19 +4269,19 @@ class PromptResourceTest {
                             .build(),
                     apiKey, workspaceName);
 
-            var unknownId = UUID.randomUUID();
+            var unknownCommit = UUID.randomUUID().toString();
 
-            var result = getPromptsByVersionIds(
-                    List.of(unknownId, version.id()), apiKey, workspaceName);
+            var result = getPromptsByCommits(
+                    List.of(unknownCommit, version.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
 
-            // First entry: unknown - null prompt and commit
-            assertThat(result.get(0).promptVersionId()).isEqualTo(unknownId);
-            assertThat(result.get(0).commit()).isNull();
+            // First entry: unknown commit - null prompt and version id
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit);
+            assertThat(result.get(0).promptVersionId()).isNull();
             assertThat(result.get(0).prompt()).isNull();
 
-            // Second entry: known - has prompt and commit
+            // Second entry: known commit - has prompt and version id
             assertThat(result.get(1).promptVersionId()).isEqualTo(version.id());
             assertThat(result.get(1).commit()).isEqualTo(version.commit());
             assertThat(result.get(1).prompt()).isNotNull();
@@ -4291,7 +4291,7 @@ class PromptResourceTest {
         @Test
         @DisplayName("when empty list, then return empty result")
         void whenEmptyList__thenReturnEmptyResult() {
-            var result = getPromptsByVersionIds(List.of(), API_KEY, TEST_WORKSPACE);
+            var result = getPromptsByCommits(List.of(), API_KEY, TEST_WORKSPACE);
 
             assertThat(result).isEmpty();
         }

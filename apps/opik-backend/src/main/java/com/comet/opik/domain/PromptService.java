@@ -50,7 +50,6 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.stream.Collectors.toMap;
-import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(PromptServiceImpl.class)
 public interface PromptService {
@@ -90,7 +89,7 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 
-    Mono<List<PromptVersionLink>> getByVersionIds(List<UUID> versionIds);
+    Mono<List<PromptVersionLink>> getByCommits(List<String> commits);
 }
 
 @Singleton
@@ -534,15 +533,6 @@ class PromptServiceImpl implements PromptService {
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private Mono<Map<UUID, Prompt>> fetchPromptsByIds(Set<UUID> ids) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono
-                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
-                    PromptDAO promptDAO = handle.attach(PromptDAO.class);
-                    return promptDAO.findByIds(ids, workspaceId).stream()
-                            .collect(toMap(Prompt::id, Function.identity()));
-                })).subscribeOn(Schedulers.boundedElastic()));
-    }
-
     private EntityAlreadyExistsException newConflict(String alreadyExists) {
         log.info(alreadyExists);
         return new EntityAlreadyExistsException(new ErrorMessage(409, alreadyExists));
@@ -708,32 +698,27 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public Mono<List<PromptVersionLink>> getByVersionIds(@NonNull List<UUID> versionIds) {
-        if (versionIds.isEmpty()) {
+    public Mono<List<PromptVersionLink>> getByCommits(@NonNull List<String> commits) {
+        if (commits.isEmpty()) {
             return Mono.just(List.of());
         }
 
-        return fetchVersionsByIds(versionIds)
-                .flatMap(versionsById -> {
-                    Set<UUID> promptIds = versionsById.values().stream()
-                            .map(PromptVersion::promptId)
-                            .collect(toSet());
+        return makeMonoContextAware((userName, workspaceId) -> Mono
+                .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                    PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-                    Mono<Map<UUID, Prompt>> promptsMono = promptIds.isEmpty()
-                            ? Mono.just(Map.of())
-                            : fetchPromptsByIds(promptIds);
+                    Map<String, PromptVersionLink> linksByCommit = promptDAO
+                            .findPromptsByCommits(commits, workspaceId).stream()
+                            .collect(toMap(PromptVersionLink::commit, Function.identity(),
+                                    (existing, duplicate) -> existing));
 
-                    return promptsMono.map(promptById -> versionIds.stream()
-                            .map(versionId -> {
-                                PromptVersion version = versionsById.get(versionId);
-                                return PromptVersionLink.builder()
-                                        .promptVersionId(versionId)
-                                        .commit(version != null ? version.commit() : null)
-                                        .prompt(version != null ? promptById.get(version.promptId()) : null)
-                                        .build();
-                            })
-                            .toList());
-                });
+                    return commits.stream()
+                            .map(commit -> linksByCommit.getOrDefault(commit,
+                                    PromptVersionLink.builder()
+                                            .commit(commit)
+                                            .build()))
+                            .toList();
+                })).subscribeOn(Schedulers.boundedElastic()));
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
