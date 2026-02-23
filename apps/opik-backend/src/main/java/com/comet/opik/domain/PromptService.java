@@ -530,7 +530,7 @@ class PromptServiceImpl implements PromptService {
                 .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
                     PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
                     return promptVersionDAO.findByIds(ids, workspaceId).stream()
-                            .collect(toMap(PromptVersion::id, Function.identity()));
+                            .collect(toMap(PromptVersion::id, Function.identity(), (existing, duplicate) -> existing));
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
