@@ -11,7 +11,9 @@ NOT_USED = sentinel.NOT_USED
 
 
 @pytest.fixture
-def batched_streamer_and_mock_message_processor(fake_file_upload_preprocessor):
+def batched_streamer_and_mock_message_processor(
+    fake_file_upload_manager, fake_replay_manager
+):
     tested = None
     try:
         mock_message_processor = mock.Mock()
@@ -20,8 +22,9 @@ def batched_streamer_and_mock_message_processor(fake_file_upload_preprocessor):
             n_consumers=1,
             use_batching=True,
             use_attachment_extraction=False,
-            upload_preprocessor=fake_file_upload_preprocessor,
+            file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=fake_replay_manager,
         )
 
         yield tested, mock_message_processor
@@ -55,7 +58,7 @@ def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
     ],
 )
 def test_streamer__batching_disabled__messages_that_support_batching_are_processed_independently(
-    objects, fake_file_upload_preprocessor
+    objects, fake_file_upload_manager
 ):
     mock_message_processor = mock.Mock()
     tested = None
@@ -65,12 +68,13 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             n_consumers=1,
             use_batching=False,
             use_attachment_extraction=False,
-            upload_preprocessor=fake_file_upload_preprocessor,
+            file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=mock.Mock(),
         )
 
-        for object in objects:
-            tested.put(object)
+        for obj in objects:
+            tested.put(obj)
         assert tested.flush(0.1) is True
 
         mock_message_processor.process.assert_has_calls(

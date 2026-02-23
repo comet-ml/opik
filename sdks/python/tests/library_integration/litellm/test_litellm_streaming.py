@@ -37,7 +37,7 @@ def test_litellm_completion_streaming__happyflow(
     stream = tracked_completion(
         model=model,
         messages=messages,
-        max_tokens=5,
+        max_tokens=10,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -66,7 +66,7 @@ def test_litellm_completion_streaming__happyflow(
         metadata=ANY_DICT.containing(
             {
                 "created_from": "litellm",
-                "max_tokens": 5,
+                "max_tokens": 10,
             }
         ),
         start_time=ANY_BUT_NONE,
@@ -83,7 +83,7 @@ def test_litellm_completion_streaming__happyflow(
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "litellm",
-                        "max_tokens": 5,
+                        "max_tokens": 10,
                     }
                 ),
                 usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
@@ -114,7 +114,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
     stream = await tracked_acompletion(
         model=MODEL_FOR_TESTS,
         messages=messages,
-        max_tokens=5,
+        max_tokens=10,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -143,7 +143,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
         metadata=ANY_DICT.containing(
             {
                 "created_from": "litellm",
-                "max_tokens": 5,
+                "max_tokens": 10,
             }
         ),
         start_time=ANY_BUT_NONE,
@@ -160,7 +160,7 @@ async def test_litellm_acompletion_streaming__happyflow(fake_backend):
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "litellm",
-                        "max_tokens": 5,
+                        "max_tokens": 10,
                     }
                 ),
                 usage=constants.EXPECTED_LITELLM_USAGE_LOGGED_FORMAT,  # Usage info must be present
@@ -201,7 +201,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
     stream = tracked_completion(
         model=MODEL_FOR_TESTS,
         messages=messages,
-        max_tokens=5,
+        max_tokens=10,
         stream=True,
         stream_options={"include_usage": True},
         opik_args=args_dict,
@@ -220,7 +220,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
         output={"choices": ANY_LIST},
         tags=["litellm", "streaming-span", "streaming-trace"],
         metadata=ANY_DICT.containing(
-            {"created_from": "litellm", "max_tokens": 5, "trace_key": "trace_value"}
+            {"created_from": "litellm", "max_tokens": 10, "trace_key": "trace_value"}
         ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -237,7 +237,7 @@ def test_litellm_completion_streaming_with_opik_args__happyflow(fake_backend):
                 metadata=ANY_DICT.containing(
                     {
                         "created_from": "litellm",
-                        "max_tokens": 5,
+                        "max_tokens": 10,
                         "stream_key": "stream_value",
                     }
                 ),

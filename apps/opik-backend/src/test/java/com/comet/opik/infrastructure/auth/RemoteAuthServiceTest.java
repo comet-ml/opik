@@ -150,11 +150,7 @@ class RemoteAuthServiceTest {
 
         assertThatThrownBy(() -> getService(new RequestContext()).authenticate(
                 getHeadersMock(workspaceName, ""), null,
-                ContextInfoHolder.builder()
-                        .uriInfo(createMockUriInfo("/priv/something"))
-                        .method("GET")
-                        .requiredPermissions(null)
-                        .build()))
+                new ContextInfoHolder(createMockUriInfo("/priv/something"), "GET")))
                 .isInstanceOf(ClientErrorException.class)
                 .hasMessage(MISSING_API_KEY);
     }
