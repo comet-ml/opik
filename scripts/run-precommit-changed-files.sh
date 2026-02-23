@@ -2,12 +2,13 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: $0 --config <path> --pathspec <pathspec> [--label <text>] [--precommit-cmd <cmd>]"
+	echo "Usage: $0 --config <path> --pathspec <pathspec> [--label <text>] [--base-ref <ref>] [--precommit-cmd <cmd>]"
 }
 
 config=""
 pathspec=""
 label="files"
+base_ref=""
 precommit_cmd="pre-commit"
 
 while [[ $# -gt 0 ]]; do
@@ -22,6 +23,10 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--label)
 		label="${2:-}"
+		shift 2
+		;;
+	--base-ref)
+		base_ref="${2:-}"
 		shift 2
 		;;
 	--precommit-cmd)
@@ -63,6 +68,23 @@ changed_files="$(mktemp)"
 trap 'rm -f "$changed_files"' EXIT
 
 git diff --name-only -z --diff-filter=ACM -- "$pathspec" > "$changed_files"
+
+if [[ ! -s "$changed_files" ]] && [[ -n "$base_ref" ]]; then
+	if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+		case "$base_ref" in
+		origin/*)
+			base_branch="${base_ref#origin/}"
+			git fetch -q origin "$base_branch:refs/remotes/origin/$base_branch" || true
+			;;
+		esac
+	fi
+
+	if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+		merge_base="$(git merge-base HEAD "$base_ref")"
+		git diff --name-only -z --diff-filter=ACM "$merge_base...HEAD" -- "$pathspec" > "$changed_files"
+	fi
+fi
+
 if [[ ! -s "$changed_files" ]]; then
 	echo "No ${label} changed. Pre-commit skipped."
 	exit 0
