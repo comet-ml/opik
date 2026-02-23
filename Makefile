@@ -28,9 +28,9 @@ help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
-	@echo "  make codex         - Legacy fallback: ensure .codex symlink points to .agents/ (for non-Cursor tooling)"
+	@echo "  make codex         - Ensure .codex symlink + generate Codex AGENTS.override.md from .agents/rules/*.mdc"
 	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
-	@echo "  make clean-agents  - Remove synced files from .claude/ (preserves local customizations)"
+	@echo "  make clean-agents  - Remove synced files from .claude/ and local Codex artifacts"
 	@echo ""
 	@echo "Git Hooks"
 	@echo ""
@@ -49,7 +49,8 @@ cursor:
 
 codex:
 	$(call link_agent_config,.codex)
-	@echo "Codex ready!"
+	@./scripts/sync-codex.sh "$(AI_DIR)" "AGENTS.md" "AGENTS.override.md"
+	@echo "Codex ready! Generated AGENTS.override.md and .agents/generated/codex/rules/*.md"
 
 # Sync to Claude (preserve nested structure, convert frontmatter)
 # Converts: .mdc -> .md, Cursor frontmatter -> Claude frontmatter
@@ -107,12 +108,15 @@ claude:
 clean-agents:
 	@echo "Removing generated files (preserving local customizations)..."
 	@[ -L "$(CURSOR_DIR)" ] && rm -f $(CURSOR_DIR) && echo "Removed $(CURSOR_DIR) symlink" || true
+	@[ -L ".codex" ] && rm -f .codex && echo "Removed .codex symlink" || true
+	@[ -f "AGENTS.override.md" ] && rm -f AGENTS.override.md && echo "Removed AGENTS.override.md" || true
+	@[ -d "$(AI_DIR)/generated/codex" ] && rm -rf "$(AI_DIR)/generated/codex" && echo "Removed $(AI_DIR)/generated/codex" || true
 	@# Clean rules: only delete .claude/rules/*.md that have .agents/rules/*.mdc source
 	@if [ -d "$(AI_DIR)/rules" ]; then \
 		find $(AI_DIR)/rules -name "*.mdc" 2>/dev/null | while read src; do \
 			rel=$${src#$(AI_DIR)/rules/}; \
 			dest="$(CLAUDE_DIR)/rules/$${rel%.mdc}.md"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
 		done; \
 	fi
 	@# Clean commands: only delete files that exist in .agents/commands/
@@ -120,7 +124,7 @@ clean-agents:
 		find $(AI_DIR)/commands -name "*.md" 2>/dev/null | while read src; do \
 			rel=$${src#$(AI_DIR)/commands/}; \
 			dest="$(CLAUDE_DIR)/commands/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
 		done; \
 	fi
 	@# Clean skills: only delete directories/files that exist in .agents/skills/
@@ -128,7 +132,7 @@ clean-agents:
 		find $(AI_DIR)/skills -type f 2>/dev/null | while read src; do \
 			rel=$${src#$(AI_DIR)/skills/}; \
 			dest="$(CLAUDE_DIR)/skills/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
 		done; \
 	fi
 	@# Clean agents: only delete files that exist in .agents/agents/
@@ -136,7 +140,7 @@ clean-agents:
 		find $(AI_DIR)/agents -name "*.md" 2>/dev/null | while read src; do \
 			rel=$${src#$(AI_DIR)/agents/}; \
 			dest="$(CLAUDE_DIR)/agents/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
 		done; \
 	fi
 	@# Clean up empty directories
