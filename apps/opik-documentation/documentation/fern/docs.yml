@@ -434,13 +434,6 @@ navigation:
                 path: docs/contributing/backend.mdx
                 slug: backend
                 icon: fa-regular fa-server
-          - section: Developer Programs
-            slug: /developer-programs
-            contents:
-              - page: Bounty Program
-                path: docs/contributing/bounties.mdx
-                slug: bounties
-                icon: fa-regular fa-gem
   - tab: integrations
     layout:
       - page: Overview
