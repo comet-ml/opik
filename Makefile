@@ -5,6 +5,7 @@ CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
 HOOKS_DEST := .git/hooks
+SDK_DIFF_BASE ?= origin/main
 
 define link_agent_config
 	@if [ ! -d "$(AI_DIR)" ]; then \
@@ -177,9 +178,25 @@ precommit-sdks:
 	@./scripts/run-precommit-changed-files.sh \
 		--config sdks/python/.pre-commit-config.yaml \
 		--pathspec sdks/python/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
 		--label "Python SDK files"
-	$(MAKE) -C sdks/opik_optimizer precommit
-	@ts_files=$$(git diff --name-only --diff-filter=ACM | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
+	$(MAKE) -C sdks/opik_optimizer precommit SDK_DIFF_BASE="$(SDK_DIFF_BASE)"
+	@base_ref="$(SDK_DIFF_BASE)"; \
+	ts_files=$$(git diff --name-only --diff-filter=ACM | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
+	if [ -z "$$ts_files" ]; then \
+		if ! git rev-parse --verify "$$base_ref" >/dev/null 2>&1; then \
+			case "$$base_ref" in \
+				origin/*) \
+					base_branch=$${base_ref#origin/}; \
+					git fetch -q origin "$$base_branch:refs/remotes/origin/$$base_branch" || true; \
+					;; \
+			esac; \
+		fi; \
+		if git rev-parse --verify "$$base_ref" >/dev/null 2>&1; then \
+			merge_base=$$(git merge-base HEAD "$$base_ref"); \
+			ts_files=$$(git diff --name-only --diff-filter=ACM "$$merge_base...HEAD" | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
+		fi; \
+	fi; \
 	if [ -n "$$ts_files" ]; then \
 		echo "TypeScript SDK source files changed. Running lint and typecheck..."; \
 		cd sdks/typescript && npm run lint && npm run typecheck; \
