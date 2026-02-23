@@ -2438,7 +2438,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input <else> t.input <endif> as input,
                 <if(output)> :output <else> t.output <endif> as output,
                 <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)>arrayConcat(t.tags, :tags)<else>:tags<endif><else>t.tags<endif> as tags,
+                """ + TagOperations.tagUpdateFragment("t.tags") + """
+                as tags,
                 <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
                 t.created_at,
                 t.created_by,
@@ -2453,7 +2454,7 @@ class TraceDAOImpl implements TraceDAO {
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
             LIMIT 1 BY t.id
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -3648,11 +3649,8 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(traceUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        TagOperations.configureTagTemplate(template, traceUpdate, mergeTags);
         Optional.ofNullable(traceUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(traceUpdate.endTime())
@@ -3684,8 +3682,9 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("output", outputValue);
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        TagOperations.bindTagParams(statement, traceUpdate);
+
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(traceUpdate.metadata())

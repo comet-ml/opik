@@ -48,13 +48,27 @@ def display_experiment_results(
     experiment_scores: Optional[List[score_result.ScoreResult]] = None,
 ) -> None:
     average_scores, failed_scores = _compute_average_scores(test_results)
-    nb_items = len(test_results)
+    nb_runs = len(test_results)
+
+    # Count unique dataset items (not runs)
+    unique_item_ids = {
+        result.test_case.dataset_item_id
+        for result in test_results
+        if result.test_case.dataset_item_id is not None
+    }
+    nb_items = len(unique_item_ids) if unique_item_ids else nb_runs
 
     time_text = text.Text(f"Total time:        {_format_time(total_time)}")
     time_text.stylize("bold", 0, 18)
     time_text = align.Align.left(time_text)
 
-    nb_samples_text = text.Text(f"Number of samples: {nb_items:,}")
+    # Show both items and runs if they differ
+    if nb_runs != nb_items:
+        nb_samples_text = text.Text(
+            f"Number of items:   {nb_items:,} ({nb_runs:,} runs)"
+        )
+    else:
+        nb_samples_text = text.Text(f"Number of samples: {nb_items:,}")
     nb_samples_text.stylize("bold", 0, 18)
     nb_samples_text = align.Align.left(nb_samples_text)
 
@@ -85,9 +99,13 @@ def display_experiment_results(
     content.add_row(aligned_test_results)
 
     # Create panel with content inside
+    if nb_runs != nb_items:
+        panel_title = f"{dataset_name} ({nb_items} items, {nb_runs} runs)"
+    else:
+        panel_title = f"{dataset_name} ({nb_items} samples)"
     panel_content = panel.Panel(
         content,
-        title=f"{dataset_name} ({nb_items} samples)",
+        title=panel_title,
         title_align="left",
         expand=False,
     )

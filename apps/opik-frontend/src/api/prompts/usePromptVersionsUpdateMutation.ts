@@ -5,6 +5,10 @@ import get from "lodash/get";
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
+// NOTE: Prompt versions still use the legacy tags + mergeTags approach.
+// Reason: The backend SQL query for prompt versions to handle bulk tag removals across
+// multiple items would get quite complex. The simpler replace/merge approach is
+// sufficient for current prompt version tag management use cases.
 type UsePromptVersionsUpdateMutationParams = {
   versionIds: string[];
   tags: string[];

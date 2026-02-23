@@ -20,13 +20,15 @@ from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
     dataset_version_public,
+    evaluator_item_write as rest_evaluator_item,
+    execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
 from opik import id_helpers
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
-from . import dataset_item, converters, rest_operations
+from . import dataset_item, converters, rest_operations, execution_policy
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -281,6 +283,30 @@ class DatasetVersion(DatasetExportOperations):
         """
         return self._version_info
 
+    def get_evaluators(self) -> List[Any]:
+        """
+        Get suite-level evaluators for this dataset version.
+
+        DatasetVersion does not support suite-level evaluators, so this always
+        returns an empty list.
+
+        Returns:
+            Empty list.
+        """
+        return []
+
+    def get_execution_policy(self) -> execution_policy.ExecutionPolicy:
+        """
+        Get the execution policy for this dataset version.
+
+        DatasetVersion does not support suite-level execution policy, so this
+        returns the default execution policy.
+
+        Returns:
+            Default execution policy.
+        """
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+
 
 class Dataset(DatasetExportOperations):
     def __init__(
@@ -374,6 +400,116 @@ class Dataset(DatasetExportOperations):
             return None
         return versions_response.content[0]
 
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
+        """
+        Get suite-level evaluators from the current dataset version.
+
+        Converts EvaluatorItemPublic objects from the BE into LLMJudge instances.
+
+        Args:
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+        Returns:
+            List of LLMJudge instances extracted from the version.
+        """
+        from opik.evaluation.suite_evaluators import llm_judge
+        from opik.evaluation.suite_evaluators.llm_judge import (
+            config as llm_judge_config,
+        )
+
+        version_info = self.get_version_info()
+        if version_info is None or not version_info.evaluators:
+            return []
+
+        evaluators: List[Any] = []
+        for evaluator_item in version_info.evaluators:
+            try:
+                if evaluator_item.type == "llm_judge":
+                    cfg = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                    evaluator = llm_judge.LLMJudge.from_config(
+                        cfg, init_kwargs={"model": evaluator_model}
+                    )
+                    evaluators.append(evaluator)
+                else:
+                    LOGGER.warning(
+                        "Unsupported evaluator type in version: %s. Only 'llm_judge' is supported.",
+                        evaluator_item.type,
+                    )
+            except Exception:
+                LOGGER.error(
+                    "Failed to instantiate evaluator from version config: %s",
+                    evaluator_item.config,
+                    exc_info=True,
+                )
+                raise
+
+        return evaluators
+
+    def get_execution_policy(
+        self,
+    ) -> execution_policy.ExecutionPolicy:
+        """
+        Get suite-level execution policy from the current dataset version.
+
+        Returns:
+            ExecutionPolicy dict with runs_per_item and pass_threshold.
+        """
+        version_info = self.get_version_info()
+        if version_info is not None and version_info.execution_policy is not None:
+            ep = version_info.execution_policy
+            return {
+                "runs_per_item": ep.runs_per_item
+                if ep.runs_per_item is not None
+                else 1,
+                "pass_threshold": ep.pass_threshold
+                if ep.pass_threshold is not None
+                else 1,
+            }
+
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+
+    def _convert_to_rest_item(
+        self, item: dataset_item.DatasetItem
+    ) -> rest_dataset_item.DatasetItemWrite:
+        """Convert a DatasetItem to REST API format.
+
+        Args:
+            item: The DatasetItem to convert.
+
+        Returns:
+            DatasetItemWrite object ready for REST API.
+        """
+        evaluators = None
+        if item.evaluators:
+            evaluators = [
+                rest_evaluator_item.EvaluatorItemWrite(
+                    name=e.name,
+                    type=e.type,  # type: ignore
+                    config=e.config,
+                )
+                for e in item.evaluators
+            ]
+
+        execution_policy = None
+        if item.execution_policy:
+            execution_policy = rest_execution_policy.ExecutionPolicyWrite(
+                runs_per_item=item.execution_policy.runs_per_item,
+                pass_threshold=item.execution_policy.pass_threshold,
+            )
+
+        return rest_dataset_item.DatasetItemWrite(
+            id=item.id,  # type: ignore
+            trace_id=item.trace_id,  # type: ignore
+            span_id=item.span_id,  # type: ignore
+            source=item.source,  # type: ignore
+            data=item.get_content(),
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+        )
+
     def _insert_batch_with_retry(
         self,
         batch: List[rest_dataset_item.DatasetItemWrite],
@@ -413,16 +549,7 @@ class Dataset(DatasetExportOperations):
             self._hashes.add(item_hash)
             self._id_to_hash[item.id] = item_hash
 
-        rest_items = [
-            rest_dataset_item.DatasetItemWrite(
-                id=item.id,  # type: ignore
-                trace_id=item.trace_id,  # type: ignore
-                span_id=item.span_id,  # type: ignore
-                source=item.source,  # type: ignore
-                data=item.get_content(),
-            )
-            for item in deduplicated_items
-        ]
+        rest_items = [self._convert_to_rest_item(item) for item in deduplicated_items]
 
         batches = sequence_splitter.split_into_batches(
             rest_items,
@@ -435,6 +562,9 @@ class Dataset(DatasetExportOperations):
         for batch in batches:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
+
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
 
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
         """
@@ -449,9 +579,6 @@ class Dataset(DatasetExportOperations):
             for item in items
         ]
         self.__internal_api__insert_items_as_dataclasses__(dataset_items)
-
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
 
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
