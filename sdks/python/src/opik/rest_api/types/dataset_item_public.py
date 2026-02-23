@@ -19,6 +19,7 @@ class DatasetItemPublic(UniversalBaseModel):
     span_id: typing.Optional[str] = None
     source: DatasetItemPublicSource
     data: JsonNode
+    description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     evaluators: typing.Optional[typing.List[EvaluatorItemPublic]] = None
     execution_policy: typing.Optional[ExecutionPolicyPublic] = None
