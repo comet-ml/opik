@@ -315,16 +315,20 @@ participant G as Aggregator
 participant U as UI
 
 O->>P: create/load optimization context
+O->>U: run_status_changed(initialized/running)
 O->>O: run baseline candidate (step 0)
 O->>M: materialize baseline
 M-->>O: baseline candidate_id + mask_id
 O->>X: trigger baseline experiment
+O->>U: progress_changed(running=1)
 X->>E: trigger
 G->>X: wait (event-first, poll fallback)
 X->>E: status/results reads as needed
 G-->>O: baseline TrialResult
 O->>P: save baseline trial + checkpoint
 O->>O: if baseline status != completed, mark optimization failed and stop
+O->>U: trial_added_or_updated(baseline)
+O->>U: progress_changed(completed/failed baseline)
 
 O->>A: initialize(RunContext with baseline score)
 A-->>O: initial OptimizerState
@@ -336,6 +340,7 @@ loop each optimization step
   O->>V: validate proposals
   V-->>O: accepted + rejected(reason_code)
   O->>P: persist rejections and accepted set
+  O->>U: progress_changed(proposed/accepted/rejected)
 
   par each accepted candidate
     O->>O: assign candidate_id + step_index
@@ -344,6 +349,7 @@ loop each optimization step
     O->>X: trigger experiment
     X->>E: trigger
     O->>P: save candidate mapping (candidate_id/mask_id/experiment_id)
+    O->>U: progress_changed(running increment)
   end
 
   G->>X: detect completion + fetch results
@@ -351,16 +357,17 @@ loop each optimization step
   G-->>O: TrialResult[]
 
   O->>P: persist checkpoint (trial data already in experiment records)
+  O->>U: trial_added_or_updated(batch)
+  O->>U: progress_changed(completed/failed counters)
   O->>A: observe(state, trial_results)
   A-->>O: updated state
+  O->>U: best_candidate_changed(if changed)
   O->>A: should_stop(state, history)
   A-->>O: stop or continue
-
-  O->>U: publish progress events
 end
 
 O->>P: mark optimization terminal state
-O->>U: publish terminal event
+O->>U: run_finished
 ```
 
 Lineage in this flow:
