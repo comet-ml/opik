@@ -235,7 +235,7 @@ class ChatCompletionsResourceTest {
             return Stream.of(
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
                             UUID.randomUUID().toString(), actualContainsExpectedEval),
-                    arguments(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString(), LlmProvider.ANTHROPIC,
+                    arguments(AnthropicModelName.CLAUDE_SONNET_3_7.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY"), actualContainsExpectedEval),
                     arguments(GeminiModelName.GEMINI_1_5_PRO.toString(), LlmProvider.GEMINI,
                             System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
@@ -311,12 +311,12 @@ class ChatCompletionsResourceTest {
         return Stream.of(
                 arguments(named("no messages", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString())
+                        .model(AnthropicModelName.CLAUDE_SONNET_3_7.toString())
                         .maxCompletionTokens(100).build()),
                         ERROR_EMPTY_MESSAGES),
                 arguments(named("no max tokens", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                         .stream(false)
-                        .model(AnthropicModelName.CLAUDE_3_5_SONNET_20241022.toString())
+                        .model(AnthropicModelName.CLAUDE_SONNET_3_7.toString())
                         .addUserMessage("Say 'Hello World'").build()),
                         ERROR_NO_COMPLETION_TOKENS));
     }

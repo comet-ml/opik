@@ -33,6 +33,11 @@ def upload_attachment(
         # delete the file after upload if requested
         if upload_options.delete_after_upload:
             _delete_attachment_file(upload_options.file_path)
+
+        # signal that file upload is completed successfully
+        if upload_options.on_upload_success is not None:
+            upload_options.on_upload_success()
+
     except Exception as e:
         LOGGER.error(
             "Failed to upload attachment: '%s' from file: [%s] with size: [%s]. Error: %s",
@@ -42,6 +47,9 @@ def upload_attachment(
             e,
             exc_info=True,
         )
+        if upload_options.on_upload_failed is not None:
+            # signal that the upload failed
+            upload_options.on_upload_failed(e)
         raise
 
 
@@ -50,7 +58,6 @@ def _delete_attachment_file(file_path: str) -> None:
         os.unlink(file_path)
     except OSError as e:
         LOGGER.info(f"Failed to delete attachment file: '{file_path}'. Reason: {e}.")
-        pass
 
 
 def _do_upload_attachment(
