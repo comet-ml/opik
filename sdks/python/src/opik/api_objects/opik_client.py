@@ -47,10 +47,17 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .config.client import ConfigClient
+from .config.config import Config as ConfigHandle
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
+from ..config import (
+    MAX_BATCH_SIZE_MB,
+    OPIK_WORKSPACE_DEFAULT_NAME,
+    OpikConfig,
+    get_from_user_inputs as _get_config_from_user_inputs,
+)
 from .. import (
-    config,
     datetime_helpers,
     exceptions,
     httpx_client,
@@ -119,7 +126,7 @@ class Opik:
             None
         """
 
-        config_ = config.get_from_user_inputs(
+        config_ = _get_config_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
@@ -143,10 +150,10 @@ class Opik:
         atexit.register(self.end, timeout=self._flush_timeout)
 
     @property
-    def config(self) -> config.OpikConfig:
+    def config(self) -> OpikConfig:
         """
         Returns:
-            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+            OpikConfig: Read-only copy of the configuration of the Opik client.
         """
         return self._config.model_copy()
 
@@ -731,7 +738,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
@@ -781,7 +788,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_trace_feedback_scores_batch_message = (
@@ -1575,7 +1582,7 @@ class Opik:
         """
 
         dereferenced_workspace = self._workspace
-        if dereferenced_workspace == config.OPIK_WORKSPACE_DEFAULT_NAME:
+        if dereferenced_workspace == OPIK_WORKSPACE_DEFAULT_NAME:
             dereferenced_workspace = (
                 self._rest_client.check.get_workspace_name().workspace_name
             )
@@ -2270,6 +2277,42 @@ class Opik:
         self._rest_client.annotation_queues.delete_annotation_queue_batch(
             ids=[queue_id]
         )
+
+    def get_config(
+        self,
+        name: str,
+        config_id: str,
+        env: Optional[str] = None,
+        mask_id: Optional[str] = None,
+    ) -> ConfigHandle:
+        config_client_ = ConfigClient(self._rest_client)
+        config_data = config_client_.get_blueprint(
+            config_id=config_id,
+            mask_id=mask_id,
+            env=env,
+        )
+        return ConfigHandle.from_backend_data(name=name, config_data=config_data)
+
+    def create_config(
+        self,
+        name: str,
+        parameters: Dict[str, Any],
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> ConfigHandle:
+        config_client_ = ConfigClient(self._rest_client)
+
+        fields_with_values: Dict[str, tuple] = {}
+        for key, value in parameters.items():
+            fields_with_values[key] = (type(value), value)
+
+        config_data = config_client_.create_config(
+            name=name,
+            fields_with_values=fields_with_values,
+            project_name=project_name,
+            description=description,
+        )
+        return ConfigHandle.from_backend_data(name=name, config_data=config_data)
 
 
 @functools.lru_cache()
