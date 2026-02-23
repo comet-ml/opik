@@ -112,13 +112,16 @@ profile:
 
 precommit:
 	$(call warn_if_no_venv)
-	# Use null-delimited paths to avoid shell splitting and preserve special chars.
-	@files=$$(git diff --name-only --diff-filter=ACM); \
-	if [ -z "$$files" ]; then \
+	# Use null-delimited, module-relative paths to avoid shell splitting issues.
+	@changed_files=$$(mktemp); \
+	git diff --name-only -z --relative --diff-filter=ACM -- . > "$$changed_files"; \
+	if [ ! -s "$$changed_files" ]; then \
 		echo "No changed files found. Pre-commit skipped."; \
+		rm -f "$$changed_files"; \
 		exit 0; \
 	fi; \
-	git diff --name-only -z --diff-filter=ACM | xargs -0 $(PRECOMMIT) run --files --
+	xargs -0 $(PRECOMMIT) run --files < "$$changed_files"; \
+	rm -f "$$changed_files"
 
 precommit-all:
 	$(call warn_if_no_venv)
