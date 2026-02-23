@@ -34,6 +34,7 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/tracing/open
         ```toml
         [otel]
         # Optional environment label in Codex telemetry
+        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
@@ -53,6 +54,7 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/tracing/open
     <Tab value="Enterprise deployment" title="Enterprise deployment">
         ```toml
         [otel]
+        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
@@ -72,6 +74,7 @@ For Opik OTEL endpoint behavior, see [Opik OpenTelemetry overview](/tracing/open
     <Tab value="Self-hosted instance" title="Self-hosted instance">
         ```toml
         [otel]
+        trace_exporter = "otlp-http"
         environment = "prod"
         log_user_prompt = false
 
