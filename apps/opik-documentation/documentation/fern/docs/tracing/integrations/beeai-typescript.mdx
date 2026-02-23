@@ -51,7 +51,7 @@ yarn add beeai-framework@0.1.13 @ai-sdk/openai @arizeai/openinference-instrument
 Configure your environment variables based on your Opik deployment:
 
 Intent:
-Route BeeAI OpenInference spans to Opik through OTLP.
+Route BeeAI OpenInference spans to Opik through OTLP. No breaking changes: existing BeeAI setups continue to work; these settings are only required to send traces to Opik.
 
 Applies when:
 You run BeeAI (TypeScript) with `@arizeai/openinference-instrumentation-beeai`.
