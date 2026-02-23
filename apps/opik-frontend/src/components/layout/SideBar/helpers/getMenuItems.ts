@@ -35,16 +35,18 @@ const getMenuItems = ({
           icon: LucideHome,
           label: "Home",
         },
-        canViewDashboards
-          ? {
-              id: "dashboards",
-              path: "/$workspaceName/dashboards",
-              type: MENU_ITEM_TYPE.router,
-              icon: ChartLine,
-              label: "Dashboards",
-              count: "dashboards",
-            }
-          : null,
+        ...(canViewDashboards
+          ? [
+              {
+                id: "dashboards",
+                path: "/$workspaceName/dashboards",
+                type: MENU_ITEM_TYPE.router,
+                icon: ChartLine,
+                label: "Dashboards",
+                count: "dashboards",
+              },
+            ]
+          : []),
       ],
     },
     {
