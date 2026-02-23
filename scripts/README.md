@@ -33,6 +33,19 @@ See:
 - https://github.com/Redocly/redoc
 - https://docs.oracle.com/en/java/javase/23/docs/specs/man/jwebserver.html
 
+### `sync-codex.sh`
+
+Synchronize `.agents/rules/*.mdc` into Codex-friendly markdown and generate a local
+`AGENTS.override.md` for Codex sessions.
+
+Usage:
+
+```bash
+./scripts/sync-codex.sh .agents AGENTS.md AGENTS.override.md
+```
+
+This script is executed by `make codex`.
+
 ### `dev-runner.sh`
 
 Development environment runner script for local Opik development. This script manages Docker infrastructure,
