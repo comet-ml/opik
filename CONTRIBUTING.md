@@ -76,5 +76,6 @@ Rules:
 
 ## Agent/editor setup
 - Cursor compatibility: `make cursor` (`.cursor -> .agents`)
+- Codex compatibility: `make codex` (`.codex -> .agents`, generates `AGENTS.override.md` from `.agents/rules/*.mdc`)
 - Claude sync: `make claude` (syncs `.agents` to `.claude`)
 - Git hooks: `make hooks`
