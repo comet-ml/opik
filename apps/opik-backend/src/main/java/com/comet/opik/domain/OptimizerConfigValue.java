@@ -2,8 +2,10 @@ package com.comet.opik.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -19,13 +21,13 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizerConfigValue(
-        UUID id,
-        UUID projectId,
-        @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
-        @NotBlank @Size(max = 255, message = "value cannot exceed 255 characters") String value,
-        @NotNull ValueType type,
-        UUID validFromBlueprintId,
-        UUID validToBlueprintId) {
+        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "value cannot exceed 255 characters") String value,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotNull ValueType type,
+        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
+        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId) {
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

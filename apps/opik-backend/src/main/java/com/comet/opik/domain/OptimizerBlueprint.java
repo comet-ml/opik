@@ -2,8 +2,11 @@ package com.comet.opik.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
@@ -13,21 +16,24 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizerBlueprint(
-        UUID id,
-        UUID projectId,
-        @NotNull UUID configId,
-        @NotNull BlueprintType type,
-        @Size(max = 255, message = "description cannot exceed 255 characters") String description,
-        String createdBy,
-        Instant createdAt,
-        String lastUpdatedBy,
-        Instant lastUpdatedAt) {
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID configId,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull BlueprintType type,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class, OptimizerConfig.View.Write.class}) @Size(max = 255, message = "description cannot exceed 255 characters") String description,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) List<String> tags,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @Valid @Size(min = 1, message = "values must not be empty") List<OptimizerConfigValue> values) {
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

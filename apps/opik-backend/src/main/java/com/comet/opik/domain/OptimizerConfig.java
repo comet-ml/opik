@@ -18,4 +18,15 @@ public record OptimizerConfig(
         Instant createdAt,
         String lastUpdatedBy,
         Instant lastUpdatedAt) {
+
+    public static class View {
+        public static class Write {
+        }
+
+        public static class Public {
+        }
+
+        public static class History {
+        }
+    }
 }
