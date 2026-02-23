@@ -12,8 +12,16 @@ import {
   useItemDeletedBehaviorIds,
 } from "@/store/EvaluationSuiteDraftStore";
 import { useEvaluatorDisplayRows } from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/useEvaluatorDisplayRows";
-import { getMetricIcon, formatEvaluatorConfig, getSectionLabel } from "@/lib/evaluator-converters";
-import { BehaviorDisplayRow, MetricType, LLMJudgeConfig } from "@/types/evaluation-suites";
+import {
+  getMetricIcon,
+  formatEvaluatorConfig,
+  getSectionLabel,
+} from "@/lib/evaluator-converters";
+import {
+  BehaviorDisplayRow,
+  MetricType,
+  LLMJudgeConfig,
+} from "@/types/evaluation-suites";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 
 const EMPTY_EVALUATORS: Evaluator[] = [];
@@ -23,7 +31,7 @@ function EvaluatorTooltipEntry({ row }: { row: BehaviorDisplayRow }) {
   const Icon = getMetricIcon(row.type);
   const isLLMJudge = row.type === MetricType.LLM_AS_JUDGE;
   const assertions = isLLMJudge
-    ? ((row.config as LLMJudgeConfig).assertions ?? [])
+    ? (row.config as LLMJudgeConfig).assertions ?? []
     : [];
   const configSummary = isLLMJudge
     ? null
@@ -111,7 +119,11 @@ function BehaviorsCountCellInner({
   }
 
   return (
-    <CellWrapper metadata={metadata} tableMetadata={tableMetadata} className="p-0">
+    <CellWrapper
+      metadata={metadata}
+      tableMetadata={tableMetadata}
+      className="p-0"
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="group flex size-full cursor-pointer items-center px-3 py-2">
