@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 _OPIK_INTERNAL_ATTRS = frozenset(
     {
-        "__opik_config_name__",
         "__opik_config_id__",
         "__opik_blueprint_id__",
         "__opik_mask_id__",
@@ -46,7 +45,6 @@ def config_decorator(
                 f"@opik.config can only be applied to dataclasses, got {cls.__name__}"
             )
 
-        config_name = name or cls.__name__
         supported_fields = type_helpers.extract_dataclass_fields(cls)
         field_types: typing.Dict[str, typing.Any] = {
             f_name: f_type for f_name, f_type, _ in supported_fields
@@ -56,7 +54,6 @@ def config_decorator(
 
         def new_init(self: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
             original_init(self, *args, **kwargs)
-            object.__setattr__(self, "__opik_config_name__", config_name)
             object.__setattr__(self, "__opik_config_id__", None)
             object.__setattr__(self, "__opik_blueprint_id__", None)
             object.__setattr__(self, "__opik_mask_id__", mask_id)
@@ -99,7 +96,6 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
         config_client = ConfigClient(client.rest_client)
 
         field_types = object.__getattribute__(instance, "__opik_field_types__")
-        config_name = object.__getattribute__(instance, "__opik_config_name__")
         project_name = object.__getattribute__(instance, "__opik_project_name__")
         description = object.__getattribute__(instance, "__opik_description__")
 
@@ -109,7 +105,6 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
             fields_with_values[f_name] = (f_type, value)
 
         config_data = config_client.create_config(
-            name=config_name,
             fields_with_values=fields_with_values,
             project_name=project_name,
             description=description,
@@ -214,15 +209,13 @@ def _maybe_inject_span_metadata(instance: typing.Any) -> None:
         if span_data is None:
             return
 
-        config_name = object.__getattribute__(instance, "__opik_config_name__")
         config_id = object.__getattribute__(instance, "__opik_config_id__")
         blueprint_id = object.__getattribute__(instance, "__opik_blueprint_id__")
         values_cache = object.__getattribute__(instance, "__opik_values_cache__")
 
         config_metadata = {
             "opik_configs": {
-                config_name: {
-                    "config_id": config_id,
+                config_id: {
                     "blueprint_id": blueprint_id,
                     "values": dict(values_cache),
                 }

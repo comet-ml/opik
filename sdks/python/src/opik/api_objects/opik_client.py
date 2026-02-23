@@ -2280,7 +2280,6 @@ class Opik:
 
     def get_config(
         self,
-        name: str,
         config_id: str,
         env: Optional[str] = None,
         mask_id: Optional[str] = None,
@@ -2291,11 +2290,10 @@ class Opik:
             mask_id=mask_id,
             env=env,
         )
-        return ConfigHandle.from_backend_data(name=name, config_data=config_data)
+        return ConfigHandle.from_backend_data(config_data=config_data)
 
     def create_config(
         self,
-        name: str,
         parameters: Dict[str, Any],
         project_name: Optional[str] = None,
         description: Optional[str] = None,
@@ -2307,12 +2305,11 @@ class Opik:
             fields_with_values[key] = (type(value), value)
 
         config_data = config_client_.create_config(
-            name=name,
             fields_with_values=fields_with_values,
             project_name=project_name,
             description=description,
         )
-        return ConfigHandle.from_backend_data(name=name, config_data=config_data)
+        return ConfigHandle.from_backend_data(config_data=config_data)
 
 
 @functools.lru_cache()

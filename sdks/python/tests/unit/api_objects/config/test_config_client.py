@@ -55,7 +55,6 @@ class TestCreateConfig:
         )
 
         result = config_client.create_config(
-            name="TestConfig",
             fields_with_values={
                 "temperature": (float, 0.6),
                 "name": (str, "agent"),
@@ -84,7 +83,6 @@ class TestCreateConfig:
         )
 
         config_client.create_config(
-            name="TestConfig",
             fields_with_values={"flag": (bool, False)},
         )
 
@@ -105,7 +103,6 @@ class TestCreateConfig:
         )
 
         config_client.create_config(
-            name="TestConfig",
             fields_with_values={"temp": (float, 0.5)},
             project_name="my-project",
         )
@@ -122,7 +119,6 @@ class TestCreateConfig:
 
         with pytest.raises(ValueError, match="Backend returned no config_id"):
             config_client.create_config(
-                name="Test",
                 fields_with_values={"x": (str, "y")},
             )
 

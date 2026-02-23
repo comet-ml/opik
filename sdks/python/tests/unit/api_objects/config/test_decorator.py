@@ -23,24 +23,14 @@ class TestConfigDecoratorValidation:
 
         assert dataclasses.is_dataclass(MyConfig)
 
-    @pytest.mark.parametrize(
-        "decorator_kwargs, attr, expected",
-        [
-            ({"name": "custom-name"}, "__opik_config_name__", "custom-name"),
-            ({"ttl_seconds": 60}, "__opik_ttl_seconds__", 60),
-        ],
-        ids=["custom_name", "custom_ttl"],
-    )
-    def test_decorator_with_arguments__sets_internal_attrs(
-        self, mock_backend, decorator_kwargs, attr, expected
-    ):
-        @config_decorator(**decorator_kwargs)
+    def test_decorator_with_ttl__sets_ttl_internal_attr(self, mock_backend):
+        @config_decorator(ttl_seconds=60)
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
 
         instance = MyConfig()
-        assert object.__getattribute__(instance, attr) == expected
+        assert object.__getattribute__(instance, "__opik_ttl_seconds__") == 60
 
 
 class TestConfigDecoratorInit:
@@ -86,17 +76,6 @@ class TestConfigDecoratorInit:
 
             instance = MyConfig()
             assert instance.temp == 0.8
-
-    def test_init__no_explicit_name__uses_class_name(self, mock_backend):
-        @config_decorator
-        @dataclasses.dataclass
-        class AgentConfig:
-            temp: float = 0.8
-
-        instance = AgentConfig()
-        assert (
-            object.__getattribute__(instance, "__opik_config_name__") == "AgentConfig"
-        )
 
 
 class TestConfigDecoratorFieldFiltering:

@@ -26,20 +26,10 @@ class ConfigClient:
 
     def create_config(
         self,
-        name: str,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         project_name: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> ConfigData:
-        """
-        Create a config in the backend.
-
-        Args:
-            name: Config name (used as identifier).
-            fields_with_values: Dict of field_name -> (py_type, value).
-            project_name: Optional project name.
-            description: Optional description for the blueprint.
-        """
         backend_values = []
         for field_name, (py_type, value) in fields_with_values.items():
             backend_values.append(

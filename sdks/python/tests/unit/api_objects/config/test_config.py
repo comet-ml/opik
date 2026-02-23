@@ -9,7 +9,6 @@ from opik.api_objects.config.client import ConfigData
 @pytest.fixture
 def sample_config():
     return Config.from_backend_data(
-        name="Test",
         config_data=ConfigData(
             config_id="cfg-1",
             blueprint_id="bp-1",
@@ -26,9 +25,8 @@ class TestConfigFromBackendData:
             values={"temperature": 0.6, "name": "agent"},
         )
 
-        config = Config.from_backend_data(name="TestConfig", config_data=config_data)
+        config = Config.from_backend_data(config_data=config_data)
 
-        assert config.name == "TestConfig"
         assert config.config_id == "cfg-1"
         assert config.blueprint_id == "bp-1"
         assert config.values == {"temperature": 0.6, "name": "agent"}
@@ -40,7 +38,7 @@ class TestConfigFromBackendData:
             values={"items": [1, 2, 3]},
         )
 
-        config = Config.from_backend_data(name="Test", config_data=config_data)
+        config = Config.from_backend_data(config_data=config_data)
         values = config.values
         values["items"].append(4)
 
@@ -101,7 +99,7 @@ class TestConfigInit:
             )
         )
 
-        config = Config(name="TestConfig", parameters={"temperature": 0.8})
+        config = Config(parameters={"temperature": 0.8})
 
         assert config.config_id == "cfg-new"
         assert config.blueprint_id == "bp-new"
@@ -114,7 +112,6 @@ class TestConfigLogValues:
         self, mock_get_client
     ):
         config = Config.from_backend_data(
-            name="Test",
             config_data=ConfigData(
                 config_id="cfg-1",
                 blueprint_id="bp-1",
@@ -148,7 +145,6 @@ class TestConfigUpdateEnvs:
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
     def test_update_envs__multiple_envs__calls_assign(self, mock_get_client):
         config = Config.from_backend_data(
-            name="Test",
             config_data=ConfigData(
                 config_id="cfg-1",
                 blueprint_id="bp-1",

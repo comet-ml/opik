@@ -9,12 +9,10 @@ class Config:
 
     def __init__(
         self,
-        name: str,
         parameters: typing.Dict[str, typing.Any],
         project_name: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ):
-        self._name = name
         self._parameters = parameters
         self._project_name = project_name
         self._description = description
@@ -35,7 +33,6 @@ class Config:
             fields_with_values[key] = (py_type, value)
 
         config_data = config_client.create_config(
-            name=self._name,
             fields_with_values=fields_with_values,
             project_name=self._project_name,
             description=self._description,
@@ -50,11 +47,9 @@ class Config:
     @classmethod
     def from_backend_data(
         cls,
-        name: str,
         config_data: ConfigData,
     ) -> "Config":
         obj = cls.__new__(cls)
-        obj._name = name
         obj._parameters = {}
         obj._project_name = None
         obj._description = config_data.description
@@ -62,10 +57,6 @@ class Config:
         obj._blueprint_id = config_data.blueprint_id
         obj._values = config_data.values
         return obj
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def config_id(self) -> typing.Optional[str]:
