@@ -214,11 +214,10 @@ def _maybe_inject_span_metadata(instance: typing.Any) -> None:
         values_cache = object.__getattribute__(instance, "__opik_values_cache__")
 
         config_metadata = {
-            "opik_configs": {
-                config_id: {
-                    "blueprint_id": blueprint_id,
-                    "values": dict(values_cache),
-                }
+            "configuration": {
+                "config_id": config_id,
+                "blueprint_id": blueprint_id,
+                "values": dict(values_cache),
             }
         }
 

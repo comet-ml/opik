@@ -151,7 +151,11 @@ class TestConfigDecoratorSpanMetadata:
 
             mock_span_data.update.assert_called()
             call_kwargs = mock_span_data.update.call_args[1]
-            assert "opik_configs" in call_kwargs["metadata"]
+            assert "configuration" in call_kwargs["metadata"]
+            config = call_kwargs["metadata"]["configuration"]
+            assert "config_id" in config
+            assert "blueprint_id" in config
+            assert "values" in config
 
     def test_field_access_outside_span__no_injection(self, mock_backend):
         with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:
