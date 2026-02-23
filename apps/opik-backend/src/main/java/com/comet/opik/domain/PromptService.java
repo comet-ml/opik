@@ -89,7 +89,7 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 
-    List<PromptVersionLink> getByVersionIds(List<UUID> versionIds);
+    Mono<List<PromptVersionLink>> getByVersionIds(List<UUID> versionIds);
 }
 
 @Singleton
@@ -695,39 +695,43 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public List<PromptVersionLink> getByVersionIds(@NonNull List<UUID> versionIds) {
-        String workspaceId = requestContext.get().getWorkspaceId();
+    public Mono<List<PromptVersionLink>> getByVersionIds(@NonNull List<UUID> versionIds) {
+        if (versionIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
 
-        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
+            return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+                PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+                PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            // Get versions indexed by id
-            Map<UUID, PromptVersion> versionsById = promptVersionDAO
-                    .findByIds(versionIds, workspaceId).stream()
-                    .collect(toMap(PromptVersion::id, Function.identity()));
+                // Get versions indexed by id
+                Map<UUID, PromptVersion> versionsById = promptVersionDAO
+                        .findByIds(versionIds, workspaceId).stream()
+                        .collect(toMap(PromptVersion::id, Function.identity()));
 
-            // Get prompts by their IDs
-            Set<UUID> promptIds = versionsById.values().stream()
-                    .map(PromptVersion::promptId)
-                    .collect(toSet());
-            Map<UUID, Prompt> promptById = promptIds.isEmpty()
-                    ? Map.of()
-                    : promptDAO.findByIds(promptIds, workspaceId).stream()
-                            .collect(toMap(Prompt::id, Function.identity()));
+                // Get prompts by their IDs
+                Set<UUID> promptIds = versionsById.values().stream()
+                        .map(PromptVersion::promptId)
+                        .collect(toSet());
+                Map<UUID, Prompt> promptById = promptIds.isEmpty()
+                        ? Map.of()
+                        : promptDAO.findByIds(promptIds, workspaceId).stream()
+                                .collect(toMap(Prompt::id, Function.identity()));
 
-            // Assemble in input order, one entry per version ID
-            return versionIds.stream()
-                    .map(versionId -> {
-                        PromptVersion version = versionsById.get(versionId);
-                        return PromptVersionLink.builder()
-                                .promptVersionId(versionId)
-                                .commit(version != null ? version.commit() : null)
-                                .prompt(version != null ? promptById.get(version.promptId()) : null)
-                                .build();
-                    })
-                    .toList();
-        });
+                // Assemble in input order, one entry per version ID
+                return versionIds.stream()
+                        .map(versionId -> {
+                            PromptVersion version = versionsById.get(versionId);
+                            return PromptVersionLink.builder()
+                                    .promptVersionId(versionId)
+                                    .commit(version != null ? version.commit() : null)
+                                    .prompt(version != null ? promptById.get(version.promptId()) : null)
+                                    .build();
+                        })
+                        .toList();
+            });
+        }).subscribeOn(Schedulers.boundedElastic()));
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,

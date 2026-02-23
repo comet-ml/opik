@@ -25,6 +25,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -56,6 +57,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 @Path("/v1/private/prompts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -201,7 +204,7 @@ public class PromptResource {
     @POST
     @Path("/retrieve-by-version-ids")
     @Operation(operationId = "getPromptsByVersionIds", summary = "Get prompts by version ids", description = "Get prompts by prompt version ids", responses = {
-            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionLink.class))),
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
     })
     @JsonView({Prompt.View.Public.class})
     public Response getPromptsByVersionIds(
@@ -212,7 +215,9 @@ public class PromptResource {
         log.info("Getting prompts by version ids, count '{}', on workspace_id '{}'",
                 request.promptVersionIds().size(), workspaceId);
 
-        var prompts = promptService.getByVersionIds(request.promptVersionIds());
+        var prompts = promptService.getByVersionIds(request.promptVersionIds())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
 
         log.info("Got prompts by version ids, count '{}', on workspace_id '{}'",
                 prompts.size(), workspaceId);
