@@ -226,7 +226,8 @@ public class SpanService {
 
         boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' spans", batchUpdate.ids().size()));
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' spans", batchUpdate.ids().size()))
+                .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
@@ -275,7 +276,7 @@ public class SpanService {
 
             return failWithConflict(TRACE_ID_MISMATCH);
         }
-        return Mono.error(ex);
+        return TagOperations.mapTagLimitError(ex);
     }
 
     private Mono<Long> updateOrFail(SpanUpdate spanUpdate, UUID id, Span existingSpan, Project project) {

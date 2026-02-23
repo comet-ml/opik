@@ -657,6 +657,7 @@ public class ExperimentService {
                 .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
                 .then(experimentDAO.update(id, experimentUpdate))
                 .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
+                .onErrorResume(TagOperations::mapTagLimitError)
                 .onErrorResume(throwable -> {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
                     return Mono.error(throwable);
@@ -669,6 +670,7 @@ public class ExperimentService {
         boolean mergeTags = batchUpdate.mergeTags();
         return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
+                .onErrorResume(TagOperations::mapTagLimitError)
                 .onErrorResume(throwable -> {
                     log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
                             throwable);
