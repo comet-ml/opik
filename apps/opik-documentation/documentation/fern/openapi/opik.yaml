@@ -1410,6 +1410,14 @@ paths:
         schema:
           type: string
           description: "Filter datasets by name (partial match, case insensitive)"
+      - name: type
+        in: query
+        schema:
+          type: string
+          description: Filter datasets by type (dataset or evaluation_suite)
+          enum:
+          - dataset
+          - evaluation_suite
       - name: sorting
         in: query
         schema:
@@ -9092,6 +9100,10 @@ components:
           $ref: "#/components/schemas/JsonNode"
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item description
         tags:
           uniqueItems: true
           type: array
@@ -9334,6 +9346,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9592,6 +9607,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9936,6 +9954,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -10425,6 +10446,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array

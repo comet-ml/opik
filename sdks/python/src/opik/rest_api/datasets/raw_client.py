@@ -39,6 +39,7 @@ from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
+from .types.find_datasets_request_type import FindDatasetsRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -226,6 +227,7 @@ class RawDatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -246,6 +248,8 @@ class RawDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -269,6 +273,7 @@ class RawDatasetsClient:
                 "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
                 "name": name,
+                "type": type,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -1276,6 +1281,7 @@ class RawDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -1297,6 +1303,8 @@ class RawDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1320,6 +1328,7 @@ class RawDatasetsClient:
                 "span_id": span_id,
                 "source": source,
                 "data": data,
+                "description": description,
                 "tags": tags,
                 "evaluators": convert_and_respect_annotation_metadata(
                     object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"
@@ -2234,6 +2243,7 @@ class AsyncRawDatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2254,6 +2264,8 @@ class AsyncRawDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -2277,6 +2289,7 @@ class AsyncRawDatasetsClient:
                 "with_optimizations_only": with_optimizations_only,
                 "prompt_id": prompt_id,
                 "name": name,
+                "type": type,
                 "sorting": sorting,
                 "filters": filters,
             },
@@ -3287,6 +3300,7 @@ class AsyncRawDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -3308,6 +3322,8 @@ class AsyncRawDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -3331,6 +3347,7 @@ class AsyncRawDatasetsClient:
                 "span_id": span_id,
                 "source": source,
                 "data": data,
+                "description": description,
                 "tags": tags,
                 "evaluators": convert_and_respect_annotation_metadata(
                     object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"

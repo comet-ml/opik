@@ -30,6 +30,7 @@ from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
+from .types.find_datasets_request_type import FindDatasetsRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -157,6 +158,7 @@ class DatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -177,6 +179,8 @@ class DatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -203,6 +207,7 @@ class DatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
+            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,
@@ -920,6 +925,7 @@ class DatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -941,6 +947,8 @@ class DatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -969,6 +977,7 @@ class DatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
             evaluators=evaluators,
             execution_policy=execution_policy,
@@ -1523,6 +1532,7 @@ class AsyncDatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1543,6 +1553,8 @@ class AsyncDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -1572,6 +1584,7 @@ class AsyncDatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
+            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,
@@ -2351,6 +2364,7 @@ class AsyncDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -2372,6 +2386,8 @@ class AsyncDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -2403,6 +2419,7 @@ class AsyncDatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
             evaluators=evaluators,
             execution_policy=execution_policy,

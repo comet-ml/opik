@@ -16,6 +16,7 @@ class DatasetItemWrite(UniversalBaseModel):
     span_id: typing.Optional[str] = None
     source: DatasetItemWriteSource
     data: JsonNode
+    description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     evaluators: typing.Optional[typing.List[EvaluatorItemWrite]] = None
     execution_policy: typing.Optional[ExecutionPolicyWrite] = None

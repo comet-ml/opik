@@ -26,6 +26,11 @@ class DatasetItemUpdate(UniversalBaseModel):
 
     metadata: typing.Optional[JsonNode] = None
     data: typing.Optional[JsonNode] = None
+    description: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Dataset item description
+    """
+
     tags: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
     """
     Tags
