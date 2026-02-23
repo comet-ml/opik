@@ -24,9 +24,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizerBlueprint(
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull UUID configId,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @NotNull BlueprintType type,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class, OptimizerConfig.View.Write.class}) @NotNull BlueprintType type,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class, OptimizerConfig.View.Write.class}) @Size(max = 255, message = "description cannot exceed 255 characters") String description,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) List<String> tags,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
