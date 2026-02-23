@@ -49,6 +49,31 @@ export const migrateSelectedColumns = (
 };
 
 /**
+ * Migrates column order from an old localStorage key.
+ * Preserves custom user orders (non-empty arrays) and applies
+ * the new default order for users who never customized.
+ */
+export const migrateColumnsOrder = (
+  oldStorageKey: string,
+  defaultOrder: string[],
+): string[] => {
+  const oldData = localStorage.getItem(oldStorageKey);
+
+  if (oldData !== null) {
+    try {
+      const parsed = JSON.parse(oldData);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    } catch {
+      // Ignore malformed JSON and fall back to defaultOrder
+    }
+  }
+
+  return defaultOrder;
+};
+
+/**
  * Determines if a column can be sorted based on the backend's sortable_by response.
  * Handles multiple matching patterns:
  * 1. Direct match: column id exactly matches a sortable field
