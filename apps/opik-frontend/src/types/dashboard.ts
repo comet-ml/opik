@@ -213,6 +213,7 @@ export interface WidgetMetadata {
   category: WIDGET_CATEGORY;
   iconColor?: string;
   disabled?: boolean;
+  disabledTooltip?: string;
 }
 
 export interface WidgetComponents {

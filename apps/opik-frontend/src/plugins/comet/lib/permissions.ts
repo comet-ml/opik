@@ -1,23 +1,22 @@
-import { WORKSPACE_OWNER_VALUE } from "@/plugins/comet/constants/permissions";
 import {
   ManagementPermissionsNames,
   UserPermission,
 } from "@/plugins/comet/types";
 
-export const isUserPermissionValid = (permissionValue?: string) =>
-  permissionValue === WORKSPACE_OWNER_VALUE;
-
-export const getPermissionByType = (
+export const getUserPermissionValue = (
   userPermissions: UserPermission[] = [],
   type: ManagementPermissionsNames,
 ) => {
   const isTypeValid = Object.values(ManagementPermissionsNames).includes(type);
   if (!isTypeValid) return null;
 
-  return (
-    userPermissions?.find(({ permissionName }) => permissionName === type) ??
-    null
-  );
+  const permissionValue = userPermissions?.find(
+    ({ permissionName }) => permissionName === type,
+  )?.permissionValue;
+
+  if (permissionValue === "true") return true;
+  if (permissionValue === "false") return false;
+  return null;
 };
 
 export const updatePermissionByType = (
