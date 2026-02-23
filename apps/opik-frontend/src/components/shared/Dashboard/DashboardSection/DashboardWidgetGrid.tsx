@@ -23,6 +23,7 @@ import {
   selectWidgetResolver,
 } from "@/store/DashboardStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { applyWidgetPermissions } from "@/components/shared/Dashboard/widgets/widgetRegistry";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
 import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
@@ -42,7 +43,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
-  const { canViewExperiments } = usePermissions();
+  const { permissions } = usePermissions();
 
   const handleAddWidget = () => {
     onAddEditWidgetCallback?.({ sectionId });
@@ -79,12 +80,16 @@ const DashboardWidgetGrid: React.FunctionComponent<
       autoSize={true}
     >
       {widgets.map((widget) => {
-        const widgetComponents = widgetResolver?.({
-          type: widget.type || WIDGET_TYPE.PROJECT_METRICS,
-          canViewExperiments: !!canViewExperiments,
-        });
+        const widgetType = widget.type || WIDGET_TYPE.PROJECT_METRICS;
+        const baseComponents = widgetResolver?.(widgetType);
 
-        if (!widgetComponents) return null;
+        if (!baseComponents) return null;
+
+        const widgetComponents = applyWidgetPermissions(
+          baseComponents,
+          widgetType,
+          permissions,
+        );
 
         const { Widget, metadata } = widgetComponents;
 

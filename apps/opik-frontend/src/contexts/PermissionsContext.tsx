@@ -1,20 +1,22 @@
 import React, { createContext, useContext, ReactNode } from "react";
-import { Permissions } from "@/types/permissions";
+import { PermissionsContextValue } from "@/types/permissions";
 
-const PermissionsContext = createContext<Permissions | undefined>(undefined);
+const PermissionsContext = createContext<PermissionsContextValue | undefined>(
+  undefined,
+);
 
 export const PermissionsProvider: React.FC<{
   children: ReactNode;
-  permissions: Permissions;
-}> = ({ children, permissions }) => {
+  value: PermissionsContextValue;
+}> = ({ children, value }) => {
   return (
-    <PermissionsContext.Provider value={permissions}>
+    <PermissionsContext.Provider value={value}>
       {children}
     </PermissionsContext.Provider>
   );
 };
 
-export const usePermissions = (): Permissions => {
+export const usePermissions = (): PermissionsContextValue => {
   const context = useContext(PermissionsContext);
   if (context === undefined) {
     throw new Error("usePermissions must be used within a PermissionsProvider");

@@ -2,7 +2,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
 const ExperimentsPageGuard = () => {
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   return (
     <NoAccessPageGuard

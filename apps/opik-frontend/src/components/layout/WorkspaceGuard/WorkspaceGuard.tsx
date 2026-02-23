@@ -3,6 +3,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import usePluginStore from "@/store/PluginsStore";
 import { FeatureTogglesProvider } from "@/components/feature-toggles-provider";
 import { ServerSyncProvider } from "@/components/server-sync-provider";
+import PermissionsGuard from "@/components/layout/PermissionsGuard/PermissionsGuard";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import { DEFAULT_PERMISSIONS } from "@/types/permissions";
 
@@ -33,9 +34,11 @@ const WorkspaceGuard = ({
   return (
     <WorkspacePreloader>
       {PermissionsProviderPlugin ? (
-        <PermissionsProviderPlugin>{layout}</PermissionsProviderPlugin>
+        <PermissionsProviderPlugin>
+          <PermissionsGuard>{layout}</PermissionsGuard>
+        </PermissionsProviderPlugin>
       ) : (
-        <PermissionsProvider permissions={DEFAULT_PERMISSIONS}>
+        <PermissionsProvider value={DEFAULT_PERMISSIONS}>
           {layout}
         </PermissionsProvider>
       )}

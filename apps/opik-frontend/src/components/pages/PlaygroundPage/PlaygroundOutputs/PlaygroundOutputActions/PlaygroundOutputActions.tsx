@@ -101,7 +101,9 @@ const PlaygroundOutputActions = ({
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
 
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
   const filtersColumnData = useMemo(() => {

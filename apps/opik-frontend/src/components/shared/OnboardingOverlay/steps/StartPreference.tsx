@@ -19,7 +19,9 @@ const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
 
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"

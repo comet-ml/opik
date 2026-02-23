@@ -26,7 +26,9 @@ interface SideBarMenuItemsProps {
 
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   const menuItems = getMenuItems({ canViewExperiments: !!canViewExperiments });
 

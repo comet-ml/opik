@@ -4,7 +4,10 @@ import {
   useDashboardStore,
   selectWidgetResolver,
 } from "@/store/DashboardStore";
-import { getAllWidgetTypes } from "@/components/shared/Dashboard/widgets/widgetRegistry";
+import {
+  getAllWidgetTypes,
+  applyWidgetPermissions,
+} from "@/components/shared/Dashboard/widgets/widgetRegistry";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -34,23 +37,25 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
   WidgetConfigDialogAddStepProps
 > = ({ onSelectWidget }) => {
   const widgetResolver = useDashboardStore(selectWidgetResolver);
-  const { canViewExperiments } = usePermissions();
+  const { permissions } = usePermissions();
 
   const widgetOptions = useMemo(() => {
     if (!widgetResolver) return [];
 
     return getAllWidgetTypes().map((type) => {
-      const components = widgetResolver({
+      const baseComponents = widgetResolver(type);
+      const components = applyWidgetPermissions(
+        baseComponents,
         type,
-        canViewExperiments: !!canViewExperiments,
-      });
+        permissions,
+      );
 
       return {
         type,
         ...components.metadata,
       };
     });
-  }, [widgetResolver, canViewExperiments]);
+  }, [widgetResolver, permissions]);
 
   const categories = Object.values(WIDGET_CATEGORY);
 

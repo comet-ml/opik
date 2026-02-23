@@ -224,13 +224,7 @@ export interface WidgetComponents {
   metadata: WidgetMetadata;
 }
 
-export type WidgetResolver = ({
-  type,
-  canViewExperiments,
-}: {
-  type: string;
-  canViewExperiments?: boolean;
-}) => WidgetComponents;
+export type WidgetResolver = (type: string) => WidgetComponents;
 
 export interface AddEditWidgetCallbackParams {
   sectionId: string;

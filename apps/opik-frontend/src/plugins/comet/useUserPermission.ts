@@ -17,6 +17,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
+  const isEnabled = configEnabled && !isAdmin;
   const { data: userPermissions, isPending } = useUserPermissions(
     {
       organizationId: currentOrganization?.id || "",
@@ -25,7 +26,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     {
       refetchOnMount: true,
       // there is no need in permissions, if a user is admin
-      enabled: configEnabled && !isAdmin,
+      enabled: isEnabled,
     },
   );
 
@@ -66,15 +67,16 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
       ManagementPermissionsNames.EXPERIMENT_VIEW,
     );
 
-    if (isPending) {
-      return permissionValue;
-    }
-
     // should default to true if the permission is not found
     return permissionValue !== false;
-  }, [workspacePermissions, isWorkspaceOwner, isPending]);
+  }, [workspacePermissions, isWorkspaceOwner]);
 
-  return { canInviteMembers, isWorkspaceOwner, canViewExperiments };
+  return {
+    canInviteMembers,
+    isWorkspaceOwner,
+    canViewExperiments,
+    isPending: isEnabled && isPending,
+  };
 };
 
 export default useUserPermission;
