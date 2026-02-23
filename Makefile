@@ -170,16 +170,10 @@ hooks-remove:
 # Run SDK pre-commit style checks (changed files only / explicit script checks)
 precommit-sdks:
 	@echo "Running SDK-level pre-commit checks on changed files..."
-	@cd sdks/python && \
-	changed_files=$$(mktemp); \
-	git diff --name-only -z --relative --diff-filter=ACM -- . > "$$changed_files"; \
-	if [ -s "$$changed_files" ]; then \
-		echo "Python SDK files changed. Running pre-commit..."; \
-		xargs -0 pre-commit run --config .pre-commit-config.yaml --files < "$$changed_files"; \
-	else \
-		echo "No Python SDK files changed. Skipping."; \
-	fi; \
-	rm -f "$$changed_files"
+	@./scripts/run-precommit-changed-files.sh \
+		--config sdks/python/.pre-commit-config.yaml \
+		--pathspec sdks/python/ \
+		--label "Python SDK files"
 	$(MAKE) -C sdks/opik_optimizer precommit
 	@ts_files=$$(git diff --name-only --diff-filter=ACM | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
 	if [ -n "$$ts_files" ]; then \
