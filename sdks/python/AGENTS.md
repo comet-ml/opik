@@ -17,7 +17,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 Run commands from `sdks/python` unless noted.
 - `pip install -r tests/test_requirements.txt && pytest tests/unit tests/integration tests/e2e`: install test dependencies and run standard tests.
 - `pytest tests/e2e_library_integration tests/e2e_smoke`: run higher-cost integration coverage.
-- `make precommit`: run formatting, linting, and mypy hooks on changed files in this module (repo-level shared entry is `make precommit-sdks`).
+- `cd "$(git rev-parse --show-toplevel)" && make precommit-sdks`: run formatting, linting, and mypy hooks on changed files via the repo-level SDK entrypoint.
 - `opik configure --use_local` (or `opik configure`): local SDK configuration for local/dev environments.
 
 ## Coding Style & Naming Conventions
