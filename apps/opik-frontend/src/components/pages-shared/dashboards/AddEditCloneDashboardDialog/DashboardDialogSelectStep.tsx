@@ -13,7 +13,9 @@ interface DashboardDialogSelectStepProps {
 const DashboardDialogSelectStep: React.FunctionComponent<
   DashboardDialogSelectStepProps
 > = ({ onSelect }) => {
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   return (
     <div className="flex flex-col gap-4">

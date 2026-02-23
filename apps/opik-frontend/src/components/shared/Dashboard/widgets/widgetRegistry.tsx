@@ -9,8 +9,10 @@ import {
   WidgetResolver,
   WidgetComponents,
   WIDGET_CATEGORY,
+  WIDGET_TYPE,
 } from "@/types/dashboard";
 import { WIDGET_TYPES } from "@/lib/dashboard/utils";
+import { Permissions } from "@/types/permissions";
 import ProjectMetricsWidget from "./ProjectMetricsWidget/ProjectMetricsWidget";
 import ProjectMetricsEditor from "./ProjectMetricsWidget/ProjectMetricsEditor";
 import { widgetHelpers as projectMetricsHelpers } from "./ProjectMetricsWidget/helpers";
@@ -30,10 +32,14 @@ import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLead
 export const DISABLED_EXPERIMENTS_TOOLTIP =
   "You don't have permission to view experiments";
 
-export const widgetResolver: WidgetResolver = ({
-  type,
-  canViewExperiments = true,
-}): WidgetComponents => {
+const EXPERIMENT_WIDGET_TYPES = new Set<WIDGET_TYPE>([
+  WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES,
+  WIDGET_TYPES.EXPERIMENT_LEADERBOARD,
+]);
+
+export const widgetResolver: WidgetResolver = (
+  type: string,
+): WidgetComponents => {
   switch (type) {
     case WIDGET_TYPES.PROJECT_METRICS:
       return {
@@ -96,10 +102,7 @@ export const widgetResolver: WidgetResolver = ({
           icon: <FlaskConical className="size-4" />,
           category: WIDGET_CATEGORY.EVALUATION,
           iconColor: "text-[#9B59B6]",
-          disabled: !canViewExperiments,
-          disabledTooltip: canViewExperiments
-            ? undefined
-            : DISABLED_EXPERIMENTS_TOOLTIP,
+          disabled: false,
         },
       };
     case WIDGET_TYPES.EXPERIMENT_LEADERBOARD:
@@ -115,10 +118,7 @@ export const widgetResolver: WidgetResolver = ({
           icon: <Trophy className="size-4" />,
           category: WIDGET_CATEGORY.EVALUATION,
           iconColor: "text-[#FFD700]",
-          disabled: !canViewExperiments,
-          disabledTooltip: canViewExperiments
-            ? undefined
-            : DISABLED_EXPERIMENTS_TOOLTIP,
+          disabled: false,
         },
       };
     default:
@@ -138,6 +138,31 @@ export const widgetResolver: WidgetResolver = ({
         },
       };
   }
+};
+
+const isExperimentWidgetType = (widgetType: string): boolean => {
+  return EXPERIMENT_WIDGET_TYPES.has(widgetType as WIDGET_TYPE);
+};
+
+export const applyWidgetPermissions = (
+  components: WidgetComponents,
+  widgetType: string,
+  permissions: Permissions,
+): WidgetComponents => {
+  const { canViewExperiments } = permissions;
+
+  if (isExperimentWidgetType(widgetType) && !canViewExperiments) {
+    return {
+      ...components,
+      metadata: {
+        ...components.metadata,
+        disabled: true,
+        disabledTooltip: DISABLED_EXPERIMENTS_TOOLTIP,
+      },
+    };
+  }
+
+  return components;
 };
 
 export const getAllWidgetTypes = (): string[] => {

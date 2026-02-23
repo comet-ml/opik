@@ -27,7 +27,9 @@ const GetStartedSection = () => {
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
 
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   const openNewExperimentDialog = () => setIsNewExperimentDialogOpened(true);
   const openLogTraceDialog = () => setIsLogTraceDialogOpened(true);

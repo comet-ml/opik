@@ -17,6 +17,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
+  const isEnabled = configEnabled && !isAdmin;
   const { data: userPermissions, isPending } = useUserPermissions(
     {
       organizationId: currentOrganization?.id || "",
@@ -25,7 +26,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     {
       refetchOnMount: true,
       // there is no need in permissions, if a user is admin
-      enabled: configEnabled && !isAdmin,
+      enabled: isEnabled,
     },
   );
 
@@ -67,13 +68,10 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
         permissionName,
       );
 
-      if (isPending) {
-        return permissionValue;
-      }
-
+      // should default to true if the permission is not found
       return permissionValue !== false;
     },
-    [workspacePermissions, isWorkspaceOwner, isPending],
+    [workspacePermissions, isWorkspaceOwner],
   );
 
   const canViewExperiments = useMemo(
@@ -91,6 +89,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     isWorkspaceOwner,
     canViewExperiments,
     canViewDashboards,
+    isPending: isEnabled && isPending,
   };
 };
 

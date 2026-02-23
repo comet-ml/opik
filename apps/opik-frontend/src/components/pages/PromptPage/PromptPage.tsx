@@ -21,7 +21,9 @@ import ExperimentsTab from "./ExperimentsTab/ExperimentsTab";
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
 
-  const { canViewExperiments } = usePermissions();
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   const promptId = usePromptIdFromURL();
 

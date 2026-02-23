@@ -1,9 +1,17 @@
 export interface Permissions {
-  canViewExperiments: boolean | null;
-  canViewDashboards: boolean | null;
+  canViewExperiments: boolean;
+  canViewDashboards: boolean;
 }
 
-export const DEFAULT_PERMISSIONS: Permissions = {
-  canViewExperiments: true,
-  canViewDashboards: true,
+export interface PermissionsContextValue {
+  permissions: Permissions;
+  isPending: boolean;
+}
+
+export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
+  permissions: {
+    canViewExperiments: true,
+    canViewDashboards: true,
+  },
+  isPending: false,
 };
