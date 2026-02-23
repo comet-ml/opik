@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
+
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem, Evaluator } from "@/types/datasets";
 import { ExecutionPolicy } from "@/types/evaluation-suites";
 import { useToast } from "@/components/ui/use-toast";
+import { extractErrorMessage } from "@/lib/tags";
 
 interface DatasetItemChangesPayload {
   added_items: DatasetItem[];
@@ -59,15 +60,10 @@ const useDatasetItemChangesMutation = (
       }
 
       // For other errors, show toast
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
 
       toast({
         title: "Error",
-        description: message,
+        description: extractErrorMessage(error),
         variant: "destructive",
       });
     },

@@ -5,5 +5,6 @@
 from .dataset_update_visibility import DatasetUpdateVisibility
 from .dataset_write_type import DatasetWriteType
 from .dataset_write_visibility import DatasetWriteVisibility
+from .find_datasets_request_type import FindDatasetsRequestType
 
-__all__ = ["DatasetUpdateVisibility", "DatasetWriteType", "DatasetWriteVisibility"]
+__all__ = ["DatasetUpdateVisibility", "DatasetWriteType", "DatasetWriteVisibility", "FindDatasetsRequestType"]

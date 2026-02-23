@@ -41,9 +41,14 @@ hallucination_metric = Hallucination(
 
 ## Using OpenAI-compatible providers
 
-Many LLM providers (such as SiliconFlow, Together AI, Groq, and others) expose APIs that are compatible with the OpenAI API format. You can use these providers with Opik's LLM-as-a-Judge metrics by using LiteLLM's `openai/` prefix and setting the appropriate environment variables.
+Many LLM providers (such as SiliconFlow, Together AI, Groq, and others) expose APIs that are compatible with the OpenAI API format. You can use these providers with Opik's LLM-as-a-Judge metrics by using LiteLLM's [`openai/` provider prefix](https://docs.litellm.ai/docs/providers/openai_compatible) and setting the appropriate environment variables.
+
+This is a simpler alternative to [creating a custom model class](#creating-your-own-custom-model-class) when your provider already supports the OpenAI API format.
 
 Set `OPENAI_API_KEY` to your provider's API key and `OPENAI_BASE_URL` to the provider's API endpoint, then use the `openai/` prefix when specifying the model name:
+
+{/* Example based on LiteLLM's OpenAI-compatible provider pattern.
+    See: https://docs.litellm.ai/docs/providers/openai_compatible */}
 
 ```python
 import os
@@ -68,7 +73,7 @@ print(f"Hallucination score: {score.value}")
 
 The `openai/` prefix tells LiteLLM to use the OpenAI-compatible API format with the configured base URL. This approach works with any metric that accepts a `model` parameter, including `Hallucination`, `Moderation`, `AnswerRelevance`, and others.
 
-For more details on supported providers, see the [LiteLLM providers documentation](https://docs.litellm.ai/docs/providers).
+For the full list of supported providers and configuration options, see the [LiteLLM OpenAI-compatible providers documentation](https://docs.litellm.ai/docs/providers/openai_compatible).
 
 ## Creating Your Own Custom Model Class
 
