@@ -66,6 +66,7 @@ AI assistance is allowed, but human authors remain accountable for correctness, 
 
 Rules:
 - Always run relevant tests/linters for touched code.
+- Always be explicit about human/users interaction with produced output.
 - Always review prior issues, pull requests, and existing code for related solutions.
 - Always address system-generated reviews (Baz, Greptile).
 - Never submit unreviewed AI output.
