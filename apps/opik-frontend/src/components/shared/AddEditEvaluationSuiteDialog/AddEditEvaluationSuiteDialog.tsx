@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 
@@ -454,7 +454,7 @@ const AddEditEvaluationSuiteDialog = ({
                     rel="noopener noreferrer"
                   >
                     Learn more
-                    <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+                    <ExternalLink className="ml-0.5 size-3 shrink-0" />
                   </a>
                 </Button>
               </Description>
