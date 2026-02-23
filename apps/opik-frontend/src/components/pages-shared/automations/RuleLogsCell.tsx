@@ -1,5 +1,5 @@
 import React from "react";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { CellContext } from "@tanstack/react-table";
 import { Link } from "@tanstack/react-router";
 
@@ -29,7 +29,7 @@ const RuleLogsCell = (context: CellContext<EvaluatorsRule, string>) => {
       >
         <Button variant="tableLink" size="sm">
           Show logs
-          <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+          <ExternalLink className="ml-1.5 mt-1 size-3.5 shrink-0" />
         </Button>
       </Link>
     </CellWrapper>

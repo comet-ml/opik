@@ -1,5 +1,5 @@
 import React from "react";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl, cn } from "@/lib/utils";
@@ -48,7 +48,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
             rel="noreferrer"
           >
             Read more
-            <SquareArrowOutUpRight className={cn("ml-1 shrink-0", iconSize)} />
+            <ExternalLink className={cn("ml-1 shrink-0", iconSize)} />
           </a>
         </Button>
       )}
