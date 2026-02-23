@@ -197,13 +197,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
                 </div>
               )}
 
-              <ul>
-                {renderItems(
-                  menuGroup.items.filter(
-                    (item): item is MenuItem => item !== null,
-                  ),
-                )}
-              </ul>
+              <ul>{renderItems(menuGroup.items)}</ul>
             </div>
           </li>
         );
