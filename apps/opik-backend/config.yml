@@ -227,6 +227,48 @@ experimentAggregates:
   # Description: Number of experiment items processed per batch when populating experiment_item_aggregates table. Higher values improve performance but increase memory usage. Recommended range: 100-5000.
   batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
 
+# Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
+experimentDenormalization:
+  # Default: false
+  # Description: Whether the experiment denormalization job and subscriber are enabled
+  enabled: ${EXPERIMENT_DENORMALIZATION_ENABLED:-false}
+  # Default: experiment_denormalization_stream
+  # Description: The name of the Redis Stream used for experiment aggregates recomputation
+  streamName: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_NAME:-'experiment_denormalization_stream'}
+  # Default: experiment_denormalization
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: ${OPIK_REDIS_EXPERIMENT_DENORM_CONSUMER_GROUP_NAME:-'experiment_denormalization'}
+  # Default: 100
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${OPIK_REDIS_EXPERIMENT_DENORM_CONSUMER_BATCH_SIZE:-100}
+  # Default: 500ms
+  # Description: How often the experiment denormalization consumer will check Redis for new messages
+  poolingInterval: ${OPIK_REDIS_EXPERIMENT_DENORM_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${OPIK_REDIS_EXPERIMENT_DENORM_LONG_POLLING_DURATION:-5s}
+  # Default: 1m
+  # Description: Debounce delay before an experiment is published to the denormalization stream. Each new write resets the timer.
+  debounceDelay: ${OPIK_EXPERIMENT_DENORM_DEBOUNCE_DELAY:-1m}
+  # Default: 4s
+  # Description: The time to wait for the denormalization scan job to finish before releasing the lock
+  jobLockTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
+  jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: 120s
+  # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before a message is considered orphaned and eligible for claiming
+  pendingMessageDuration: ${OPIK_REDIS_EXPERIMENT_DENORM_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: ${OPIK_REDIS_EXPERIMENT_DENORM_MAX_RETRIES:-3}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
@@ -690,6 +732,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not the experiment denormalization (debounced aggregates re-computation) feature is enabled
+  experimentDenormalizationEnabled: ${TOGGLE_EXPERIMENT_DENORMALIZATION_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

@@ -48,4 +48,14 @@ public class FeatureFlags {
             throw new ForbiddenException("Dataset versioning feature is not enabled");
         }
     }
+
+    /**
+     * Checks if experiment denormalization (debounced re-computation) is enabled.
+     *
+     * @return true if experiment denormalization is enabled, false otherwise
+     */
+    public boolean isExperimentDenormalizationEnabled() {
+        return config.getServiceToggles() != null
+                && config.getServiceToggles().isExperimentDenormalizationEnabled();
+    }
 }

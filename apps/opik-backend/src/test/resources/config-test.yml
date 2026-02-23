@@ -409,6 +409,23 @@ experimentAggregates:
   # Batch size for processing experiment items when calculating aggregates
   batchSize: 100
 
+experimentDenormalization:
+  # Default: false for testing
+  # Description: Whether the experiment denormalization job and subscriber are enabled
+  enabled: true
+  streamName: 'experiment_denormalization_stream'
+  consumerGroupName: 'experiment_denormalization'
+  consumerBatchSize: 100
+  poolingInterval: 500ms
+  longPollingDuration: 5s
+  debounceDelay: 1s
+  jobLockTime: 4s
+  jobLockWaitTime: 300ms
+  aggregationLockTime: 120s
+  claimIntervalRatio: 10
+  pendingMessageDuration: 10m
+  maxRetries: 3
+
 # Configuration AWS S3
 s3Config:
   s3Region: 'us-east-1'
@@ -497,6 +514,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
+  # Default: false
+  # Description: Whether or not the experiment denormalization feature is enabled
+  experimentDenormalizationEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:
