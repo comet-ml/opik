@@ -20,7 +20,7 @@ class PromptVersionUpdate(UniversalBaseModel):
     - If merge_tags is true, these tags will be added to existing tags.
     - If merge_tags is false, these tags will replace all existing tags.
     - null: preserve existing tags (no change).
-    - empty set: clear all tags merge_tags is false.
+    - empty set: clear all tags when merge_tags is false.
     """
 
     if IS_PYDANTIC_V2:

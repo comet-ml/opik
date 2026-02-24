@@ -9105,12 +9105,38 @@ components:
           type: string
           description: Dataset item description
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
             description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         evaluators:
           type: array
           description: Evaluators
@@ -10794,10 +10820,34 @@ components:
           minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
             maxLength: 100
             minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         type:
           type: string
           enum:
@@ -14398,6 +14448,8 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: |
@@ -14405,16 +14457,17 @@ components:
             - If merge_tags is true, these tags will be added to existing tags.
             - If merge_tags is false, these tags will replace all existing tags.
             - null: preserve existing tags (no change).
-            - empty set: clear all tags merge_tags is false.
+            - empty set: clear all tags when merge_tags is false.
           items:
-            minLength: 1
+            maxLength: 100
+            minLength: 0
             type: string
             description: |
               Tags to set or merge with existing tags. Follows PATCH semantics:
               - If merge_tags is true, these tags will be added to existing tags.
               - If merge_tags is false, these tags will replace all existing tags.
               - null: preserve existing tags (no change).
-              - empty set: clear all tags merge_tags is false.
+              - empty set: clear all tags when merge_tags is false.
       description: |
         Update to apply to prompt versions.
         Note: Prompt versions are immutable by design.
@@ -14556,10 +14609,38 @@ components:
         provider:
           type: string
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         usage:
           type: object
           additionalProperties:
@@ -15033,10 +15114,38 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonListString"
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
@@ -15071,9 +15180,31 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
             type: string
     TraceThreadBatchIdentifier:
       type: object

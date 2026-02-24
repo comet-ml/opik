@@ -17,7 +17,12 @@ export interface SpanUpdate {
     metadata?: OpikApi.JsonListString;
     model?: string;
     provider?: string;
+    /** Tags */
     tags?: string[];
+    /** Tags to add */
+    tagsToAdd?: string[];
+    /** Tags to remove */
+    tagsToRemove?: string[];
     usage?: Record<string, number>;
     totalEstimatedCost?: number;
     errorInfo?: OpikApi.ErrorInfo;

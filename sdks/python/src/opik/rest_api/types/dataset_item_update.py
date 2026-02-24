@@ -36,6 +36,16 @@ class DatasetItemUpdate(UniversalBaseModel):
     Tags
     """
 
+    tags_to_add: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to add
+    """
+
+    tags_to_remove: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to remove
+    """
+
     evaluators: typing.Optional[typing.List[EvaluatorItem]] = pydantic.Field(default=None)
     """
     Evaluators

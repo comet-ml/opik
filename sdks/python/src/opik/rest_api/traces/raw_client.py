@@ -750,6 +750,8 @@ class RawTracesClient:
         output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
@@ -779,6 +781,13 @@ class RawTracesClient:
         metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         error_info : typing.Optional[ErrorInfo]
 
@@ -811,6 +820,8 @@ class RawTracesClient:
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
@@ -1902,6 +1913,8 @@ class RawTracesClient:
         thread_model_id: str,
         *,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1912,6 +1925,10 @@ class RawTracesClient:
         thread_model_id : str
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1925,6 +1942,8 @@ class RawTracesClient:
             method="PATCH",
             json={
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
             },
             headers={
                 "content-type": "application/json",
@@ -2810,6 +2829,8 @@ class AsyncRawTracesClient:
         output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
@@ -2839,6 +2860,13 @@ class AsyncRawTracesClient:
         metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         error_info : typing.Optional[ErrorInfo]
 
@@ -2871,6 +2899,8 @@ class AsyncRawTracesClient:
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
@@ -3964,6 +3994,8 @@ class AsyncRawTracesClient:
         thread_model_id: str,
         *,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3974,6 +4006,10 @@ class AsyncRawTracesClient:
         thread_model_id : str
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3987,6 +4023,8 @@ class AsyncRawTracesClient:
             method="PATCH",
             json={
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
             },
             headers={
                 "content-type": "application/json",

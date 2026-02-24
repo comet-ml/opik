@@ -16,6 +16,14 @@ export const TraceUpdate: core.serialization.ObjectSchema<serializers.TraceUpdat
         output: JsonListString.optional(),
         metadata: JsonListString.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
+        tagsToAdd: core.serialization.property(
+            "tags_to_add",
+            core.serialization.list(core.serialization.string()).optional(),
+        ),
+        tagsToRemove: core.serialization.property(
+            "tags_to_remove",
+            core.serialization.list(core.serialization.string()).optional(),
+        ),
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         ttft: core.serialization.number().optional(),
@@ -31,6 +39,8 @@ export declare namespace TraceUpdate {
         output?: JsonListString.Raw | null;
         metadata?: JsonListString.Raw | null;
         tags?: string[] | null;
+        tags_to_add?: string[] | null;
+        tags_to_remove?: string[] | null;
         error_info?: ErrorInfo.Raw | null;
         thread_id?: string | null;
         ttft?: number | null;

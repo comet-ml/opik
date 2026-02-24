@@ -510,6 +510,8 @@ class SpansClient:
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
@@ -550,6 +552,13 @@ class SpansClient:
         provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         usage : typing.Optional[typing.Dict[str, int]]
 
@@ -587,6 +596,8 @@ class SpansClient:
             model=model,
             provider=provider,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             usage=usage,
             total_estimated_cost=total_estimated_cost,
             error_info=error_info,
@@ -1442,6 +1453,8 @@ class AsyncSpansClient:
         model: typing.Optional[str] = OMIT,
         provider: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
@@ -1482,6 +1495,13 @@ class AsyncSpansClient:
         provider : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         usage : typing.Optional[typing.Dict[str, int]]
 
@@ -1522,6 +1542,8 @@ class AsyncSpansClient:
             model=model,
             provider=provider,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             usage=usage,
             total_estimated_cost=total_estimated_cost,
             error_info=error_info,

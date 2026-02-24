@@ -17,6 +17,14 @@ export const DatasetItemUpdate: core.serialization.ObjectSchema<
     data: JsonNode.optional(),
     description: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    tagsToAdd: core.serialization.property(
+        "tags_to_add",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
+    tagsToRemove: core.serialization.property(
+        "tags_to_remove",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
     evaluators: core.serialization.list(EvaluatorItem).optional(),
     executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
     clearExecutionPolicy: core.serialization.property(
@@ -33,6 +41,8 @@ export declare namespace DatasetItemUpdate {
         data?: JsonNode.Raw | null;
         description?: string | null;
         tags?: string[] | null;
+        tags_to_add?: string[] | null;
+        tags_to_remove?: string[] | null;
         evaluators?: EvaluatorItem.Raw[] | null;
         execution_policy?: ExecutionPolicy.Raw | null;
         clear_execution_policy?: boolean | null;

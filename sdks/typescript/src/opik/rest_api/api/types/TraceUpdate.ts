@@ -12,7 +12,12 @@ export interface TraceUpdate {
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
     metadata?: OpikApi.JsonListString;
+    /** Tags */
     tags?: string[];
+    /** Tags to add */
+    tagsToAdd?: string[];
+    /** Tags to remove */
+    tagsToRemove?: string[];
     errorInfo?: OpikApi.ErrorInfo;
     threadId?: string;
     ttft?: number;
