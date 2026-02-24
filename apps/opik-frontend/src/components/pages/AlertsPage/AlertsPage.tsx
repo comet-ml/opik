@@ -105,7 +105,7 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
   },
@@ -144,7 +144,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
   },
 ];
