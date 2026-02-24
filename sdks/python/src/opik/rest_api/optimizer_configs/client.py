@@ -23,12 +23,14 @@ class OptimizerConfigsClient:
         self,
         *,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         blueprint: typing.Optional[typing.Dict[str, typing.Any]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> OptimizerConfigCreateResponse:
         _response = self._raw_client.create_config(
             project_name=project_name,
+            project_id=project_id,
             id=id,
             blueprint=blueprint,
             request_options=request_options,
@@ -37,48 +39,17 @@ class OptimizerConfigsClient:
 
     def get_blueprint(
         self,
-        config_id: str,
         *,
-        mask_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
         env: typing.Optional[str] = None,
+        mask_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> OptimizerConfigBlueprint:
         _response = self._raw_client.get_blueprint(
-            config_id,
-            mask_id=mask_id,
+            project_name=project_name,
             env=env,
+            mask_id=mask_id,
             request_options=request_options,
         )
         return _response.data
 
-    def update_values(
-        self,
-        config_id: str,
-        *,
-        values: typing.List[typing.Dict[str, str]],
-        description: typing.Optional[str] = OMIT,
-        id: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> OptimizerConfigBlueprint:
-        _response = self._raw_client.update_values(
-            config_id,
-            values=values,
-            description=description,
-            id=id,
-            request_options=request_options,
-        )
-        return _response.data
-
-    def assign_envs(
-        self,
-        config_id: str,
-        *,
-        envs: typing.List[typing.Dict[str, str]],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
-        _response = self._raw_client.assign_envs(
-            config_id,
-            envs=envs,
-            request_options=request_options,
-        )
-        return _response.data

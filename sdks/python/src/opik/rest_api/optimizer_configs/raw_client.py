@@ -23,6 +23,7 @@ class RawOptimizerConfigsClient:
         self,
         *,
         project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         id: typing.Optional[str] = OMIT,
         blueprint: typing.Optional[typing.Dict[str, typing.Any]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -32,6 +33,7 @@ class RawOptimizerConfigsClient:
             method="POST",
             json={
                 "projectName": project_name,
+                "projectId": project_id,
                 "id": id,
                 "blueprint": blueprint,
             },
@@ -58,18 +60,19 @@ class RawOptimizerConfigsClient:
 
     def get_blueprint(
         self,
-        config_id: str,
         *,
-        mask_id: typing.Optional[str] = None,
+        project_name: typing.Optional[str] = None,
         env: typing.Optional[str] = None,
+        mask_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[OptimizerConfigBlueprint]:
         _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/optimizer-configs/{jsonable_encoder(config_id)}/blueprint/retrieve",
+            "v1/private/optimizer-configs/blueprint/retrieve",
             method="GET",
             params={
-                "maskid": mask_id,
+                "project_name": project_name,
                 "env": env,
+                "maskid": mask_id,
             },
             request_options=request_options,
         )
@@ -88,67 +91,3 @@ class RawOptimizerConfigsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def update_values(
-        self,
-        config_id: str,
-        *,
-        values: typing.List[typing.Dict[str, str]],
-        description: typing.Optional[str] = OMIT,
-        id: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[OptimizerConfigBlueprint]:
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/optimizer-configs/{jsonable_encoder(config_id)}/values",
-            method="POST",
-            json={
-                "id": id,
-                "description": description,
-                "values": values,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                _data = typing.cast(
-                    OptimizerConfigBlueprint,
-                    parse_obj_as(
-                        type_=OptimizerConfigBlueprint,  # type: ignore
-                        object_=_response.json(),
-                    ),
-                )
-                return HttpResponse(response=_response, data=_data)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def assign_envs(
-        self,
-        config_id: str,
-        *,
-        envs: typing.List[typing.Dict[str, str]],
-        request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
-        _response = self._client_wrapper.httpx_client.request(
-            f"v1/private/optimizer-configs/{jsonable_encoder(config_id)}/envs",
-            method="POST",
-            json={
-                "envs": envs,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)

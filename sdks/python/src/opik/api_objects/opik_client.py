@@ -2280,15 +2280,17 @@ class Opik:
 
     def get_config(
         self,
-        config_id: str,
+        project_name: Optional[str] = None,
         env: Optional[str] = None,
         mask_id: Optional[str] = None,
     ) -> ConfigHandle:
+        if project_name is None:
+            project_name = self._project_name
         config_client_ = ConfigClient(self._rest_client)
         config_data = config_client_.get_blueprint(
-            config_id=config_id,
-            mask_id=mask_id,
+            project_name=project_name,
             env=env,
+            mask_id=mask_id,
         )
         return ConfigHandle.from_backend_data(config_data=config_data)
 
@@ -2298,6 +2300,8 @@ class Opik:
         project_name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> ConfigHandle:
+        if project_name is None:
+            project_name = self._project_name
         config_client_ = ConfigClient(self._rest_client)
 
         fields_with_values: Dict[str, tuple] = {}
@@ -2310,6 +2314,18 @@ class Opik:
             description=description,
         )
         return ConfigHandle.from_backend_data(config_data=config_data)
+
+    def update_config(
+        self,
+        parameters: Dict[str, Any],
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> ConfigHandle:
+        return self.create_config(
+            parameters=parameters,
+            project_name=project_name,
+            description=description,
+        )
 
 
 @functools.lru_cache()

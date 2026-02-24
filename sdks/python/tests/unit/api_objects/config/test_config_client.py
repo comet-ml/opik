@@ -10,8 +10,8 @@ from opik.rest_api.types.optimizer_config_detail import (
 )
 
 
-def _make_create_response(config_id="cfg-123"):
-    return OptimizerConfigCreateResponse(id=config_id)
+def _make_create_response():
+    return OptimizerConfigCreateResponse(id="cfg-123")
 
 
 def _make_blueprint(
@@ -48,7 +48,7 @@ class TestCreateConfig:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.optimizer_configs.create_config.return_value = (
-            _make_create_response("cfg-1")
+            _make_create_response()
         )
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
@@ -65,18 +65,16 @@ class TestCreateConfig:
         call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
         assert call_kwargs["blueprint"]["values"] is not None
 
-        mock_rest_client.optimizer_configs.get_blueprint.assert_called_once_with(
-            "cfg-1", mask_id=None, env=None
-        )
+        mock_rest_client.optimizer_configs.get_blueprint.assert_called_once()
 
         assert isinstance(result, ConfigData)
-        assert result.config_id == "cfg-1"
+        assert result.blueprint_id == "bp-456"
 
     def test_create__bool_field__serialized_as_string_type(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.optimizer_configs.create_config.return_value = (
-            _make_create_response("cfg-2")
+            _make_create_response()
         )
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
@@ -110,17 +108,41 @@ class TestCreateConfig:
         call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
 
-    def test_create__backend_returns_no_id__raises_value_error(
+    def test_create__with_project_name__get_blueprint_uses_same_project(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.optimizer_configs.create_config.return_value = (
-            OptimizerConfigCreateResponse(id=None)
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
         )
 
-        with pytest.raises(ValueError, match="Backend returned no config_id"):
-            config_client.create_config(
-                fields_with_values={"x": (str, "y")},
-            )
+        config_client.create_config(
+            fields_with_values={"temp": (float, 0.5)},
+            project_name="my-project",
+        )
+
+        get_bp_kwargs = mock_rest_client.optimizer_configs.get_blueprint.call_args[1]
+        assert get_bp_kwargs.get("project_name") == "my-project"
+
+    def test_create__with_project_id__passes_project_id_to_backend(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
+        )
+
+        config_client.create_config(
+            fields_with_values={"temp": (float, 0.5)},
+            project_id="proj-99",
+        )
+
+        call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert call_kwargs["project_id"] == "proj-99"
 
 
 class TestGetBlueprint:
@@ -131,9 +153,8 @@ class TestGetBlueprint:
             blueprint_id="bp-789"
         )
 
-        result = config_client.get_blueprint(config_id="cfg-1")
+        result = config_client.get_blueprint(project_name="my-project")
 
-        assert result.config_id == "cfg-1"
         assert result.blueprint_id == "bp-789"
         assert "temperature" in result.values
         assert "name" in result.values
@@ -149,7 +170,7 @@ class TestGetBlueprint:
         )
 
         result = config_client.get_blueprint(
-            config_id="cfg-1",
+            project_name="my-project",
             field_types={"temperature": float, "flag": bool},
         )
 
@@ -157,69 +178,24 @@ class TestGetBlueprint:
         assert result.values["flag"] is True
 
     @pytest.mark.parametrize(
-        "mask_id, env",
-        [
-            ("mask-1", "prod"),
-            (None, "staging"),
-            ("mask-2", None),
-        ],
-        ids=["both_mask_and_env", "env_only", "mask_only"],
+        "mask_id",
+        ["mask-1", "mask-2", None],
+        ids=["mask_1", "mask_2", "no_mask"],
     )
-    def test_get_blueprint__mask_id_and_env__passed_to_backend(
-        self, config_client, mock_rest_client, mask_id, env
+    def test_get_blueprint__mask_id__passed_to_backend(
+        self, config_client, mock_rest_client, mask_id
     ):
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
 
         config_client.get_blueprint(
-            config_id="cfg-1",
+            project_name="my-project",
             mask_id=mask_id,
-            env=env,
         )
 
         mock_rest_client.optimizer_configs.get_blueprint.assert_called_once_with(
-            "cfg-1", mask_id=mask_id, env=env
+            project_name="my-project",
+            env=None,
+            mask_id=mask_id,
         )
-
-
-class TestUpdateValues:
-    def test_update_values__happy_path__sends_correct_payload(
-        self, config_client, mock_rest_client
-    ):
-        mock_rest_client.optimizer_configs.update_values.return_value = (
-            _make_blueprint()
-        )
-
-        config_client.update_values(
-            config_id="cfg-1",
-            values={"temperature": (float, 0.9)},
-            description="Bump temp",
-        )
-
-        mock_rest_client.optimizer_configs.update_values.assert_called_once()
-        call_kwargs = mock_rest_client.optimizer_configs.update_values.call_args[1]
-        assert call_kwargs["description"] == "Bump temp"
-        assert len(call_kwargs["values"]) == 1
-        assert call_kwargs["values"][0]["key"] == "temperature"
-        assert call_kwargs["values"][0]["value"] == "0.9"
-
-
-class TestAssignEnvs:
-    def test_assign_envs__multiple_envs__sends_correct_payload(
-        self, config_client, mock_rest_client
-    ):
-        mock_rest_client.optimizer_configs.assign_envs.return_value = None
-
-        config_client.assign_envs(
-            config_id="cfg-1",
-            blueprint_id="bp-1",
-            envs=["prod", "staging"],
-        )
-
-        mock_rest_client.optimizer_configs.assign_envs.assert_called_once()
-        call_kwargs = mock_rest_client.optimizer_configs.assign_envs.call_args[1]
-        envs = call_kwargs["envs"]
-        assert len(envs) == 2
-        assert {"env": "prod", "blueprintId": "bp-1"} in envs
-        assert {"env": "staging", "blueprintId": "bp-1"} in envs

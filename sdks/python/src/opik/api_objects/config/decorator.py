@@ -97,9 +97,9 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
 
         if mask_id_val is not None or env_val is not None:
             pinned_data = config_client.get_blueprint(
-                config_id=config_data.config_id,
-                mask_id=mask_id_val,
+                project_name=project_name,
                 env=env_val,
+                mask_id=mask_id_val,
                 field_types=field_types,
             )
             _apply_backend_values(instance, pinned_data)
@@ -139,13 +139,11 @@ def _maybe_refetch(instance: typing.Any) -> None:
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
         field_types = object.__getattribute__(instance, "__opik_field_types__")
+        project_name = object.__getattribute__(instance, "__opik_project_name__")
         env_val = object.__getattribute__(instance, "__opik_env__")
 
-        if cache.config_id is None:
-            return
-
         config_data = config_client.get_blueprint(
-            config_id=cache.config_id,
+            project_name=project_name,
             env=env_val,
             field_types=field_types,
         )
@@ -160,14 +158,11 @@ def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
 
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
-        cache: ConfigCache = object.__getattribute__(instance, "__opik_cache__")
         field_types = object.__getattribute__(instance, "__opik_field_types__")
-
-        if cache.config_id is None:
-            return
+        project_name = object.__getattribute__(instance, "__opik_project_name__")
 
         config_data = config_client.get_blueprint(
-            config_id=cache.config_id,
+            project_name=project_name,
             mask_id=mask_id,
             field_types=field_types,
         )
@@ -186,7 +181,6 @@ def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
 
         config_metadata = {
             "configuration": {
-                "config_id": cache.config_id,
                 "blueprint_id": cache.blueprint_id,
                 "values": {attr: cache.values[attr]} if attr in cache.values else {},
             }

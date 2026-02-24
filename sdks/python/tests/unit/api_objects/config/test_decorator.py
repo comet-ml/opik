@@ -155,7 +155,6 @@ class TestConfigDecoratorSpanMetadata:
             call_kwargs = mock_span_data.update.call_args[1]
             assert "configuration" in call_kwargs["metadata"]
             config = call_kwargs["metadata"]["configuration"]
-            assert "config_id" in config
             assert "blueprint_id" in config
             assert "values" in config
 

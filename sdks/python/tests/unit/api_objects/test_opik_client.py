@@ -380,3 +380,117 @@ class TestOpikClientGetDataset:
 
         assert isinstance(result, Dataset)
         assert result.name == "test_dataset"
+
+
+def _make_blueprint(blueprint_id="bp-1", values=None, description=None):
+    bp = Mock()
+    bp.id = blueprint_id
+    bp.values = values or []
+    bp.description = description
+    return bp
+
+
+class TestOpikClientConfigMethods:
+    def test_get_config__no_project_name__uses_instance_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with patch.object(
+            opik_client_._rest_client.optimizer_configs,
+            "get_blueprint",
+            return_value=_make_blueprint(),
+        ) as mock_get_blueprint:
+            opik_client_.get_config()
+
+        assert mock_get_blueprint.call_args[1]["project_name"] == "my-project"
+
+    def test_get_config__explicit_project_name__overrides_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with patch.object(
+            opik_client_._rest_client.optimizer_configs,
+            "get_blueprint",
+            return_value=_make_blueprint(),
+        ) as mock_get_blueprint:
+            opik_client_.get_config(project_name="other-project")
+
+        assert mock_get_blueprint.call_args[1]["project_name"] == "other-project"
+
+    def test_create_config__no_project_name__uses_instance_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with (
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "create_config",
+                return_value=Mock(id="cfg-1"),
+            ) as mock_create,
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ),
+        ):
+            opik_client_.create_config(parameters={"temp": 0.7})
+
+        assert mock_create.call_args[1]["project_name"] == "my-project"
+
+    def test_create_config__explicit_project_name__overrides_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with (
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "create_config",
+                return_value=Mock(id="cfg-1"),
+            ) as mock_create,
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ),
+        ):
+            opik_client_.create_config(
+                parameters={"temp": 0.7}, project_name="other-project"
+            )
+
+        assert mock_create.call_args[1]["project_name"] == "other-project"
+
+    def test_update_config__no_project_name__uses_instance_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with (
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "create_config",
+                return_value=Mock(id="cfg-1"),
+            ) as mock_create,
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ),
+        ):
+            opik_client_.update_config(parameters={"temp": 0.9})
+
+        assert mock_create.call_args[1]["project_name"] == "my-project"
+
+    def test_update_config__explicit_project_name__overrides_default(self):
+        opik_client_ = opik_client.Opik(project_name="my-project")
+
+        with (
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "create_config",
+                return_value=Mock(id="cfg-1"),
+            ) as mock_create,
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ),
+        ):
+            opik_client_.update_config(
+                parameters={"temp": 0.9}, project_name="other-project"
+            )
+
+        assert mock_create.call_args[1]["project_name"] == "other-project"

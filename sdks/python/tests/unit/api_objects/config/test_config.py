@@ -10,7 +10,6 @@ from opik.api_objects.config.client import ConfigData
 def sample_config():
     return Config.from_backend_data(
         config_data=ConfigData(
-            config_id="cfg-1",
             blueprint_id="bp-1",
             values={"temp": 0.6, "name": "agent", "count": 10},
         ),
@@ -20,20 +19,17 @@ def sample_config():
 class TestConfigFromBackendData:
     def test_from_backend_data__happy_path__sets_all_properties(self):
         config_data = ConfigData(
-            config_id="cfg-1",
             blueprint_id="bp-1",
             values={"temperature": 0.6, "name": "agent"},
         )
 
         config = Config.from_backend_data(config_data=config_data)
 
-        assert config.config_id == "cfg-1"
         assert config.blueprint_id == "bp-1"
         assert config.values == {"temperature": 0.6, "name": "agent"}
 
     def test_from_backend_data__values_property__returns_deep_copy(self):
         config_data = ConfigData(
-            config_id="cfg-1",
             blueprint_id="bp-1",
             values={"items": [1, 2, 3]},
         )
@@ -101,19 +97,15 @@ class TestConfigInit:
 
         config = Config(parameters={"temperature": 0.8})
 
-        assert config.config_id == "cfg-new"
         assert config.blueprint_id == "bp-new"
         mock_client.rest_client.optimizer_configs.create_config.assert_called_once()
 
 
-class TestConfigLogValues:
+class TestConfigUpdate:
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_log_values__happy_path__calls_update_and_applies_result(
-        self, mock_get_client
-    ):
+    def test_update__posts_new_blueprint_and_updates_state(self, mock_get_client):
         config = Config.from_backend_data(
             config_data=ConfigData(
-                config_id="cfg-1",
                 blueprint_id="bp-1",
                 values={"temp": 0.6},
             ),
@@ -122,41 +114,63 @@ class TestConfigLogValues:
         mock_client = mock.Mock()
         mock_get_client.return_value = mock_client
 
-        mock_client.rest_client.optimizer_configs.update_values.return_value = (
+        mock_client.rest_client.optimizer_configs.create_config.return_value = (
+            mock.Mock(id="cfg-1")
+        )
+        mock_client.rest_client.optimizer_configs.get_blueprint.return_value = (
             mock.Mock(
                 id="bp-2",
-                values=[
-                    mock.Mock(key="temp", type="number", value=0.9),
-                ],
+                values=[mock.Mock(key="temp", type="number", value=0.9)],
                 description="Updated",
             )
         )
 
-        config.log_values(
-            values={"temp": 0.9},
-            description="Updated",
-        )
+        config.update(values={"temp": 0.9}, description="Updated")
 
-        mock_client.rest_client.optimizer_configs.update_values.assert_called_once()
+        mock_client.rest_client.optimizer_configs.create_config.assert_called_once()
         assert config.blueprint_id == "bp-2"
+        assert config["temp"] == 0.9
 
-
-class TestConfigUpdateEnvs:
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_update_envs__multiple_envs__calls_assign(self, mock_get_client):
+    def test_update__passes_description_to_blueprint(self, mock_get_client):
         config = Config.from_backend_data(
-            config_data=ConfigData(
-                config_id="cfg-1",
-                blueprint_id="bp-1",
-                values={"temp": 0.6},
-            ),
+            config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
         )
 
         mock_client = mock.Mock()
         mock_get_client.return_value = mock_client
+        mock_client.rest_client.optimizer_configs.create_config.return_value = (
+            mock.Mock(id="cfg-1")
+        )
+        mock_client.rest_client.optimizer_configs.get_blueprint.return_value = (
+            mock.Mock(id="bp-2", values=[], description="bump")
+        )
 
-        config.update_envs(["prod", "staging"])
+        config.update(values={"temp": 0.9}, description="bump")
 
-        mock_client.rest_client.optimizer_configs.assign_envs.assert_called_once()
-        call_kwargs = mock_client.rest_client.optimizer_configs.assign_envs.call_args[1]
-        assert len(call_kwargs["envs"]) == 2
+        call_kwargs = mock_client.rest_client.optimizer_configs.create_config.call_args[
+            1
+        ]
+        assert call_kwargs["blueprint"]["description"] == "bump"
+
+    @mock.patch("opik.api_objects.opik_client.get_client_cached")
+    def test_update__passes_project_id_to_backend(self, mock_get_client):
+        config = Config.from_backend_data(
+            config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
+        )
+
+        mock_client = mock.Mock()
+        mock_get_client.return_value = mock_client
+        mock_client.rest_client.optimizer_configs.create_config.return_value = (
+            mock.Mock(id="cfg-1")
+        )
+        mock_client.rest_client.optimizer_configs.get_blueprint.return_value = (
+            mock.Mock(id="bp-2", values=[], description=None)
+        )
+
+        config.update(values={"temp": 0.9}, project_id="proj-42")
+
+        call_kwargs = mock_client.rest_client.optimizer_configs.create_config.call_args[
+            1
+        ]
+        assert call_kwargs["project_id"] == "proj-42"

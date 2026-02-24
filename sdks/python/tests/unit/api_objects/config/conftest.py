@@ -5,10 +5,7 @@ import pytest
 
 @pytest.fixture
 def mock_backend():
-    """Sets up a mock Opik backend for config decorator tests.
-
-    Returns a namespace with the mock client and helper to customize blueprint responses.
-    """
+    """Sets up a mock Opik backend for config decorator tests."""
     with mock.patch(
         "opik.api_objects.opik_client.get_client_cached"
     ) as mock_get_client:

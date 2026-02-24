@@ -16,7 +16,6 @@ class Config:
         self._parameters = parameters
         self._project_name = project_name
         self._description = description
-        self._config_id: typing.Optional[str] = None
         self._blueprint_id: typing.Optional[str] = None
         self._values: typing.Dict[str, typing.Any] = {}
         self._sync_with_backend()
@@ -40,7 +39,6 @@ class Config:
         self._apply_config_data(config_data)
 
     def _apply_config_data(self, config_data: ConfigData) -> None:
-        self._config_id = config_data.config_id
         self._blueprint_id = config_data.blueprint_id
         self._values = config_data.values
 
@@ -53,14 +51,9 @@ class Config:
         obj._parameters = {}
         obj._project_name = None
         obj._description = config_data.description
-        obj._config_id = config_data.config_id
         obj._blueprint_id = config_data.blueprint_id
         obj._values = config_data.values
         return obj
-
-    @property
-    def config_id(self) -> typing.Optional[str]:
-        return self._config_id
 
     @property
     def blueprint_id(self) -> typing.Optional[str]:
@@ -79,38 +72,23 @@ class Config:
     def keys(self) -> typing.KeysView[str]:
         return self._values.keys()
 
-    def log_values(
+    def update(
         self,
         values: typing.Dict[str, typing.Any],
+        project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> None:
-        """Update config values (patch/merge semantics)."""
         from opik.api_objects import opik_client
 
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
 
-        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
-        for key, value in values.items():
-            py_type = type(value)
-            fields_with_values[key] = (py_type, value)
-
-        config_data = config_client.update_values(
-            config_id=self._config_id,  # type: ignore
-            values=fields_with_values,
+        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {
+            key: (type(value), value) for key, value in values.items()
+        }
+        config_data = config_client.create_config(
+            fields_with_values=fields_with_values,
+            project_id=project_id,
             description=description,
         )
         self._apply_config_data(config_data)
-
-    def update_envs(self, envs: typing.List[str]) -> None:
-        """Assign env labels to the current blueprint."""
-        from opik.api_objects import opik_client
-
-        client = opik_client.get_client_cached()
-        config_client = ConfigClient(client.rest_client)
-
-        config_client.assign_envs(
-            config_id=self._config_id,  # type: ignore
-            blueprint_id=self._blueprint_id,  # type: ignore
-            envs=envs,
-        )
