@@ -571,6 +571,8 @@ class ExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -588,6 +590,13 @@ class ExperimentsClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -614,6 +623,8 @@ class ExperimentsClient:
             name=name,
             metadata=metadata,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             type=type,
             status=status,
             experiment_scores=experiment_scores,
@@ -1299,6 +1310,8 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -1316,6 +1329,13 @@ class AsyncExperimentsClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -1345,6 +1365,8 @@ class AsyncExperimentsClient:
             name=name,
             metadata=metadata,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             type=type,
             status=status,
             experiment_scores=experiment_scores,

@@ -2,6 +2,7 @@ import dataclasses
 import os
 from typing import Optional
 
+from . import types as upload_types
 from ..message_processing import messages
 from ..types import AttachmentEntityType
 
@@ -17,10 +18,14 @@ class FileUploadOptions:
     project_name: str
     encoded_url_override: str
     delete_after_upload: bool
+    on_upload_success: Optional[upload_types.OnUploadSuccessCallback] = None
+    on_upload_failed: Optional[upload_types.OnUploadFailureCallback] = None
 
 
 def file_upload_options_from_attachment(
     attachment: messages.CreateAttachmentMessage,
+    on_upload_success: Optional[upload_types.OnUploadSuccessCallback],
+    on_upload_failed: Optional[upload_types.OnUploadFailureCallback],
 ) -> FileUploadOptions:
     file_size = os.path.getsize(attachment.file_path)
 
@@ -34,4 +39,6 @@ def file_upload_options_from_attachment(
         project_name=attachment.project_name,
         encoded_url_override=attachment.encoded_url_override,
         delete_after_upload=attachment.delete_after_upload,
+        on_upload_success=on_upload_success,
+        on_upload_failed=on_upload_failed,
     )

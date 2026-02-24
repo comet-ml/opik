@@ -38,6 +38,32 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0001658");
     }
 
+    @ParameterizedTest
+    @MethodSource("provideAudioSpeechModels")
+    void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "openai",
+                Map.of("input_characters", inputCharacters), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioSpeechModels() {
+        return Stream.of(
+                // tts-1 at $0.000015 per character, 1000 characters → $0.015
+                Arguments.of("tts-1", 1000, "0.015"),
+                // tts-1-hd at $0.000030 per character, 500 characters → $0.015
+                Arguments.of("tts-1-hd", 500, "0.015"));
+    }
+
+    @Test
+    void calculateCostForAudioSpeechWithOriginalUsagePrefix() {
+        // SDK 1.6.0+ sends usage with original_usage. prefix
+        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
+                Map.of("original_usage.input_characters", 1000), null);
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
+
     @Test
     void calculateCostFallsBackToMetadataWhenNoMatchingModelFound() {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
@@ -97,5 +123,39 @@ class CostServiceTest {
                 // Unknown models should gracefully return zero
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithDateSuffixes")
+    void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithDateSuffix_issue5018() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
+        return Stream.of(
+                // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
+                Arguments.of("gpt-5.2-2025-12-17", "openai"),
+                // 2. Stripped date on normalized name (dots normalized to hyphens, then date suffix removed)
+                Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
+                // 3. Base models without date suffix should still work
+                Arguments.of("gpt-5.2", "openai"),
+                Arguments.of("claude-sonnet-4.5", "anthropic"));
     }
 }
