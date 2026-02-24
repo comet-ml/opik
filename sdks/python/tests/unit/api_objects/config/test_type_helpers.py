@@ -1,10 +1,78 @@
 import dataclasses
 import json
 from typing import List, Dict, Callable
+from unittest import mock
 
 import pytest
 
 from opik.api_objects.config import type_helpers
+from opik.api_objects.prompt.base_prompt import BasePrompt
+from opik.api_objects.prompt.text.prompt import Prompt
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
+
+
+class TestIsPromptType:
+    @pytest.mark.parametrize(
+        "py_type",
+        [BasePrompt, Prompt, ChatPrompt],
+        ids=["BasePrompt", "Prompt", "ChatPrompt"],
+    )
+    def test_prompt_classes__returns_true(self, py_type):
+        assert type_helpers.is_prompt_type(py_type) is True
+
+    @pytest.mark.parametrize(
+        "py_type",
+        [str, int, float, bool, object, list],
+        ids=["str", "int", "float", "bool", "object", "list"],
+    )
+    def test_non_prompt_types__returns_false(self, py_type):
+        assert type_helpers.is_prompt_type(py_type) is False
+
+    def test_custom_subclass_of_base_prompt__returns_true(self):
+        class MyPrompt(BasePrompt):
+            @property
+            def name(self):
+                return ""
+
+            @property
+            def commit(self):
+                return None
+
+            @property
+            def version_id(self):
+                return ""
+
+            @property
+            def metadata(self):
+                return None
+
+            @property
+            def type(self):
+                return None
+
+            @property
+            def id(self):
+                return None
+
+            @property
+            def description(self):
+                return None
+
+            @property
+            def change_description(self):
+                return None
+
+            @property
+            def tags(self):
+                return None
+
+            def format(self, *args, **kwargs):
+                return ""
+
+            def __internal_api__to_info_dict__(self):
+                return {}
+
+        assert type_helpers.is_prompt_type(MyPrompt) is True
 
 
 class TestIsSupportedType:
@@ -23,6 +91,9 @@ class TestIsSupportedType:
             (Dict[str, bool], True),
             (Dict[str, int], True),
             (Dict[str, str], True),
+            (Prompt, True),
+            (ChatPrompt, True),
+            (BasePrompt, True),
         ],
         ids=[
             "str",
@@ -37,6 +108,9 @@ class TestIsSupportedType:
             "Dict[str,bool]",
             "Dict[str,int]",
             "Dict[str,str]",
+            "Prompt",
+            "ChatPrompt",
+            "BasePrompt",
         ],
     )
     def test_supported_types__returns_true(self, py_type, expected):
@@ -93,6 +167,14 @@ class TestPythonTypeToBackendType:
         with pytest.raises(TypeError):
             type_helpers.python_type_to_backend_type(object)
 
+    @pytest.mark.parametrize(
+        "py_type",
+        [Prompt, ChatPrompt, BasePrompt],
+        ids=["Prompt", "ChatPrompt", "BasePrompt"],
+    )
+    def test_prompt_types__return_string(self, py_type):
+        assert type_helpers.python_type_to_backend_type(py_type) == "string"
+
 
 class TestPythonValueToBackendValue:
     @pytest.mark.parametrize(
@@ -132,6 +214,16 @@ class TestPythonValueToBackendValue:
     def test_collections__serialized_as_json(self, value, py_type, expected_parsed):
         result = type_helpers.python_value_to_backend_value(value, py_type)
         assert json.loads(result) == expected_parsed
+
+    @pytest.mark.parametrize(
+        "py_type",
+        [Prompt, ChatPrompt, BasePrompt],
+        ids=["Prompt", "ChatPrompt", "BasePrompt"],
+    )
+    def test_prompt_value__returns_version_id(self, py_type):
+        prompt = mock.Mock()
+        prompt.__internal_api__version_id__ = "ver-abc"
+        assert type_helpers.python_value_to_backend_value(prompt, py_type) == "ver-abc"
 
 
 class TestBackendValueToPythonValue:
@@ -186,6 +278,27 @@ class TestBackendValueToPythonValue:
 
     def test_none__returns_none(self):
         assert type_helpers.backend_value_to_python_value(None, "string", str) is None
+
+    @pytest.mark.parametrize(
+        "py_type",
+        [Prompt, ChatPrompt, BasePrompt],
+        ids=["Prompt", "ChatPrompt", "BasePrompt"],
+    )
+    def test_prompt_type__returns_raw_version_id_string(self, py_type):
+        result = type_helpers.backend_value_to_python_value(
+            "ver-xyz", "string", py_type
+        )
+        assert result == "ver-xyz"
+
+    @pytest.mark.parametrize(
+        "py_type",
+        [Prompt, ChatPrompt, BasePrompt],
+        ids=["Prompt", "ChatPrompt", "BasePrompt"],
+    )
+    def test_prompt_type__none_value__returns_none(self, py_type):
+        assert (
+            type_helpers.backend_value_to_python_value(None, "string", py_type) is None
+        )
 
 
 class TestRoundTrip:
@@ -282,3 +395,22 @@ class TestExtractDataclassFields:
 
         fields = type_helpers.extract_dataclass_fields(NoDefault)
         assert fields[0][2] is dataclasses.MISSING
+
+    def test_prompt_field__included_in_extracted_fields(self):
+        @dataclasses.dataclass
+        class WithPrompt:
+            temp: float = 0.7
+            system_prompt: Prompt = dataclasses.field(default=None)
+
+        fields = type_helpers.extract_dataclass_fields(WithPrompt)
+        names = [f[0] for f in fields]
+        assert "system_prompt" in names
+        assert "temp" in names
+
+    def test_base_prompt_field__included_in_extracted_fields(self):
+        @dataclasses.dataclass
+        class WithBase:
+            p: BasePrompt = dataclasses.field(default=None)
+
+        fields = type_helpers.extract_dataclass_fields(WithBase)
+        assert fields[0][0] == "p"

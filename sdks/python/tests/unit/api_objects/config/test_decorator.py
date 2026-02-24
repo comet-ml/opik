@@ -7,6 +7,9 @@ import pytest
 
 from opik.api_objects.config.cache import SharedConfigCache
 from opik.api_objects.config.decorator import config_decorator
+from opik.api_objects.prompt.base_prompt import BasePrompt
+from opik.api_objects.prompt.text.prompt import Prompt
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.api_objects.span.span_data import SpanData
 
 
@@ -596,3 +599,148 @@ class TestConfigDecoratorTTLEnvVar:
         instance = MyConfig()
         cache = object.__getattribute__(instance, "__opik_shared_cache__")
         assert cache._ttl_seconds == 60
+
+
+class TestConfigDecoratorPromptFields:
+    def test_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
+        fake_prompt = mock.Mock(spec=Prompt)
+        fake_prompt.__internal_api__version_id__ = "ver-abc"
+
+        @config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            system_prompt: Prompt = dataclasses.field(
+                default_factory=lambda: fake_prompt
+            )
+
+        MyConfig()
+
+        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
+        values = call_kwargs["blueprint"]["values"]
+        prompt_param = next(v for v in values if v["key"] == "MyConfig.system_prompt")
+        assert prompt_param["type"] == "string"
+        assert prompt_param["value"] == "ver-abc"
+
+    def test_chat_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
+        fake_prompt = mock.Mock(spec=ChatPrompt)
+        fake_prompt.__internal_api__version_id__ = "ver-chat-1"
+
+        @config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            messages: ChatPrompt = dataclasses.field(
+                default_factory=lambda: fake_prompt
+            )
+
+        MyConfig()
+
+        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
+        values = call_kwargs["blueprint"]["values"]
+        param = next(v for v in values if v["key"] == "MyConfig.messages")
+        assert param["value"] == "ver-chat-1"
+
+    def test_existing_blueprint_prompt_field__resolves_and_applied_to_instance(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(
+                    key="MyConfig.system_prompt", type="string", value="ver-backend"
+                )
+            ]
+        )
+
+        version_detail = mock.Mock()
+        version_detail.prompt_id = "prompt-id-1"
+        version_detail.template_structure = "text"
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
+
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+            prompt_detail
+        )
+
+        fake_prompt = mock.Mock(spec=Prompt)
+
+        with mock.patch(
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
+            return_value=fake_prompt,
+        ):
+
+            @config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                system_prompt: Prompt = dataclasses.field(default=None)
+
+            instance = MyConfig()
+
+        assert instance.system_prompt is fake_prompt
+
+    def test_existing_blueprint_chat_prompt_field__resolves_chat_prompt(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.messages", type="string", value="ver-chat")]
+        )
+
+        version_detail = mock.Mock()
+        version_detail.prompt_id = "prompt-id-2"
+        version_detail.template_structure = "chat"
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
+
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "chat-prompt"
+        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+            prompt_detail
+        )
+
+        fake_chat_prompt = mock.Mock(spec=ChatPrompt)
+
+        with mock.patch(
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
+            return_value=fake_chat_prompt,
+        ):
+
+            @config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                messages: ChatPrompt = dataclasses.field(default=None)
+
+            instance = MyConfig()
+
+        assert instance.messages is fake_chat_prompt
+
+    def test_base_prompt_annotation__dispatches_on_template_structure(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.p", type="string", value="ver-base")]
+        )
+
+        version_detail = mock.Mock()
+        version_detail.prompt_id = "prompt-base"
+        version_detail.template_structure = "chat"
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
+
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "base-prompt"
+        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+            prompt_detail
+        )
+
+        fake_chat_prompt = mock.Mock(spec=ChatPrompt)
+
+        with mock.patch(
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
+            return_value=fake_chat_prompt,
+        ):
+
+            @config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                p: BasePrompt = dataclasses.field(default=None)
+
+            instance = MyConfig()
+
+        assert instance.p is fake_chat_prompt

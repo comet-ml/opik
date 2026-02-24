@@ -2,6 +2,8 @@ import dataclasses
 import json
 import typing
 
+from opik.api_objects.prompt.base_prompt import BasePrompt
+
 SUPPORTED_PRIMITIVE_TYPES = (str, int, float, bool)
 
 _PYTHON_TO_BACKEND_TYPE: typing.Dict[type, str] = {
@@ -12,8 +14,14 @@ _PYTHON_TO_BACKEND_TYPE: typing.Dict[type, str] = {
 }
 
 
+def is_prompt_type(py_type: typing.Any) -> bool:
+    return isinstance(py_type, type) and issubclass(py_type, BasePrompt)
+
+
 def is_supported_type(py_type: typing.Any) -> bool:
     if py_type in SUPPORTED_PRIMITIVE_TYPES:
+        return True
+    if is_prompt_type(py_type):
         return True
     origin = typing.get_origin(py_type)
     if origin is list:
@@ -30,6 +38,8 @@ def is_supported_type(py_type: typing.Any) -> bool:
 def python_type_to_backend_type(py_type: typing.Any) -> str:
     if py_type in _PYTHON_TO_BACKEND_TYPE:
         return _PYTHON_TO_BACKEND_TYPE[py_type]
+    if is_prompt_type(py_type):
+        return "string"
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return "json"
@@ -43,6 +53,8 @@ def python_value_to_backend_value(value: typing.Any, py_type: typing.Any) -> str
         return str(value)
     if py_type is str:
         return value
+    if is_prompt_type(py_type):
+        return value.__internal_api__version_id__
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return json.dumps(value)
@@ -69,6 +81,9 @@ def backend_value_to_python_value(
         return float(value) if not isinstance(value, float) else value
 
     if py_type is str:
+        return str(value)
+
+    if is_prompt_type(py_type):
         return str(value)
 
     origin = typing.get_origin(py_type)
