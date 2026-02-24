@@ -105,7 +105,7 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row) =>
       row.last_updated_at ? formatDate(row.last_updated_at) : "-",
@@ -145,7 +145,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
   },
 ];
