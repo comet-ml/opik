@@ -23,7 +23,11 @@ def test_guardrails__trace_and_span_per_one_validation_check(
         llm_callable="gpt-3.5-turbo", on_fail=OnFailAction.NOOP
     )
 
-    guard: Guard = Guard().use_many(politeness_check)
+    guard: Guard = Guard()
+    if hasattr(guard, "use_many"):
+        guard = guard.use_many(politeness_check)
+    else:
+        guard = guard.use(politeness_check)
     guard = track_guardrails(guard, project_name=project_name)
 
     result = guard.validate(

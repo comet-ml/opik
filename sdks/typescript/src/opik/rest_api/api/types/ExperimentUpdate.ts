@@ -5,7 +5,12 @@ import type * as OpikApi from "../index.js";
 export interface ExperimentUpdate {
     name?: string;
     metadata?: OpikApi.JsonNode;
+    /** Tags */
     tags?: string[];
+    /** Tags to add */
+    tagsToAdd?: string[];
+    /** Tags to remove */
+    tagsToRemove?: string[];
     type?: OpikApi.ExperimentUpdateType;
     /** The status of the experiment */
     status?: OpikApi.ExperimentUpdateStatus;

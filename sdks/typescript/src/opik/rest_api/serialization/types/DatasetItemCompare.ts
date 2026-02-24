@@ -19,6 +19,7 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemCompareSource,
     data: JsonNode,
+    description: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     evaluators: core.serialization.list(EvaluatorItemCompare).optional(),
     executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
@@ -41,6 +42,7 @@ export declare namespace DatasetItemCompare {
         span_id?: string | null;
         source: DatasetItemCompareSource.Raw;
         data: JsonNode.Raw;
+        description?: string | null;
         tags?: string[] | null;
         evaluators?: EvaluatorItemCompare.Raw[] | null;
         execution_policy?: ExecutionPolicyCompare.Raw | null;

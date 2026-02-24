@@ -238,6 +238,33 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
     """
 
+    connection_monitor_ping_interval: float = 10
+    """
+    Interval in seconds between OPIK server's connection monitoring pings.
+    """
+
+    connection_monitor_check_timeout: float = 5
+    """
+    Timeout in seconds for OPIK server's connection monitoring checks.
+    """
+
+    replay_batch_size: int = 50
+    """
+    Number of failed messages to replay in a single batch after connection to the OPIK server is restored.
+    The messages are replayed in batches to avoid overwhelming the system with too many requests at once and to control memory consumption.
+    """
+    replay_batch_replay_delay: float = 0.5
+    """
+    Delay in seconds between replaying batches of failed messages after connection to the OPIK server is restored.
+    This is to control memory consumption and to avoid overwhelming the system with too many requests at once.
+    """
+
+    replay_tick_interval: float = 0.3
+    """
+    Interval in seconds between replay manager thread's ticks.
+    This is to control the frequency of replay manager thread's operations, such as checking for status of connection to the OPIK server and replaying failed messages if connection restored.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

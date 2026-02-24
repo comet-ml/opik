@@ -39,7 +39,7 @@ You can configure the Opik client using environment variables.
 OPIK_API_KEY="your-api-key"
 OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
 OPIK_PROJECT_NAME="your-project-name"
-OPIK_WORKSPACE_NAME="your-workspace-name"
+OPIK_WORKSPACE="your-workspace-name"
 ```
 
 Or you can pass the configuration to the Opik client constructor.

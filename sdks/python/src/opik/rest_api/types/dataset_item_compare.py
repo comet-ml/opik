@@ -19,6 +19,7 @@ class DatasetItemCompare(UniversalBaseModel):
     span_id: typing.Optional[str] = None
     source: DatasetItemCompareSource
     data: JsonNode
+    description: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
     evaluators: typing.Optional[typing.List[EvaluatorItemCompare]] = None
     execution_policy: typing.Optional[ExecutionPolicyCompare] = None

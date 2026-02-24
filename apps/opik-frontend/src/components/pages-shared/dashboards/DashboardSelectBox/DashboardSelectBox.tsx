@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
 import AddEditCloneDashboardDialog, {
   DashboardDialogMode,
@@ -304,18 +305,11 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
             </>
           )}
 
-          <Separator />
-          <div className="p-1">
-            <div
-              className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
-              onClick={handleCreateNew}
-            >
-              <div className="comet-body-s flex items-center gap-2 text-primary">
-                <Plus className="size-3.5 shrink-0" />
-                <span>Create new dashboard</span>
-              </div>
-            </div>
-          </div>
+          <Separator className="my-1" />
+          <ListAction onClick={handleCreateNew}>
+            <Plus className="size-3.5 shrink-0" />
+            Add new
+          </ListAction>
         </DropdownMenuContent>
       </DropdownMenu>
 

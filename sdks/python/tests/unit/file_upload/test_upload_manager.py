@@ -24,7 +24,9 @@ def test_upload_attachment__s3(rest_client_s3, attachment, respx_mock, capture_l
 
     number_of_uploads = 10
     for _ in range(number_of_uploads):
-        file_upload_manager.upload_attachment(attachment)
+        file_upload_manager.upload_attachment(
+            attachment, on_upload_success=None, on_upload_failed=None
+        )
 
     file_upload_manager.close()
 
@@ -73,7 +75,9 @@ def test_upload_attachment__s3__failed_upload(rest_client_s3, attachment, respx_
 
     number_of_uploads = 10
     for _ in range(number_of_uploads):
-        file_upload_manager.upload_attachment(attachment)
+        file_upload_manager.upload_attachment(
+            attachment, on_upload_success=None, on_upload_failed=None
+        )
 
     file_upload_manager.close()
 
@@ -108,7 +112,9 @@ def test_upload_attachment__local(
 
     number_of_uploads = 10
     for _ in range(number_of_uploads):
-        file_upload_manager.upload_attachment(attachment)
+        file_upload_manager.upload_attachment(
+            attachment, on_upload_success=None, on_upload_failed=None
+        )
 
     file_upload_manager.close()
 
@@ -154,7 +160,9 @@ def test_upload_attachment__local__failed_upload(
 
     number_of_uploads = 10
     for _ in range(number_of_uploads):
-        file_upload_manager.upload_attachment(attachment)
+        file_upload_manager.upload_attachment(
+            attachment, on_upload_success=None, on_upload_failed=None
+        )
 
     file_upload_manager.close()
 

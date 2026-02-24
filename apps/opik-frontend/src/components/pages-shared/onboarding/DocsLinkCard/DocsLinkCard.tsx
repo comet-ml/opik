@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 export type DocsLinkCardProps = {
   link: string;
@@ -23,7 +23,7 @@ const DocsLinkCard: React.FC<DocsLinkCardProps> = ({
           <a href={link} target="_blank" rel="noreferrer">
             <span className="flex items-center gap-1">
               {buttonText}
-              <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+              <ExternalLink className="ml-2 size-4 shrink-0" />
             </span>
           </a>
         </Button>

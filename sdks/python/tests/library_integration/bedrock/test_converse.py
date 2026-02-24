@@ -14,6 +14,8 @@ from ...testlib import (
 from .constants import (
     BEDROCK_MODEL_FOR_TESTS,
     EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT,
+    MISTRAL_PIXTRAL_MODEL_FOR_TESTS,
+    MISTRAL_PIXTRAL_REGION_FOR_TESTS,
 )
 
 pytestmark = pytest.mark.usefixtures("ensure_aws_bedrock_configured")
@@ -245,13 +247,20 @@ def test_bedrock_converse__converse_call_made_in_another_tracked_function__bedro
         # Mistral Pixtral - Tests multimodal model streaming (text focus in this test)
         # Multimodal models may include additional event types
         # Ref: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-mistral.html
-        "us.mistral.pixtral-large-2502-v1:0",
+        MISTRAL_PIXTRAL_MODEL_FOR_TESTS,
     ],
 )
 def test_bedrock_converse__stream_mode_is_on__generator_tracked_correctly(
     fake_backend, model_id
 ):
-    client = boto3.client("bedrock-runtime", region_name="us-east-1")
+    region_name_by_model_id = {
+        MISTRAL_PIXTRAL_MODEL_FOR_TESTS: MISTRAL_PIXTRAL_REGION_FOR_TESTS,
+    }
+
+    client = boto3.client(
+        "bedrock-runtime",
+        region_name=region_name_by_model_id.get(model_id, "us-east-1"),
+    )
     tracked_client = track_bedrock(client)
 
     messages = [{"role": "user", "content": [{"text": "Hello, tell me a story"}]}]
