@@ -1221,6 +1221,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND lower(concat(toString(id), '|||', name, '|||', input, '|||', output, '|||', metadata, '|||', error_info, '|||', arrayStringConcat(tags, '|||'), '|||', thread_id)) LIKE CONCAT('%', lower(:search_text), '%') <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
@@ -1629,6 +1630,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
+                    <if(search_text)> AND lower(concat(toString(id), '|||', name, '|||', input, '|||', output, '|||', metadata, '|||', error_info, '|||', arrayStringConcat(tags, '|||'), '|||', thread_id)) LIKE CONCAT('%', lower(:search_text), '%') <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
@@ -2256,6 +2258,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND lower(concat(toString(id), '|||', name, '|||', input, '|||', output, '|||', metadata, '|||', error_info, '|||', arrayStringConcat(tags, '|||'), '|||', thread_id)) LIKE CONCAT('%', lower(:search_text), '%') <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (

@@ -657,7 +657,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder="Search threads..."
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>

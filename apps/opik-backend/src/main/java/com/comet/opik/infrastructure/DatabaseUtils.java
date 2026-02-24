@@ -139,6 +139,9 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
+
+        Optional.ofNullable(traceSearchCriteria.searchText())
+                .ifPresent(searchText -> template.add("search_text", true));
         return template;
     }
 
@@ -162,6 +165,9 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+
+        Optional.ofNullable(traceSearchCriteria.searchText())
+                .ifPresent(searchText -> statement.bind("search_text", searchText));
     }
 
     public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {

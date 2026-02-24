@@ -1220,7 +1220,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder={`Search ${type}...`}
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
