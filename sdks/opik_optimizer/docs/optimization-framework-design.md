@@ -2,19 +2,23 @@
 
 ### 1. Overview
 
-This document defines an optimizer-agnostic framework for running agent optimization on top of Opik experiments and evaluation suites.
+This document defines an optimizer-agnostic framework for running agent optimization on top of Opik experiments and datasets.
+
+The framework is a **standalone Python service** (`opik-optimizer`) deployed alongside the Opik backend. It is triggered via API (e.g. from the Opik UI) and can run multiple optimizations concurrently. It persists state through the **Opik Python SDK**, which communicates with the Opik backend REST API.
 
 The framework is responsible for:
 
-1. Receiving full candidate configurations from an optimizer algorithm.
-2. Validating candidates with framework guardrails.
-3. Creating isolated execution overlays (`mask_id`) per accepted candidate.
-4. Triggering experiments through existing experiment execution capability.
-5. Detecting completion and aggregating experiment outputs into normalized trial results.
-6. Feeding trial results back to the optimizer algorithm.
-7. Persisting optimization state and exposing progress to the frontend.
+1. Running a sampler service before optimizer execution to prepare training and validation subsets.
+2. Passing concrete item subsets to the optimizer.
+3. Evaluating optimizer candidates through a framework-owned `evaluation_adapter`.
+4. Validating candidates with framework guardrails.
+5. Creating isolated execution overlays (`mask_id`) per accepted candidate.
+6. Triggering experiments through existing experiment execution capability.
+7. Detecting completion and aggregating experiment outputs into normalized trial results.
+8. Persisting optimization state and exposing progress to the frontend.
+9. Self-recovering in-progress optimizations after service restarts.
 
-Principle: optimizer algorithms decide **what to test next**; the framework decides **how to run, persist, and report**.
+Principle: optimizer algorithms decide **what to test and which items to test**; the framework decides **how to run, persist, and report**.
 
 ---
 
@@ -33,43 +37,86 @@ Principle: optimizer algorithms decide **what to test next**; the framework deci
 1. **Optimization**: One end-to-end optimization session; identified by `optimization_id`.
 2. **Candidate**: One full configuration proposed for evaluation.
 3. **Trial**: One candidate evaluation record, backed by one experiment.
-4. **Evaluation Suite**: Dataset + evaluators + policy used by experiment engine.
-5. **Mask (`mask_id`)**: Request-scoped configuration overlay for isolated candidate execution.
+4. **Evaluation Suite**: A dataset used for the optimization process. The full dataset is the evaluation suite; the optimizer algorithm controls which subsets of items are used for each candidate evaluation. The framework passes specific `dataset_item_ids` when creating experiments, so only the selected items are evaluated — no temporary datasets are created.
+5. **Mask (`mask_id`)**: Request-scoped configuration overlay for isolated candidate execution. When an agent reads its configuration from Opik via SDK, a mask causes a candidate-specific configuration to be served for that request instead of the production default. This is an existing Opik platform capability; the framework creates masks through the materializer and does not manage the mask resolution mechanism itself.
 6. **Optimization Graph**: Parent-child relations between candidates used to render optimization evolution.
-7. **Experiment Runner**: Existing experiment execution capability (push/pull behavior belongs there).
-8. **Result Aggregator**: Framework component that detects completion and builds normalized trial results.
-9. **Canonical Config Hash**: Deterministic hash of a normalized full candidate configuration used for deduplication.
+7. **Sampler Service**: Framework component that builds training/validation subsets (as `dataset_item_ids` lists) from the evaluation suite before optimizer starts.
+8. **Evaluation Adapter**: Optimizer-facing framework boundary used to evaluate candidate configurations on concrete item subsets.
+9. **Experiment Execution**: Experiments are created via the Opik Python SDK (similar to the current `evaluate_optimization_trial()` pattern). The SDK accepts `dataset_item_ids` to control which items are included in the experiment, streaming and filtering items client-side. There is no separate experiment runner service; the framework creates experiments directly.
+10. **Result Aggregator**: Framework component that detects experiment completion and builds normalized trial results.
+11. **Canonical Config Hash**: Deterministic hash of a normalized full candidate configuration used for deduplication.
+12. **Event Emitter**: Framework component responsible for emitting lifecycle events to the presentation layer. All components delegate event emission through it.
 
 ---
 
 ### 4. High-Level Architecture
 
 ```mermaid
-flowchart LR
-O["Optimization Orchestrator"] --> A["Optimizer Algorithm"]
-A --> O
-O --> V["Candidate Validator"]
-V --> M["Candidate Materializer"]
-M --> E["Experiment Adapter"]
-E --> R["Experiment Runner (existing)"]
-R --> G["Result Aggregator"]
-G --> O
-O --> P["Optimization Repository"]
-P --> U["Presentation APIs + Realtime Events"]
+flowchart TD
+    subgraph Orchestration
+        O["Orchestrator"]
+        S["Sampler"]
+        O --> S
+        S --> O
+    end
+
+    subgraph Algorithm
+        A["Optimizer Algorithm"]
+    end
+
+    subgraph Evaluation Pipeline
+        EA["Evaluation Adapter"]
+        V["Candidate Validator"]
+        M["Candidate Materializer"]
+        EX["Experiment Execution"]
+        G["Result Aggregator"]
+        EA --> V --> M --> EX --> G --> EA
+    end
+
+    subgraph Persistence
+        SDK["Opik SDK\n(Opik Backend REST API)"]
+    end
+
+    subgraph Frontend Communication
+        EV["Event Emitter"]
+    end
+
+    O --> A
+    A --> EA
+    EA --> A
+    O --> SDK
+    M --> SDK
+    EX --> SDK
+    G -.->|reads| SDK
+    O --> EV
+    EA --> EV
 ```
 
 Ownership:
 
 1. **Orchestrator** is the active controller.
-2. **Experiment Adapter** is the integration boundary between framework and experiment runner APIs.
-3. **Result Aggregator** decides when trial results are ready and publishes normalized results to orchestrator.
-4. **Optimizer Algorithm** never polls experiments and never serves frontend payloads.
+2. **Sampler** prepares train/validation subsets before optimizer execution.
+3. **Evaluation Adapter** is the optimizer-facing integration boundary.
+4. **Result Aggregator** decides when trial results are ready and publishes normalized results to evaluation adapter.
+5. **Optimizer Algorithm** never polls experiments and never serves frontend payloads.
+6. **Event Emitter** is the single point for emitting lifecycle events to the frontend. Orchestrator and adapter trigger events through it.
+
+Persistence approach:
+
+1. All persistence goes through the **Opik Python SDK** (REST API calls to Opik backend). No direct database access. No separate repository abstraction — the SDK is the persistence boundary.
+2. Who interacts with the SDK:
+   - **Orchestrator** (writes): creates/updates optimization records, saves checkpoints to `optimizations.metadata`, marks terminal status.
+   - **Materializer** (writes): creates masks (configuration overlays) for candidates.
+   - **Experiment Execution** (writes): creates experiment records, experiment items, traces, feedback scores.
+   - **Result Aggregator** (reads): detects experiment completion and fetches results. Does not write data — it normalizes results in-memory and hands them back to the evaluation adapter.
+3. The frontend reads persisted data through the Opik backend APIs (snapshot endpoints) and receives realtime updates through the event emitter (SSE stream).
+4. For testing, the Opik SDK client is mocked directly — no intermediate abstraction layer needed.
 
 How completion is detected:
 
-1. Preferred: completion events from experiment runner.
+1. Preferred: completion events from experiment execution.
 2. Fallback: status polling through adapter.
-3. In both cases, aggregator builds final `TrialResult` and hands it to orchestrator.
+3. In both cases, aggregator builds final `TrialResult` and hands it to evaluation adapter.
 
 ---
 
@@ -91,28 +138,39 @@ erDiagram
         UUID id PK
         STRING name
         STRING description
+        ENUM type "dataset | evaluation_suite"
+        ENUM visibility "private | public"
+        ENUM status "unknown | processing | completed | failed"
+        STRING tags
         DATETIME created_at
         DATETIME last_updated_at
+        DATETIME last_created_experiment_at
+        DATETIME last_created_optimization_at
     }
 
     OPTIMIZATIONS {
         UUID id PK
         STRING name
         STRING objective_name
-        STRING status
+        ENUM status "running | completed | cancelled | initialized | error"
         JSON metadata
-        UUID dataset_id
+        JSON studio_config
+        UUID dataset_id FK
+        BOOL dataset_deleted
         DATETIME created_at
         DATETIME last_updated_at
     }
 
     EXPERIMENTS {
         UUID id PK
+        UUID dataset_id FK
         UUID optimization_id FK
         STRING name
-        STRING status
+        ENUM type "regular | trial | mini-batch"
+        ENUM status "unknown | running | completed | cancelled"
         JSON metadata
         JSON experiment_scores
+        STRING dataset_version_id
         DATETIME created_at
         DATETIME last_updated_at
     }
@@ -120,10 +178,9 @@ erDiagram
     EXPERIMENT_ITEMS {
         UUID id PK
         UUID experiment_id FK
-        UUID dataset_item_id
+        UUID dataset_item_id FK
         UUID trace_id
-        JSON input
-        JSON output
+        UUID project_id
         DATETIME created_at
         DATETIME last_updated_at
     }
@@ -131,19 +188,28 @@ erDiagram
     DATASET_ITEMS {
         UUID id PK
         UUID dataset_id FK
-        JSON data
-        STRING source
+        MAP data
+        STRING input
+        STRING expected_output
+        STRING metadata
+        ENUM source "unknown | sdk | manual | span | trace"
         UUID trace_id
         UUID span_id
+        ARRAY tags
         DATETIME created_at
         DATETIME last_updated_at
     }
 
     FEEDBACK_SCORES {
-        STRING entity_id
-        STRING entity_type
+        UUID entity_id
+        ENUM entity_type "unknown | span | trace | thread"
+        UUID project_id
         STRING name
+        STRING category_name
         DECIMAL value
+        STRING reason
+        ENUM source "sdk | ui | online_scoring"
+        DATETIME created_at
         DATETIME last_updated_at
     }
 
@@ -151,25 +217,32 @@ erDiagram
 
 DB location:
 
-1. `optimizations`: Opik analytics DB.
-2. `experiments`: Opik analytics DB.
-3. `experiment_items`: Opik analytics DB.
-4. `datasets`: Opik analytics DB.
-5. `dataset_items`: Opik analytics DB.
-6. `feedback_scores`: Opik analytics DB.
+1. `optimizations`: Opik analytics DB (ClickHouse).
+2. `experiments`: Opik analytics DB (ClickHouse).
+3. `experiment_items`: Opik analytics DB (ClickHouse).
+4. `datasets`: Opik state DB (MySQL).
+5. `dataset_items`: Opik analytics DB (ClickHouse).
+6. `feedback_scores`: Opik analytics DB (ClickHouse).
 
 Storage mapping:
 
-1. Optimization checkpoint state -> `optimizations.metadata.framework_checkpoint`.
-2. Run-level errors/status details -> `optimizations.metadata.framework_error`.
-3. Candidate-trial attribution -> `experiments.metadata` fields:
+`optimizations.metadata` is entirely framework-controlled — no namespacing needed:
+
+1. Optimization checkpoint state -> `optimizations.metadata.checkpoint`.
+2. Run-level errors/status details -> `optimizations.metadata.error`.
+3. Validation rejections -> `optimizations.metadata.validation_rejections`.
+4. Materialization failures -> `optimizations.metadata.materialization_failures`.
+
+`experiments.metadata` is a shared JSON blob (experiments exist independently of optimizations), so all optimization-specific fields are namespaced under an `optimization` key:
+
+5. Candidate-trial attribution -> `experiments.metadata.optimization`:
    - `candidate_id`
    - `mask_id`
    - `step_index`
    - `parent_candidate_ids`
    - `candidate_config_hash`
-4. Trial-level terminal errors -> `experiments.metadata.trial_error`.
-5. Objective/trial metric values shown in optimization views are derived from `feedback_scores` linked through experiment item traces.
+6. Trial-level terminal errors -> `experiments.metadata.optimization.error`.
+7. Objective/trial metric values shown in optimization views are derived from `feedback_scores` linked through experiment item traces.
 
 Notes:
 
@@ -185,27 +258,41 @@ Notes:
 Responsibilities:
 
 1. Create/load optimization context.
-2. Run baseline evaluation before first optimizer proposal.
-3. Call optimizer methods in order: `initialize -> propose -> observe -> should_stop`.
-4. Assign `candidate_id` to accepted candidates.
-5. Coordinate validation, materialization, execution, aggregation, and persistence.
+2. Invoke sampler service before optimizer start.
+3. Run baseline evaluation before calling optimizer.
+4. Call optimizer once: `run(context, training_set, validation_set, evaluation_adapter)`.
+5. Coordinate baseline lifecycle, persistence, and final run status.
 6. Apply framework stop conditions (cancel, global timeout, fatal internal error).
 
-### 6.2 Optimizer Algorithm
+### 6.2 Sampler Service
 
 Responsibilities:
 
-1. Generate candidate configurations.
-2. Update internal algorithm state based on trial outcomes.
-3. Decide algorithmic stopping conditions.
+1. Build concrete item subsets from the evaluation suite before optimizer starts.
+2. Return:
+   - `training_set: list[DatasetItem]`
+   - `validation_set: list[DatasetItem] | None`
+3. Subsets are resolved as lists of `dataset_item_ids` — no temporary datasets are created.
+4. Persist sampling metadata (`strategy`, `seed`, sizes) for reproducibility.
+
+### 6.3 Optimizer Algorithm
+
+Responsibilities:
+
+1. Run algorithm loop inside one `run(...)` call.
+2. Generate candidate configurations as `CandidateProposal` objects.
+3. Decide which concrete items to evaluate per candidate.
+4. Call `evaluation_adapter.evaluate(...)` with one or more candidate proposals. The framework runs them in parallel when multiple are provided.
+5. Decide algorithmic stopping conditions internally (convergence, no improvement, target reached, etc.) and return from `run()` when done.
 
 Non-responsibilities:
 
 1. No direct experiment API calls.
 2. No completion polling/subscription logic.
 3. No frontend data formatting.
+4. No framework-level stop conditions (max trials, budget, timeout) — those are enforced by the framework.
 
-### 6.3 Candidate Validator
+### 6.4 Candidate Validator
 
 Responsibilities:
 
@@ -232,7 +319,7 @@ What `reason_code` is used for:
 4. Clarify this is a pre-experiment rejection. If execution starts and then fails, it is a trial failure, not a rejection.
 5. Because no experiment exists yet for rejected candidates, these records are stored as optimization-level validation events.
 
-### 6.4 Candidate Materializer
+### 6.5 Candidate Materializer
 
 Responsibilities:
 
@@ -240,25 +327,55 @@ Responsibilities:
 2. Create candidate `mask_id`.
 3. Return execution-ready identity tuple (`candidate_id`, `mask_id`).
 
-### 6.5 Experiment Adapter
+### 6.6 Evaluation Adapter
 
 Why this exists:
 
-1. Framework calls one stable interface even if experiment runner APIs/protocols change.
-2. Tests can mock this boundary to validate orchestrator logic without real remote execution.
+1. Optimizer gets one stable interface regardless of runner internals.
+2. Framework keeps validator/materializer/runner/aggregator hidden behind one call.
+3. Tests can mock this boundary to validate optimizer logic without remote execution.
 
 Responsibilities:
 
-1. Trigger experiment for one candidate.
-2. Provide status and result read methods used by the aggregator.
-3. Cancel running experiments.
+1. Accept one or more `CandidateProposal` objects + concrete item subset (as `dataset_item_ids`).
+2. Validate and materialize each candidate (create mask).
+3. Create experiments via Opik Python SDK, passing `dataset_item_ids` to evaluate only the selected items.
+4. Receive terminal results from aggregator.
+5. Return normalized `list[TrialResult]` to optimizer.
+6. Trigger lifecycle events through event emitter.
+
+Concurrency:
+
+1. Each candidate gets its own experiment. Within each experiment, dataset items are executed in parallel (the remote agent handles concurrent requests).
+2. When multiple proposals are provided, their experiments run concurrently. Returns when all candidates have terminal results.
+3. The framework bounds concurrent experiment triggers and applies backpressure when remote execution is throttled.
+
+Multi-run execution (`runs_per_item`):
+
+Evaluation suites can define an `ExecutionPolicy` with `runs_per_item > 1`, meaning each dataset item is executed multiple times per experiment. Each run creates a separate experiment item with its own trace. The platform aggregates scores across runs (mean of successful runs) and applies `pass_threshold` to determine pass/fail per item.
+
+Responsibility breakdown:
+
+1. **Evaluation suite** owns the policy: `runs_per_item` and `pass_threshold` are stored on the dataset.
+2. **Framework (evaluation adapter)** passes the execution policy through to experiment creation via the Opik SDK. The framework does not interpret or override the policy.
+3. **Opik SDK / platform** handles multi-run execution: creates N experiment items per dataset item, runs them in parallel, stores individual traces.
+4. **Result aggregator** reads back experiment results. Scores are already aggregated per dataset item by the platform (mean of successful runs). The aggregator computes `TrialResult.objective_score` from these per-item aggregated scores.
+5. **Optimizer algorithm** sees only `TrialResult.objective_score` — a single scalar. It does not know whether items ran once or multiple times.
+6. **Optimizer adapter** (e.g. GEPA adapter) is responsible for any optimizer-specific interpretation of multi-run results. Reflection-based optimizers pass `include_item_results=True` to get per-item, per-run data in `TrialResult.item_results`. For example, GEPA's reflection mechanism (`make_reflective_dataset`) needs per-item traces — the adapter iterates the `TrialItemRun` records and decides which to present for reflection (e.g. worst-scoring run, median run, or all runs). This is adapter-level logic — not framework logic.
+
+If a run fails:
+
+1. Failed runs still create experiment items and traces.
+2. Failed runs are excluded from score aggregation (platform default).
+3. Failed runs count toward `runs_total` but not toward `pass_threshold`.
+4. The `TrialResult.objective_score` reflects only successful runs. Optimizer adapters that need different failure handling (e.g. counting failures as zero) can pass `include_item_results=True` to inspect individual `TrialItemRun` entries and recompute as needed.
 
 Clarification:
 
-1. Adapter exposes raw status/results access.
-2. Aggregator owns completion logic, retry/backoff for reads, and normalization into `TrialResult`.
+1. Optimizer calls `evaluation_adapter` only.
+2. Aggregator still owns completion logic and normalization.
 
-### 6.6 Result Aggregator
+### 6.7 Result Aggregator
 
 Responsibilities:
 
@@ -266,24 +383,11 @@ Responsibilities:
 2. Determine terminal completion for each candidate experiment.
 3. Retrieve results via adapter.
 4. Build normalized trial outputs.
-5. Return ready trial batch to orchestrator.
+5. Return ready trial result(s) to evaluation adapter.
 
 What "aggregation failure" means:
 
 1. Experiment reached terminal state, but result fetch/parse/normalize failed.
-
-### 6.7 Optimization Repository
-
-Pattern:
-
-1. Repository interface with production implementation backed by Opik persistence.
-2. Tests inject mocks.
-
-Responsibilities:
-
-1. Persist/load optimizer checkpoint state.
-2. Persist candidate-to-experiment mappings.
-3. Expose read models for frontend by querying existing experiment data.
 
 ### 6.8 Presentation Layer
 
@@ -298,6 +402,20 @@ Important:
 1. Frontend data is served from framework persistence/read models.
 2. Optimizer algorithm is not directly queried by frontend.
 
+### 6.9 Event Emitter
+
+Why this exists:
+
+1. Multiple components (orchestrator, evaluation adapter) need to emit lifecycle events to the presentation layer.
+2. Centralizing emission avoids ordering bugs and duplicate events.
+
+Responsibilities:
+
+1. Accept lifecycle events from orchestrator and evaluation adapter.
+2. Emit events to the presentation layer (SSE stream).
+3. Ensure events are emitted only after persistence succeeds.
+4. Deduplicate events using stable event keys.
+
 ---
 
 ### 7. Technical Flow
@@ -305,76 +423,61 @@ Important:
 ```mermaid
 sequenceDiagram
 participant O as Orchestrator
-participant P as Repository
+participant S as Sampler
+participant SDK as Opik SDK
+participant EV as Event Emitter
 participant A as Optimizer
+participant EA as Evaluation Adapter
 participant V as Validator
 participant M as Materializer
-participant X as Adapter
-participant E as Experiment Runner
 participant G as Aggregator
 participant U as UI
 
-O->>P: create/load optimization context
-O->>U: run_status_changed(initialized/running)
-O->>O: run baseline candidate (step 0)
-O->>M: materialize baseline
-M-->>O: baseline candidate_id + mask_id
-O->>X: trigger baseline experiment
-O->>U: progress_changed(running=1)
-X->>E: trigger
-G->>X: wait (event-first, poll fallback)
-X->>E: status/results reads as needed
+O->>SDK: create/load optimization context
+O->>EV: run_status_changed(initialized/running)
+EV->>U: run_status_changed
+O->>S: sample(training/validation)
+S-->>O: training_set, validation_set
+
+note over O,SDK: Baseline evaluation (no mask needed — uses production config)
+O->>SDK: create baseline experiment (production config, validation_set item IDs)
+G->>SDK: wait for completion (event-first, poll fallback)
+SDK-->>G: status/results
 G-->>O: baseline TrialResult
-O->>P: save baseline trial + checkpoint
+O->>SDK: save baseline checkpoint
 O->>O: if baseline status != completed, mark optimization failed and stop
-O->>U: trial_added_or_updated(baseline)
-O->>U: progress_changed(completed/failed baseline)
+O->>EV: trial_added_or_updated(baseline)
+EV->>U: trial_added_or_updated
 
-O->>A: initialize(RunContext with baseline score)
-A-->>O: initial OptimizerState
-
-loop each optimization step
-  O->>A: propose(state, history, max_candidates)
-  A-->>O: CandidateProposal[]
-
-  O->>V: validate proposals
-  V-->>O: accepted + rejected(reason_code)
-  O->>P: persist rejections and accepted set
-  O->>U: progress_changed(proposed/accepted/rejected)
-
-  par each accepted candidate
-    O->>O: assign candidate_id + step_index
-    O->>M: materialize candidate
-    M-->>O: candidate_id + mask_id
-    O->>X: trigger experiment
-    X->>E: trigger
-    O->>P: save candidate mapping (candidate_id/mask_id/experiment_id)
-    O->>U: progress_changed(running increment)
-  end
-
-  G->>X: detect completion + fetch results
-  X->>E: status/results reads as needed
-  G-->>O: TrialResult[]
-
-  O->>P: persist checkpoint (trial data already in experiment records)
-  O->>U: trial_added_or_updated(batch)
-  O->>U: progress_changed(completed/failed counters)
-  O->>A: observe(state, trial_results)
-  A-->>O: updated state
-  O->>U: best_candidate_changed(if changed)
-  O->>A: should_stop(state, history)
-  A-->>O: stop or continue
+O->>A: run(context, training_set, validation_set, evaluation_adapter)
+loop algorithm-controlled execution
+    A->>EA: evaluate([proposal_1, ..., proposal_N], items)
+    par for each proposal
+      EA->>V: validate candidate
+      EA->>M: materialize candidate
+      M->>SDK: create mask
+      EA->>SDK: create experiment (mask_id, dataset_item_ids)
+      G->>SDK: detect completion + fetch results
+      G-->>EA: TrialResult
+      EA->>EV: trial_added_or_updated/progress_changed/best_candidate_changed
+      EV->>U: events
+    end
+    EA-->>A: list[TrialResult]
 end
 
-O->>P: mark optimization terminal state
-O->>U: run_finished
+O->>SDK: mark optimization terminal state
+O->>EV: run_finished
+EV->>U: run_finished
 ```
 
-Lineage in this flow:
+Step index and parent graph in this flow:
 
-1. Candidate includes `parent_candidate_ids`.
-2. Repository stores lineage per candidate.
-3. Frontend reads lineage graph projection from repository.
+1. Optimizer passes `parent_candidate_ids` and `step_index` on each `CandidateProposal`.
+2. Framework always generates `candidate_id` during materialization.
+3. If `step_index` is omitted, framework assigns monotonic step index by evaluation order.
+4. If `parent_candidate_ids` is omitted, framework stores `[]`.
+5. Graph fields are persisted in experiment metadata via SDK.
+6. Frontend reads optimization graph projection from Opik backend APIs.
 
 ---
 
@@ -384,44 +487,27 @@ Lineage in this flow:
 
 ```python
 class Optimizer(Protocol):
-    def initialize(self, context: "RunContext") -> "OptimizerState":
-        ...
-
-    def propose(
+    def run(
         self,
-        state: "OptimizerState",
-        history: "TrialHistory",
-        max_candidates: int
-    ) -> list["CandidateProposal"]:
-        ...
-
-    def observe(
-        self,
-        state: "OptimizerState",
-        trial_results: list["TrialResult"]
-    ) -> "OptimizerState":
-        ...
-
-    def should_stop(
-        self,
-        state: "OptimizerState",
-        history: "TrialHistory"
-    ) -> "StopDecision":
+        context: "RunContext",
+        training_set: list["DatasetItem"],
+        validation_set: list["DatasetItem"] | None,
+        evaluation_adapter: "EvaluationAdapter",
+    ) -> "OptimizationResult":
         ...
 ```
 
 Method intent:
 
-1. `initialize`: build algorithm state after baseline is available.
-2. `propose`: generate next candidate batch.
-3. `observe`: update algorithm state with completed trial outcomes.
-4. `should_stop`: algorithm-level stop decision.
+1. `run`: execute the full algorithm loop and call `evaluation_adapter` whenever candidate evaluation is needed.
+2. The optimizer returns from `run()` when it decides to stop (convergence, no improvement, target reached, etc.) or when a framework stop condition is raised.
 
 GEPA fit:
 
-1. Baseline result is available before `initialize`.
-2. GEPA can seed initial population from baseline context in `initialize`.
-3. GEPA updates population in `observe` and emits next generation in `propose`.
+1. Baseline result is available in `context.baseline_trial` before `run`.
+2. Completed trials from any prior run (recovery) are available in `context.completed_trials`.
+3. GEPA can keep its native internal loop and evaluate selected minibatches via adapter calls.
+4. GEPA can use `evaluate()` to run a generation of competing candidates in parallel.
 
 ### 8.2 RunContext
 
@@ -429,28 +515,33 @@ GEPA fit:
 @dataclass(frozen=True)
 class RunContext:
     optimization_id: str
-    evaluation_suite_id: str
+    dataset_id: str
     objective_name: str
-    baseline_candidate_id: str
-    baseline_score: float
-    max_candidates_per_step: int
+    baseline_trial: "TrialResult"
+    completed_trials: list["TrialResult"]
+    max_trials: int | None
+    max_cost: float | None
+    timeout_seconds: int | None
 ```
 
 Field usage:
 
 1. `optimization_id`: top-level correlation key for this run.
-2. `evaluation_suite_id`: suite used for all trials in this optimization.
+2. `dataset_id`: dataset used for all trials in this optimization.
 3. `objective_name`: primary objective being optimized.
-4. `baseline_candidate_id`: lineage root reference.
-5. `baseline_score`: baseline objective score used as reference for first proposal.
-6. `max_candidates_per_step`: framework batch limit provided to algorithm.
+4. `baseline_trial`: baseline trial result including `candidate_id` (lineage root) and `objective_score`.
+5. `completed_trials`: empty on fresh start; populated with previously completed trials on recovery. Allows the optimizer to resume from where it left off without re-running completed work.
+6. `max_trials`: optional framework stop guardrail.
+7. `max_cost`: optional total cost budget for the optimization.
+8. `timeout_seconds`: optional wall-clock timeout for the optimization.
 
 Creation timing:
 
 1. Orchestrator creates `RunContext` only after baseline trial completes successfully.
 2. If baseline fails, optimization is marked failed and optimizer is not initialized.
+3. On recovery, `completed_trials` is populated from persisted experiment records before calling `run()`.
 
-### 8.3 OptimizerState
+### 8.3 OptimizerState (Optional Checkpoint Payload)
 
 ```python
 @dataclass
@@ -463,14 +554,12 @@ class OptimizerState:
 
 Field usage:
 
-1. `generation`: current optimizer generation/iteration index.
-2. `best_candidate_id`: best-known candidate according to optimizer.
-3. `best_score`: best-known objective value.
-4. `algorithm_data`: algorithm-specific serializable state.
+1. Optional algorithm checkpoint payload for recovery.
+2. Not part of the optimizer method signature contract.
 
 Persistence:
 
-1. Stored in `optimizations.metadata.framework_checkpoint.optimizer_state`.
+1. Stored in `optimizations.metadata.checkpoint.optimizer_state`.
 
 ### 8.4 CandidateProposal
 
@@ -479,6 +568,7 @@ Persistence:
 class CandidateProposal:
     configuration: dict[str, Any]
     parent_candidate_ids: list[str]
+    step_index: int | None = None
     rationale: str | None = None
 ```
 
@@ -486,13 +576,14 @@ Field usage:
 
 1. `configuration`: full execution configuration.
 2. `parent_candidate_ids`: lineage edges.
-3. `rationale`: optional human-readable explanation.
+3. `step_index`: optional optimizer-provided step/generation index.
+4. `rationale`: optional human-readable explanation.
 
 Notes:
 
 1. `candidate_id` is generated by framework on acceptance.
 
-### 8.5 TrialHistory
+### 8.5 TrialHistory (Optional Helper Type)
 
 ```python
 @dataclass
@@ -505,49 +596,53 @@ Usage:
 1. Contains completed trials only.
 2. Used by optimizer to propose and decide stopping.
 
-### 8.6 StopDecision
+### 8.6 Stop Conditions
+
+Framework stop conditions are enforced by the orchestrator and the evaluation adapter. When a framework stop condition is met, the adapter raises a `FrameworkStopError` that the optimizer should not catch.
 
 ```python
-class StopReason(str, Enum):
-    TARGET_REACHED = "target_reached"
-    CONVERGENCE = "convergence"
-    NO_IMPROVEMENT = "no_improvement"
-    ALGORITHM_SPECIFIC = "algorithm_specific"
-
-@dataclass
-class StopDecision:
-    should_stop: bool
-    reason: StopReason | None = None
-    message: str | None = None
+class FrameworkStopError(Exception):
+    reason: str
+    message: str
 ```
 
-Usage:
+Framework stop reasons:
 
-1. `should_stop`: algorithm wants to stop.
-2. `reason`: machine-readable reason.
-3. `message`: optional human-readable reason.
+1. `max_trials_reached`: trial count equals `RunContext.max_trials`.
+2. `budget_exceeded`: cumulative cost exceeds `RunContext.max_cost`.
+3. `timeout`: wall-clock time exceeds `RunContext.timeout_seconds`.
+4. `cancelled`: external cancellation signal (user cancelled via UI/API).
 
-### 8.7 ExperimentAdapter
+Optimizer-level stopping is internal to each optimizer algorithm. The optimizer decides when to return from `run()` based on its own logic (convergence, no improvement, target score reached, etc.). The framework does not define or enforce optimizer-level stop conditions.
+
+### 8.7 EvaluationAdapter
 
 ```python
-class ExperimentAdapter(Protocol):
-    def trigger(self, request: "ExperimentRequest") -> "TriggeredExperiment":
-        ...
-
-    def get_status(self, experiment_id: str) -> "ExperimentStatus":
-        ...
-
-    def get_results(self, experiment_id: str) -> "RawExperimentResults":
-        ...
-
-    def cancel(self, experiment_id: str) -> None:
+class EvaluationAdapter(Protocol):
+    def evaluate(
+        self,
+        proposals: list["CandidateProposal"],
+        items: list["DatasetItem"],
+        include_item_results: bool = False,
+    ) -> list["TrialResult"]:
         ...
 ```
 
 Why needed:
 
-1. One integration boundary between framework and experiment runner.
-2. Allows event and polling mechanics without leaking runner-specific details into orchestrator.
+1. One optimizer-facing integration boundary.
+2. Keeps materializer/runner/aggregator internal to framework.
+
+Method intent:
+
+1. `evaluate`: accepts one or more proposals. Each gets its own experiment. When multiple proposals are provided, experiments run concurrently (bounded by framework concurrency limits). Within each experiment, dataset items run in parallel (the remote agent handles concurrent requests). Returns when all candidates have terminal results.
+2. Enforces framework stop conditions (`FrameworkStopError`) before triggering experiments.
+
+The `include_item_results` flag:
+
+1. `objective_score` and `summary` are always computed — the aggregator reads per-item scores (lightweight numeric data from `feedback_scores`) to derive them.
+2. When `include_item_results=False` (default): `TrialResult.item_results` is `None`. This is sufficient for optimizers that only use `objective_score` for selection (evolutionary, meta-prompt, parameter tuning, few-shot bayesian).
+3. When `include_item_results=True`: the aggregator also fetches full per-item content (inputs, outputs, traces, per-run breakdowns) and populates `TrialResult.item_results`. This is expensive — it requires reading dataset items, experiment items, and traces — but necessary for reflection-based optimizers (GEPA, hierarchical reflective) that analyze individual item results to propose improvements.
 
 ### 8.8 ExperimentRequest
 
@@ -557,7 +652,8 @@ class ExperimentRequest:
     optimization_id: str
     candidate_id: str
     mask_id: str
-    evaluation_suite_id: str
+    dataset_id: str
+    dataset_item_ids: list[str]
     execution_params: dict[str, Any]
 ```
 
@@ -565,9 +661,10 @@ Field usage:
 
 1. `optimization_id`: ties experiment to optimization session.
 2. `candidate_id`: ties experiment to one candidate.
-3. `mask_id`: ensures candidate-isolated config execution.
-4. `evaluation_suite_id`: tells experiment runner what suite to execute.
-5. `execution_params`: pass-through parameters required by experiment runner.
+3. `mask_id`: ensures candidate-isolated config execution via Opik's mask resolution.
+4. `dataset_id`: the evaluation suite (dataset) to use.
+5. `dataset_item_ids`: concrete subset of items chosen by the optimizer for this candidate evaluation. Only these items are streamed and evaluated — the full dataset is not iterated.
+6. `execution_params`: pass-through parameters required by experiment execution.
 
 ### 8.9 TrialResult
 
@@ -592,77 +689,115 @@ class TrialResult:
 
     objective_score: float | None
     summary: TrialSummary
+    item_results: list["TrialItemResult"] | None = None
     error: str | None = None
 ```
 
 Why this shape:
 
-1. `objective_score` is a single scalar used directly by optimizer.
-2. `summary` is a fixed type for consistent UI display.
-3. Large detail payloads (`item_results`, `trace_refs`) are not embedded here; frontend fetches details on demand from experiment APIs.
+1. `objective_score` is a single scalar derived from per-item scores — used directly by optimizer for selection decisions. Always computed.
+2. `summary` is a fixed type for consistent UI display. Always computed.
+3. `item_results` is `None` by default. Populated only when `include_item_results=True`. Computing `objective_score` only requires per-item scores (lightweight). Populating `item_results` requires fetching full item content — inputs, outputs, traces, per-run breakdowns — which is expensive. The flag avoids this cost for optimizers that don't need it.
 
-### 8.10 Repository Interface
+### 8.10 TrialItemResult
 
 ```python
-class OptimizationRepository(Protocol):
-    def create_optimization(self, optimization_id: str, context: RunContext) -> None:
-        ...
+@dataclass
+class TrialItemRun:
+    trial_id: int
+    trace_id: str
+    score: float | None
+    passed: bool
+    error: str | None = None
 
-    def save_checkpoint(self, optimization_id: str, state: OptimizerState) -> None:
-        ...
-
-    def save_candidate_mapping(
-        self,
-        optimization_id: str,
-        candidate_id: str,
-        experiment_id: str,
-        mask_id: str,
-        step_index: int,
-        parent_candidate_ids: list[str],
-        candidate_config_hash: str,
-    ) -> None:
-        ...
-
-    def save_rejection(
-        self,
-        optimization_id: str,
-        proposed_index: int,
-        reason_code: str,
-    ) -> None:
-        ...
-
-    def get_optimization_summary(self, optimization_id: str) -> dict[str, Any]:
-        ...
-
-    def list_trials(self, optimization_id: str) -> list[TrialResult]:
-        ...
-
-    def get_optimization_graph(self, optimization_id: str) -> dict[str, Any]:
-        ...
-
-    def list_validation_rejections(self, optimization_id: str) -> list[dict[str, Any]]:
-        ...
-
-    def load_checkpoint(self, optimization_id: str) -> OptimizerState | None:
-        ...
-
-    def load_history(self, optimization_id: str) -> TrialHistory:
-        ...
+@dataclass
+class TrialItemResult:
+    dataset_item_id: str
+    input: dict[str, Any]
+    expected_output: dict[str, Any] | None
+    aggregated_score: float | None
+    passed: bool
+    runs: list[TrialItemRun]
 ```
 
-Storage mapping for repository methods:
+Field usage:
 
-1. `save_checkpoint` -> `optimizations.metadata.framework_checkpoint`.
-2. `save_candidate_mapping` -> `experiments.metadata` on experiment creation/update.
-3. `save_rejection` -> optimization-level validation event log in `optimizations.metadata.validation_rejections`.
-4. `get_optimization_summary` -> `optimizations` (+ aggregate trial signals from linked experiments).
-5. `list_trials` -> `experiments` linked by `experiments.optimization_id`.
-6. `get_optimization_graph` -> candidate lineage fields in `experiments.metadata`.
-7. `list_validation_rejections` -> `optimizations.metadata.validation_rejections`.
+1. `dataset_item_id`: links back to the evaluation suite item.
+2. `input` / `expected_output`: the item's data, for building reflection datasets.
+3. `aggregated_score`: platform-aggregated score across all runs for this item.
+4. `passed`: whether the item passed the evaluation suite's `pass_threshold`.
+5. `runs`: individual run results. Each run has its own `trace_id`, `score`, and pass/fail status. When `runs_per_item=1`, this list has one entry.
 
-Scope:
+Usage by optimizer adapters:
 
-1. Tests inject mocks instead of real repository implementation.
+1. Reflection-based optimizers (GEPA, hierarchical reflective) pass `include_item_results=True` to get per-item content.
+2. GEPA adapter iterates `TrialResult.item_results` to build `make_reflective_dataset()` inputs — needs per-item inputs, outputs, and scores.
+3. Hierarchical reflective optimizer iterates `item_results` for root cause analysis — needs per-item inputs, outputs, scores, and failure reasons.
+4. When `runs_per_item > 1`, the adapter chooses which run(s) to present for reflection (e.g. worst-scoring run to learn from failures, or all runs for full visibility).
+5. Score-only optimizers (evolutionary, meta-prompt, parameter, few-shot bayesian) leave `include_item_results=False` — they only use `objective_score` and pay no fetch cost.
+
+### 8.11 OptimizationResult
+
+```python
+@dataclass
+class OptimizationResult:
+    optimization_id: str
+    dataset_id: str
+    objective_name: str
+    status: Literal["completed", "failed", "cancelled"]
+
+    best_candidate_id: str
+    best_configuration: dict[str, Any]
+    best_score: float
+
+    baseline_candidate_id: str
+    baseline_configuration: dict[str, Any]
+    baseline_score: float
+
+    trials: list[TrialResult]
+    total_trials: int
+    total_cost: float | None
+
+    error: str | None = None
+```
+
+Field usage:
+
+1. `best_*`: the winning candidate, its full configuration, and objective score.
+2. `baseline_*`: the initial production configuration and its score, for comparison.
+3. `trials`: all completed trial results for inspection.
+4. `total_cost`: cumulative cost across all trials (if tracked).
+5. `status`: terminal status of the optimization run.
+6. `error`: populated when `status` is `failed`.
+
+Notes:
+
+1. Returned by `Optimizer.run()`.
+2. The orchestrator wraps this with additional metadata (timing, sampling info) before persisting.
+3. UI fetches detailed per-item results on demand via experiment APIs; `OptimizationResult` stays lightweight.
+
+### 8.12 SDK Persistence Mapping
+
+All framework-level state is persisted through the Opik Python SDK — no intermediate repository abstraction. The orchestrator and pipeline components call SDK methods directly.
+
+Storage mapping:
+
+| What | Where | Who | Access |
+|------|-------|-----|--------|
+| Optimization record (status, config) | `optimizations` | Orchestrator | write |
+| Checkpoint state | `optimizations.metadata.checkpoint` | Orchestrator | write |
+| Validation rejections | `optimizations.metadata.validation_rejections` | Validator (via orchestrator) | write |
+| Materialization failures | `optimizations.metadata.materialization_failures` | Materializer (via orchestrator) | write |
+| Framework errors | `optimizations.metadata.error` | Orchestrator | write |
+| Candidate-to-experiment mapping | `experiments.metadata.optimization` (candidate_id, mask_id, step_index, parent_candidate_ids, config_hash) | Materializer | write |
+| Optimization graph (lineage) | `experiments.metadata.optimization` (step_index, parent_candidate_ids) | Materializer | write |
+| Trial-level errors | `experiments.metadata.optimization.error` | Aggregator (via adapter) | write |
+| Experiment data (items, traces, scores) | `experiments`, `experiment_items`, `feedback_scores` | Experiment Execution | write |
+| Trial results (completion + scores) | `experiments` linked by `experiments.optimization_id` | Result Aggregator | read |
+
+Testing approach:
+
+1. Tests mock the Opik SDK client directly (e.g. `opik.Client`) rather than injecting a separate repository implementation.
 
 ---
 
@@ -670,17 +805,21 @@ Scope:
 
 ### 9.1 Failure types and storage
 
-1. Validation failure:
-   - stored as rejection record (`reason_code`) in optimization metadata/event log.
-2. Experiment execution failure:
-   - stored in trial (`status` + `error`) and `experiments.metadata.trial_error`.
-3. Aggregation failure (terminal experiment but result read/parse failed):
-   - stored in trial error + experiment metadata.
-4. Optimizer method exception:
-   - stored in `optimizations.metadata.framework_error` and run terminal status.
-5. Persistence failure:
-   - checkpoint/run write failures stored in `optimizations.metadata.framework_error`.
-   - experiment metadata update failures (for trial_error/candidate mapping) stored in `optimizations.metadata.framework_error`.
+1. Sampler failure (dataset not found, empty dataset, SDK read error):
+   - optimization marked failed before optimizer is called. Stored in `optimizations.metadata.error`.
+2. Validation failure:
+   - stored as rejection record (`reason_code`) in `optimizations.metadata.validation_rejections`.
+3. Materialization failure (mask creation or candidate persistence via SDK fails):
+   - no experiment exists yet. Stored in `optimizations.metadata.materialization_failures`.
+4. Experiment execution failure:
+   - stored in trial (`status` + `error`) and `experiments.metadata.optimization.error`.
+5. Aggregation failure (terminal experiment but result read/parse failed):
+   - stored in `experiments.metadata.optimization.error`.
+6. Optimizer method exception:
+   - stored in `optimizations.metadata.error` and run terminal status.
+7. Persistence failure:
+   - checkpoint/run write failures stored in `optimizations.metadata.error`.
+   - experiment metadata update failures stored in `optimizations.metadata.error`.
 
 ### 9.2 Retry policy principles
 
@@ -690,23 +829,37 @@ Scope:
    - transient DB/connectivity: retry,
    - deterministic schema/serialization bug: fail fast.
 
-### 9.3 Resumption and recovery flow
+### 9.3 Self-recovery flow
+
+The framework performs self-recovery automatically. Because optimizations are offline processes whose results are polled by the UI, the framework can detect and resume interrupted runs without external intervention.
+
+Recovery trigger:
+
+1. On service startup, the framework queries for optimizations in `running` or `initialized` status.
+2. For each, the recovery sequence runs before any new optimizer work begins.
 
 Recovery sources:
 
 1. Checkpoint state in optimization metadata.
-2. Candidate mappings in experiment metadata (`candidate_id`, `mask_id`, `step_index`, `parent_candidate_ids`).
+2. Candidate mappings in `experiments.metadata.optimization` (`candidate_id`, `mask_id`, `step_index`, `parent_candidate_ids`).
 3. Trial outcomes in experiment records.
 
 Resume sequence:
 
-1. Load checkpoint and completed history.
+1. Load checkpoint and completed trial history from persisted experiments.
 2. Query mapped experiments where status is not one of `completed`, `failed`, `cancelled`, `timeout`.
 3. For each such candidate:
-   - if experiment is now terminal: aggregate and persist trial.
+   - if experiment is now terminal: aggregate and persist trial result.
    - if experiment still running: continue waiting.
    - if experiment missing: mark trial failed with `error="orphaned_experiment"`.
-4. Continue orchestrator loop from next unresolved step.
+4. Build `RunContext` with `completed_trials` populated from all recovered trial results.
+5. Call `optimizer.run(context, ...)` — the optimizer sees the pre-existing history and continues from where it left off.
+
+How the optimizer handles recovery:
+
+1. The optimizer receives `context.completed_trials` which contains all previously completed trials.
+2. The optimizer uses this to skip already-evaluated candidates and resume its algorithm loop.
+3. The framework does not attempt to restore optimizer-internal state (generations, populations, etc.) — the optimizer is responsible for reconstructing its algorithm state from the completed trial history.
 
 Idempotency:
 
@@ -727,15 +880,15 @@ Where duplicate event handling matters:
 Key constraints:
 
 1. Validation and orchestration CPU inside framework.
-2. Experiment-runner throughput limits.
-3. Remote execution target limits (rate limiting, throttling, queue saturation).
+2. Experiment execution throughput limits (Opik SDK + backend).
+3. Remote agent limits (rate limiting, throttling, queue saturation).
 
 Concurrency strategy:
 
 1. Validate proposals in parallel.
-2. Bound concurrent experiment triggers.
+2. Bound concurrent experiment executions.
 3. Aggregate completions asynchronously in batches.
-4. Apply backpressure when remote execution is throttled.
+4. Apply backpressure when remote agents are throttled.
 
 Tradeoffs:
 
@@ -757,11 +910,36 @@ Persistence style:
 
 ---
 
-### 11. Frontend Realtime Communication
+### 11. Deployment and Runtime Model
 
-This section defines what the backend reports to the UI during optimization execution, when it is reported, and how it is delivered.
+### 11.1 Service architecture
 
-### 11.1 UI-facing events
+1. The optimizer framework is a **standalone Python service** (`opik-optimizer`).
+2. It is deployed alongside the Opik backend as a separate service.
+3. It exposes an HTTP API for triggering and managing optimizations.
+4. It communicates with the Opik backend exclusively through the **Opik Python SDK** (REST API calls).
+5. Initially placed in the monorepo under `apps/opik-optimizer`; may be extracted to a separate repository later.
+
+### 11.2 Lifecycle
+
+1. Optimization is triggered via API call (e.g. from a UI button click).
+2. The service can run **multiple optimizations concurrently**, each managed by its own orchestrator instance.
+3. On service startup, the framework performs **self-recovery**: it queries for optimizations in `running`/`initialized` status and resumes them automatically (see section 9.3).
+4. The service serves SSE streams for realtime UI updates and snapshot endpoints for initial page loads.
+
+### 11.3 Concurrency model
+
+1. Each optimization runs in its own async task / thread.
+2. Within an optimization, the evaluation adapter manages experiment concurrency (see section 6.6).
+3. The service applies global concurrency limits to prevent overloading experiment execution and remote agents.
+
+---
+
+### 12. Frontend Realtime Communication
+
+This section defines what the framework reports to the UI during optimization execution, when it is reported, and how it is delivered.
+
+### 12.1 UI-facing events
 
 1. `run_status_changed`
    - When emitted: optimization status changes (`initialized/running/completed/failed/cancelled`).
@@ -784,13 +962,13 @@ Notes:
 1. `candidate_validated` can remain internal unless product explicitly adds a rejected-candidates panel.
 2. Large payloads are not pushed in events; UI fetches heavy details on demand.
 
-### 11.2 Emission timing rules
+### 12.2 Emission timing rules
 
 1. Emit events only after persistence succeeds.
 2. Emit on state transitions, not on every internal method call.
 3. If no transition occurs for a long period, emit periodic `progress_changed` heartbeat updates (optional).
 
-### 11.3 Transport
+### 12.3 Transport
 
 Recommended transport:
 
@@ -806,7 +984,7 @@ Why SSE:
 1. This flow is server-to-client only.
 2. Simpler operational model than WebSocket for this use case.
 
-### 11.4 Current behavior vs target behavior
+### 12.4 Current behavior vs target behavior
 
 1. Current optimization compare page behavior is polling-based (periodic refetch).
 2. Target behavior is SSE + snapshot + polling fallback.
