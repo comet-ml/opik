@@ -23,7 +23,9 @@ public final class OpenInferenceMappingRules {
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("llm.token_count.").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build());
+                    .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("session.id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.THREAD_ID).build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

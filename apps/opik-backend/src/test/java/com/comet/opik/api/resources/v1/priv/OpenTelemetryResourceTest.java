@@ -532,6 +532,60 @@ class OpenTelemetryResourceTest {
         }
 
         @Test
+        @DisplayName("test session.id maps to threadId in OpenTelemetry (OpenInference/Agno)")
+        void testSessionIdSupport() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+            String sessionId = "session-agno-xyz";
+
+            var rootSpan = Span.newBuilder()
+                    .setName("root span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("session.id")
+                            .setValue(AnyValue.newBuilder().setStringValue(sessionId))
+                            .build())
+                    .build();
+
+            var childSpan = Span.newBuilder()
+                    .setName("child span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 500) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(rootSpan, childSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            Trace trace = traceResourceClient.getById(expectedOpikTraceId, workspaceName, okApikey);
+            assertThat(trace.id()).isEqualTo(expectedOpikTraceId);
+            assertThat(trace.threadId()).isEqualTo(sessionId);
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            var rootSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(rootSpanFromDb.metadata().get("thread_id").asText()).isEqualTo(sessionId);
+        }
+
+        @Test
         @DisplayName("test integer thread_id is properly stored in OpenTelemetry traces")
         void testIntegerThreadIdSupport() {
             String workspaceName = UUID.randomUUID().toString();
