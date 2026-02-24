@@ -4,8 +4,6 @@ import logging
 import random
 from typing import Any, cast
 from collections.abc import Callable
-import sys
-import warnings
 
 import numpy as np
 
@@ -212,14 +210,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
-        # Initialize base class first
-        if sys.version_info >= (3, 13):
-            warnings.warn(
-                "Python 3.13 is not officially supported (python_requires <3.13). "
-                "You may see asyncio teardown warnings. Prefer Python 3.12.",
-                RuntimeWarning,
-            )
-
         self._ensure_deap_available()
 
         super().__init__(
