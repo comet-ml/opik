@@ -8,6 +8,8 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 class TraceThreadUpdate(UniversalBaseModel):
     tags: typing.Optional[typing.List[str]] = None
+    tags_to_add: typing.Optional[typing.List[str]] = None
+    tags_to_remove: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

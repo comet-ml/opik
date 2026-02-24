@@ -16,6 +16,10 @@ export interface DatasetItemUpdate {
     description?: string;
     /** Tags */
     tags?: string[];
+    /** Tags to add */
+    tagsToAdd?: string[];
+    /** Tags to remove */
+    tagsToRemove?: string[];
     /** Evaluators */
     evaluators?: OpikApi.EvaluatorItem[];
     executionPolicy?: OpikApi.ExecutionPolicy;
