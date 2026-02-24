@@ -69,7 +69,11 @@ public class CostService {
      * Fixes issue #4114: Handles model name variations like "claude-3.5-sonnet"
      * by normalizing to "claude-3-5-sonnet" format used in pricing database.
      *
-     * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet")
+     * Fixes issue #5130: Handles Bedrock model names with colon suffix (e.g.,
+     * "anthropic.claude-opus-4-6-v1:0") by stripping the suffix to match
+     * entries without it.
+     *
+     * @param modelName The model name (may contain dots or colon suffix)
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
@@ -94,6 +98,34 @@ public class CostService {
                 log.debug("Found model price using normalized name. Original: '{}', Normalized: '{}'",
                         modelName, normalizedModelName);
                 return normalizedMatch;
+            }
+        }
+
+        // Try removing colon suffix (e.g., ":0") for Bedrock model name compatibility.
+        // AWS Bedrock changed the naming convention for Claude Opus 4.6, removing the
+        // trailing ":0" that was present in all prior model names. This fallback ensures
+        // pricing lookups succeed regardless of whether the suffix is present.
+        int colonIndex = modelName.indexOf(':');
+        if (colonIndex > 0) {
+            String withoutSuffix = modelName.substring(0, colonIndex);
+            // Try exact match without suffix
+            String withoutSuffixKey = createModelProviderKey(withoutSuffix, provider);
+            ModelPrice withoutSuffixMatch = modelProviderPrices.get(withoutSuffixKey);
+            if (withoutSuffixMatch != null) {
+                log.debug("Found model price by removing colon suffix. Original: '{}', Without suffix: '{}'",
+                        modelName, withoutSuffix);
+                return withoutSuffixMatch;
+            }
+            // Try normalized match without suffix
+            String normalizedWithoutSuffix = normalizeModelName(withoutSuffix);
+            if (!normalizedWithoutSuffix.equalsIgnoreCase(withoutSuffix)) {
+                String normalizedWithoutSuffixKey = createModelProviderKey(normalizedWithoutSuffix, provider);
+                ModelPrice normalizedWithoutSuffixMatch = modelProviderPrices.get(normalizedWithoutSuffixKey);
+                if (normalizedWithoutSuffixMatch != null) {
+                    log.debug("Found model price by removing colon suffix and normalizing. Original: '{}', Resolved: '{}'",
+                            modelName, normalizedWithoutSuffix);
+                    return normalizedWithoutSuffixMatch;
+                }
             }
         }
 
