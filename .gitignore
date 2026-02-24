@@ -106,4 +106,4 @@ response.txt
 *~
 
 # Generated diagrams (local artifacts from /share-diagram command)
-diagrams/
+/diagrams/

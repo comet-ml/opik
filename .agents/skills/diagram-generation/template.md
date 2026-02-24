@@ -103,7 +103,7 @@ Use this as the base structure for generating diagrams. Adapt sections based on 
 
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 <script>
 async function copyAsImage(btn) {
   btn.textContent = 'Rendering...';
@@ -115,6 +115,7 @@ async function copyAsImage(btn) {
       useCORS: true,
     });
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    if (!blob) throw new Error('Canvas toBlob returned null');
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     btn.textContent = 'Copied!';
     btn.classList.add('copied');

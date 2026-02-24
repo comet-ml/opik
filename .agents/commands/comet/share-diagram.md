@@ -31,8 +31,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check Jira MCP**: Test availability by attempting to fetch user info
-  > If unavailable: "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."
-  > Stop here.
+  > If unavailable: warn but continue — diagram can be generated from code diff alone without Jira context.
 - **Check GitHub MCP**: Test availability by attempting to fetch repository info for `comet-ml/opik`
   > If unavailable: warn but continue — diagram can be generated from local git diff alone.
 - **Check git repository**: Verify we're in a git repo with commits.

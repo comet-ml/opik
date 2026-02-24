@@ -34,7 +34,7 @@
 ```html
 <div class="flow">
   <div class="box client">Source</div>
-  <div class="arrow arr-r green">→</div>
+  <div class="arrow green">→</div>
   <div class="box layer"><b>Component</b><br>detail</div>
 </div>
 ```
@@ -118,7 +118,7 @@
 
 ```html
 <div class="guard">
-  <div class="guard-icon guard-green">1</div>
+  <div class="guard-icon">1</div>
   Guard description
 </div>
 ```
