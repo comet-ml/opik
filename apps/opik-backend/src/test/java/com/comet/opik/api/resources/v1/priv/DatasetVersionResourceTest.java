@@ -4442,8 +4442,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: clearDescription removes item description via applyChanges")
-        void applyChanges__whenClearDescription__thenDescriptionIsCleared() {
+        @DisplayName("Success: empty string description clears item description via applyChanges")
+        void applyChanges__whenEmptyDescription__thenDescriptionIsCleared() {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             var originalDescription = "Description to clear " + UUID.randomUUID();
@@ -4472,7 +4472,7 @@ class DatasetVersionResourceTest {
 
             var editedItem = DatasetItemEdit.builder()
                     .id(v1Items.getFirst().id())
-                    .clearDescription(true)
+                    .description("")
                     .build();
 
             var changes = DatasetItemChanges.builder()
@@ -4491,8 +4491,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: clearDescription removes item description via batch update")
-        void batchUpdate__whenClearDescription__thenDescriptionIsCleared() {
+        @DisplayName("Success: empty string description clears item description via batch update")
+        void batchUpdate__whenEmptyDescription__thenDescriptionIsCleared() {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             var originalDescription = "Batch description to clear " + UUID.randomUUID();
@@ -4519,7 +4519,7 @@ class DatasetVersionResourceTest {
             var batchUpdate = DatasetItemBatchUpdate.builder()
                     .ids(Set.of(v1Items.getFirst().id()))
                     .update(DatasetItemUpdate.builder()
-                            .clearDescription(true)
+                            .description("")
                             .build())
                     .build();
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
