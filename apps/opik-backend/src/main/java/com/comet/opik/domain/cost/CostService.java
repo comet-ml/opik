@@ -15,6 +15,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -34,6 +35,7 @@ public class CostService {
             "groq", "groq");
     public static final String MODEL_PRICES_FILE = "model_prices_and_context_window.json";
     private static final String BEDROCK_PROVIDER = "bedrock";
+    private static final String DATE_SUFFIX_PATTERN = "-\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$";
     private static final Map<String, BiFunction<ModelPrice, Map<String, Integer>, BigDecimal>> PROVIDERS_CACHE_COST_CALCULATOR = Map
             .of("anthropic", SpanCostCalculator::textGenerationWithCacheCostAnthropic,
                     "openai", SpanCostCalculator::textGenerationWithCacheCostOpenAI,
@@ -69,6 +71,9 @@ public class CostService {
      * Fixes issue #4114: Handles model name variations like "claude-3.5-sonnet"
      * by normalizing to "claude-3-5-sonnet" format used in pricing database.
      *
+     * Fixes issue #5018: Handles model names with date suffixes like "gpt-5.2-2025-12-17"
+     * by stripping the date suffix and falling back to the base model name.
+     *
      * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet")
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
@@ -97,6 +102,32 @@ public class CostService {
             }
         }
 
+        // Try stripping date suffix from original name with dots preserved (e.g., "gpt-5.2-2025-12-17" -> "gpt-5.2")
+        String baseOriginalModelName = stripDateSuffix(modelName);
+        if (!baseOriginalModelName.equalsIgnoreCase(modelName)) {
+            String normalizedKey = createModelProviderKey(baseOriginalModelName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug(
+                        "Found model price using original base name after stripping date suffix. Original: '{}', Base: '{}'",
+                        modelName, baseOriginalModelName);
+                return normalizedMatch;
+            }
+        }
+
+        // Try stripping date suffix from normalized name (e.g., "gpt-5-2-2025-12-17" -> "gpt-5-2")
+        String baseNormalizedModelName = stripDateSuffix(normalizedModelName);
+        if (!baseNormalizedModelName.equalsIgnoreCase(normalizedModelName)) {
+            String normalizedKey = createModelProviderKey(baseNormalizedModelName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug(
+                        "Found model price using normalized base name after stripping date suffix. Original: '{}', Base: '{}'",
+                        modelName, baseNormalizedModelName);
+                return normalizedMatch;
+            }
+        }
+
         log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
         return DEFAULT_COST;
     }
@@ -111,7 +142,21 @@ public class CostService {
      * @return Normalized model name with dots replaced by hyphens and lowercase
      */
     private static String normalizeModelName(String modelName) {
-        return modelName.replace('.', '-').toLowerCase(java.util.Locale.ROOT);
+        return modelName.replace('.', '-').toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Strips date suffixes from model names to enable fallback pricing lookup.
+     * This handles cases where providers return dated model names (e.g., "gpt-5.2-2025-12-17")
+     * but the pricing database only has the base model name (e.g., "gpt-5.2").
+     *
+     * Date patterns recognized: YYYY-MM-DD (e.g., "2025-12-17") at the end of the model name.
+     *
+     * @param modelName The model name
+     * @return Lowercase model name with date suffix removed if present, otherwise lowercase original name
+     */
+    private static String stripDateSuffix(String modelName) {
+        return modelName.toLowerCase(Locale.ROOT).replaceFirst(DATE_SUFFIX_PATTERN, "");
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {
