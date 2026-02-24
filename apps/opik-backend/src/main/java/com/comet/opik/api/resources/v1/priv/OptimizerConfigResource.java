@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.OptimizerConfigCreate;
+import com.comet.opik.api.OptimizerConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.OptimizerBlueprint;
 import com.comet.opik.domain.OptimizerConfigService;
@@ -58,16 +59,11 @@ public class OptimizerConfigResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = OptimizerConfigCreate.class))) @Valid OptimizerConfigCreate request,
             @Context UriInfo uriInfo) {
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        String userName = requestContext.get().getUserName();
-
-        log.info("Creating blueprint for project '{}' in workspace '{}'",
-                request.projectName(), workspaceId);
+        log.info("Creating blueprint for project '{}'", request.projectName());
 
         OptimizerBlueprint createdBlueprint = optimizerConfigService.createOrUpdateConfig(request);
 
-        log.info("Created blueprint '{}' for project '{}' in workspace '{}'",
-                createdBlueprint.id(), request.projectName(), workspaceId);
+        log.info("Created blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
         URI location = uriInfo.getBaseUriBuilder()
                 .path("v1/private/optimizer-configs/blueprint/{blueprint_id}")
@@ -155,5 +151,23 @@ public class OptimizerConfigResource {
         OptimizerBlueprint delta = optimizerConfigService.getDeltaById(blueprintId);
 
         return Response.ok(delta).build();
+    }
+
+    @POST
+    @Path("/envs")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(operationId = "createOrUpdateEnvs", summary = "Create or update environments", description = "Creates or updates environment-to-blueprint mappings", responses = {
+            @ApiResponse(responseCode = "204", description = "Environments updated"),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response createOrUpdateEnvs(
+            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizerConfigEnvUpdate.class))) @Valid OptimizerConfigEnvUpdate request) {
+
+        log.info("Creating or updating environments for project '{}'", request.projectId());
+
+        optimizerConfigService.createOrUpdateEnvs(request);
+
+        return Response.noContent().build();
     }
 }

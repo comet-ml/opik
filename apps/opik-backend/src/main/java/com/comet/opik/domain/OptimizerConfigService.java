@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.OptimizerConfigCreate;
+import com.comet.opik.api.OptimizerConfigEnvUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,6 +39,8 @@ public interface OptimizerConfigService {
     OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
 
     OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId);
+
+    void createOrUpdateEnvs(@NonNull OptimizerConfigEnvUpdate request);
 }
 
 @Slf4j
@@ -276,6 +280,55 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             return blueprint.toBuilder()
                     .values(deltaValues)
                     .build();
+        });
+    }
+
+    @Override
+    public void createOrUpdateEnvs(@NonNull OptimizerConfigEnvUpdate request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        UUID projectId = request.projectId();
+
+        log.info("Creating or updating {} environments for project '{}' in workspace '{}'",
+                request.envs().size(), projectId, workspaceId);
+
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+
+            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            if (config == null) {
+                throw new NotFoundException("No configuration found for project '" + projectId + "'");
+            }
+
+            List<String> envNames = request.envs().stream()
+                    .map(OptimizerConfigEnv::envName)
+                    .toList();
+
+            List<OptimizerConfigEnv> existingEnvs = dao.getEnvsByNames(workspaceId, projectId, envNames);
+            Set<String> existingEnvNames = existingEnvs.stream()
+                    .map(OptimizerConfigEnv::envName)
+                    .collect(Collectors.toSet());
+
+            List<OptimizerConfigEnv> newEnvs = request.envs().stream()
+                    .filter(env -> !existingEnvNames.contains(env.envName()))
+                    .map(env -> env.toBuilder().id(idGenerator.generateId()).build())
+                    .toList();
+
+            List<OptimizerConfigEnv> envsToUpdate = request.envs().stream()
+                    .filter(env -> existingEnvNames.contains(env.envName()))
+                    .toList();
+
+            if (!newEnvs.isEmpty()) {
+                log.info("Inserting {} new environments", newEnvs.size());
+                dao.batchInsertEnvs(workspaceId, projectId, config.id(), userName, userName, newEnvs);
+            }
+
+            if (!envsToUpdate.isEmpty()) {
+                log.info("Updating {} existing environments", envsToUpdate.size());
+                dao.batchUpdateEnvs(workspaceId, projectId, userName, envsToUpdate);
+            }
+
+            return null;
         });
     }
 

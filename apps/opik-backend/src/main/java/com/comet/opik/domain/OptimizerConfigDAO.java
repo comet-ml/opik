@@ -22,6 +22,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(OptimizerConfig.class)
 @RegisterConstructorMapper(OptimizerBlueprint.class)
 @RegisterConstructorMapper(OptimizerConfigValue.class)
+@RegisterConstructorMapper(OptimizerConfigEnv.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(ValueTypeArgumentFactory.class)
 @RegisterColumnMapper(ValueTypeColumnMapper.class)
@@ -171,27 +172,57 @@ interface OptimizerConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("env_name") String envName);
 
-    @SqlUpdate("INSERT INTO optimizer_config_envs (id, workspace_id, project_id, config_id, env_name, blueprint_id, created_by, last_updated_by) "
+    @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
             +
-            "VALUES (:id, :workspace_id, :project_id, :config_id, :env_name, :blueprint_id, :created_by, :last_updated_by)")
-    void insertEnv(
-            @Bind("id") UUID id,
+            "FROM optimizer_config_envs " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name IN (<env_names>)")
+    List<OptimizerConfigEnv> getEnvsByNames(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @BindList("env_names") List<String> envNames);
+
+    @SqlBatch("""
+            INSERT INTO optimizer_config_envs (
+                id,
+                workspace_id,
+                project_id,
+                config_id,
+                env_name,
+                blueprint_id,
+                created_by,
+                last_updated_by
+            )
+            VALUES (
+                :bean.id,
+                :workspace_id,
+                :project_id,
+                :config_id,
+                :bean.envName,
+                :bean.blueprintId,
+                :created_by,
+                :last_updated_by
+            )
+            """)
+    void batchInsertEnvs(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("config_id") UUID configId,
-            @Bind("env_name") String envName,
-            @Bind("blueprint_id") UUID blueprintId,
             @Bind("created_by") String createdBy,
-            @Bind("last_updated_by") String lastUpdatedBy);
+            @Bind("last_updated_by") String lastUpdatedBy,
+            @BindMethods("bean") List<OptimizerConfigEnv> envs);
 
-    @SqlUpdate("UPDATE optimizer_config_envs " +
-            "SET blueprint_id = :blueprint_id, last_updated_by = :last_updated_by, last_updated_at = CURRENT_TIMESTAMP(6) "
-            +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
-    void updateEnv(
+    @SqlBatch("""
+            UPDATE optimizer_config_envs
+            SET blueprint_id = :bean.blueprintId,
+                last_updated_by = :last_updated_by,
+                last_updated_at = CURRENT_TIMESTAMP(6)
+            WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND env_name = :bean.envName
+            """)
+    void batchUpdateEnvs(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
-            @Bind("env_name") String envName,
-            @Bind("blueprint_id") UUID blueprintId,
-            @Bind("last_updated_by") String lastUpdatedBy);
+            @Bind("last_updated_by") String lastUpdatedBy,
+            @BindMethods("bean") List<OptimizerConfigEnv> envs);
 }
