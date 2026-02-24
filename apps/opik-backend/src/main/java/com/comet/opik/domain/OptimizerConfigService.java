@@ -8,15 +8,19 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -26,11 +30,11 @@ public interface OptimizerConfigService {
 
     OptimizerBlueprint createOrUpdateConfig(@NonNull OptimizerConfigCreate request);
 
-    OptimizerBlueprint getLatestBlueprint(@NonNull UUID configId);
+    OptimizerBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId);
 
-    OptimizerBlueprint getBlueprintById(@NonNull UUID configId, @NonNull UUID blueprintId);
+    OptimizerBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId);
 
-    OptimizerBlueprint getBlueprintByTag(@NonNull UUID configId, @NonNull String tag);
+    OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
 }
 
 @Slf4j
@@ -84,7 +88,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             String workspaceId,
             String userName) {
 
-        OptimizerConfig existingConfig = dao.getConfigByWorkspaceId(workspaceId);
+        OptimizerConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
 
         if (existingConfig != null) {
             return existingConfig.id();
@@ -92,7 +96,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
 
         UUID configId = Objects.requireNonNullElseGet(request.id(), idGenerator::generateId);
 
-        log.info("Creating new config '{}' for workspace '{}'", configId, workspaceId);
+        log.info("Creating new config '{}' for project '{}' in workspace '{}'", configId, projectId, workspaceId);
 
         dao.insertConfig(configId, workspaceId, projectId, userName, userName);
 
@@ -160,69 +164,122 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint getLatestBlueprint(@NonNull UUID configId) {
+    public OptimizerBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving latest blueprint for config '{}' in workspace '{}'", configId, workspaceId);
+        log.info("Retrieving latest blueprint for project '{}' in workspace '{}'", projectId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
             OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
-            return getBlueprintWithDetails(dao, configId, workspaceId, null);
+
+            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            if (config == null) {
+                throw new NotFoundException("No configuration found for project '" + projectId + "'");
+            }
+
+            return getBlueprintWithDetails(dao, projectId, workspaceId, null, maskId);
         });
     }
 
     @Override
-    public OptimizerBlueprint getBlueprintById(@NonNull UUID configId, @NonNull UUID blueprintId) {
+    public OptimizerBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving blueprint '{}' for config '{}' in workspace '{}'", blueprintId, configId, workspaceId);
+        log.info("Retrieving blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
             OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
-            return getBlueprintWithDetails(dao, configId, workspaceId, blueprintId);
+
+            UUID projectId = dao.getProjectIdByBlueprintId(workspaceId, blueprintId);
+            if (projectId == null) {
+                throw new NotFoundException("Blueprint '" + blueprintId + "' not found");
+            }
+
+            return getBlueprintWithDetails(dao, projectId, workspaceId, blueprintId, maskId);
         });
     }
 
     @Override
-    public OptimizerBlueprint getBlueprintByTag(@NonNull UUID configId, @NonNull String tag) {
+    public OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Retrieving blueprint by tag '{}' for config '{}' in workspace '{}'", tag, configId, workspaceId);
+        log.info("Retrieving blueprint by environment '{}' for project '{}' in workspace '{}'", envName, projectId,
+                workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
             OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
 
-            UUID blueprintId = dao.getBlueprintIdByEnvName(workspaceId, configId, tag);
+            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            if (config == null) {
+                throw new NotFoundException("No configuration found for project '" + projectId + "'");
+            }
 
-            Preconditions.checkArgument(blueprintId != null,
-                    "No blueprint found for tag '%s' in config '%s'", tag, configId);
+            UUID blueprintId = dao.getBlueprintIdByEnvName(workspaceId, projectId, envName);
+            if (blueprintId == null) {
+                throw new NotFoundException("No blueprint found for environment '" + envName + "'");
+            }
 
-            return getBlueprintWithDetails(dao, configId, workspaceId, blueprintId);
+            return getBlueprintWithDetails(dao, projectId, workspaceId, blueprintId, maskId);
         });
     }
 
     private OptimizerBlueprint getBlueprintWithDetails(
             OptimizerConfigDAO dao,
-            UUID configId,
+            UUID projectId,
             String workspaceId,
-            UUID blueprintId) {
+            UUID blueprintId,
+            UUID maskId) {
 
         OptimizerBlueprint blueprint = blueprintId != null
-                ? dao.getBlueprintById(workspaceId, configId, blueprintId)
-                : dao.getLatestBlueprint(workspaceId, configId);
+                ? dao.getBlueprintById(workspaceId, projectId, blueprintId)
+                : dao.getLatestBlueprint(workspaceId, projectId);
 
-        Preconditions.checkArgument(blueprint != null,
-                "Blueprint not found for config '%s'", configId);
+        if (blueprint == null) {
+            throw new NotFoundException("Blueprint not found");
+        }
 
-        java.util.List<OptimizerConfigValue> values = dao.getValuesByBlueprintId(
-                workspaceId, configId, blueprint.id());
+        List<OptimizerConfigValue> values = dao.getValuesByBlueprintId(
+                workspaceId, projectId, blueprint.id());
 
-        java.util.List<String> tags = dao.getTagsByBlueprintId(
-                workspaceId, configId, blueprint.id());
+        if (maskId != null) {
+            values = applyMask(dao, workspaceId, projectId, maskId, values);
+        }
+
+        List<String> tags = dao.getTagsByBlueprintId(
+                workspaceId, projectId, blueprint.id());
 
         return blueprint.toBuilder()
                 .values(values)
                 .tags(tags)
                 .build();
+    }
+
+    private List<OptimizerConfigValue> applyMask(
+            OptimizerConfigDAO dao,
+            String workspaceId,
+            UUID projectId,
+            UUID maskId,
+            List<OptimizerConfigValue> blueprintValues) {
+
+        OptimizerBlueprint mask = dao.getBlueprintById(workspaceId, projectId, maskId);
+        if (mask == null) {
+            throw new NotFoundException("Mask blueprint '" + maskId + "' not found");
+        }
+        Preconditions.checkArgument(mask.type() == OptimizerBlueprint.BlueprintType.MASK,
+                "Blueprint '%s' is not a mask", maskId);
+
+        List<OptimizerConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(
+                workspaceId, projectId, maskId);
+
+        Map<String, OptimizerConfigValue> valueMap = blueprintValues.stream()
+                .collect(Collectors.toMap(
+                        OptimizerConfigValue::key,
+                        v -> v));
+
+        for (OptimizerConfigValue maskValue : maskDelta) {
+            valueMap.put(maskValue.key(), maskValue);
+        }
+
+        return new ArrayList<>(valueMap.values());
     }
 }

@@ -34,6 +34,19 @@ interface OptimizerConfigDAO {
             "WHERE workspace_id = :workspace_id")
     OptimizerConfig getConfigByWorkspaceId(@Bind("workspace_id") String workspaceId);
 
+    @SqlQuery("SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at " +
+            "FROM optimizer_config " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id")
+    OptimizerConfig getConfigByProjectId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId);
+
+    @SqlQuery("SELECT config_id FROM optimizer_blueprint " +
+            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
+    UUID getConfigIdByBlueprintId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("blueprint_id") UUID blueprintId);
+
     @SqlUpdate("INSERT INTO optimizer_config (id, workspace_id, project_id, created_by, last_updated_by) " +
             "VALUES (:id, :workspace_id, :project_id, :created_by, :last_updated_by)")
     void insertConfig(
@@ -99,50 +112,64 @@ interface OptimizerConfigDAO {
 
     @SqlQuery("SELECT id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM optimizer_blueprint " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
             "ORDER BY created_at DESC LIMIT 1")
     OptimizerBlueprint getLatestBlueprint(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId);
+            @Bind("project_id") UUID projectId);
 
     @SqlQuery("SELECT id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM optimizer_blueprint " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id AND id = :blueprint_id")
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :blueprint_id")
     OptimizerBlueprint getBlueprintById(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
+            @Bind("blueprint_id") UUID blueprintId);
+
+    @SqlQuery("SELECT project_id FROM optimizer_blueprint " +
+            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
+    UUID getProjectIdByBlueprintId(
+            @Bind("workspace_id") String workspaceId,
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("SELECT blueprint_id FROM optimizer_config_envs " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id AND env_name = :env_name")
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
     UUID getBlueprintIdByEnvName(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
             @Bind("env_name") String envName);
 
     @SqlQuery("SELECT `key`, value, type FROM optimizer_config_values " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id " +
-            "AND valid_from_blueprint_id = :blueprint_id " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
+            "AND valid_from_blueprint_id <= :blueprint_id " +
             "AND (valid_to_blueprint_id IS NULL OR valid_to_blueprint_id > :blueprint_id)")
     java.util.List<OptimizerConfigValue> getValuesByBlueprintId(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
+            @Bind("blueprint_id") UUID blueprintId);
+
+    @SqlQuery("SELECT `key`, value, type FROM optimizer_config_values " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
+            "AND valid_from_blueprint_id = :blueprint_id")
+    List<OptimizerConfigValue> getValuesDeltaByBlueprintId(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("SELECT env_name FROM optimizer_config_envs " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id AND blueprint_id = :blueprint_id")
-    java.util.List<String> getTagsByBlueprintId(
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND blueprint_id = :blueprint_id")
+    List<String> getTagsByBlueprintId(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
             +
             "FROM optimizer_config_envs " +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id AND env_name = :env_name")
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
     OptimizerConfigEnv getEnvByName(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
             @Bind("env_name") String envName);
 
     @SqlUpdate("INSERT INTO optimizer_config_envs (id, workspace_id, project_id, config_id, env_name, blueprint_id, created_by, last_updated_by) "
@@ -161,10 +188,10 @@ interface OptimizerConfigDAO {
     @SqlUpdate("UPDATE optimizer_config_envs " +
             "SET blueprint_id = :blueprint_id, last_updated_by = :last_updated_by, last_updated_at = CURRENT_TIMESTAMP(6) "
             +
-            "WHERE workspace_id = :workspace_id AND config_id = :config_id AND env_name = :env_name")
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
     void updateEnv(
             @Bind("workspace_id") String workspaceId,
-            @Bind("config_id") UUID configId,
+            @Bind("project_id") UUID projectId,
             @Bind("env_name") String envName,
             @Bind("blueprint_id") UUID blueprintId,
             @Bind("last_updated_by") String lastUpdatedBy);

@@ -79,27 +79,27 @@ public class OptimizerConfigResource {
     }
 
     @GET
-    @Path("/{config_id}/blueprint/retrieve")
+    @Path("/blueprint/retrieve")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
-    @Operation(operationId = "getLatestBlueprint", summary = "Retrieve latest blueprint", description = "Retrieves the latest blueprint for a configuration", responses = {
+    @Operation(operationId = "getLatestBlueprint", summary = "Retrieve latest blueprint", description = "Retrieves the latest blueprint for a project", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getLatestBlueprint(
-            @PathParam("config_id") UUID configId,
-            @QueryParam("maskid") UUID maskId) {
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("mask_id") UUID maskId) {
 
-        log.info("Retrieving latest blueprint for config '{}'", configId);
+        log.info("Retrieving latest blueprint for project '{}'", projectId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getLatestBlueprint(configId);
+        OptimizerBlueprint blueprint = optimizerConfigService.getLatestBlueprint(projectId, maskId);
 
         return Response.ok(blueprint).build();
     }
 
     @GET
-    @Path("/{config_id}/blueprint/{blueprint_id}")
+    @Path("/blueprint/{blueprint_id}")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
     @Operation(operationId = "getBlueprintById", summary = "Retrieve blueprint by ID", description = "Retrieves a specific blueprint by its ID", responses = {
@@ -108,34 +108,33 @@ public class OptimizerConfigResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintById(
-            @PathParam("config_id") UUID configId,
             @PathParam("blueprint_id") UUID blueprintId,
-            @QueryParam("maskid") UUID maskId) {
+            @QueryParam("mask_id") UUID maskId) {
 
-        log.info("Retrieving blueprint '{}' for config '{}'", blueprintId, configId);
+        log.info("Retrieving blueprint '{}'", blueprintId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintById(configId, blueprintId);
+        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintById(blueprintId, maskId);
 
         return Response.ok(blueprint).build();
     }
 
     @GET
-    @Path("/{config_id}/blueprint/tag/{tag}")
+    @Path("/blueprint/env/{env_name}")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
-    @Operation(operationId = "getBlueprintByTag", summary = "Retrieve blueprint by environment tag", description = "Retrieves the blueprint associated with a specific environment tag", responses = {
+    @Operation(operationId = "getBlueprintByEnv", summary = "Retrieve blueprint by environment", description = "Retrieves the blueprint associated with a specific environment", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response getBlueprintByTag(
-            @PathParam("config_id") UUID configId,
-            @PathParam("tag") String tag,
-            @QueryParam("maskid") UUID maskId) {
+    public Response getBlueprintByEnv(
+            @PathParam("env_name") String envName,
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("mask_id") UUID maskId) {
 
-        log.info("Retrieving blueprint by tag '{}' for config '{}'", tag, configId);
+        log.info("Retrieving blueprint by environment '{}' for project '{}'", envName, projectId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintByTag(configId, tag);
+        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintByEnv(projectId, envName, maskId);
 
         return Response.ok(blueprint).build();
     }
