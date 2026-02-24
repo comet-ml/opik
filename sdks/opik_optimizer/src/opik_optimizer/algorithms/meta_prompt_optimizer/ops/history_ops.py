@@ -126,8 +126,8 @@ def build_history_context(
                 score = p.get("score", float("nan"))
                 context += f"- Score {score:.4f}:\n"
 
-                if isinstance(prompt_data, list):
-                    context += display_format.format_prompt_messages(
+                if isinstance(prompt_data, (list, dict)):
+                    context += display_format.format_prompt_payload(
                         prompt_data, pretty=pretty_mode
                     )
                     context += "\n\n"

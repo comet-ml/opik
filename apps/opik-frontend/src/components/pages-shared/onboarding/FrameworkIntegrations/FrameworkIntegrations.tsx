@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import ApiKeyCard from "../ApiKeyCard/ApiKeyCard";
@@ -101,7 +101,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
           rel="noreferrer"
         >
           Explore all integrations
-          <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+          <ExternalLink className="ml-2 size-4 shrink-0" />
         </a>
       </Button>
     </>

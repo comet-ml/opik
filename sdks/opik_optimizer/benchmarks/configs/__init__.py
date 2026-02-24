@@ -1,1 +1,1 @@
-"""Benchmark manifest parsing and schemas."""
+"""Benchmark configuration data files (schemas and examples)."""

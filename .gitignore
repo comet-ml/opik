@@ -83,6 +83,9 @@ pip-log.txt
 .claude/
 .mcp.json
 CLAUDE.md
+.codex
+AGENTS.override.md
+.agents/generated/
 
 # Cursor
 .cursor
