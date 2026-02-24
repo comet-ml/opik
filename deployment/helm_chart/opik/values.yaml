@@ -89,6 +89,13 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
     backendConfigMap:
       enabled: true
     run_migration: true
@@ -194,6 +201,13 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
     backendConfigMap:
       enabled: true
     podDisruptionBudget:
@@ -402,6 +416,13 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
     backendConfigMap:
       enabled: false
     resources:
