@@ -6,9 +6,12 @@ import com.comet.opik.infrastructure.db.BlueprintTypeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
@@ -16,6 +19,9 @@ import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,6 +29,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(OptimizerBlueprint.class)
 @RegisterConstructorMapper(OptimizerConfigValue.class)
 @RegisterConstructorMapper(OptimizerConfigEnv.class)
+@RegisterRowMapper(OptimizerConfigDAO.BlueprintWithTagsRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(ValueTypeArgumentFactory.class)
 @RegisterColumnMapper(ValueTypeColumnMapper.class)
@@ -41,12 +48,6 @@ interface OptimizerConfigDAO {
     OptimizerConfig getConfigByProjectId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId);
-
-    @SqlQuery("SELECT config_id FROM optimizer_blueprint " +
-            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
-    UUID getConfigIdByBlueprintId(
-            @Bind("workspace_id") String workspaceId,
-            @Bind("blueprint_id") UUID blueprintId);
 
     @SqlUpdate("INSERT INTO optimizer_config (id, workspace_id, project_id, created_by, last_updated_by) " +
             "VALUES (:id, :workspace_id, :project_id, :created_by, :last_updated_by)")
@@ -111,7 +112,7 @@ interface OptimizerConfigDAO {
             @Bind("valid_to_blueprint_id") UUID validToBlueprintId,
             @BindList("keys") List<String> keys);
 
-    @SqlQuery("SELECT id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
+    @SqlQuery("SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM optimizer_blueprint " +
             "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
             "ORDER BY created_at DESC LIMIT 1")
@@ -158,19 +159,44 @@ interface OptimizerConfigDAO {
 
     @SqlQuery("SELECT env_name FROM optimizer_config_envs " +
             "WHERE workspace_id = :workspace_id AND project_id = :project_id AND blueprint_id = :blueprint_id")
-    List<String> getTagsByBlueprintId(
+    List<String> getEnvsByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
-            +
-            "FROM optimizer_config_envs " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
-    OptimizerConfigEnv getEnvByName(
+    @SqlQuery("""
+            SELECT
+                b.id,
+                b.project_id,
+                b.type,
+                b.description,
+                b.created_by,
+                b.created_at,
+                b.last_updated_by,
+                b.last_updated_at,
+                GROUP_CONCAT(e.env_name) as envs
+            FROM optimizer_blueprint b
+            LEFT JOIN optimizer_config_envs e
+                ON e.workspace_id = b.workspace_id
+                AND e.project_id = b.project_id
+                AND e.blueprint_id = b.id
+            WHERE b.workspace_id = :workspace_id
+                AND b.project_id = :project_id
+            GROUP BY b.id, b.project_id, b.type, b.description, b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
+            ORDER BY b.created_at DESC
+            LIMIT :limit OFFSET :offset
+            """)
+    List<OptimizerBlueprint> getBlueprintHistory(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
-            @Bind("env_name") String envName);
+            @Bind("limit") int limit,
+            @Bind("offset") int offset);
+
+    @SqlQuery("SELECT COUNT(*) FROM optimizer_blueprint " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id")
+    long countBlueprints(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId);
 
     @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
             +
@@ -225,4 +251,36 @@ interface OptimizerConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("last_updated_by") String lastUpdatedBy,
             @BindMethods("bean") List<OptimizerConfigEnv> envs);
+
+    class BlueprintWithTagsRowMapper implements RowMapper<OptimizerBlueprint> {
+
+        @Override
+        public OptimizerBlueprint map(ResultSet rs, StatementContext ctx) throws SQLException {
+            List<String> envs = null;
+            try {
+                String envsString = rs.getString("envs");
+                if (envsString != null && !envsString.isEmpty()) {
+                    envs = Arrays.asList(envsString.split(","));
+                }
+            } catch (SQLException e) {
+                // envs column doesn't exist in non-history queries
+            }
+
+            var typeMapper = ctx.findColumnMapperFor(BlueprintType.class);
+            BlueprintType type = typeMapper.isPresent() ? typeMapper.get().map(rs, "type", ctx) : null;
+
+            return OptimizerBlueprint.builder()
+                    .id(UUID.fromString(rs.getString("id")))
+                    .projectId(UUID.fromString(rs.getString("project_id")))
+                    .type(type)
+                    .description(rs.getString("description"))
+                    .envs(envs)
+                    .createdBy(rs.getString("created_by"))
+                    .createdAt(rs.getTimestamp("created_at").toInstant())
+                    .lastUpdatedBy(rs.getString("last_updated_by"))
+                    .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
+                    .values(List.of())
+                    .build();
+        }
+    }
 }

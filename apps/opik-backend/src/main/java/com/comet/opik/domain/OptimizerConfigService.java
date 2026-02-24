@@ -41,6 +41,8 @@ public interface OptimizerConfigService {
     OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId);
 
     void createOrUpdateEnvs(@NonNull OptimizerConfigEnvUpdate request);
+
+    OptimizerBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size);
 }
 
 @Slf4j
@@ -251,12 +253,12 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             values = applyMask(dao, workspaceId, projectId, maskId, values);
         }
 
-        List<String> tags = dao.getTagsByBlueprintId(
+        List<String> envs = dao.getEnvsByBlueprintId(
                 workspaceId, projectId, blueprint.id());
 
         return blueprint.toBuilder()
                 .values(values)
-                .tags(tags)
+                .envs(envs)
                 .build();
     }
 
@@ -329,6 +331,33 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             }
 
             return null;
+        });
+    }
+
+    @Override
+    public OptimizerBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieving blueprint history for project '{}', page {}, size {}", projectId, page, size);
+
+        return transactionTemplate.inTransaction(handle -> {
+            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+
+            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            if (config == null) {
+                throw new NotFoundException("No configuration found for project '" + projectId + "'");
+            }
+
+            int offset = (page - 1) * size;
+            List<OptimizerBlueprint> blueprints = dao.getBlueprintHistory(workspaceId, projectId, size, offset);
+            long total = dao.countBlueprints(workspaceId, projectId);
+
+            return OptimizerBlueprint.BlueprintPage.builder()
+                    .page(page)
+                    .size(size)
+                    .total(total)
+                    .content(blueprints)
+                    .build();
         });
     }
 

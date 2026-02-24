@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Page;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -32,7 +33,7 @@ public record OptimizerBlueprint(
                 OptimizerConfig.View.Write.class}) @NotNull BlueprintType type,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class,
                 OptimizerConfig.View.Write.class}) @Size(max = 255, message = "cannot exceed 255 characters") String description,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) List<String> tags,
+        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class}) List<String> envs,
         @JsonView({OptimizerConfig.View.Public.class,
                 OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({OptimizerConfig.View.Public.class,
@@ -43,6 +44,21 @@ public record OptimizerBlueprint(
                 OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({OptimizerConfig.View.Public.class,
                 OptimizerConfig.View.Write.class}) @Valid @NotEmpty List<OptimizerConfigValue> values){
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record BlueprintPage(
+            @JsonView({OptimizerConfig.View.History.class}) int page,
+            @JsonView({OptimizerConfig.View.History.class}) int size,
+            @JsonView({OptimizerConfig.View.History.class}) long total,
+            @JsonView({OptimizerConfig.View.History.class}) List<OptimizerBlueprint> content)
+            implements Page<OptimizerBlueprint> {
+
+        public static BlueprintPage empty(int page) {
+            return new BlueprintPage(page, 0, 0, List.of());
+        }
+    }
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

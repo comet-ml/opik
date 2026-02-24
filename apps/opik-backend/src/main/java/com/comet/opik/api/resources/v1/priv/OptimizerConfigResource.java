@@ -170,4 +170,25 @@ public class OptimizerConfigResource {
 
         return Response.noContent().build();
     }
+
+    @GET
+    @Path("/history")
+    @Produces(MediaType.APPLICATION_JSON)
+    @JsonView(com.comet.opik.domain.OptimizerConfig.View.History.class)
+    @Operation(operationId = "getBlueprintHistory", summary = "Get blueprint history", description = "Retrieves paginated blueprint history for a project", responses = {
+            @ApiResponse(responseCode = "200", description = "History retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.BlueprintPage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getBlueprintHistory(
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("page") @jakarta.validation.constraints.Min(1) @jakarta.ws.rs.DefaultValue("1") int page,
+            @QueryParam("size") @jakarta.validation.constraints.Min(1) @jakarta.ws.rs.DefaultValue("10") int size) {
+
+        log.info("Retrieving blueprint history for project '{}', page {}, size {}", projectId, page, size);
+
+        OptimizerBlueprint.BlueprintPage historyPage = optimizerConfigService.getHistory(projectId, page, size);
+
+        return Response.ok(historyPage).build();
+    }
 }
