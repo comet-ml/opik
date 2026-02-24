@@ -27,6 +27,7 @@ public record OptimizerBlueprint(
         @JsonView( {
                 OptimizerConfig.View.Public.class,
                 OptimizerConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        UUID projectId,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class,
                 OptimizerConfig.View.Write.class}) @NotNull BlueprintType type,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.History.class,

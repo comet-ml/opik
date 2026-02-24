@@ -138,4 +138,22 @@ public class OptimizerConfigResource {
 
         return Response.ok(blueprint).build();
     }
+
+    @GET
+    @Path("/delta/{blueprint_id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
+    @Operation(operationId = "getDeltaById", summary = "Retrieve delta by blueprint ID", description = "Retrieves only the changes (delta) introduced in a specific blueprint", responses = {
+            @ApiResponse(responseCode = "200", description = "Delta retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response getDeltaById(@PathParam("blueprint_id") UUID blueprintId) {
+
+        log.info("Retrieving delta for blueprint '{}'", blueprintId);
+
+        OptimizerBlueprint delta = optimizerConfigService.getDeltaById(blueprintId);
+
+        return Response.ok(delta).build();
+    }
 }

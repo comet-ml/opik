@@ -35,6 +35,8 @@ public interface OptimizerConfigService {
     OptimizerBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId);
 
     OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
+
+    OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId);
 }
 
 @Slf4j
@@ -231,7 +233,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             UUID maskId) {
 
         OptimizerBlueprint blueprint = blueprintId != null
-                ? dao.getBlueprintById(workspaceId, projectId, blueprintId)
+                ? dao.getBlueprintById(workspaceId, blueprintId)
                 : dao.getLatestBlueprint(workspaceId, projectId);
 
         if (blueprint == null) {
@@ -254,6 +256,29 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
                 .build();
     }
 
+    @Override
+    public OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieving delta for blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
+
+        return transactionTemplate.inTransaction(handle -> {
+            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+
+            OptimizerBlueprint blueprint = dao.getBlueprintById(workspaceId, blueprintId);
+            if (blueprint == null) {
+                throw new NotFoundException("Blueprint '" + blueprintId + "' not found");
+            }
+
+            List<OptimizerConfigValue> deltaValues = dao.getValuesDeltaByBlueprintId(
+                    workspaceId, blueprint.projectId(), blueprintId);
+
+            return blueprint.toBuilder()
+                    .values(deltaValues)
+                    .build();
+        });
+    }
+
     private List<OptimizerConfigValue> applyMask(
             OptimizerConfigDAO dao,
             String workspaceId,
@@ -261,7 +286,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             UUID maskId,
             List<OptimizerConfigValue> blueprintValues) {
 
-        OptimizerBlueprint mask = dao.getBlueprintById(workspaceId, projectId, maskId);
+        OptimizerBlueprint mask = dao.getBlueprintById(workspaceId, maskId);
         if (mask == null) {
             throw new NotFoundException("Mask blueprint '" + maskId + "' not found");
         }

@@ -118,12 +118,11 @@ interface OptimizerConfigDAO {
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId);
 
-    @SqlQuery("SELECT id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
+    @SqlQuery("SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM optimizer_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND id = :blueprint_id")
+            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
     OptimizerBlueprint getBlueprintById(
             @Bind("workspace_id") String workspaceId,
-            @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("SELECT project_id FROM optimizer_blueprint " +
