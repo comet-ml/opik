@@ -1,29 +1,25 @@
-import { LLMProvider, LLMProviderImplementation } from "../types";
-import { openaiProvider } from "./openai";
+import { LLMMessageFormat, LLMMessageFormatImplementation } from "../types";
+import { openaiFormat } from "./openai";
+import { langchainFormat } from "./langchain";
 
-// Registry of all providers
-const PROVIDER_REGISTRY: Record<LLMProvider, LLMProviderImplementation | null> =
-  {
-    openai: openaiProvider,
-    // Future providers - placeholders for now
-    anthropic: null,
-    google: null,
-  };
-
-/**
- * Get a provider implementation by name
- */
-export const getProvider = (
-  provider: LLMProvider,
-): LLMProviderImplementation | null => {
-  return PROVIDER_REGISTRY[provider] || null;
+const FORMAT_REGISTRY: Record<
+  LLMMessageFormat,
+  LLMMessageFormatImplementation | null
+> = {
+  openai: openaiFormat,
+  langchain: langchainFormat,
+  anthropic: null,
+  google: null,
 };
 
-/**
- * Get all registered provider implementations
- */
-export const getAllProviders = (): LLMProviderImplementation[] => {
-  return Object.values(PROVIDER_REGISTRY).filter(
-    (p): p is LLMProviderImplementation => p !== null,
+export const getFormat = (
+  format: LLMMessageFormat,
+): LLMMessageFormatImplementation | null => {
+  return FORMAT_REGISTRY[format] || null;
+};
+
+export const getAllFormats = (): LLMMessageFormatImplementation[] => {
+  return Object.values(FORMAT_REGISTRY).filter(
+    (p): p is LLMMessageFormatImplementation => p !== null,
   );
 };
