@@ -37,3 +37,16 @@ Follow the style guide in `style-guide.md` and use the HTML template in `templat
 - **New feature**: Focus on data flow, architecture, files changed
 - **Refactor**: Focus on before/after architecture, files changed
 - **Cross-component**: Show all layers with connecting flows
+
+## Reference Files
+
+- [style-guide.md](style-guide.md) — Semantic colors, box themes, section labels, flow patterns, architecture trees
+- [template.md](template.md) — Base HTML structure, copy-as-image script, section recipes
+
+## Common Gotchas
+
+- **SRI hash on CDN scripts**: The html2canvas `<script>` tag must include `integrity` and `crossorigin` attributes — see template.md for the current hash
+- **Absolute paths for Playwright screenshots**: Playwright saves relative to its own CWD, not the repo root — always use absolute paths when calling `browser_take_screenshot`
+- **Max 4 sections**: More than 4 sections makes diagrams too tall for screenshots and hard to scan visually
+- **No raw diff content**: Diagrams show high-level summaries (component names, file names, flow descriptions) — never embed verbatim diff hunks or Jira comments
+- **`toBlob` can return null**: The Canvas `toBlob` call in the copy-as-image script needs a null check — see template.md

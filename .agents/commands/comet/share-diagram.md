@@ -6,7 +6,7 @@
 
 Analyze the current branch's diff and Jira ticket context, then generate a self-contained HTML architecture diagram at `diagrams/opik-{TICKET_NUMBER}-diagram.html`.
 
-- **Execution model**: Stateless. Each invocation re-analyzes the current branch diff and Jira context, then generates a fresh diagram.
+- **Execution model**: Stateless. Each invocation re-checks tool availability (`gh` preferred, GitHub MCP fallback), re-analyzes the current branch diff and Jira context, then generates a fresh diagram.
 
 This workflow will:
 
@@ -32,8 +32,9 @@ This workflow will:
 
 - **Check Jira MCP**: Test availability by attempting to fetch user info
   > If unavailable: warn but continue — diagram can be generated from code diff alone without Jira context.
-- **Check GitHub MCP**: Test availability by attempting to fetch repository info for `comet-ml/opik`
-  > If unavailable: warn but continue — diagram can be generated from local git diff alone.
+- **Check GitHub CLI (preferred)**: Ensure `gh` is installed and authenticated (`gh auth status`)
+- **GitHub fallback path**: If `gh` is unavailable or unauthenticated, test GitHub MCP availability by fetching repository info for `comet-ml/opik`.
+  > If both are unavailable: warn but continue — diagram can be generated from local git diff alone.
 - **Check git repository**: Verify we're in a git repo with commits.
 - **Ensure `diagrams/` directory exists**: Create if missing.
 
@@ -49,9 +50,9 @@ This workflow will:
 - **Build ticket context**: Title, type, key requirements, acceptance criteria
 
 #### Code Changes
-- **Check for PR**: Use GitHub MCP to find an open PR for the current branch on `comet-ml/opik`
-  - If PR exists: use PR diff (preferred — includes review context)
-  - If no PR: use `git diff main...HEAD` for local changes
+- **Check for PR**: Use `gh pr view --json number,title,url` (preferred) or GitHub MCP to find an open PR for the current branch on `comet-ml/opik`
+  - If PR exists: use `gh pr diff` or GitHub MCP PR diff (preferred — includes review context)
+  - If no PR or no GitHub tool available: use `git diff main...HEAD` for local changes
 - **Parse diff**: Identify files changed, grouped by component layer:
   - **API layer**: Resources, endpoints, request/response models
   - **Service layer**: Business logic, services
@@ -150,7 +151,9 @@ If Playwright MCP is **not available**, skip this step and fall back to showing 
 - Ticket not found: Ask user to verify ticket number
 - No description: Generate diagram from code diff alone, note the gap
 
-### GitHub MCP Failures
+### GitHub CLI / MCP Failures
+- `gh` not installed or unauthenticated: Fall back to GitHub MCP
+- Both unavailable: Fall back to local `git diff main...HEAD`
 - No PR found: Fall back to local `git diff main...HEAD`
 - PR diff too large: Summarize by file, focus on key changes
 
