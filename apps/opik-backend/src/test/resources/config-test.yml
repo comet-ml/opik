@@ -514,9 +514,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
-  # Default: false
-  # Description: Whether or not the experiment denormalization feature is enabled
-  experimentDenormalizationEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:

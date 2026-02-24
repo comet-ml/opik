@@ -26,49 +26,49 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
     private boolean enabled = false;
 
     @Valid @NotBlank @JsonProperty
-    private String streamName;
+    private String streamName = "experiment_denormalization_stream";
 
     @Valid @NotBlank @JsonProperty
-    private String consumerGroupName;
+    private String consumerGroupName = "experiment_denormalization";
 
     @Valid @JsonProperty
-    @Min(1) private int consumerBatchSize;
+    @Min(1) private int consumerBatchSize = 100;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    private Duration poolingInterval;
+    private Duration poolingInterval = Duration.milliseconds(500);
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
-    private Duration longPollingDuration;
+    private Duration longPollingDuration = Duration.seconds(5);
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration debounceDelay;
+    private Duration debounceDelay = Duration.minutes(1);
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration jobLockTime;
+    private Duration jobLockTime = Duration.seconds(4);
 
     @Valid @JsonProperty
     @MaxDuration(value = 1, unit = TimeUnit.SECONDS)
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    private Duration jobLockWaitTime;
+    private Duration jobLockWaitTime = Duration.milliseconds(300);
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration aggregationLockTime;
+    private Duration aggregationLockTime = Duration.minutes(1);
 
     @JsonProperty
-    @Min(2) private int claimIntervalRatio;
+    @Min(2) private int claimIntervalRatio = 10;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration pendingMessageDuration;
+    private Duration pendingMessageDuration = Duration.minutes(10);
 
     @JsonProperty
-    @Min(1) @Max(10) private int maxRetries;
+    @Min(1) @Max(10) private int maxRetries = 3;
 
     @Override
     @JsonIgnore

@@ -50,7 +50,7 @@ class ExperimentAggregatesSubscriberTest {
     class Lifecycle {
 
         @Test
-        void startShouldSkipStartupWhenDisabled() {
+        void startSkipsStartupWhenDisabled() {
             config = buildConfig(false);
             subscriber = new ExperimentAggregatesSubscriber(config, redisson, experimentAggregatesService, lockService);
 
@@ -60,7 +60,7 @@ class ExperimentAggregatesSubscriberTest {
         }
 
         @Test
-        void stopShouldSkipShutdownWhenDisabled() {
+        void stopSkipsShutdownWhenDisabled() {
             config = buildConfig(false);
             subscriber = new ExperimentAggregatesSubscriber(config, redisson, experimentAggregatesService, lockService);
 

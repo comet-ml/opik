@@ -732,9 +732,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not the experiment denormalization (debounced aggregates re-computation) feature is enabled
-  experimentDenormalizationEnabled: ${TOGGLE_EXPERIMENT_DENORMALIZATION_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
