@@ -77,7 +77,9 @@ def _patch_adk_opentelemetry_tracers(
         opik_client, distributed_headers=distributed_headers
     )
 
-    adk_telemetry.tracer.start_as_current_span = _patched_adk_tracer.start_as_current_span
+    adk_telemetry.tracer.start_as_current_span = (
+        _patched_adk_tracer.start_as_current_span
+    )
     adk_telemetry.tracer.start_span = _patched_adk_tracer.start_span
 
     base_agent.tracer.start_as_current_span = _patched_adk_tracer.start_as_current_span
