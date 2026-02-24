@@ -22,6 +22,7 @@ import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
 import { PROJECT_TAB } from "@/constants/traces";
 import useDashboardsViewGuard from "@/hooks/useDashboardsViewGuard";
 import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -30,6 +31,10 @@ const TracesPage = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const {
+    permissions: { canViewDashboards },
+  } = usePermissions();
 
   const { data: project } = useProjectById(
     {
@@ -107,7 +112,7 @@ const TracesPage = () => {
       );
     }
 
-    if (view === VIEW_TYPE.DASHBOARDS) {
+    if (view === VIEW_TYPE.DASHBOARDS && canViewDashboards) {
       return <DashboardsTab projectId={projectId} />;
     }
 
