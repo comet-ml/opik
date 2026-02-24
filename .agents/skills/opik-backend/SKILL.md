@@ -47,6 +47,17 @@ users.get(users.size() - 1)
         "<if(name)> AND name like concat('%', :name, '%') <endif> ")
 ```
 
+### JSON Serialization
+```java
+// ✅ GOOD - use JsonUtils
+JsonUtils.readValue(json, MyClass.class);
+JsonUtils.writeValueAsString(obj);
+
+// ❌ BAD - do not use OBJECT_MAPPER directly
+OBJECT_MAPPER.readValue(json, MyClass.class);
+OBJECT_MAPPER.writeValueAsString(obj);
+```
+
 ### Immutable Collections
 ```java
 // ✅ GOOD

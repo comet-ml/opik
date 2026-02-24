@@ -1,5 +1,8 @@
 # Backend Testing Patterns
 
+## Test Organization
+- **One test class per production class.** Each class under test should have exactly one corresponding test class (e.g., `UserService` → `UserServiceTest`).
+
 ## Test Data with PODAM
 
 ```java

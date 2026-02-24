@@ -6,18 +6,19 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,8 +32,6 @@ import java.util.stream.Stream;
 @UtilityClass
 @Slf4j
 class OnlineScoringDataExtractor {
-
-    private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     // --- Shared types ---
 
@@ -68,8 +67,8 @@ class OnlineScoringDataExtractor {
      * @param trace     the trace to extract data from
      * @return the data map to send to the Python evaluator
      */
-    static Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, Trace trace) {
-        if (arguments != null && !arguments.isEmpty()) {
+    Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, @NonNull Trace trace) {
+        if (MapUtils.isNotEmpty(arguments)) {
             return Map.copyOf(OnlineScoringEngine.toReplacements(arguments, trace));
         }
         return toFullSectionObjectData(trace);
@@ -84,8 +83,8 @@ class OnlineScoringDataExtractor {
      * @param span      the span to extract data from
      * @return the data map to send to the Python evaluator
      */
-    static Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, Span span) {
-        if (arguments != null && !arguments.isEmpty()) {
+    Map<String, Object> preparePythonEvaluatorData(Map<String, String> arguments, @NonNull Span span) {
+        if (MapUtils.isNotEmpty(arguments)) {
             return Map.copyOf(OnlineScoringEngine.toReplacements(arguments, span));
         }
         return toFullSectionObjectData(span);
@@ -93,7 +92,7 @@ class OnlineScoringDataExtractor {
 
     // --- Full section object data extraction ---
 
-    static Map<String, Object> toFullSectionObjectData(Trace trace) {
+    Map<String, Object> toFullSectionObjectData(@NonNull Trace trace) {
         return toFullSectionObjectData(section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
@@ -101,7 +100,7 @@ class OnlineScoringDataExtractor {
         });
     }
 
-    static Map<String, Object> toFullSectionObjectData(Span span) {
+    Map<String, Object> toFullSectionObjectData(@NonNull Span span) {
         return toFullSectionObjectData(section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
@@ -109,13 +108,13 @@ class OnlineScoringDataExtractor {
         });
     }
 
-    private static Map<String, Object> toFullSectionObjectData(JsonSectionExtractor sectionExtractor) {
+    private Map<String, Object> toFullSectionObjectData(JsonSectionExtractor sectionExtractor) {
         Map<String, Object> data = new HashMap<>();
         for (TraceSection section : TraceSection.values()) {
             JsonNode jsonSection = sectionExtractor.extract(section);
             if (jsonSection != null && !jsonSection.isNull()) {
                 String key = section.prefix.substring(0, section.prefix.length() - 1);
-                data.put(key, OBJECT_MAPPER.convertValue(jsonSection, Object.class));
+                data.put(key, JsonUtils.treeToValue(jsonSection, Object.class));
             }
         }
         return Collections.unmodifiableMap(data);
@@ -130,7 +129,7 @@ class OnlineScoringDataExtractor {
      * @param templateMessages the messages to extract variables from
      * @return a set of all variable names found in the templates
      */
-    static Set<String> extractAllVariablesFromMessages(List<LlmAsJudgeMessage> templateMessages) {
+    Set<String> extractAllVariablesFromMessages(@NonNull List<LlmAsJudgeMessage> templateMessages) {
         return templateMessages.stream()
                 .flatMap(message -> {
                     if (message.isStringContent()) {
@@ -172,7 +171,8 @@ class OnlineScoringDataExtractor {
      * @param trace             the trace to extract values from
      * @return a map of variable name to extracted value
      */
-    public static Map<String, String> toReplacementsFromTemplateVariables(Set<String> templateVariables, Trace trace) {
+    Map<String, String> toReplacementsFromTemplateVariables(@NonNull Set<String> templateVariables,
+            @NonNull Trace trace) {
         return toReplacementsFromTemplateVariables(templateVariables, section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
@@ -187,7 +187,8 @@ class OnlineScoringDataExtractor {
      * @param span              the span to extract values from
      * @return a map of variable name to extracted value
      */
-    public static Map<String, String> toReplacementsFromTemplateVariables(Set<String> templateVariables, Span span) {
+    Map<String, String> toReplacementsFromTemplateVariables(@NonNull Set<String> templateVariables,
+            @NonNull Span span) {
         return toReplacementsFromTemplateVariables(templateVariables, section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
@@ -195,8 +196,8 @@ class OnlineScoringDataExtractor {
         });
     }
 
-    static Map<String, String> toReplacementsFromTemplateVariables(
-            Set<String> templateVariables, JsonSectionExtractor sectionExtractor) {
+    Map<String, String> toReplacementsFromTemplateVariables(
+            @NonNull Set<String> templateVariables, @NonNull JsonSectionExtractor sectionExtractor) {
         return templateVariables.stream()
                 .map(variableName -> {
                     var mapping = parseVariableAsPath(variableName);
@@ -229,7 +230,7 @@ class OnlineScoringDataExtractor {
      * @param variableName the variable name from the template (e.g., "input.question")
      * @return a MessageVariableMapping with the parsed section and JSON path, or null if invalid
      */
-    static MessageVariableMapping parseVariableAsPath(String variableName) {
+    MessageVariableMapping parseVariableAsPath(String variableName) {
         if (StringUtils.isBlank(variableName)) {
             return null;
         }
@@ -262,13 +263,13 @@ class OnlineScoringDataExtractor {
 
     // --- JSON extraction utilities ---
 
-    static String extractFromJson(JsonNode json, String path) {
+    String extractFromJson(@NonNull JsonNode json, @NonNull String path) {
         // Special case: if path is "$", return the entire JSON object as string
         if ("$".equals(path)) {
             try {
-                return OBJECT_MAPPER.writeValueAsString(json);
-            } catch (JsonProcessingException e) {
-                log.warn("failed to serialize entire json object, json={}", json, e);
+                return JsonUtils.writeValueAsString(json);
+            } catch (UncheckedIOException e) {
+                log.warn("failed to serialize entire json object, json='{}', error='{}'", json, e.getMessage());
                 return null;
             }
         }
@@ -277,10 +278,10 @@ class OnlineScoringDataExtractor {
         try {
             // JsonPath didn't work with JsonNode, even explicitly using
             // JacksonJsonProvider, so we convert to a Map
-            forcedObject = OBJECT_MAPPER.convertValue(json, new TypeReference<>() {
+            forcedObject = JsonUtils.convertValue(json, new TypeReference<>() {
             });
         } catch (InvalidArgumentException e) {
-            log.warn("failed to parse json, json={}", json, e);
+            log.warn("failed to parse json, json='{}', error='{}'", json, e.getMessage());
             return null;
         }
 
@@ -292,7 +293,8 @@ class OnlineScoringDataExtractor {
             var value = JsonPath.parse(forcedObject).read(path);
             return value != null ? serializeToJsonString(value) : null;
         } catch (Exception e) {
-            log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
+            log.warn("couldn't find path inside json, trying flat structure, path='{}', json='{}', error='{}'", path,
+                    json, e.getMessage());
             return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
                     .map(OnlineScoringDataExtractor::serializeToJsonString)
                     .orElseGet(() -> {
@@ -306,7 +308,7 @@ class OnlineScoringDataExtractor {
      * Serialize a value to a JSON string. For simple types (String, Number, Boolean),
      * returns the value directly as a string. For complex types (Map, List), serializes to JSON.
      */
-    private static String serializeToJsonString(Object value) {
+    private String serializeToJsonString(Object value) {
         if (value == null) {
             return null;
         }
@@ -319,9 +321,10 @@ class OnlineScoringDataExtractor {
         }
         // For complex types (Map, List, etc.), serialize to proper JSON
         try {
-            return OBJECT_MAPPER.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize value to JSON, falling back to toString(), value={}", value, e);
+            return JsonUtils.writeValueAsString(value);
+        } catch (UncheckedIOException e) {
+            log.warn("Failed to serialize value to JSON, falling back to toString(), value='{}', error='{}'", value,
+                    e.getMessage());
             return value.toString();
         }
     }

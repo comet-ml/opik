@@ -83,7 +83,8 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
             try {
                 data = OnlineScoringDataExtractor.preparePythonEvaluatorData(message.code().arguments(), span);
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for spanId '{}'", span.id());
+                userFacingLogger.error("Error preparing Python request for spanId '{}', error='{}'", span.id(),
+                        exception.getMessage());
                 throw exception;
             }
 
@@ -116,7 +117,8 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 var loggedScores = storeSpanScores(scores, span, message.userName(), message.workspaceId());
                 userFacingLogger.info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores);
             } catch (Exception exception) {
-                userFacingLogger.error("Unexpected error while storing scores for spanId '{}'", span.id());
+                userFacingLogger.error("Unexpected error while storing scores for spanId '{}', error='{}'", span.id(),
+                        exception.getMessage());
                 throw exception;
             }
         }
