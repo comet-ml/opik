@@ -4124,7 +4124,7 @@ class PromptResourceTest {
     }
 
     @Nested
-    @DisplayName("Get Prompts By Version Ids")
+    @DisplayName("Get Prompts By Commits")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptsByCommits {
 
