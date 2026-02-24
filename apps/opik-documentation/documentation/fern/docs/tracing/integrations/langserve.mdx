@@ -1,0 +1,88 @@
+---
+description: Configure LangServe host-level OpenTelemetry export for Opik with clear applicability and minimal setup guidance.
+headline: LangServe | Opik Documentation
+og:description: LangServe has no standalone OTEL bootstrap; instrument the hosting app and export to Opik.
+og:site_name: Opik Documentation
+og:title: LangServe Integration - Opik
+title: Observability for LangServe with Opik
+---
+
+[LangServe](https://github.com/langchain-ai/langserve) does not define its own standalone OpenTelemetry bootstrap. Instrumentation is configured at the host app/runtime layer (typically FastAPI + LangChain components).
+
+## When this guide applies
+
+Use this when your LangServe routes run inside a Python web app and you want request + framework spans in Opik.
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers: none by default
+        Optional headers: `projectName`, auth headers if enabled
+    </Tab>
+</Tabs>
+
+## OTEL configuration pattern for LangServe
+
+Intent:
+Configure telemetry at the LangServe host boundary so request and framework spans can be exported.
+
+Applies when:
+LangServe is mounted in an app you control (for example FastAPI).
+
+Required inputs:
+- host runtime instrumentation enabled
+- OTLP endpoint
+- OTLP headers for your deployment mode
+
+Optional inputs:
+- explicit `service.name`
+- additional framework or library instrumentors
+- route-level filtering/sampling
+
+Minimal valid setup:
+- set `OTEL_EXPORTER_OTLP_ENDPOINT`
+- set `OTEL_EXPORTER_OTLP_HEADERS`
+- enable instrumentation for your host app and LangChain stack
+
+Use canonical host/runtime setup from:
+- [OpenTelemetry FastAPI instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html)
+- [Opik LangChain integration guide](/tracing/integrations/langchain)
+
+## Validation
+
+1. Send a request through a LangServe endpoint.
+2. Confirm a root HTTP/server span is emitted from your host app.
+3. Confirm downstream LangChain/LangServe-related spans are exported and visible in Opik.
+
+## Source references
+
+- [LangServe repository](https://github.com/langchain-ai/langserve)
+- [OpenTelemetry FastAPI instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html)
+- [Opik LangChain integration guide](/tracing/integrations/langchain)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
