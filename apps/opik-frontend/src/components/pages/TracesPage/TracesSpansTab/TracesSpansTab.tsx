@@ -177,6 +177,13 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     },
   },
   {
+    id: "error_info",
+    label: "Errors",
+    statisticKey: "error_count",
+    type: COLUMN_TYPE.errors,
+    cell: ErrorCell as never,
+  },
+  {
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
@@ -249,14 +256,72 @@ const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
-  COLUMN_ID_ID,
-  "name",
+const DEFAULT_TRACES_COLUMNS: string[] = [
   "start_time",
   "input",
   "output",
+  "error_info",
   "duration",
+  "usage.total_tokens",
+  "total_estimated_cost",
+  "tags",
   COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_SPANS_COLUMNS: string[] = [
+  "start_time",
+  "input",
+  "output",
+  "error_info",
+  "name",
+  "type",
+  "duration",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "input",
+  "output",
+  "error_info",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+  "name",
+  "span_count",
+  "llm_span_count",
+  "thread_id",
+  COLUMN_EXPERIMENT_ID,
+  COLUMN_ID_ID,
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
+];
+
+const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "input",
+  "output",
+  "error_info",
+  "name",
+  "type",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+  COLUMN_ID_ID,
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
@@ -452,7 +517,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     {
       defaultValue: migrateSelectedColumns(
         `${type}-${SELECTED_COLUMNS_KEY_SUFFIX}`,
-        DEFAULT_TRACES_PAGE_COLUMNS,
+        type === TRACE_DATA_TYPE.traces
+          ? DEFAULT_TRACES_COLUMNS
+          : DEFAULT_SPANS_COLUMNS,
         [COLUMN_ID_ID, "start_time"],
       ),
     },
@@ -603,7 +670,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
     {
-      defaultValue: [],
+      defaultValue:
+        type === TRACE_DATA_TYPE.traces
+          ? DEFAULT_TRACES_COLUMNS_ORDER
+          : DEFAULT_SPANS_COLUMNS_ORDER,
     },
   );
 
@@ -871,13 +941,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           ]
         : []),
       {
-        id: "error_info",
-        label: "Errors",
-        statisticKey: "error_count",
-        type: COLUMN_TYPE.errors,
-        cell: ErrorCell as never,
-      },
-      {
         id: "created_by",
         label: "Created by",
         type: COLUMN_TYPE.string,
@@ -953,11 +1016,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
-      {
-        id: "error_info",
-        label: "Errors",
-        type: COLUMN_TYPE.errors,
-      },
       {
         id: COLUMN_METADATA_ID,
         label: "Metadata",
