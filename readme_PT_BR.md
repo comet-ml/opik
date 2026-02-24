@@ -1,6 +1,6 @@
 > Aviso: este arquivo foi traduzido automaticamente usando IA. Contribuições para melhorar a tradução são bem-vindas!
 
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a> | <a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a> | <a href="readme_RU.md">Русский</a> | <a href="readme_AR.md">العربية</a> | <a href="readme_HI.md">हिन्दी</a> | <a href="readme_TR.md">Türkçe</a></b></div>
 
 
 <h1 align="center" style="border-bottom: none">
@@ -24,7 +24,6 @@ O Opik ajuda você a construir, testar e otimizar aplicações de IA generativa 
 [![Python SDK](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 [![Build](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml/badge.svg)](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml)
-[![Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Falgora.io%2Fapi%2Fshields%2Fcomet-ml%2Fbounties%3Fstatus%3Dopen)](https://algora.io/comet-ml/bounties?status=open)
 
 <!-- [![Quick Start](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/opik_quickstart.ipynb) -->
 
@@ -47,6 +46,7 @@ O Opik ajuda você a construir, testar e otimizar aplicações de IA generativa 
 
 [![Opik platform screenshot (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
+<a id="-o-que-%C3%A9-o-opik"></a>
 ## 🚀 O que é o Opik?
 
 Opik (desenvolvido pela [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik)) é uma plataforma open-source projetada para simplificar todo o ciclo de vida de aplicações LLM. Ela capacita desenvolvedores a avaliar, testar, monitorar e otimizar seus modelos e sistemas agentes. As principais ofertas incluem:
@@ -83,6 +83,7 @@ Principais capacidades incluem:
 
 <br>
 
+<a id="%EF%B8%8F-instala%C3%A7%C3%A3o-do-servidor-opik"></a>
 ## 🛠️ Instalação do Servidor Opik
 
 Coloque seu servidor Opik em funcionamento em minutos. Escolha a opção que melhor atende às suas necessidades:
@@ -157,6 +158,7 @@ Para implantações de produção ou em maior escala, o Opik pode ser instalado 
 > [!IMPORTANT]
 > **Versão 1.7.0 — Alterações**: Verifique o [changelog](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md) para atualizações importantes e mudanças que quebram compatibilidade.
 
+<a id="-sdk-cliente-opik"></a>
 ## 💻 SDK Cliente Opik
 
 O Opik fornece um conjunto de bibliotecas cliente e uma API REST para interagir com o servidor Opik. Isso inclui SDKs para Python, TypeScript e Ruby (via OpenTelemetry), permitindo integração fluida em seus fluxos de trabalho. Para referências de API e SDK, consulte a [Documentação de Referência do Cliente Opik](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
@@ -186,6 +188,7 @@ opik configure
 
 Agora você está pronto para começar a registrar traces usando o [SDK Python](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik).
 
+<a id="-registro-de-traces-com-integra%C3%A7%C3%B5es"></a>
 ### 📝 Registro de Traces com Integrações
 
 A maneira mais fácil de registrar traces é usar uma de nossas integrações diretas. O Opik suporta uma ampla gama de frameworks, incluindo adições recentes como **Google ADK**, **Autogen**, **AG2** e **Flowise AI**:
@@ -272,6 +275,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]
 > O decorador track pode ser usado em conjunto com qualquer uma de nossas integrações e também pode ser usado para rastrear chamadas de função aninhadas.
 
+<a id="-m%C3%A9tricas-llm-como-juiz"></a>
 ### 🧑‍⚖️ Métricas LLM como Juiz
 
 O SDK Python do Opik inclui diversas métricas LLM-como-juiz para ajudá-lo a avaliar sua aplicação LLM. Saiba mais na [documentação de métricas](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik).
@@ -292,16 +296,19 @@ print(score)
 
 O Opik também inclui diversas métricas heurísticas pré-construídas, além da possibilidade de criar suas próprias. Saiba mais na [documentação de métricas](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik).
 
+<a id="-avaliando-sua-aplica%C3%A7%C3%A3o-llm"></a>
 ### 🔍 Avaliando sua Aplicação LLM
 
 O Opik permite avaliar sua aplicação LLM durante o desenvolvimento por meio de [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik) e [Experimentos](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik). O Painel Opik oferece gráficos aprimorados para experimentos e melhor manuseio de traces grandes. Você também pode executar avaliações como parte do seu pipeline CI/CD usando nossa [integração PyTest](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik).
 
+<a id="-d%C3%AA-nos-uma-estrela-no-github"></a>
 ## ⭐ Dê-nos uma estrela no GitHub
 
 Se você achar o Opik útil, considere nos dar uma estrela! Seu apoio nos ajuda a crescer nossa comunidade e continuar melhorando o produto.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
+<a id="-contribuir"></a>
 ## 🤝 Contribuir
 
 Há muitas maneiras de contribuir com o Opik:
