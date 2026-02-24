@@ -44,6 +44,9 @@ import { detectLLMMessages } from "@/components/shared/PrettyLLMMessage/llmMessa
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
+import useLoadPlayground from "@/hooks/useLoadPlayground";
+import { LLMMessage, LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
+import { generateRandomString } from "@/lib/utils";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -105,6 +108,45 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
     return hasValid && !hasInvalid;
   }, [transformedInput, transformedOutput]);
+
+  const isSpan = type !== TRACE_TYPE_FOR_TREE;
+  const showPlaygroundButton = canShowMessagesTab && isSpan;
+
+  const { loadPlayground } = useLoadPlayground();
+
+  const handleOpenInPlayground = useCallback(() => {
+    const input = transformedInput as Record<string, unknown>;
+    let rawMessages: Array<{ role: string; content: unknown }> = [];
+
+    if (Array.isArray(input)) {
+      rawMessages = input as Array<{ role: string; content: unknown }>;
+    } else if (Array.isArray(input?.messages)) {
+      rawMessages = input.messages as Array<{ role: string; content: unknown }>;
+    }
+
+    const supportedRoles = [
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+      LLM_MESSAGE_ROLE.assistant,
+    ] as string[];
+
+    const messages: LLMMessage[] = rawMessages
+      .filter((msg) => supportedRoles.includes(msg.role))
+      .map((msg) => ({
+        id: generateRandomString(),
+        role: msg.role as LLM_MESSAGE_ROLE,
+        content:
+          typeof msg.content === "string"
+            ? msg.content
+            : Array.isArray(msg.content)
+              ? (msg.content as MessageContent)
+              : "",
+      }));
+
+    if (messages.length > 0) {
+      loadPlayground({ messages });
+    }
+  }, [transformedInput, loadPlayground]);
 
   const defaultTab = canShowMessagesTab ? "messages" : "details";
 
@@ -206,6 +248,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
+                showPlaygroundButton={showPlaygroundButton}
+                onOpenInPlayground={handleOpenInPlayground}
               />
             )}
           />
