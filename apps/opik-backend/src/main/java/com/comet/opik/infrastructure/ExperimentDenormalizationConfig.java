@@ -32,7 +32,7 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
     private String consumerGroupName = "experiment_denormalization";
 
     @Valid @JsonProperty
-    @Min(1) private int consumerBatchSize = 100;
+    @Min(1) @Max(500) private int consumerBatchSize = 100;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
@@ -52,7 +52,7 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
     private Duration jobLockTime = Duration.seconds(4);
 
     @Valid @JsonProperty
-    @MaxDuration(value = 1, unit = TimeUnit.SECONDS)
+    @NotNull @MaxDuration(value = 1, unit = TimeUnit.SECONDS)
     @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     private Duration jobLockWaitTime = Duration.milliseconds(300);
 
