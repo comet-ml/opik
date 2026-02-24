@@ -56,8 +56,20 @@ When documenting a feature, cover:
 
 ## Key Files
 
-- `CHANGELOG.md` - Main changelog
+- `CHANGELOG.md` - Self-hosted deployment changelog (breaking/critical changes only)
+- `apps/opik-documentation/documentation/fern/docs/changelog/` - Main product docs changelog entries (dated `.mdx` files)
+- `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` - Agent Optimizer release changelog
+- `apps/opik-documentation/documentation/fern/docs.yml` - Docs routing/navigation source of truth for changelog surfaces
 - `.github/release-drafter.yml` - Release template
+
+## Changelog Routing Rules
+
+- Pick the changelog target by scope; do not default everything to root `CHANGELOG.md`.
+- Use `CHANGELOG.md` only for self-hosted deployment breaking/critical/security-impacting notes.
+- Use `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` for general Opik product release notes shown in `/docs/opik/changelog`.
+- Use `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` for Agent Optimizer version updates (for example `sdks/opik_optimizer` releases like `3.1.0`).
+- Liquibase `changelog.xml` files are migration manifests, not user-facing release-note changelogs.
+- If unsure where an entry belongs, confirm the surface from `apps/opik-documentation/documentation/fern/docs.yml` before editing.
 
 ## Images in documentation
 
