@@ -19,7 +19,7 @@ import { ModelConfigurationError } from "./errors";
  * @example
  * ```typescript
  * // Valid model IDs
- * const model1: SupportedModelId = "gpt-4o";
+ * const model1: SupportedModelId = "gpt-5-nano";
  * const model2: SupportedModelId = "claude-3-5-sonnet-latest";
  * const model3: SupportedModelId = "gemini-2.0-flash";
  * ```
@@ -74,7 +74,7 @@ export type AllProviderOptions =
  * @example
  * ```typescript
  * // TypeScript infers OpenAIProviderOptions
- * const options1: ProviderOptionsForModel<"gpt-4o"> = {
+ * const options1: ProviderOptionsForModel<"gpt-5-nano"> = {
  *   apiKey: "sk-...",
  *   organization: "org-123" // ✅ Valid OpenAI option
  * };
@@ -163,7 +163,7 @@ function validateApiKey(
  * Detects the provider from the model ID and creates the appropriate provider instance.
  * Uses pattern matching to automatically determine which provider to use.
  *
- * @param modelId - Model ID (e.g., "gpt-4o", "claude-3-5-sonnet-latest", "gemini-2.0-flash")
+ * @param modelId - Model ID (e.g., "gpt-5-nano", "claude-3-5-sonnet-latest", "gemini-2.0-flash")
  * @param options - Provider-specific configuration options
  * @returns Provider-specific model instance ready for use with Vercel AI SDK
  *
@@ -172,7 +172,7 @@ function validateApiKey(
  * @example
  * ```typescript
  * // OpenAI with organization
- * const openaiModel = detectProvider("gpt-4o", {
+ * const openaiModel = detectProvider("gpt-5-nano", {
  *   apiKey: "sk-...",
  *   organization: "org-123"
  * });

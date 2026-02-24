@@ -55,7 +55,11 @@ public class AnthropicMappersTest {
             assertThat(actual.model).isEqualTo(request.model());
             assertThat(actual.stream).isEqualTo(request.stream());
             assertThat(actual.temperature).isEqualTo(request.temperature());
-            assertThat(actual.topP).isEqualTo(request.topP());
+            if (request.temperature() != null) {
+                assertThat(actual.topP).isNull();
+            } else {
+                assertThat(actual.topP).isEqualTo(request.topP());
+            }
             assertThat(actual.stopSequences).isEqualTo(request.stop());
             assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()

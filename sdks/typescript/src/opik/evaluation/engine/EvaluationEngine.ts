@@ -126,6 +126,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         new ExperimentItemReferences({
           datasetItemId: datasetItem.id,
           traceId: this.rootTrace.data.id,
+          projectName: this.rootTrace.data.projectName,
         })
       );
 

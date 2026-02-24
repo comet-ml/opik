@@ -52,7 +52,7 @@ def create_optimizer_config(
         model_parameters["max_tokens"] = max_tokens
 
     base_config: dict[str, Any] = {
-        "model": "openai/gpt-4o-mini",
+        "model": "openai/gpt-5-nano",
         "model_parameters": model_parameters,
         "verbose": verbose,
         "seed": 42,

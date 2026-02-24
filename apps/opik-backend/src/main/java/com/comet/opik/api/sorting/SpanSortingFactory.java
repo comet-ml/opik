@@ -21,6 +21,7 @@ import static com.comet.opik.api.sorting.SortableFields.START_TIME;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
 import static com.comet.opik.api.sorting.SortableFields.TRACE_ID;
+import static com.comet.opik.api.sorting.SortableFields.TTFT;
 import static com.comet.opik.api.sorting.SortableFields.TYPE;
 import static com.comet.opik.api.sorting.SortableFields.USAGE;
 
@@ -40,6 +41,7 @@ public class SpanSortingFactory extends SortingFactory {
                 START_TIME,
                 END_TIME,
                 DURATION,
+                TTFT,
                 USAGE,
                 METADATA,
                 TAGS,

@@ -8,5 +8,8 @@ export interface DatasetItemWrite {
     spanId?: string;
     source: OpikApi.DatasetItemWriteSource;
     data: OpikApi.JsonNode;
+    description?: string;
     tags?: string[];
+    evaluators?: OpikApi.EvaluatorItemWrite[];
+    executionPolicy?: OpikApi.ExecutionPolicyWrite;
 }

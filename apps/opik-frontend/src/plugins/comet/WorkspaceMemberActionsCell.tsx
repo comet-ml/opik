@@ -52,7 +52,11 @@ const WorkspaceMemberActionsCell = (
   );
 
   const deleteMenuItem = (
-    <DropdownMenuItem onClick={handleDeleteClick} disabled={isInvitedByEmail}>
+    <DropdownMenuItem
+      onClick={handleDeleteClick}
+      disabled={isInvitedByEmail}
+      variant="destructive"
+    >
       <Trash className="mr-2 size-4" />
       Delete
     </DropdownMenuItem>

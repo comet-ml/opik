@@ -2,7 +2,20 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    Literal,
+    cast,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
 
 import httpx
 
@@ -26,6 +39,8 @@ from .annotation_queue import rest_operations as annotation_queue_rest_operation
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
+from .dataset import evaluation_suite
+from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
@@ -44,6 +59,7 @@ from .. import (
     rest_client_configurator,
     url_helpers,
 )
+from ..healthcheck import connection_monitor, connection_probe
 from ..message_processing import (
     messages,
     streamer_constructors,
@@ -51,6 +67,7 @@ from ..message_processing import (
 )
 from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
+from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
@@ -68,6 +85,7 @@ from ..types import (
     LLMProvider,
     SpanType,
 )
+from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -181,23 +199,51 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
+        file_uploader = upload_manager.FileUploadManager(
+            rest_client=self._rest_client,
+            httpx_client=self._httpx_client,
+            worker_count=self._config.file_upload_background_workers,
+        )
+
+        fallback_replay = self._create_replay_manager()
+
         self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
-                rest_client=self._rest_client
+                rest_client=self._rest_client,
+                file_upload_manager=file_uploader,
+                fallback_replay_manager=fallback_replay,
             )
         )
         self._streamer = streamer_constructors.construct_online_streamer(
+            file_uploader=file_uploader,
             n_consumers=self._config.background_workers,
-            rest_client=self._rest_client,
-            httpx_client=self._httpx_client,
             use_batching=use_batching,
             use_attachment_extraction=self._config.is_attachment_extraction_active,
             min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
-            file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
             message_processor=self.__internal_api__message_processor__,
             url_override=self._config.url_override,
+            fallback_replay_manager=fallback_replay,
         )
+
+    def _create_replay_manager(self) -> replay_manager.ReplayManager:
+        probe = connection_probe.ConnectionProbe(
+            base_url=self._config.url_override,
+            client=self._httpx_client,
+        )
+        monitor = connection_monitor.OpikConnectionMonitor(
+            ping_interval=self._config.connection_monitor_ping_interval,
+            check_timeout=self._config.connection_monitor_check_timeout,
+            probe=probe,
+        )
+
+        fallback_replay = replay_manager.ReplayManager(
+            monitor=monitor,
+            batch_size=self._config.replay_batch_size,
+            batch_replay_delay=self._config.replay_batch_replay_delay,
+            tick_interval_seconds=self._config.replay_tick_interval,
+        )
+        return fallback_replay
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -941,6 +987,139 @@ class Opik:
                 return self.create_dataset(name, description)
             raise
 
+    def create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
+        """
+        Create a new evaluation suite for regression testing.
+
+        Evaluation suites are pre-configured test suites that let you validate
+        that prompt changes, model updates, or code modifications don't break
+        existing functionality.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description of what this suite tests.
+            evaluators: Suite-level evaluators (e.g., LLMJudge instances)
+                applied to all test items.
+            execution_policy: Dataset-level execution policy.
+                Example: {"runs_per_item": 3, "pass_threshold": 2}
+
+        Returns:
+            EvaluationSuite: The created evaluation suite object.
+
+        Example:
+            >>> from opik.evaluation.suite_evaluators import LLMJudge
+            >>>
+            >>> suite = client.create_evaluation_suite(
+            ...     name="Refund Policy Tests",
+            ...     description="Regression tests for refund scenarios",
+            ...     evaluators=[
+            ...         LLMJudge(assertions=[
+            ...             {"name": "no_hallucination", "expected_behavior": "No hallucinated information"},
+            ...         ]),
+            ...     ]
+            ... )
+            >>>
+            >>> suite.add_item(
+            ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
+            ... )
+            >>>
+            >>> results = suite.run(task=my_llm_function)
+        """
+        from .dataset import validators, rest_operations
+
+        if evaluators:
+            validators.validate_evaluators(evaluators, "suite-level evaluators")
+
+        rest_operations.create_evaluation_suite_dataset(
+            rest_client=self._rest_client,
+            dataset_name=name,
+            description=description,
+            evaluators=evaluators,
+            exec_policy=execution_policy,
+        )
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=description,
+            rest_client=self._rest_client,
+            dataset_items_count=0,
+        )
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            dataset_=suite_dataset,
+        )
+
+    def get_evaluation_suite(self, name: str) -> evaluation_suite.EvaluationSuite:
+        """
+        Get an existing evaluation suite by name.
+
+        Retrieves the dataset and its version-level evaluators/execution_policy
+        from the backend, returning a fully configured EvaluationSuite.
+
+        Args:
+            name: The name of the evaluation suite.
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+
+        Raises:
+            ApiError: If no dataset with the given name exists (404).
+        """
+        dataset_fern: dataset_public.DatasetPublic = (
+            self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
+        )
+
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=dataset_fern.description,
+            rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+        )
+
+        suite_dataset.__internal_api__sync_hashes__()
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            dataset_=suite_dataset,
+        )
+
+    def get_or_create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+    ) -> evaluation_suite.EvaluationSuite:
+        """
+        Get an existing evaluation suite by name or create a new one if it does not exist.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description (used only when creating).
+            evaluators: Suite-level evaluators (used only when creating).
+            execution_policy: Execution policy (used only when creating).
+
+        Returns:
+            EvaluationSuite: The evaluation suite object.
+        """
+        try:
+            return self.get_evaluation_suite(name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_evaluation_suite(
+                    name=name,
+                    description=description,
+                    evaluators=evaluators,
+                    execution_policy=execution_policy,
+                )
+            raise
+
     def create_experiment(
         self,
         dataset_name: str,
@@ -1220,7 +1399,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+            filter_string,
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
         )
 
         search_functor = functools.partial(
@@ -1314,7 +1495,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+            filter_string,
+            parsed_item_class=span_filter_public.SpanFilterPublic,
+            entity_type="spans",
         )
 
         search_functor = functools.partial(
@@ -1582,18 +1765,64 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a prompt
+            versions = client.get_prompt_history(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search and filtering
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1607,7 +1836,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a text prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1615,18 +1846,64 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "helpful assistant"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a chat prompt
+            versions = client.get_chat_prompt_history(name="my-chat-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant"
+            )
+
+            # Combine search and filtering
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1640,7 +1917,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a chat prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
@@ -1764,6 +2043,24 @@ class Opik:
             An instance of the ExperimentsClient initialized with a cached REST client.
         """
         return experiments_client.ExperimentsClient(self._rest_client)
+
+    def get_prompts_client(self) -> prompt_client.PromptClient:
+        """
+        Retrieves an instance of `PromptClient` for bulk prompt operations.
+
+        Use this client for operations like updating prompt version tags in batch.
+
+        Returns:
+            An instance of the PromptClient initialized with a cached REST client.
+
+        Example:
+            prompts_client = client.get_prompts_client()
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+        """
+        return prompt_client.PromptClient(self._rest_client)
 
     def _create_annotation_queue(
         self,

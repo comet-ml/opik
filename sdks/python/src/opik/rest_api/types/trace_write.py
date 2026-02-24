@@ -25,6 +25,11 @@ class TraceWrite(UniversalBaseModel):
     tags: typing.Optional[typing.List[str]] = None
     error_info: typing.Optional[ErrorInfoWrite] = None
     last_updated_at: typing.Optional[dt.datetime] = None
+    ttft: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Time to first token in milliseconds
+    """
+
     thread_id: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:

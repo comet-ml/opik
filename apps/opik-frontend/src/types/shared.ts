@@ -98,6 +98,7 @@ export type ColumnData<T> = {
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  statisticTooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
   sortable?: boolean;
   disposable?: boolean;
@@ -181,6 +182,10 @@ export interface AggregatedFeedbackScore {
   name: string;
   value: number;
 }
+
+export type FeedbackScoreDisplay = AggregatedFeedbackScore & {
+  colorKey?: string;
+};
 
 export interface AggregatedDuration {
   p50: number;

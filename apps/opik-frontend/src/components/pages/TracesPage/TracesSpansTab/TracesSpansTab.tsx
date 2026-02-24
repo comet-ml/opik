@@ -91,6 +91,7 @@ import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/Tra
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -181,6 +182,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: "tags",
@@ -223,6 +225,9 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
 ];
 

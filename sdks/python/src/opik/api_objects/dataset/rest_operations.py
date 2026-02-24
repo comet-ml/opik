@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterator, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set, TYPE_CHECKING
 
 from opik.rest_api import OpikApi
 from opik.rest_api.types import (
@@ -13,10 +13,13 @@ import opik.exceptions as exceptions
 from opik.message_processing import streamer
 from opik.rest_client_configurator import retry_decorator
 from opik.api_objects import opik_query_language, rest_stream_parser
-from . import dataset, dataset_item
+from . import dataset, dataset_item, execution_policy
 from .. import experiment, constants
 from ..experiment import experiments_client
 from ...rest_api.core.api_error import ApiError
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
 
 LOGGER = logging.getLogger(__name__)
 
@@ -94,11 +97,33 @@ def stream_dataset_items(
                 else:
                     dataset_items_ids_left.remove(item_id)
 
+            # Convert evaluators from REST format to DatasetItem format
+            evaluators = None
+            if item.evaluators:
+                evaluators = [
+                    dataset_item.EvaluatorItem(
+                        name=e.name,
+                        type=e.type,
+                        config=e.config,
+                    )
+                    for e in item.evaluators
+                ]
+
+            # Convert execution_policy from REST format to DatasetItem format
+            execution_policy = None
+            if item.execution_policy:
+                execution_policy = dataset_item.ExecutionPolicyItem(
+                    runs_per_item=item.execution_policy.runs_per_item,
+                    pass_threshold=item.execution_policy.pass_threshold,
+                )
+
             reconstructed_item = dataset_item.DatasetItem(
                 id=item.id,
                 trace_id=item.trace_id,
                 span_id=item.span_id,
                 source=item.source,
+                evaluators=evaluators,
+                execution_policy=execution_policy,
                 **item.data,
             )
 
@@ -232,3 +257,92 @@ def get_dataset_experiments(
         page += 1
 
     return experiments
+
+
+def create_evaluation_suite_dataset(
+    rest_client: OpikApi,
+    dataset_name: str,
+    description: Optional[str],
+    evaluators: Optional[List[llm_judge.LLMJudge]],
+    exec_policy: Optional[execution_policy.ExecutionPolicy],
+) -> str:
+    """
+    Create a dataset of type 'evaluation_suite' and its initial version
+    with evaluators and execution_policy persisted to the backend.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_name: The name of the dataset/suite.
+        description: Optional description.
+        evaluators: LLMJudge evaluators.
+        exec_policy: Execution policy dict.
+
+    Returns:
+        The dataset ID.
+    """
+    rest_client.datasets.create_dataset(
+        name=dataset_name, description=description, type="evaluation_suite"
+    )
+
+    dataset_fern = rest_client.datasets.get_dataset_by_identifier(
+        dataset_name=dataset_name
+    )
+
+    resolved_policy = exec_policy or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+    request: Dict[str, Any] = {}
+    if evaluators:
+        request["evaluators"] = [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ]
+    request["execution_policy"] = {
+        "runs_per_item": resolved_policy.get("runs_per_item", 1),
+        "pass_threshold": resolved_policy.get("pass_threshold", 1),
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_fern.id, request=request, override=True
+    )
+
+    return dataset_fern.id
+
+
+def update_evaluation_suite_dataset(
+    rest_client: OpikApi,
+    dataset_id: str,
+    base_version_id: str,
+    evaluators: List[llm_judge.LLMJudge],
+    exec_policy: execution_policy.ExecutionPolicy,
+) -> None:
+    """
+    Update suite-level evaluators and execution_policy by creating a new
+    dataset version based on the current latest version.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: The dataset ID.
+        base_version_id: The current latest version UUID to base the update on.
+        evaluators: Suite-level LLMJudge evaluators.
+        exec_policy: Execution policy dict.
+    """
+    request: Dict[str, Any] = {
+        "base_version": base_version_id,
+        "evaluators": [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ],
+        "execution_policy": {
+            "runs_per_item": exec_policy.get("runs_per_item", 1),
+            "pass_threshold": exec_policy.get("pass_threshold", 1),
+        },
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_id, request=request, override=False
+    )

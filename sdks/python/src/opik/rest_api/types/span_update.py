@@ -31,10 +31,25 @@ class SpanUpdate(UniversalBaseModel):
     metadata: typing.Optional[JsonListString] = None
     model: typing.Optional[str] = None
     provider: typing.Optional[str] = None
-    tags: typing.Optional[typing.List[str]] = None
+    tags: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags
+    """
+
+    tags_to_add: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to add
+    """
+
+    tags_to_remove: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to remove
+    """
+
     usage: typing.Optional[typing.Dict[str, int]] = None
     total_estimated_cost: typing.Optional[float] = None
     error_info: typing.Optional[ErrorInfo] = None
+    ttft: typing.Optional[float] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
