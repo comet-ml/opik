@@ -64,7 +64,7 @@ class OnlineScoringDataExtractorTest {
 
     @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> section={1}, jsonPath={2}")
     @MethodSource("parseVariableAsPathCases")
-    void testParseVariableAsPath(String variableName, OnlineScoringDataExtractor.TraceSection expectedSection,
+    void parseVariableAsPath(String variableName, OnlineScoringDataExtractor.TraceSection expectedSection,
             String expectedJsonPath) {
         var mapping = OnlineScoringDataExtractor.parseVariableAsPath(variableName);
 
@@ -77,7 +77,7 @@ class OnlineScoringDataExtractorTest {
     @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> null")
     @NullAndEmptySource
     @ValueSource(strings = {"   ", "unknown.field"})
-    void testParseVariableAsPath_returnsNull(String input) {
+    void parseVariableAsPathReturnsNull(String input) {
         assertThat(OnlineScoringDataExtractor.parseVariableAsPath(input)).isNull();
     }
 
@@ -85,7 +85,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toReplacementsFromTemplateVariables should extract values from trace")
-    void testToReplacementsFromTemplateVariables() throws JsonProcessingException {
+    void toReplacementsFromTemplateVariables() throws JsonProcessingException {
         // Given
         var traceId = generator.generate();
         var projectId = generator.generate();
@@ -140,7 +140,7 @@ class OnlineScoringDataExtractorTest {
 
     @ParameterizedTest(name = "toFullSectionObjectData should handle {0}")
     @MethodSource("toFullSectionObjectDataCases")
-    void testToFullSectionObjectData(String scenario, Object inputVal, Object outputVal,
+    void toFullSectionObjectData(String scenario, Object inputVal, Object outputVal,
             Object metadataVal, Map<String, Object> expectedData) {
         // Given
         var input = JsonUtils.getMapper().valueToTree(inputVal);
@@ -166,7 +166,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toFullSectionObjectData should handle nested dict input/output")
-    void testToFullSectionObjectData_nestedDictInputOutput() {
+    void toFullSectionObjectDataWhenNestedDictInputOutput() {
         // Given
         var input = JsonUtils.getMapper().valueToTree(
                 Map.of("messages", List.of(
@@ -206,7 +206,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toFullSectionObjectData should skip null sections")
-    void testToFullSectionObjectData_nullSections() {
+    void toFullSectionObjectDataWhenNullSections() {
         // Given - only output, no input or metadata
         var output = JsonUtils.getMapper().valueToTree(Map.of("result", "success"));
 
@@ -229,7 +229,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toFullSectionObjectData should handle mixed types - string input, dict output")
-    void testToFullSectionObjectData_mixedTypes() {
+    void toFullSectionObjectDataWhenMixedTypes() {
         // Given
         var input = JsonUtils.getMapper().valueToTree("plain text input");
         var output = JsonUtils.getMapper().valueToTree(Map.of("answer", "hello", "confidence", 0.9));
@@ -256,7 +256,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toFullSectionObjectData should work with Span")
-    void testToFullSectionObjectData_span() {
+    void toFullSectionObjectDataWhenSpan() {
         // Given
         var input = JsonUtils.getMapper().valueToTree(Map.of("prompt", "tell me a joke"));
         var output = JsonUtils.getMapper().valueToTree(Map.of("response", "Why did the chicken cross the road?"));
@@ -283,7 +283,7 @@ class OnlineScoringDataExtractorTest {
 
     @Test
     @DisplayName("toFullSectionObjectData should handle numeric and boolean values in objects")
-    void testToFullSectionObjectData_numericAndBooleanValues() {
+    void toFullSectionObjectDataWhenNumericAndBooleanValues() {
         // Given
         var input = JsonUtils.getMapper().valueToTree(Map.of(
                 "temperature", 0.7,
