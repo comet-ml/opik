@@ -38,7 +38,9 @@ public record DatasetItemEdit(
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New execution policy to replace existing item execution policy") @Valid ExecutionPolicy executionPolicy,
 
-        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy,
+
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "When true, clears the item description") Boolean clearDescription) {
 
     public static class View {
         public static class Write {

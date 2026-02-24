@@ -1179,12 +1179,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> :data <else> src.data <endif> as data,
-                <if(description)> :description <else> src.description <endif> as description,
+                <if(clear_description)> '' <else><if(description)> :description <else> src.description <endif><endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
                 src.span_id,
-                """ + TagOperations.tagUpdateFragment("src.tags")
+                """
+            + TagOperations.tagUpdateFragment("src.tags")
             + """
                         as tags,
                         <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
@@ -1247,7 +1248,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> mapFromArrays(:data_keys, :data_values) <else> src.data <endif> as data,
-                <if(description)> :description <else> src.description <endif> as description,
+                <if(clear_description)> '' <else><if(description)> :description <else> src.description <endif><endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
@@ -2399,7 +2400,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (edit.tags() != null) {
                         template.add("tags", true);
                     }
-                    if (edit.description() != null) {
+                    if (Boolean.TRUE.equals(edit.clearDescription())) {
+                        template.add("clear_description", true);
+                    } else if (edit.description() != null) {
                         template.add("description", true);
                     }
                     if (edit.evaluators() != null) {
@@ -2425,7 +2428,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         statement.bind("data_keys", dataAsStrings.keySet().toArray(new String[0]));
                         statement.bind("data_values", dataAsStrings.values().toArray(new String[0]));
                     }
-                    if (edit.description() != null) {
+                    if (!Boolean.TRUE.equals(edit.clearDescription()) && edit.description() != null) {
                         statement.bind("description", edit.description());
                     }
                     if (edit.tags() != null) {
@@ -2531,7 +2534,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (batchUpdate.update().description() != null) {
+                if (Boolean.TRUE.equals(batchUpdate.update().clearDescription())) {
+                    template.add("clear_description", true);
+                } else if (batchUpdate.update().description() != null) {
                     template.add("description", true);
                 }
 
@@ -2589,7 +2594,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (batchUpdate.update().description() != null) {
+                if (!Boolean.TRUE.equals(batchUpdate.update().clearDescription())
+                        && batchUpdate.update().description() != null) {
                     statement.bind("description", batchUpdate.update().description());
                 }
 
