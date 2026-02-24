@@ -205,11 +205,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
         )}
         <NavigationTag
           id={experiment?.dataset_id}
-          name={
-            experiment?.dataset_name
-              ? `Go to ${experiment.dataset_name}`
-              : experiment?.dataset_name
-          }
+          name={experiment?.dataset_name && `Go to ${experiment.dataset_name}`}
           resource={RESOURCE_TYPE.dataset}
         />
         {experiment?.prompt_versions &&
