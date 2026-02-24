@@ -8,9 +8,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Span, Trace, Thread } from "@/types/traces";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { DISABLED_DATASETS_TOOLTIP } from "@/constants/permissions";
 
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
@@ -25,10 +32,16 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
 
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const isThread = dataType === "threads";
   const isSpan = dataType === "spans";
   const showAddToDataset = !isThread;
   const showAddToQueue = isThread || !isSpan;
+  const isDatasetSingleActionDisabled =
+    !canViewDatasets && showAddToDataset && !showAddToQueue;
 
   return (
     <>
@@ -49,29 +62,51 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
         />
       )}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            className="font-normal"
-          >
-            Add to
-            <ChevronDown className="ml-2 size-4" />
-          </Button>
-        </DropdownMenuTrigger>
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+            <div>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled || isDatasetSingleActionDisabled}
+                  className="font-normal"
+                >
+                  Add to
+                  <ChevronDown className="ml-2 size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </div>
+          </TooltipTrigger>
+          {isDatasetSingleActionDisabled && (
+            <TooltipContent side="top">
+              {DISABLED_DATASETS_TOOLTIP}
+            </TooltipContent>
+          )}
+        </Tooltip>
         <DropdownMenuContent align="start" className="w-60">
           {showAddToDataset && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(1);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-              disabled={disabled}
-            >
-              <Database className="mr-2 size-4" />
-              Dataset
-            </DropdownMenuItem>
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <div>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setOpen(1);
+                      resetKeyRef.current = resetKeyRef.current + 1;
+                    }}
+                    disabled={disabled || !canViewDatasets}
+                  >
+                    <Database className="mr-2 size-4" />
+                    Dataset
+                  </DropdownMenuItem>
+                </div>
+              </TooltipTrigger>
+              {!canViewDatasets && (
+                <TooltipContent side="left">
+                  {DISABLED_DATASETS_TOOLTIP}
+                </TooltipContent>
+              )}
+            </Tooltip>
           )}
           {showAddToQueue && (
             <DropdownMenuItem
