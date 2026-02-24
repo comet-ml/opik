@@ -111,19 +111,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
   },
   {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-    sortable: true,
-  },
-  {
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
@@ -242,15 +229,31 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
-  "created_at",
-  "last_updated_at",
   "duration",
-  "status",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "first_message",
+  "last_message",
+  "number_of_messages",
+  "duration",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  `${COLUMN_USAGE_ID}.prompt_tokens`,
+  `${COLUMN_USAGE_ID}.completion_tokens`,
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+  COLUMN_ID_ID,
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -491,7 +494,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_THREADS_COLUMNS_ORDER,
     },
   );
 
