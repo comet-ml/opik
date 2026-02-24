@@ -22,8 +22,9 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test test-all precommit build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
-.PHONY: modal-list
+.PHONY: help setup-venv install install-dev test test-all precommit build clean
+.PHONY: modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
+.PHONY: benchmark-local benchmark-modal
 
 help:
 	@echo "Available targets:"
@@ -37,11 +38,13 @@ help:
 	@echo "  precommit    Run pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
-	@echo "  modal-worker Deploy Modal worker (benchmarks/runners/benchmark_worker.py)"
-	@echo "  modal-coord  Deploy Modal coordinator (benchmarks/runners/run_benchmark_modal.py)"
+	@echo "  benchmark-local Run benchmarks locally via unified runner"
+	@echo "  benchmark-modal Run benchmarks on Modal via unified runner"
+	@echo "  modal-worker Deploy Modal worker (benchmarks/engines/modal/engine.py)"
+	@echo "  modal-coord  Deploy Modal coordinator (benchmarks/run_benchmark_modal.py)"
 	@echo "  modal-deploy Deploy worker + coordinator"
 	@echo "  modal-logs   Tail worker app logs (env=main by default)"
-	@echo "  modal-list   Show dataset/optimizer registry (local)"
+	@echo "  modal-list   Show engine/dataset/optimizer registry (local)"
 	@echo "  modal-check-results   Show remote results from Modal volume (requires run-id, set RUN_ID=...)"
 
 setup-venv:
@@ -139,11 +142,11 @@ clean:
 
 modal-worker:
 	@echo "Deploying Modal worker..."
-	modal deploy benchmarks/runners/benchmark_worker.py
+	modal deploy benchmarks/engines/modal/engine.py
 
 modal-coord:
 	@echo "Deploying Modal coordinator..."
-	modal deploy benchmarks/runners/run_benchmark_modal.py
+	modal deploy benchmarks/run_benchmark_modal.py
 
 modal-deploy: modal-worker modal-coord
 
@@ -152,9 +155,17 @@ modal-logs:
 	modal app logs opik-optimizer-benchmarks --env main
 
 modal-list:
-	@echo "Listing dataset/optimizer registry (local)..."
-	PYTHONPATH=. python benchmarks/runners/run_benchmark.py --list-registries
+	@echo "Listing engine/dataset/optimizer registry (local)..."
+	PYTHONPATH=src $(PYTHON) benchmarks/run_benchmark.py --list-registries
 
 modal-check-results:
 	@echo "Checking Modal results for run $(RUN_ID)..."
 	modal run benchmarks/check_results.py --run-id $(RUN_ID)
+
+benchmark-local:
+	@echo "Running benchmarks locally via unified runner..."
+	PYTHONPATH=src $(PYTHON) benchmarks/run_benchmark.py --engine local
+
+benchmark-modal:
+	@echo "Running benchmarks on Modal via unified runner..."
+	PYTHONPATH=src $(PYTHON) benchmarks/run_benchmark.py --engine modal

@@ -26,7 +26,7 @@
         { "name": "openrouter/qwen/qwen3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
       ],
       "metrics": [
-        { "path": "benchmarks.metrics.hotpot.hotpot_f1" }
+        { "path": "benchmarks.packages.hotpot.metrics.hotpot_f1" }
       ],
       "prompt": [
         { "role": "system", "content": "Answer the question based on the given context." },
@@ -56,8 +56,8 @@
         { "name": "openrouter/qwen/qwen3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
       ],
       "metrics": [
-        { "path": "benchmarks.metrics.hover.hover_label_accuracy" },
-        { "path": "benchmarks.metrics.hover.hover_judge_feedback" }
+        { "path": "benchmarks.packages.hover.metrics.hover_label_accuracy" },
+        { "path": "benchmarks.packages.hover.metrics.hover_judge_feedback" }
       ],
       "prompt": [
         { "role": "system", "content": "Classify the claim based on the given context and provide a concise answer." },
@@ -87,8 +87,8 @@
         { "name": "openrouter/qwen/qwen3-8b" }
       ],
       "metrics": [
-        { "path": "benchmarks.metrics.pupa.pupa_quality_judge" },
-        { "path": "benchmarks.metrics.pupa.pupa_leakage_ratio" }
+        { "path": "benchmarks.packages.pupa.metrics.pupa_quality_judge" },
+        { "path": "benchmarks.packages.pupa.metrics.pupa_leakage_ratio" }
       ],
       "prompt": [
         { "role": "system", "content": "Rewrite or answer while avoiding any PII leakage; be concise and respect redaction constraints." },

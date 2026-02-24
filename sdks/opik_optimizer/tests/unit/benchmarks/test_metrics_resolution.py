@@ -1,4 +1,4 @@
-from benchmarks.core import benchmark_config
+from benchmarks.packages import registry as benchmark_config
 from benchmarks.utils.task_runner import _resolve_metrics
 
 
@@ -11,7 +11,7 @@ def test_resolve_metrics_from_strings() -> None:
 
     metrics = _resolve_metrics(
         dataset_cfg,
-        ["benchmarks.metrics.hotpot.hotpot_f1"],
+        ["benchmarks.packages.hotpot.metrics.hotpot_f1"],
     )
     assert len(metrics) == 1
     assert callable(metrics[0])
@@ -28,7 +28,7 @@ def test_resolve_metrics_from_objects_with_kwargs() -> None:
         dataset_cfg,
         [
             {
-                "path": "benchmarks.metrics.hotpot.hotpot_f1",
+                "path": "benchmarks.packages.hotpot.metrics.hotpot_f1",
             }
         ],
     )

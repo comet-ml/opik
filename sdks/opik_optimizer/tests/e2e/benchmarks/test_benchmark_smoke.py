@@ -7,9 +7,9 @@ import opik_optimizer
 
 import pytest
 
-from benchmarks.core import benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from benchmarks.local import runner as local_runner
+from benchmarks.packages import registry as benchmark_config
+from benchmarks.core.types import TaskSpec
+from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message
 from ._benchmark_test_helpers import InlineExecutor
 
@@ -26,9 +26,10 @@ class DummyDataset:
 class DummyOptimizationResult(dict):
     def __init__(self, prompt_messages: list[dict[str, Any]] | None) -> None:
         prompt_messages = prompt_messages or []
-        super().__init__(prompt=prompt_messages, llm_calls=1)
+        super().__init__(prompt=prompt_messages, llm_calls=1, history=[])
         self.prompt = prompt_messages
         self.llm_calls = 1
+        self.history: list[dict[str, Any]] = []
 
 
 class DummyOptimizer:
@@ -126,16 +127,16 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("HOME", str(tmp_path))
 
     # Inline executor to avoid multiprocessing in tests
-    monkeypatch.setattr(local_runner, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
 
-    runner = local_runner.BenchmarkRunner(
+    runner = local_engine.BenchmarkRunner(
         max_workers=1,
         seed=42,
         test_mode=True,
         checkpoint_dir=str(tmp_path),
     )
 
-    task = BenchmarkTaskSpec(
+    task = TaskSpec(
         dataset_name="toy_train",
         optimizer_name="dummy",
         model_name="dummy-model",

@@ -13,7 +13,7 @@
       "model": "openai/gpt-4.1-mini",
       "model_parameters": { "temperature": 0.3 },
       "optimizer_prompt_params": { "max_trials": 1, "n_samples": 1 },
-      "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+      "metrics": ["benchmarks.packages.hotpot.metrics.hotpot_f1"],
       "prompt": [
         { "role": "system", "content": "Answer the question based on the given context." },
         { "role": "user", "content": "{question}" }
@@ -27,7 +27,7 @@
       "optimizer_prompt_params": { "max_trials": 1, "population_size": 2, "num_generations": 1 },
       "metrics": [
         {
-          "path": "benchmarks.core.benchmark_config.create_levenshtein_ratio_metric",
+          "path": "benchmarks.packages.registry.create_levenshtein_ratio_metric",
           "kwargs": { "reference_col": "label" }
         }
       ],
