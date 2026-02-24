@@ -41,7 +41,7 @@ repos:
         files: ^sdks/opik_optimizer
         exclude: '(sdks/opik_optimizer/scripts/benchmarks/|sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
-        additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
+        additional_dependencies: [types-requests, types-PySocks, types-Pygments, types-pexpect, types-protobuf, types-setuptools, types-ujson, pytest, pyrate_limiter, modal]
 
   - repo: https://github.com/kynan/nbstripout
     rev: 0.9.0

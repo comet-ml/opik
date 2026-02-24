@@ -135,6 +135,7 @@ def initialize_population(
             population_size=optimizer.population_size,
             verbose=optimizer.verbose,
             prompts=optimizer._prompts,
+            optimizer=optimizer,
         )
         prompt_variations[prompt_name] = variations
 
@@ -288,11 +289,13 @@ def run_generation(
                         verbose=optimizer.verbose,
                         prompts=optimizer._prompts,
                         rng=crossover_rng,
+                        optimizer=optimizer,
                     )
                 else:
                     c1_new, c2_new = crossover_ops.deap_crossover(
                         c1,
                         c2,
+                        optimizer=optimizer,
                         verbose=optimizer.verbose,
                         rng=crossover_rng,
                     )
@@ -311,6 +314,7 @@ def run_generation(
         if gen_rng.random() < mut_rate:
             new_ind = mutation_ops.deap_mutation(
                 individual=ind,
+                optimizer=optimizer,
                 current_population=optimizer._current_population,
                 output_style_guidance=optimizer.output_style_guidance,
                 initial_prompts=initial_prompts,

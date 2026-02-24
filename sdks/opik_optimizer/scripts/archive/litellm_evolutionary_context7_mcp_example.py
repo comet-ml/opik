@@ -144,7 +144,7 @@ evo_optimizer = EvolutionaryOptimizer(
     verbose=1,
 )
 
-result = evo_optimizer.optimize_mcp(  # type: ignore[attr-defined]
+result = evo_optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
     metric=context7_metric,
@@ -155,6 +155,7 @@ result = evo_optimizer.optimize_mcp(  # type: ignore[attr-defined]
     fallback_invoker=lambda args: tool_invocation.invoke(args),
     n_samples=min(5, len(dataset.get_items())),
     tool_panel_style="bright_cyan",
+    optimize_tools=True,
 )
 
 if not result.prompt:

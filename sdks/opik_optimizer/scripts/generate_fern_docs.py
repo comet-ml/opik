@@ -387,7 +387,7 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 - **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
 - **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
-- **MCP Support**: Built-in support for Model Context Protocol tool calling
+- **MCP Support**: Built-in support for Model Context Protocol tool calling and optimization
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Backward Compatibility**: All original parameters preserved through kwargs extraction

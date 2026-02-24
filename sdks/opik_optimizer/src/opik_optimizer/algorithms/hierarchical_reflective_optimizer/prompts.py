@@ -94,6 +94,19 @@ INSTRUCTIONS FOR IMPROVING THE PROMPTS:
 
 6. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
 
+{tool_instructions}
+
 Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them.
 
-Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompts for ALL prompt names provided above."""
+Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompts for ALL prompt names provided above.
+"""
+
+
+TOOL_INSTRUCTIONS = """7. **Tools (if present)**: You may update tool descriptions and tool parameter descriptions only.
+   - Do NOT add/remove tools.
+   - Do NOT rename tools.
+   - Do NOT modify parameter schemas (only descriptions).
+   - If you update tools, include:
+     - tool_descriptions: list of {name, description}
+     - parameter_descriptions: list of {tool_name, parameters:[{name, description}]}
+"""
