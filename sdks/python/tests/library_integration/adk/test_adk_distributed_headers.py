@@ -16,6 +16,8 @@ from ...testlib import (
     assert_equal,
 )
 
+pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(

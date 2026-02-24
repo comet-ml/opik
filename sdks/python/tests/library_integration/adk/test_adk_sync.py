@@ -34,6 +34,8 @@ from ...testlib import (
     assert_equal,
 )
 
+pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+
 # Maximum reasonable time-to-first-token in seconds for test assertions
 MAX_REASONABLE_TTFT_SECONDS = 60
 

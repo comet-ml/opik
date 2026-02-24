@@ -24,6 +24,8 @@ from ...testlib import (
     assert_equal,
 )
 
+pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
+
 
 @pytest.mark.asyncio
 async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
