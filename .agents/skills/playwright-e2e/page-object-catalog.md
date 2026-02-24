@@ -2,6 +2,8 @@
 
 All page objects are in `tests_end_to_end/typescript-tests/page-objects/`. Always import and use these instead of writing raw Playwright locators in tests.
 
+> **Adding `data-testid` attributes**: If a page object needs a locator for an element that has no reliable selector (no role, no unique text), you may add a `data-testid` attribute to the corresponding React component in `apps/opik-frontend/src/`. Use kebab-case `{feature}-{element}` naming. See `test-conventions.md` for details.
+
 ## BasePage (`base.page.ts`)
 
 Base class for all workspace-aware page objects.
