@@ -21,11 +21,11 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import ViewSelector, {
-  VIEW_TYPE,
-} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
+import useDashboardsViewGuard from "@/hooks/useDashboardsViewGuard";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -55,6 +55,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
       updateType: "replaceIn",
     },
   );
+
+  useDashboardsViewGuard({ view, setView: onViewChange });
 
   useEffect(() => {
     title && setBreadcrumbParam("compare", "compare", title);
