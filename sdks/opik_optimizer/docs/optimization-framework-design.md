@@ -707,6 +707,7 @@ class TrialItemRun:
     trial_id: int
     trace_id: str
     score: float | None
+    reason: str | None = None
     passed: bool
     error: str | None = None
 
