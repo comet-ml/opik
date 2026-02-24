@@ -1,6 +1,6 @@
+> 참고: 이 파일은 AI를 사용하여 기계 번역되었습니다. 번역 개선에 대한 기여를 환영합니다!
 
-
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
+<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a><br><a href="readme_ES.md">Español</a> | <a href="readme_FR.md">Français</a> | <a href="readme_DE.md">Deutsch</a> | <a href="readme_RU.md">Русский</a> | <a href="readme_AR.md">العربية</a> | <a href="readme_HI.md">हिन्दी</a> | <a href="readme_TR.md">Türkçe</a></b></div>
 
 <h1 align="center" style="border-bottom: none">
     <div>
@@ -23,8 +23,6 @@ Opik은 프로토타입부터 프로덕션까지, 더 나은 생성형 AI 애플
 [![Python SDK](https://img.shields.io/pypi/v/opik)](https://pypi.org/project/opik/)
 [![License](https://img.shields.io/github/license/comet-ml/opik)](https://github.com/comet-ml/opik/blob/main/LICENSE)
 [![Build](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml/badge.svg)](https://github.com/comet-ml/opik/actions/workflows/build_apps.yml)
-[![Bounties](https://img.shields.io/endpoint?url=https%3A%2F%2Falgora.io%2Fapi%2Fshields%2Fcomet-ml%2Fbounties%3Fstatus%3Dopen)](https://algora.io/comet-ml/bounties?status=open)
-
 <!-- [![Quick Start](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/opik_quickstart.ipynb) -->
 
 </div>
@@ -46,6 +44,7 @@ Opik은 프로토타입부터 프로덕션까지, 더 나은 생성형 AI 애플
 
 [![Opik platform screenshot (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
+<a id="-opik이란"></a>
 ## 🚀 Opik이란?
 
 Opik([Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=what_is_opik_link&utm_campaign=opik) 제공)은 LLM 애플리케이션의 전체 라이프사이클을 간소화하기 위해 설계된 오픈 소스 플랫폼입니다. 개발자가 모델과 에이전트 시스템을 평가, 테스트, 모니터링, 최적화할 수 있도록 지원합니다. 주요 기능은 다음과 같습니다:
@@ -82,6 +81,7 @@ Opik([Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&ut
 
 <br>
 
+<a id="%EF%B8%8F-opik-서버-설치"></a>
 ## 🛠️ Opik 서버 설치
 
 몇 분 안에 Opik 서버를 실행할 수 있습니다. 상황에 맞는 옵션을 선택하세요:
@@ -156,6 +156,7 @@ Opik 설치 스크립트는 다양한 개발 시나리오를 위한 service prof
 > [!IMPORTANT]
 > **버전 1.7.0 변경 사항**: 중요 업데이트 및 breaking change는 [changelog](https://github.com/comet-ml/opik/blob/main/CHANGELOG.md)를 확인하세요.
 
+<a id="-opik-클라이언트-sdk"></a>
 ## 💻 Opik 클라이언트 SDK
 
 Opik은 Opik 서버와 상호작용할 수 있는 클라이언트 라이브러리 suite와 REST API를 제공합니다. Python, TypeScript, Ruby(OpenTelemetry 사용) SDK를 지원하여 워크플로우에 손쉽게 통합할 수 있습니다. 상세한 API 및 SDK 레퍼런스는 [Opik Client Reference Documentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)을 확인하세요.
@@ -183,6 +184,7 @@ opik configure
 
 이제 [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik)로 trace 로깅을 시작할 준비가 되었습니다.
 
+<a id="-통합을-통한-trace-로깅"></a>
 ### 📝 통합을 통한 Trace 로깅
 
 trace를 로깅하는 가장 쉬운 방법은 직접 통합(integration)을 사용하는 것입니다. Opik은 **Google ADK**, **Autogen**, **AG2**, **Flowise AI** 등 최신 추가 항목을 포함한 다양한 프레임워크를 지원합니다:
@@ -268,6 +270,7 @@ def my_llm_function(user_question: str) -> str:
 > [!TIP]
 > track 데코레이터는 통합 기능들과 함께 사용할 수 있으며, 중첩된 함수 호출도 추적할 수 있습니다.
 
+<a id="%EF%B8%8F-llm-as-a-judge-metrics"></a>
 ### 🧑‍⚖️ LLM as a Judge Metrics
 
 Python Opik SDK에는 LLM 애플리케이션 평가를 도와주는 다양한 LLM as a judge metric이 포함되어 있습니다. 자세한 내용은 [metrics documentation](https://www.comet.com/docs/opik/evaluation/metrics/overview/?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_2_link&utm_campaign=opik)을 참조하세요.
@@ -288,16 +291,19 @@ print(score)
 
 Opik은 다양한 사전 구축 heuristic metric과 직접 metric을 만들 수 있는 기능도 제공합니다. 자세한 내용은 [metrics documentation](https://www.comet.com/docs/opik/evaluation/metrics/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=metrics_3_link&utm_campaign=opik)을 참조하세요.
 
+<a id="-llm-애플리케이션-평가하기"></a>
 ### 🔍 LLM 애플리케이션 평가하기
 
 Opik을 사용하면 개발 중에 [Datasets](https://www.comet.com/docs/opik/evaluation/manage_datasets/?from=llm&utm_source=opik&utm_medium=github&utm_content=datasets_2_link&utm_campaign=opik)와 [Experiments](https://www.comet.com/docs/opik/evaluation/evaluate_your_llm/?from=llm&utm_source=opik&utm_medium=github&utm_content=experiments_link&utm_campaign=opik)를 통해 LLM 애플리케이션을 평가할 수 있습니다. Opik Dashboard는 향상된 실험 차트와 대용량 trace 처리 기능을 제공합니다. [PyTest integration](https://www.comet.com/docs/opik/testing/pytest_integration/?from=llm&utm_source=opik&utm_medium=github&utm_content=pytest_2_link&utm_campaign=opik)을 사용하여 CI/CD 파이프라인의 일부로 evaluation을 실행할 수도 있습니다.
 
+<a id="-github에서-star를-눌러주세요"></a>
 ## ⭐ GitHub에서 Star를 눌러주세요
 
 Opik이 유용하셨다면 Star를 눌러주세요! 여러분의 지원은 커뮤니티를 성장시키고 제품을 지속적으로 개선하는 데 큰 도움이 됩니다.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=comet-ml/opik&type=Date)](https://github.com/comet-ml/opik)
 
+<a id="-기여하기"></a>
 ## 🤝 기여하기
 
 Opik에 기여하는 방법은 다양합니다:

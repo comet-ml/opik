@@ -32,6 +32,27 @@ npm install
 npx playwright install chromium
 ```
 
+## Safety: Verify Local Config
+
+**Before running any tests or SDK operations**, check `~/.opik.config`. The Python Opik SDK (used by the Flask test helper service) reads this file. If it points to a cloud environment, the workflow will accidentally create real data there.
+
+```bash
+cat ~/.opik.config
+```
+
+If `url_override` points to anything other than `http://localhost:5173/api`, back up and fix it:
+
+```bash
+cp ~/.opik.config ~/.opik.config.bak 2>/dev/null || true
+cat > ~/.opik.config << 'EOF'
+[opik]
+url_override = http://localhost:5173/api
+workspace = default
+EOF
+```
+
+**After the workflow is complete, remind the user to restore their config:** `cp ~/.opik.config.bak ~/.opik.config`
+
 ## Knowledge Base
 
 These context files provide the domain knowledge agents need to produce accurate tests:

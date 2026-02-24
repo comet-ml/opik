@@ -104,7 +104,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
         )}
         <NavigationTag
           id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
+          name={experiment?.dataset_name && `Go to ${experiment.dataset_name}`}
           resource={RESOURCE_TYPE.dataset}
         />
         {scores.map((score) => (

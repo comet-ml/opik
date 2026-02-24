@@ -2,29 +2,39 @@
 
 # nopycln: file
 import datetime as dt
+import types
 from collections import defaultdict
-from typing import Any, Callable, ClassVar, Dict, List, Mapping, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import Any, Callable, ClassVar, Dict, List, Literal, Mapping, Optional, Set, Tuple, Type, TypeVar, Union, cast
+from typing import get_args as get_args
+from typing import get_origin as get_origin
 
 import pydantic
 
 IS_PYDANTIC_V2 = pydantic.VERSION.startswith("2.")
 
 if IS_PYDANTIC_V2:
-    from pydantic.v1.datetime_parse import parse_date as parse_date
-    from pydantic.v1.datetime_parse import parse_datetime as parse_datetime
-    from pydantic.v1.fields import ModelField as ModelField
-    from pydantic.v1.json import ENCODERS_BY_TYPE as encoders_by_type  # type: ignore[attr-defined]
-    from pydantic.v1.typing import get_args as get_args
-    from pydantic.v1.typing import get_origin as get_origin
-    from pydantic.v1.typing import is_literal_type as is_literal_type
-    from pydantic.v1.typing import is_union as is_union
+    from pydantic.deprecated.json import ENCODERS_BY_TYPE as encoders_by_type
+
+    ModelField = Any
+
+    def parse_date(value: Any) -> dt.date:
+        adapter = pydantic.TypeAdapter(dt.date)  # type: ignore[attr-defined]
+        return adapter.validate_python(value)
+
+    def parse_datetime(value: Any) -> dt.datetime:
+        adapter = pydantic.TypeAdapter(dt.datetime)  # type: ignore[attr-defined]
+        return adapter.validate_python(value)
+
+    def is_literal_type(type_: Any) -> bool:
+        return get_origin(type_) is Literal
+
+    def is_union(type_: Any) -> bool:
+        return get_origin(type_) in (Union, types.UnionType)
 else:
     from pydantic.datetime_parse import parse_date as parse_date  # type: ignore[no-redef]
     from pydantic.datetime_parse import parse_datetime as parse_datetime  # type: ignore[no-redef]
     from pydantic.fields import ModelField as ModelField  # type: ignore[attr-defined, no-redef]
     from pydantic.json import ENCODERS_BY_TYPE as encoders_by_type  # type: ignore[no-redef]
-    from pydantic.typing import get_args as get_args  # type: ignore[no-redef]
-    from pydantic.typing import get_origin as get_origin  # type: ignore[no-redef]
     from pydantic.typing import is_literal_type as is_literal_type  # type: ignore[no-redef]
     from pydantic.typing import is_union as is_union  # type: ignore[no-redef]
 

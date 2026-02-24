@@ -30,12 +30,34 @@ class LocalEmulatorMessageProcessor(
         if not self.is_active():
             return
 
-        if hasattr(message, "delivery_attempts") and message.delivery_attempts > 1:
-            # skip retries
-            LOGGER.debug("Skipping retry of the message: %s", message)
+        if (
+            hasattr(message, "delivery_attempts")
+            and message.delivery_attempts > 1
+            and self._should_skip_retry(message)
+        ):
+            LOGGER.debug("Skipping duplicate retry of the message: %s", message)
             return
 
         super().process(message)
+
+    def _should_skip_retry(
+        self,
+        message: Union[
+            messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
+        ],
+    ) -> bool:
+        """Skip retries only when the referenced entity is already recorded.
+
+        This avoids duplicate local models while still allowing retry messages to
+        recover missing create events when local recording starts mid-stream.
+        """
+        if isinstance(message, messages.CreateTraceMessage):
+            return message.trace_id in self._trace_observations
+
+        if isinstance(message, messages.CreateSpanMessage):
+            return message.span_id in self._span_observations
+
+        return False
 
     def create_trace_model(
         self,

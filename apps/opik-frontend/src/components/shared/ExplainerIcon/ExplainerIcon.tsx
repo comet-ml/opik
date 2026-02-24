@@ -1,5 +1,5 @@
 import React from "react";
-import { CircleHelp, Info, SquareArrowOutUpRight } from "lucide-react";
+import { CircleHelp, ExternalLink, Info } from "lucide-react";
 
 import { buildDocsUrl, cn } from "@/lib/utils";
 import { Explainer } from "@/types/shared";
@@ -32,7 +32,7 @@ const ExplainerIcon: React.FC<ExplainerIconProps> = ({
                 rel="noreferrer"
               >
                 Read more
-                <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+                <ExternalLink className="ml-0.5 size-3 shrink-0" />
               </a>
             </Button>
           )}

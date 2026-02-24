@@ -11,10 +11,15 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { FileTerminal, FlaskConical, LayoutGrid } from "lucide-react";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const WorkspaceStatisticSection = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+
+  const {
+    permissions: { canViewExperiments },
+  } = usePermissions();
 
   const { data: projectData } = useProjectsList(
     {
@@ -79,34 +84,36 @@ const WorkspaceStatisticSection = () => {
           </div>
         </CardContent>
       </Card>
-      <Card
-        className="min-w-52 flex-1 cursor-pointer hover:shadow-md"
-        onClick={() =>
-          navigate({
-            to: "/$workspaceName/experiments",
-            params: {
-              workspaceName,
-            },
-          })
-        }
-      >
-        <CardHeader className="flex flex-row items-center gap-3">
-          <div className="flex size-6 items-center justify-center rounded-sm bg-[var(--tag-burgundy-bg)] text-[var(--tag-burgundy-text)]">
-            <FlaskConical className="size-3.5" />
-          </div>
-          <div className="comet-body-s !m-0 flex items-center gap-1.5">
-            Experiments
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="comet-title-l truncate">
-            {formatNumberInK(experimentsData?.total ?? 0)}
-          </div>
-        </CardContent>
-      </Card>
+      {canViewExperiments && (
+        <Card
+          className="min-w-52 flex-1 cursor-pointer hover:shadow-md"
+          onClick={() =>
+            navigate({
+              to: "/$workspaceName/experiments",
+              params: {
+                workspaceName,
+              },
+            })
+          }
+        >
+          <CardHeader className="flex flex-row items-center gap-3">
+            <div className="flex size-6 items-center justify-center rounded-sm bg-[var(--tag-burgundy-bg)] text-[var(--tag-burgundy-text)]">
+              <FlaskConical className="size-3.5" />
+            </div>
+            <div className="comet-body-s !m-0 flex items-center gap-1.5">
+              Experiments
+              <ExplainerIcon
+                {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="comet-title-l truncate">
+              {formatNumberInK(experimentsData?.total ?? 0)}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card
         className="min-w-52 flex-1 cursor-pointer hover:shadow-md"
         onClick={() =>
