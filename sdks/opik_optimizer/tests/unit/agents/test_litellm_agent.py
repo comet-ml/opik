@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
+from opik_optimizer.agents.litellm_agent import _sanitize_tool_arguments_for_logging
 from opik_optimizer.api_objects import chat_prompt
 from tests.unit.fixtures.builders import make_litellm_completion_response
 from tests.unit.fixtures import system_message, user_message
@@ -86,6 +87,22 @@ class TestLiteLLMAgentInitialization:
             # Restore
             if old_val:
                 os.environ["OPIK_PROJECT_NAME"] = old_val
+
+
+def test_sanitize_tool_arguments_for_logging_redacts_sensitive_keys() -> None:
+    args = {
+        "api_key": "super-secret-value",
+        "nested": {"token": "abcd", "query": "hello"},
+        "password_hint": "something",
+        "normal": "x" * 80,
+    }
+    sanitized = _sanitize_tool_arguments_for_logging(args)
+
+    assert sanitized["api_key"] == "***REDACTED***"
+    assert sanitized["nested"]["token"] == "***REDACTED***"
+    assert sanitized["password_hint"] == "***REDACTED***"
+    assert sanitized["nested"]["query"] == "hello"
+    assert sanitized["normal"].endswith("...")
 
 
 class TestLiteLLMAgentInvoke:
@@ -208,6 +225,85 @@ class TestLiteLLMAgentInvoke:
 
         assert tool_called
         assert result == "tool-response"
+
+    def test_tool_loop_handles_invalid_tool_call_arguments(
+        self, agent: LiteLLMAgent
+    ) -> None:
+        tool_called: list[dict[str, Any]] = []
+
+        def tool_fn(**kwargs: Any) -> str:
+            tool_called.append(kwargs)
+            return "tool-response"
+
+        prompt = chat_prompt.ChatPrompt(system="s", user="u")
+        prompt.tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search",
+                    "description": "search",
+                    "parameters": {"type": "object", "properties": {"q": {}}},
+                },
+            }
+        ]
+        prompt.function_map = {"search": tool_fn}
+
+        class _ToolMessage:
+            def __init__(self) -> None:
+                self.tool_calls = [
+                    {
+                        "id": "call_1",
+                        "function": {"name": "search", "arguments": "{bad json"},
+                    }
+                ]
+                self.content = ""
+
+            def to_dict(self) -> dict[str, Any]:
+                return {"tool_calls": self.tool_calls, "content": self.content}
+
+            def __getitem__(self, key: str) -> Any:
+                return {"tool_calls": self.tool_calls, "content": self.content}[key]
+
+        class _FinalMessage:
+            def __init__(self) -> None:
+                self.tool_calls: list[dict[str, Any]] = []
+                self.content = "final answer"
+
+            def to_dict(self) -> dict[str, Any]:
+                return {"tool_calls": self.tool_calls, "content": self.content}
+
+            def __getitem__(self, key: str) -> Any:
+                return {"tool_calls": self.tool_calls, "content": self.content}[key]
+
+        first_response = make_litellm_completion_response(message=_ToolMessage())
+        second_response = make_litellm_completion_response(message=_FinalMessage())
+
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        def fake_complete(
+            model: str,
+            messages: list[dict[str, Any]],
+            **kwargs: Any,
+        ) -> MagicMock:
+            _ = model, kwargs
+            captured_messages.append(list(messages))
+            return first_response if len(captured_messages) == 1 else second_response
+
+        with patch.object(agent, "_llm_complete", side_effect=fake_complete):
+            result = agent.invoke_agent(
+                prompts={"p": prompt},
+                dataset_item={"input": "x"},
+                allow_tool_use=True,
+            )
+
+        assert result == "final answer"
+        assert tool_called == []
+        assert len(captured_messages) == 2
+        assert any(
+            msg.get("role") == "tool"
+            and "Invalid JSON arguments for tool `search`" in str(msg.get("content"))
+            for msg in captured_messages[1]
+        )
 
 
 class TestLiteLLMAgentCostTracking:

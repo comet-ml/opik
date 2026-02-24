@@ -3,6 +3,8 @@ from ...testlib import (
 )
 
 BEDROCK_MODEL_FOR_TESTS = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+MISTRAL_PIXTRAL_MODEL_FOR_TESTS = "us.mistral.pixtral-large-2502-v1:0"
+MISTRAL_PIXTRAL_REGION_FOR_TESTS = "us-east-2"
 
 EXPECTED_BEDROCK_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,

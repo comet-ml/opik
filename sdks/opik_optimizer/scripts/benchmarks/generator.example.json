@@ -17,7 +17,7 @@
           "optimizer_prompt_params": { "max_trials": 1, "population_size": 2, "num_generations": 1 }
         }
       ],
-      "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+      "metrics": ["benchmarks.packages.hotpot.metrics.hotpot_f1"],
       "prompt": [
         { "role": "system", "content": "Answer the question briefly and correctly." },
         { "role": "user", "content": "{text}" }
