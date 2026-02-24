@@ -71,11 +71,35 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "total_estimated_cost_sum",
-  "duration.p50",
   "last_updated_at",
-  "created_at",
+  "trace_count",
+  "duration.p50",
+  "total_estimated_cost_sum",
+  "error_count",
+  "usage.total_tokens",
+  COLUMN_FEEDBACK_SCORES_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_NAME_ID,
+  "last_updated_at",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_sum",
+  "error_count",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "thread_count",
+  "tags",
   "description",
+  "created_at",
+  "id",
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
 ];
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
@@ -110,7 +134,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Avg duration",
+        label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -332,7 +356,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
