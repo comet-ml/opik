@@ -7,11 +7,7 @@ import {
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-
-export enum VIEW_TYPE {
-  DETAILS = "details",
-  DASHBOARDS = "dashboards",
-}
+import { VIEW_TYPE } from "@/types/dashboard";
 
 export interface ViewSelectorProps {
   value: VIEW_TYPE;

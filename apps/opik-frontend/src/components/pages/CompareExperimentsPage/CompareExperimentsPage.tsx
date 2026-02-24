@@ -15,7 +15,7 @@ import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "@/types/dashboard";
 import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {

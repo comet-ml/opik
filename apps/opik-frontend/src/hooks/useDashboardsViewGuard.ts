@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "@/types/dashboard";
 
 interface UseDashboardsViewGuardParams {
   view: VIEW_TYPE | null;
