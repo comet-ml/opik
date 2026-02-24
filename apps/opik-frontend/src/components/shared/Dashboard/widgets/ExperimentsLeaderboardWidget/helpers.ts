@@ -62,7 +62,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     cell: ResourceCell as never,
     customMeta: {
