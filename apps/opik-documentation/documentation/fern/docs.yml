@@ -720,6 +720,12 @@ navigation:
           - page: OpenTelemetry
             path: docs/tracing/opentelemetry/overview.mdx
             slug: opentelemetry
+          - page: OpenInference
+            path: docs/tracing/integrations/openinference.mdx
+            slug: openinference
+          - page: OpenLLMetry
+            path: docs/tracing/integrations/openllmetry.mdx
+            slug: openllmetry
   - tab: agent-optimization
     layout:
       - section: Getting Started
@@ -1206,6 +1212,12 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/integrations/openai_agents"
     destination: "/docs/opik/integrations/openai_agents"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openinference"
+    destination: "/docs/opik/integrations/openinference"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openllmetry"
+    destination: "/docs/opik/integrations/openllmetry"
     permanent: true
   - source: "/docs/opik/tracing/integrations/openrouter"
     destination: "/docs/opik/integrations/openrouter"
