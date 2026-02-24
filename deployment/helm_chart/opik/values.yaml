@@ -389,6 +389,76 @@ component:
       failureThreshold: 30
       periodSeconds: 10
 
+  # Configuration for the Opik MCP server.
+  # Disabled by default; enable to expose streamable MCP over HTTP.
+  mcp:
+    # Whether to deploy the MCP component (default: false).
+    enabled: false
+    # ServiceAccount configuration for MCP pods.
+    serviceAccount:
+      # Create a dedicated ServiceAccount for MCP pods (default: true).
+      create: true
+      # Name of the ServiceAccount used by MCP pods.
+      name: opik-mcp
+    metrics:
+      enabled: false
+    image:
+      repository: opik-mcp
+      pullPolicy: IfNotPresent
+    replicaCount: 1
+    autoscaling:
+      enabled: false
+    backendConfigMap:
+      enabled: false
+    podDisruptionBudget:
+      enabled: false
+    env:
+      TRANSPORT: "streamable-http"
+      STREAMABLE_HTTP_PORT: "3001"
+      STREAMABLE_HTTP_HOST: "0.0.0.0"
+      STREAMABLE_HTTP_REQUIRE_AUTH: "true"
+      STREAMABLE_HTTP_VALIDATE_REMOTE_AUTH: "true"
+      STREAMABLE_HTTP_TRUST_WORKSPACE_HEADERS: "false"
+      OPIK_API_BASE_URL: "http://opik-frontend:5173/api"
+      OPIK_SELF_HOSTED: "true"
+      OPIK_TOOLSETS: "all"
+    securityContext: {}
+    ports:
+      - name: http
+        containerPort: 3001
+        protocol: TCP
+    service:
+      type: ClusterIP
+      ports:
+      - name: http
+        port: 3001
+        protocol: TCP
+        targetPort: 3001
+    ingress:
+      enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 3001
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 3001
+      initialDelaySeconds: 5
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: 3001
+      failureThreshold: 30
+      periodSeconds: 5
+
   frontend:
     enabled: true
     serviceAccount:
