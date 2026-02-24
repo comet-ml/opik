@@ -36,7 +36,10 @@ class TestConfigDecoratorValidation:
 
 
 class TestConfigDecoratorInit:
-    def test_init__happy_path__syncs_with_backend(self, mock_backend):
+    def test_init__no_existing_blueprint__creates_config_with_all_fields(
+        self, mock_backend
+    ):
+        # Default fixture: get_blueprint raises 404, so create_config is called
         @config_decorator
         @dataclasses.dataclass
         class MyConfig:
@@ -46,8 +49,32 @@ class TestConfigDecoratorInit:
         MyConfig(temp=0.6, name="custom")
 
         mock_backend.optimizer_configs.create_config.assert_called_once()
+        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
+        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        assert "temp" in keys
+        assert "name" in keys
 
-    def test_init__backend_returns_values__applies_them(self, mock_backend):
+    def test_init__existing_blueprint_with_same_keys__no_create_called(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(key="temp", type="number", value=0.3),
+                mock.Mock(key="name", type="string", value="backend-agent"),
+            ]
+        )
+
+        @config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+            name: str = "agent"
+
+        MyConfig()
+
+        mock_backend.optimizer_configs.create_config.assert_not_called()
+
+    def test_init__existing_blueprint_applies_backend_values(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
                 mock.Mock(key="temp", type="number", value=0.3),
@@ -64,6 +91,51 @@ class TestConfigDecoratorInit:
         instance = MyConfig()
         assert instance.temp == 0.3
         assert instance.name == "backend-agent"
+
+    def test_init__existing_blueprint_with_extra_local_keys__creates_only_extra(
+        self, mock_backend
+    ):
+        # Blueprint has "temp", local also has "max_tokens" (new key)
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(key="temp", type="number", value=0.3),
+            ]
+        )
+
+        @config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+            max_tokens: int = 2000
+
+        MyConfig()
+
+        mock_backend.optimizer_configs.create_config.assert_called_once()
+        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
+        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        assert "max_tokens" in keys
+        assert "temp" not in keys
+
+    def test_init__existing_blueprint_with_extra_local_keys__merges_values(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(key="temp", type="number", value=0.3),
+            ]
+        )
+
+        @config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+            max_tokens: int = 2000
+
+        instance = MyConfig()
+
+        # temp from backend, max_tokens from local default
+        assert instance.temp == 0.3
+        assert instance.max_tokens == 2000
 
     def test_init__backend_unavailable__uses_local_defaults(self):
         with mock.patch(
@@ -82,6 +154,7 @@ class TestConfigDecoratorInit:
 
 class TestConfigDecoratorFieldFiltering:
     def test_unsupported_field_types__excluded_from_backend_payload(self, mock_backend):
+        # No existing blueprint → create called with all supported fields
         @config_decorator
         @dataclasses.dataclass
         class MyConfig:
@@ -122,9 +195,10 @@ class TestConfigDecoratorMaskAndEnv:
         ],
         ids=["mask_id", "env"],
     )
-    def test_mask_or_env__triggers_second_blueprint_fetch(
+    def test_mask_or_env__no_existing_blueprint__creates_config(
         self, mock_backend, decorator_kwargs
     ):
+        # get_blueprint raises 404, so create_config should be called
         @config_decorator(**decorator_kwargs)
         @dataclasses.dataclass
         class MyConfig:
@@ -132,9 +206,53 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        # First fetch is from create_config -> get_blueprint,
-        # second is the pinned fetch for mask/env
-        assert mock_backend.optimizer_configs.get_blueprint.call_count >= 2
+        mock_backend.optimizer_configs.create_config.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "decorator_kwargs",
+        [
+            {"mask_id": "mask-1"},
+            {"env": "prod"},
+        ],
+        ids=["mask_id", "env"],
+    )
+    def test_mask_or_env__existing_blueprint__no_create_when_keys_match(
+        self, mock_backend, decorator_kwargs
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="temp", type="number", value=0.5)]
+        )
+
+        @config_decorator(**decorator_kwargs)
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        MyConfig()
+
+        mock_backend.optimizer_configs.create_config.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "decorator_kwargs",
+        [
+            {"mask_id": "mask-1"},
+            {"env": "prod"},
+        ],
+        ids=["mask_id", "env"],
+    )
+    def test_mask_or_env__passed_to_get_blueprint(self, mock_backend, decorator_kwargs):
+        @config_decorator(**decorator_kwargs)
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        MyConfig()
+
+        call_kwargs = mock_backend.optimizer_configs.get_blueprint.call_args[1]
+        if "mask_id" in decorator_kwargs:
+            assert call_kwargs.get("mask_id") == decorator_kwargs["mask_id"]
+        if "env" in decorator_kwargs:
+            assert call_kwargs.get("env") == decorator_kwargs["env"]
 
 
 class TestConfigDecoratorSpanMetadata:

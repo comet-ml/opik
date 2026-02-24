@@ -24,13 +24,11 @@ class ConfigClient:
     def __init__(self, client: rest_client.OpikApi):
         self._rest_client = client
 
-    def create_config(
+    def _build_blueprint_payload(
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
-        project_name: str,
-        project_id: typing.Optional[str] = None,
-        description: typing.Optional[str] = None,
-    ) -> ConfigData:
+        description: typing.Optional[str],
+    ) -> typing.Dict[str, typing.Any]:
         backend_values = []
         for field_name, (py_type, value) in fields_with_values.items():
             backend_values.append(
@@ -40,30 +38,52 @@ class ConfigClient:
                     "value": type_helpers.python_value_to_backend_value(value, py_type),
                 }
             )
-
-        blueprint_payload: typing.Dict[str, typing.Any] = {
-            "values": backend_values,
-        }
+        payload: typing.Dict[str, typing.Any] = {"values": backend_values}
         if description is not None:
-            blueprint_payload["description"] = description
+            payload["description"] = description
+        return payload
 
+    def create_blueprint_only(
+        self,
+        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
+        project_name: str,
+        project_id: typing.Optional[str] = None,
+        description: typing.Optional[str] = None,
+    ) -> None:
+        blueprint_payload = self._build_blueprint_payload(
+            fields_with_values, description
+        )
         self._rest_client.optimizer_configs.create_config(
             project_name=project_name,
             project_id=project_id,
             blueprint=blueprint_payload,
         )
 
+    def create_config(
+        self,
+        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
+        project_name: str,
+        project_id: typing.Optional[str] = None,
+        description: typing.Optional[str] = None,
+    ) -> ConfigData:
+        self.create_blueprint_only(
+            fields_with_values=fields_with_values,
+            project_name=project_name,
+            project_id=project_id,
+            description=description,
+        )
+
         return self.get_blueprint(
             project_name=project_name,
         )
 
-    def get_blueprint(
+    def try_get_blueprint(
         self,
         project_name: str,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> ConfigData:
+    ) -> typing.Optional[ConfigData]:
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name
         )
@@ -75,13 +95,30 @@ class ConfigClient:
             )
         except rest_api_core.ApiError as e:
             if e.status_code == 404:
-                raise ValueError("Config not found") from e
+                return None
             raise
 
         return self._blueprint_to_config_data(
             blueprint=blueprint,
             field_types=field_types,
         )
+
+    def get_blueprint(
+        self,
+        project_name: str,
+        env: typing.Optional[str] = None,
+        mask_id: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    ) -> ConfigData:
+        result = self.try_get_blueprint(
+            project_name=project_name,
+            env=env,
+            mask_id=mask_id,
+            field_types=field_types,
+        )
+        if result is None:
+            raise ValueError("Config not found")
+        return result
 
     def _blueprint_to_config_data(
         self,

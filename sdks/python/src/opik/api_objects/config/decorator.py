@@ -5,7 +5,7 @@ import typing
 from opik import context_storage
 from . import type_helpers
 from .cache import ConfigCache, DEFAULT_TTL_SECONDS
-from .client import ConfigClient
+from .client import ConfigClient, ConfigData
 from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
@@ -81,34 +81,98 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
             or client._project_name
         )
         description = object.__getattribute__(instance, "__opik_description__")
+        mask_id_val = object.__getattribute__(instance, "__opik_mask_id__")
+        env_val = object.__getattribute__(instance, "__opik_env__")
 
-        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
-        for f_name, f_type in field_types.items():
-            value = object.__getattribute__(instance, f_name)
-            fields_with_values[f_name] = (f_type, value)
+        existing = config_client.try_get_blueprint(
+            project_name=project_name,
+            env=env_val,
+            mask_id=mask_id_val,
+            field_types=field_types,
+        )
 
-        config_data = config_client.create_config(
-            fields_with_values=fields_with_values,
+        if existing is None:
+            _handle_no_blueprint(
+                instance,
+                config_client,
+                field_types,
+                project_name,
+                description,
+                env_val,
+                mask_id_val,
+            )
+        else:
+            _handle_existing_blueprint(
+                instance,
+                config_client,
+                existing,
+                field_types,
+                project_name,
+                description,
+            )
+
+    except Exception:
+        logger.debug("Failed to sync config with backend", exc_info=True)
+
+
+def _handle_no_blueprint(
+    instance: typing.Any,
+    config_client: ConfigClient,
+    field_types: typing.Dict[str, typing.Any],
+    project_name: str,
+    description: typing.Optional[str],
+    env_val: typing.Optional[str],
+    mask_id_val: typing.Optional[str],
+) -> None:
+    fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {
+        f_name: (f_type, object.__getattribute__(instance, f_name))
+        for f_name, f_type in field_types.items()
+    }
+    config_client.create_blueprint_only(
+        fields_with_values=fields_with_values,
+        project_name=project_name,
+        description=description,
+    )
+    created = config_client.try_get_blueprint(
+        project_name=project_name,
+        env=env_val,
+        mask_id=mask_id_val,
+        field_types=field_types,
+    )
+    if created is not None:
+        _apply_backend_values(instance, created)
+
+
+def _handle_existing_blueprint(
+    instance: typing.Any,
+    config_client: ConfigClient,
+    existing: ConfigData,
+    field_types: typing.Dict[str, typing.Any],
+    project_name: str,
+    description: typing.Optional[str],
+) -> None:
+    extra_keys = set(field_types) - set(existing.values)
+    if extra_keys:
+        extra_fields: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {
+            f_name: (field_types[f_name], object.__getattribute__(instance, f_name))
+            for f_name in extra_keys
+        }
+        config_client.create_blueprint_only(
+            fields_with_values=extra_fields,
             project_name=project_name,
             description=description,
         )
 
-        _apply_backend_values(instance, config_data)
+    merged_values = dict(existing.values)
+    for f_name in extra_keys:
+        merged_values[f_name] = object.__getattribute__(instance, f_name)
 
-        mask_id_val = object.__getattribute__(instance, "__opik_mask_id__")
-        env_val = object.__getattribute__(instance, "__opik_env__")
-
-        if mask_id_val is not None or env_val is not None:
-            pinned_data = config_client.get_blueprint(
-                project_name=project_name,
-                env=env_val,
-                mask_id=mask_id_val,
-                field_types=field_types,
-            )
-            _apply_backend_values(instance, pinned_data)
-
-    except Exception:
-        logger.debug("Failed to sync config with backend", exc_info=True)
+    merged_data = ConfigData(
+        blueprint_id=existing.blueprint_id,
+        values=merged_values,
+        description=existing.description,
+    )
+    _apply_backend_values(instance, merged_data)
 
 
 def _apply_backend_values(instance: typing.Any, config_data: typing.Any) -> None:
