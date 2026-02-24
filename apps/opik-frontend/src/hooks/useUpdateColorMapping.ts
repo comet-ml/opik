@@ -23,7 +23,7 @@ const useUpdateColorMapping = () => {
           variant: "destructive",
         });
 
-      const currentMap = { ...(config.color_map ?? {}) };
+      const currentMap = { ...(config?.color_map ?? {}) };
       const isDefault =
         hexColor.toLowerCase() ===
         resolveHexColor(resolveColor(colorKey)).toLowerCase();
@@ -51,8 +51,8 @@ const useUpdateColorMapping = () => {
       updateWorkspaceConfig({
         config: {
           timeout_to_mark_thread_as_inactive:
-            config.timeout_to_mark_thread_as_inactive,
-          truncation_on_tables: config.truncation_on_tables,
+            config?.timeout_to_mark_thread_as_inactive ?? null,
+          truncation_on_tables: config?.truncation_on_tables ?? null,
           color_map: Object.keys(currentMap).length > 0 ? currentMap : null,
         },
       });
