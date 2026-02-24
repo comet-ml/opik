@@ -2973,11 +2973,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)));
+                    .flatMap(result -> result
+                            .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)));
         });
     }
 
-    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row) {
+    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
         // Map data field - stored as Map<String, String> in ClickHouse
         Map<String, com.fasterxml.jackson.databind.JsonNode> data = Optional.ofNullable(row.get("data", Map.class))
                 .filter(m -> !m.isEmpty())
@@ -2994,6 +2995,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
+                .description(DatasetItemResultMapper.getDescription(row, rowMetadata))
                 .source(Optional.ofNullable(row.get("source", String.class))
                         .map(com.comet.opik.api.DatasetItemSource::fromString)
                         .orElse(null))
@@ -3009,6 +3011,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .map(java.util.Arrays::asList)
                         .map(Set::copyOf)
                         .orElse(null))
+                .evaluators(DatasetItemResultMapper.getEvaluators(row, rowMetadata))
+                .executionPolicy(DatasetItemResultMapper.getExecutionPolicy(row, rowMetadata))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -3077,7 +3081,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("workspace_id", workspaceId);
 
                 return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)))
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {
