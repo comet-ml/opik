@@ -17,12 +17,18 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizerConfigEnv(
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        @JsonView( {
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 50, message = "envName cannot exceed 50 characters") String envName,
+        @JsonView({OptimizerConfig.View.Public.class,
+                OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 50, message = "envName cannot exceed 50 characters") String envName,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotNull UUID blueprintId,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt){
 }

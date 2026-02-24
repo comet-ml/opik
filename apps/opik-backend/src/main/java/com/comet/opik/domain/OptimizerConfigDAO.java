@@ -10,8 +10,8 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
-import org.jdbi.v3.sqlobject.customizer.BindBean;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
@@ -43,7 +43,8 @@ interface OptimizerConfigDAO {
             @Bind("created_by") String createdBy,
             @Bind("last_updated_by") String lastUpdatedBy);
 
-    @SqlUpdate("INSERT INTO optimizer_blueprint (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by) " +
+    @SqlUpdate("INSERT INTO optimizer_blueprint (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by) "
+            +
             "VALUES (:id, :workspace_id, :project_id, :config_id, :type, :description, :created_by, :last_updated_by)")
     void insertBlueprint(
             @Bind("id") UUID id,
@@ -56,34 +57,34 @@ interface OptimizerConfigDAO {
             @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlBatch("""
-    INSERT INTO optimizer_config_values (
-        id,
-        workspace_id,
-        project_id,
-        config_id,
-        `key`,
-        value,
-        type,
-        valid_from_blueprint_id,
-        valid_to_blueprint_id
-    )
-    VALUES (
-        :bean.id,
-        :workspace_id,
-        :project_id,
-        :config_id,
-        :bean.key,
-        :bean.value,
-        :bean.type,
-        :bean.validFromBlueprintId,
-        NULL
-    )
-    """)
+            INSERT INTO optimizer_config_values (
+                id,
+                workspace_id,
+                project_id,
+                config_id,
+                `key`,
+                value,
+                type,
+                valid_from_blueprint_id,
+                valid_to_blueprint_id
+            )
+            VALUES (
+                :bean.id,
+                :workspace_id,
+                :project_id,
+                :config_id,
+                :bean.key,
+                :bean.value,
+                :bean.type,
+                :bean.validFromBlueprintId,
+                NULL
+            )
+            """)
     void batchInsertValues(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("config_id") UUID configId,
-            @BindBean("bean") List<OptimizerConfigValue> values);
+            @BindMethods("bean") List<OptimizerConfigValue> values);
 
     @SqlUpdate("UPDATE optimizer_config_values " +
             "SET valid_to_blueprint_id = :valid_to_blueprint_id " +
@@ -135,7 +136,8 @@ interface OptimizerConfigDAO {
             @Bind("config_id") UUID configId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at " +
+    @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
+            +
             "FROM optimizer_config_envs " +
             "WHERE workspace_id = :workspace_id AND config_id = :config_id AND env_name = :env_name")
     OptimizerConfigEnv getEnvByName(
@@ -143,7 +145,8 @@ interface OptimizerConfigDAO {
             @Bind("config_id") UUID configId,
             @Bind("env_name") String envName);
 
-    @SqlUpdate("INSERT INTO optimizer_config_envs (id, workspace_id, project_id, config_id, env_name, blueprint_id, created_by, last_updated_by) " +
+    @SqlUpdate("INSERT INTO optimizer_config_envs (id, workspace_id, project_id, config_id, env_name, blueprint_id, created_by, last_updated_by) "
+            +
             "VALUES (:id, :workspace_id, :project_id, :config_id, :env_name, :blueprint_id, :created_by, :last_updated_by)")
     void insertEnv(
             @Bind("id") UUID id,
@@ -156,7 +159,8 @@ interface OptimizerConfigDAO {
             @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlUpdate("UPDATE optimizer_config_envs " +
-            "SET blueprint_id = :blueprint_id, last_updated_by = :last_updated_by, last_updated_at = CURRENT_TIMESTAMP(6) " +
+            "SET blueprint_id = :blueprint_id, last_updated_by = :last_updated_by, last_updated_at = CURRENT_TIMESTAMP(6) "
+            +
             "WHERE workspace_id = :workspace_id AND config_id = :config_id AND env_name = :env_name")
     void updateEnv(
             @Bind("workspace_id") String workspaceId,

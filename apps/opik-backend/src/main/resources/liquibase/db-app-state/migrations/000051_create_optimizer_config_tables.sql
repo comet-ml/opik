@@ -2,7 +2,7 @@
 --changeset borystkachenko:000051_create_optimizer_config_tables
 --comment: Create optimizer configuration tables
 
-CREATE TABLE optimizer_config (
+CREATE TABLE IF NOT EXISTS optimizer_config (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE optimizer_config (
     CONSTRAINT optimizer_config_workspace_id_uk UNIQUE (workspace_id, project_id)
 );
 
-CREATE TABLE optimizer_blueprint (
+CREATE TABLE IF NOT EXISTS optimizer_blueprint (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -29,21 +29,21 @@ CREATE TABLE optimizer_blueprint (
     CONSTRAINT optimizer_blueprint_workspace_config_id_uk UNIQUE (workspace_id, project_id, id)
 );
 
-CREATE TABLE optimizer_config_values (
+CREATE TABLE IF NOT EXISTS optimizer_config_values (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
     config_id CHAR(36) NOT NULL,
-    key VARCHAR(255) NOT NULL,
-    value VARCHAR(255) NOT NULL,
+    `key` VARCHAR(255) NOT NULL,
+    `value` VARCHAR(255) NOT NULL,
     type ENUM('string', 'number', 'prompt', 'promptversion') NOT NULL DEFAULT 'string',
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
     CONSTRAINT optimizer_config_values_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, key)
+    CONSTRAINT optimizer_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, `key`)
 );
 
-CREATE TABLE optimizer_config_envs (
+CREATE TABLE IF NOT EXISTS optimizer_config_envs (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,

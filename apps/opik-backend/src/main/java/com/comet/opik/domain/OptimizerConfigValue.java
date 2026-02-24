@@ -21,13 +21,18 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record OptimizerConfigValue(
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
+        @JsonView( {
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
-        @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "value cannot exceed 255 characters") String value,
+        @JsonView({OptimizerConfig.View.Public.class,
+                OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
+        @JsonView({OptimizerConfig.View.Public.class,
+                OptimizerConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "value cannot exceed 255 characters") String value,
         @JsonView({OptimizerConfig.View.Public.class, OptimizerConfig.View.Write.class}) @NotNull ValueType type,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
-        @JsonView({OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId) {
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
+        @JsonView({
+                OptimizerConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId){
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

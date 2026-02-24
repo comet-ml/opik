@@ -27,13 +27,12 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
-
-import java.util.UUID;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.UUID;
 
 @Path("/v1/private/optimizer-configs")
 @Timed
@@ -50,24 +49,11 @@ public class OptimizerConfigResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Write.class)
-    @Operation(
-            operationId = "createOptimizerConfig",
-            summary = "Create optimizer config or add blueprint",
-            description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config",
-            responses = {
-                    @ApiResponse(
-                            responseCode = "201",
-                            description = "Blueprint created",
-                            content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
-                    @ApiResponse(
-                            responseCode = "400",
-                            description = "Bad Request",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(
-                            responseCode = "401",
-                            description = "Unauthorized",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-            })
+    @Operation(operationId = "createOptimizerConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
+            @ApiResponse(responseCode = "201", description = "Blueprint created", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response createOptimizerConfig(
             @RequestBody(content = @Content(schema = @Schema(implementation = OptimizerConfigCreate.class))) @Valid OptimizerConfigCreate request,
             @Context UriInfo uriInfo) {
@@ -96,24 +82,11 @@ public class OptimizerConfigResource {
     @Path("/{config_id}/blueprint/retrieve")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
-    @Operation(
-            operationId = "getLatestBlueprint",
-            summary = "Retrieve latest blueprint",
-            description = "Retrieves the latest blueprint for a configuration",
-            responses = {
-                    @ApiResponse(
-                            responseCode = "200",
-                            description = "Blueprint retrieved",
-                            content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
-                    @ApiResponse(
-                            responseCode = "404",
-                            description = "Not Found",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(
-                            responseCode = "401",
-                            description = "Unauthorized",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-            })
+    @Operation(operationId = "getLatestBlueprint", summary = "Retrieve latest blueprint", description = "Retrieves the latest blueprint for a configuration", responses = {
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response getLatestBlueprint(
             @PathParam("config_id") UUID configId,
             @QueryParam("maskid") UUID maskId) {
@@ -129,24 +102,11 @@ public class OptimizerConfigResource {
     @Path("/{config_id}/blueprint/{blueprint_id}")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
-    @Operation(
-            operationId = "getBlueprintById",
-            summary = "Retrieve blueprint by ID",
-            description = "Retrieves a specific blueprint by its ID",
-            responses = {
-                    @ApiResponse(
-                            responseCode = "200",
-                            description = "Blueprint retrieved",
-                            content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
-                    @ApiResponse(
-                            responseCode = "404",
-                            description = "Not Found",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(
-                            responseCode = "401",
-                            description = "Unauthorized",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-            })
+    @Operation(operationId = "getBlueprintById", summary = "Retrieve blueprint by ID", description = "Retrieves a specific blueprint by its ID", responses = {
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response getBlueprintById(
             @PathParam("config_id") UUID configId,
             @PathParam("blueprint_id") UUID blueprintId,
@@ -163,24 +123,11 @@ public class OptimizerConfigResource {
     @Path("/{config_id}/blueprint/tag/{tag}")
     @Produces(MediaType.APPLICATION_JSON)
     @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
-    @Operation(
-            operationId = "getBlueprintByTag",
-            summary = "Retrieve blueprint by environment tag",
-            description = "Retrieves the blueprint associated with a specific environment tag",
-            responses = {
-                    @ApiResponse(
-                            responseCode = "200",
-                            description = "Blueprint retrieved",
-                            content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
-                    @ApiResponse(
-                            responseCode = "404",
-                            description = "Not Found",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(
-                            responseCode = "401",
-                            description = "Unauthorized",
-                            content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
-            })
+    @Operation(operationId = "getBlueprintByTag", summary = "Retrieve blueprint by environment tag", description = "Retrieves the blueprint associated with a specific environment tag", responses = {
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
     public Response getBlueprintByTag(
             @PathParam("config_id") UUID configId,
             @PathParam("tag") String tag,
