@@ -58,8 +58,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.utils.AsyncUtils.setRequestContext;
-
 @Path("/v1/private/prompts")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -215,9 +213,7 @@ public class PromptResource {
         log.info("Getting prompts by commits, count '{}', on workspace_id '{}'",
                 request.commits().size(), workspaceId);
 
-        var prompts = promptService.getByCommits(request.commits())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
+        var prompts = promptService.getByCommits(request.commits());
 
         log.info("Got prompts by commits, count '{}', on workspace_id '{}'",
                 prompts.size(), workspaceId);

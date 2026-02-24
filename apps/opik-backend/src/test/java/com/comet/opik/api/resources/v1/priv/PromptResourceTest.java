@@ -4291,11 +4291,21 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when empty list, then return empty result")
-        void getPromptsByCommitsWhenEmptyListReturnsEmptyResult() {
-            var result = getPromptsByCommits(List.of(), API_KEY, TEST_WORKSPACE);
+        @DisplayName("when empty list, then return 422 validation error")
+        void getPromptsByCommitsWhenEmptyListReturnsValidationError() {
+            var request = PromptVersionCommitsRequest.builder()
+                    .commits(List.of())
+                    .build();
 
-            assertThat(result).isEmpty();
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("retrieve-by-commits")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(request))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
         }
     }
 }
