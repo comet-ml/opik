@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates O
     `usage_total_tokens_percentiles` Map(String, Float64) DEFAULT map() CODEC(ZSTD(1))
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/experiment_aggregates', '{replica}', last_updated_at)
-ORDER BY (workspace_id, id)
+ORDER BY (workspace_id, dataset_id, id)
 SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggrega
     `trace_id` FixedString(36),
     `input` String DEFAULT '' CODEC(ZSTD(3)),
     `output` String DEFAULT '' CODEC(ZSTD(3)),
-    `input_slim` String DEFAULT '' CODEC(ZSTD(3)),
-    `output_slim` String DEFAULT '' CODEC(ZSTD(3)),
-    `duration` Decimal64(9) DEFAULT 0 CODEC(Delta, ZSTD(1)),
+    `input_slim` String DEFAULT '' CODEC(ZSTD(1)),
+    `output_slim` String DEFAULT '' CODEC(ZSTD(1)),
+    `duration` Float64 DEFAULT 0 CODEC(ZSTD(1)),
     `total_estimated_cost` Decimal(38, 12) DEFAULT 0 CODEC(ZSTD(1)),
     `usage` Map(String, Int64) DEFAULT map() CODEC(ZSTD(1)),
     `feedback_scores` Map(String, Decimal64(9)) DEFAULT map() CODEC(ZSTD(1)),
