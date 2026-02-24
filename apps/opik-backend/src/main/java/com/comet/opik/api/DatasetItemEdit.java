@@ -27,7 +27,7 @@ public record DatasetItemEdit(
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(implementation = JsonNode.class, ref = "JsonNode", description = "New data to merge with existing item data") Map<String, JsonNode> data,
 
-        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New description for the item. Send empty string to clear.") String description,
+        @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New description for the item") String description,
 
         @JsonView(DatasetItemEdit.View.Write.class) @Schema(description = "New tags to replace existing item tags") Set<String> tags,
 
