@@ -9,6 +9,7 @@ export interface TrackOpikConfig {
   client?: Opik;
   generationName?: string;
   parent?: OpikParent;
+  provider?: string;
 }
 
 export interface OpikExtension {

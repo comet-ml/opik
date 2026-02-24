@@ -14,9 +14,12 @@ OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
 def _get_provider(openai_client: OpenAIClient) -> str:
     """Get the provider name from the OpenAI client's base URL."""
-    if openai_client.base_url.host != "api.openai.com":
-        return openai_client.base_url.host
-    return "openai"
+    if openai_client.base_url.host in {"api.openai.com", "localhost"}:
+        return "openai"
+    if "openrouter.ai" in openai_client.base_url.host:
+        return "openrouter"
+
+    return openai_client.base_url.host
 
 
 def track_openai(

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2019",
     "module": "ESNext",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": ["ESNext", "DOM"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -16,19 +16,10 @@
     "types": ["vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "opik": ["./src/opik/index.ts"],
-      "@/*": ["./src/opik/*"],
+      "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"]
     }
   },
   "include": ["src", "tests"],
-  "exclude": [
-    "node_modules",
-    "src/opik/integrations/opik-langchain",
-    "src/opik/integrations/opik-openai",
-    "src/opik/integrations/opik-openrouter",
-    "src/opik/integrations/opik-gemini",
-    "src/opik/integrations/opik-vercel",
-    "src/opik/configure"
-  ]
+  "exclude": ["node_modules"]
 }

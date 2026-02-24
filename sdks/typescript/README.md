@@ -108,9 +108,11 @@ await client.flush();
 Opik provides seamless integrations with popular AI frameworks and tools. Check out our integration packages:
 
 - **Vercel AI** - [`opik-vercel`](https://www.npmjs.com/package/opik-vercel)
-- **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
-- **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
 - **Google Gemini** - [`opik-gemini`](https://www.npmjs.com/package/opik-gemini)
+- **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
+- **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
+- **OpenRouter** - [`opik-openrouter`](https://www.npmjs.com/package/opik-openrouter)
+- **Vercel AI** - [`opik-vercel`](https://www.npmjs.com/package/opik-vercel)
 
 ## Contributing
 

@@ -1,0 +1,183 @@
+---
+description: Start here to integrate Opik with OpenRouter using OpenAI-compatible clients and OpenRouter Gateway broadcast.
+headline: OpenRouter Gateway | Opik Documentation
+og:description: Track OpenRouter calls through OpenAI-compatible wrappers and broadcast destinations.
+og:site_name: Opik Documentation
+og:title: Integrate OpenRouter Gateway with Opik
+title: Observability for OpenRouter Gateway with Opik
+---
+
+OpenRouter can be used through:
+
+- OpenRouter Broadcast destination (`opik`) for direct forwarding
+- The OpenAI-compatible path (`track_openai` / `trackOpenAI`) with OpenRouter base URL
+
+<Tip>
+If you already use native OpenRouter clients, use the [OpenRouter SDK guide](/docs/opik/integrations/openrouter/).
+</Tip>
+
+<Tip>
+OpenRouter route/proxy resolution in OpenAI-compatible tracing is best-effort and inferred from model/response data. It does not currently expose a guaranteed explicit upstream routing label on every request.
+</Tip>
+
+## Option 1: OpenRouter Broadcast destination (recommended)
+
+Use this path when you want OpenRouter to manage routing and send traces to Opik directly from OpenRouter.
+
+If you prefer centralized routing, audit, and no OpenAI-wrapper wiring in your application code, use the OpenRouter Broadcast destination first.
+
+- Open the OpenRouter dashboard
+- Go to **Broadcast** destinations
+- Add `opik` as a destination
+- Configure your Opik endpoint and credentials as described in OpenRouter docs
+
+Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
+
+<Tip>
+If you want typed SDK-native tracing (instead of broadcast), use the dedicated [OpenRouter SDK guide](/docs/opik/integrations/openrouter/) or the OpenAI-compatible paths below.
+</Tip>
+
+### Broadcast metadata mapping (OpenRouter → Opik)
+
+OpenRouter Broadcast sends standard OpenAI-compatible request/response observability fields, plus additional metadata in the OpenRouter `trace` block.
+
+The following fields are explicitly handled by Opik in the OpenRouter destination:
+
+- `trace.trace_id` → `openrouter_trace_id` (stored in trace metadata)
+- `trace.trace_name` → trace display name
+- `trace.span_name` → span display name
+- `trace.generation_name` → generation span display name
+- `user` → Opik trace user identifier
+
+OpenRouter also forwards the optional keys inside `trace` to both trace and span metadata, which lets you add workflow context (for example: `session_id`, `eval_suite`, `environment`, `feature`).
+
+OpenRouter payloads include additional fields that Opik also records when available:
+- model metadata and finish reasons
+- cost totals (input/output/total, when provided)
+- model parameters and finish reasons in span metadata
+- `openrouter_observation_id` in metadata for the OpenRouter span ID
+
+Reference: https://openrouter.ai/docs/guides/features/broadcast/opik
+
+For full schema details, including example payload and privacy-mode behavior, see OpenRouter’s destination guide for Opik.
+
+## Option 2: OpenAI-compatible path
+
+Use this path when your app already uses OpenAI-style calls (`chat.completions.create`) and you want to keep the OpenAI-compatible integration while sending requests to OpenRouter.
+
+<Tabs>
+<Tab value="Python" title="Python">
+
+:::note
+Intent: use `track_openai` when the OpenAI client is the wrapper surface and OpenRouter is only the transport.
+:::
+
+```bash
+pip install opik openai
+```
+
+### Required fields for OpenAI-compatible payload
+
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
+
+### Optional fields
+
+- `temperature`, `top_p`, `max_tokens`, `stream`, `tools`, `response_format`, `tool_choice`
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="YOUR_OPENROUTER_API_KEY"
+)
+tracked_client = track_openai(client)
+
+response = tracked_client.chat.completions.create(
+    model="openai/gpt-4",
+    messages=[{"role": "user", "content": "Hello, world!"}],
+)
+```
+
+### Minimal valid payload
+
+```python
+response = tracked_client.chat.completions.create(
+  model="openai/gpt-4",
+  messages=[{"role": "user", "content": "Hello, world!"}],
+)
+```
+
+</Tab>
+<Tab value="TypeScript" title="TypeScript">
+
+:::note
+Intent: use `trackOpenAI` when your TypeScript code already calls OpenAI-compatible methods.
+:::
+
+```bash
+npm install opik-openai openai
+```
+
+### Required fields for OpenAI-compatible payload
+
+- `model` (required) - e.g., `openai/gpt-4`
+- `messages` (required) - list of role/content messages
+
+### Optional fields
+
+- `temperature`, `top_p`, `max_tokens`, `stream`, `tools`, `response_format`, `tool_choice`
+
+```typescript
+import OpenAI from "openai";
+import { trackOpenAI } from "opik-openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: "https://openrouter.ai/api/v1",
+});
+
+const trackedOpenAI = trackOpenAI(openai);
+
+const response = await trackedOpenAI.chat.completions.create({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+### Minimal valid payload
+
+```typescript
+const response = await trackedOpenAI.chat.completions.create({
+  model: "openai/gpt-4",
+  messages: [{ role: "user", content: "Hello, world!" }],
+});
+```
+
+</Tab>
+</Tabs>
+
+### Canonical reference
+
+For full payload matrix and generated walkthroughs, use:
+- Python OpenAI-compatible integration guide: https://www.comet.com/docs/opik/integrations/openai/
+- TypeScript OpenAI-compatible integration guide: https://www.comet.com/docs/opik/integrations/openai-typescript/
+
+## Available Methods
+
+When using the OpenAI-compatible path:
+
+- `client.chat.completions.create()`
+- `client.beta.chat.completions.parse()` (OpenAI-compatible models)
+
+## Option 3: Official OpenRouter SDK
+
+Use the dedicated guide if your codebase uses `@openrouter/sdk` in TypeScript or native OpenRouter Python client usage:
+
+- [OpenRouter SDK with Opik](/docs/opik/integrations/openrouter/)
+
+For non-OpenAI models and structured output details, see [OpenRouter Structured Outputs](https://openrouter.ai/docs/features/structured-outputs).
+
+For a full OpenRouter reference, see the [OpenRouter documentation](https://openrouter.ai/docs).
