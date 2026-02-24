@@ -9,10 +9,20 @@ export const TraceThreadUpdate: core.serialization.ObjectSchema<
     OpikApi.TraceThreadUpdate
 > = core.serialization.object({
     tags: core.serialization.list(core.serialization.string()).optional(),
+    tagsToAdd: core.serialization.property(
+        "tags_to_add",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
+    tagsToRemove: core.serialization.property(
+        "tags_to_remove",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace TraceThreadUpdate {
     export interface Raw {
         tags?: string[] | null;
+        tags_to_add?: string[] | null;
+        tags_to_remove?: string[] | null;
     }
 }
