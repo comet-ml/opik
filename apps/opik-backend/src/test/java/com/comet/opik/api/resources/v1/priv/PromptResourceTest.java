@@ -7,7 +7,6 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
-import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.PromptVersionUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -27,6 +26,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptVersionResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -42,7 +42,6 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -161,6 +160,7 @@ class PromptResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private PromptResourceClient promptResourceClient;
     private PromptVersionResourceClient promptVersionResourceClient;
 
     @BeforeAll
@@ -168,6 +168,7 @@ class PromptResourceTest {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         this.promptVersionResourceClient = new PromptVersionResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
@@ -4127,26 +4128,6 @@ class PromptResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetPromptsByCommits {
 
-        private List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
-                String workspaceName) {
-            var request = PromptVersionCommitsRequest.builder()
-                    .commits(commits)
-                    .build();
-
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("retrieve-by-commits")
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(request))) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-                return response.readEntity(new GenericType<List<PromptVersionLink>>() {
-                });
-            }
-        }
-
         @Test
         @DisplayName("Success: should return prompts for given commits")
         void getPromptsByCommits() {
@@ -4177,7 +4158,7 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             // Call the endpoint
-            var result = getPromptsByCommits(
+            var result = promptResourceClient.getPromptsByCommits(
                     List.of(version1.commit(), version2.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
@@ -4219,7 +4200,7 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             // Request in reverse order
-            var result = getPromptsByCommits(
+            var result = promptResourceClient.getPromptsByCommits(
                     List.of(version2.commit(), version1.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
@@ -4238,7 +4219,7 @@ class PromptResourceTest {
             var unknownCommit1 = UUID.randomUUID().toString();
             var unknownCommit2 = UUID.randomUUID().toString();
 
-            var result = getPromptsByCommits(
+            var result = promptResourceClient.getPromptsByCommits(
                     List.of(unknownCommit1, unknownCommit2), API_KEY, TEST_WORKSPACE);
 
             assertThat(result).hasSize(2);
@@ -4273,7 +4254,7 @@ class PromptResourceTest {
 
             var unknownCommit = UUID.randomUUID().toString();
 
-            var result = getPromptsByCommits(
+            var result = promptResourceClient.getPromptsByCommits(
                     List.of(unknownCommit, version.commit()), apiKey, workspaceName);
 
             assertThat(result).hasSize(2);
