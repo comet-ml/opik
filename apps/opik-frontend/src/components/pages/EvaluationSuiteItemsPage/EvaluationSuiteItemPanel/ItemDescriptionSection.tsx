@@ -30,7 +30,7 @@ function ItemDescriptionSection({ itemId }: ItemDescriptionSectionProps) {
         onChange={handleChange}
         placeholder="Describe this item..."
         className={cn(TEXT_AREA_CLASSES, "min-h-0 resize-none")}
-        minRows={2}
+        minRows={1}
       />
     </div>
   );

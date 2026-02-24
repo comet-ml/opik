@@ -403,9 +403,7 @@ function EvaluationSuiteItemsTab({
           id: "description",
           label: "Description",
           type: COLUMN_TYPE.string,
-          accessorFn: (row) =>
-            (row.data as Record<string, unknown> | undefined)?.description ??
-            "",
+          accessorFn: (row) => row.description ?? "",
         },
         {
           id: "expected_behaviors",

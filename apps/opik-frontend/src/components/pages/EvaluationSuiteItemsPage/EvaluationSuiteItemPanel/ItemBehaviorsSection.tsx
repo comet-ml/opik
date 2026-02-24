@@ -89,7 +89,7 @@ function EvaluatorCard({ row, onEdit, onDelete }: EvaluatorCardProps) {
 
   return (
     <>
-      <Card className={cn("group p-3", getDraftBorderClass(row))}>
+      <Card className={cn("group p-3 shadow-none", getDraftBorderClass(row))}>
         <CardContent className="flex flex-col gap-1.5 p-0">
           {/* Zone A: Header */}
           <div className="flex items-center justify-between gap-2">

@@ -89,6 +89,29 @@ function hasItemLevelChanges(state: EvaluationSuiteDraftState): boolean {
   );
 }
 
+function removeUndefinedValues<T extends Record<string, unknown>>(
+  entry: Partial<T>,
+): Partial<T> | null {
+  const entries = Object.entries(entry).filter(([, v]) => v !== undefined);
+  return entries.length > 0
+    ? (Object.fromEntries(entries) as Partial<T>)
+    : null;
+}
+
+function mergeEditedItem(
+  editedItems: Map<string, Partial<DatasetItem>>,
+  id: string,
+  changes: Partial<DatasetItem>,
+): void {
+  const existing = editedItems.get(id) || {};
+  const cleaned = removeUndefinedValues({ ...existing, ...changes });
+  if (cleaned) {
+    editedItems.set(id, cleaned);
+  } else {
+    editedItems.delete(id);
+  }
+}
+
 const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
   (set, get) => ({
     ...createInitialState(),
@@ -125,8 +148,7 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
         }
 
         const newEditedItems = new Map(state.editedItems);
-        const existingChanges = state.editedItems.get(id) || {};
-        newEditedItems.set(id, { ...existingChanges, ...changes });
+        mergeEditedItem(newEditedItems, id, changes);
         return { editedItems: newEditedItems, isAllItemsSelected: false };
       });
     },
@@ -169,8 +191,7 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
             const existingItem = state.addedItems.get(id)!;
             newAddedItems.set(id, { ...existingItem, ...changes });
           } else {
-            const existingChanges = state.editedItems.get(id) || {};
-            newEditedItems.set(id, { ...existingChanges, ...changes });
+            mergeEditedItem(newEditedItems, id, changes);
           }
         });
 
