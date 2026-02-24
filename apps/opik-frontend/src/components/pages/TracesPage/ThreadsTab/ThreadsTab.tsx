@@ -75,10 +75,6 @@ import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScores
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
@@ -262,7 +258,6 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "last_updated_at",
   "duration",
   "status",
-  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -461,19 +456,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }, [feedbackScoresNames]);
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    return dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,

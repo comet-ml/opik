@@ -108,10 +108,6 @@ import { GuardrailResult } from "@/types/guardrails";
 import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
@@ -248,7 +244,6 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   "output",
   "duration",
   COLUMN_COMMENTS_ID,
-  USER_FEEDBACK_COLUMN_ID,
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
@@ -665,22 +660,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    const feedbackScoresColumns = [
-      userFeedbackColumn,
-      ...otherDynamicColumns,
-    ].map(
+    const feedbackScoresColumns = dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
