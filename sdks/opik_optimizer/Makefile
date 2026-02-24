@@ -14,6 +14,8 @@ PIP ?= $(PYTHON) -m pip
 PRECOMMIT ?= $(VENV_PRECOMMIT)
 endif
 
+SDK_DIFF_BASE ?= origin/main
+
 define warn_if_no_venv
 @if [ ! -f "$(VENV_PY)" ]; then \
   echo "[warn] Virtual environment $(VENV) not found; using system-level interpreters/tools."; \
@@ -22,7 +24,7 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test test-all precommit build clean
+.PHONY: help setup-venv install install-dev test test-all precommit precommit-all build clean
 .PHONY: modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
 .PHONY: benchmark-local benchmark-modal
 
@@ -35,7 +37,8 @@ help:
 	@echo "  test         Run tests"
 	@echo "  test-all     Run tests including integration markers"
 	@echo "  profile      Profile unit tests (cProfile via pytest-profiling)"
-	@echo "  precommit    Run pre-commit hooks on all files"
+	@echo "  precommit    Run pre-commit hooks on changed files"
+	@echo "  precommit-all    Run all pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
 	@echo "  benchmark-local Run benchmarks locally via unified runner"
@@ -114,7 +117,17 @@ profile:
 
 precommit:
 	$(call warn_if_no_venv)
-	PYTHONPATH=src $(PRECOMMIT) run --all-files
+	@repo_root=$$(git rev-parse --show-toplevel); \
+	"$$repo_root/scripts/run-precommit-changed-files.sh" \
+		--config sdks/opik_optimizer/.pre-commit-config.yaml \
+		--pathspec sdks/opik_optimizer/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
+		--label "Optimizer SDK files" \
+		--precommit-cmd "$(PRECOMMIT)"
+
+precommit-all:
+	$(call warn_if_no_venv)
+	PYTHONPATH=src $(PRECOMMIT) run --all-files -c .pre-commit-config.yaml
 
 build:
 	$(call warn_if_no_venv)

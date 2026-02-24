@@ -76,7 +76,7 @@ This repo uses a shared configuration setup for Claude Code and Cursor interoper
 ├── rules/*.mdc            # Rules (Cursor .mdc format)
 └── skills/**/             # Domain-specific skills
 
-.cursor -> .agents/        # SYMLINK - Cursor reads .agents directly
+.cursor -> .agents/        # OPTIONAL symlink created by `make cursor`
 
 .claude/                   # GENERATED - Do NOT edit directly
 ├── agents/                # Copied from .agents/agents/
@@ -119,7 +119,7 @@ When user is creating a new rule/skill/agent/MCP:
 ### Audit (explicit request)
 When user asks to audit or check config:
 1. Full scan of `.agents/` (source of truth)
-2. Verify `.cursor` symlink exists and points to `.agents`
+2. If `.cursor` exists, verify it points to `.agents`; if absent, note optional setup and recommend `make cursor`
 3. Check `.claude/` is in sync with `.agents/`
 4. Comprehensive anti-pattern check
 5. Context impact analysis
@@ -130,9 +130,9 @@ When user asks to audit or check config:
 ### Step 1: Verify Architecture
 
 ```bash
-# Check symlink
-ls -la .cursor
-# Should show: .cursor -> .agents
+# Optional symlink check
+if [ -e .cursor ]; then ls -la .cursor; else echo ".cursor not present (optional)"; fi
+# If present, should show: .cursor -> .agents
 
 # Check source of truth exists
 ls -la .agents/
@@ -154,7 +154,7 @@ Scan `.agents/` (source of truth):
 
 **Architecture Issues**
 - ❌ Files created directly in `.claude/` instead of `.agents/`
-- ❌ `.cursor` not a symlink or points elsewhere
+- ⚠️ `.cursor` exists but is not a symlink to `.agents`
 - ❌ `.claude/` out of sync with `.agents/` (forgot `make claude`)
 - ❌ Rules in `.agents/` with `.md` extension (should be `.mdc`)
 - ❌ MCP config edited in `.mcp.json` instead of `.agents/mcp.json`
@@ -232,7 +232,7 @@ Files in `.claude/` that don't have a source in `.agents/` are considered "local
 | Check | Status |
 |-------|--------|
 | `.agents/` exists | ✅/❌ |
-| `.cursor` → `.agents` symlink | ✅/❌ |
+| `.cursor` → `.agents` symlink (optional) | ✅/⚠️/N/A |
 | `.claude/` in sync | ✅/❌ |
 | `.mcp.json` generated | ✅/❌ |
 
