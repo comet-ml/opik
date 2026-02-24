@@ -15,6 +15,8 @@ from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
+from ...utils.toolcalling.core import segment_updates
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -39,6 +41,9 @@ def _message_has_content(message: dict[str, Any]) -> bool:
 
 
 class HierarchicalReflectiveOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     The Hierarchical Reflective Optimizer uses hierarchical root cause analysis to improve prompts
     based on failure modes identified during the evaluation process.
@@ -206,6 +211,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         prompts: dict[str, chat_prompt.ChatPrompt],
         root_cause: FailureMode,
         attempt: int = 1,
+        *,
+        optimize_tools: bool = False,
     ) -> dict[str, ImprovedPrompt] | list[dict[str, ImprovedPrompt]]:
         """
         Improve all prompts in the dict based on the root cause analysis.
@@ -225,13 +232,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         for prompt_name, prompt in prompts.items():
             prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
             prompts_section += f"```\n{prompt.get_messages()}\n```\n"
+            if optimize_tools:
+                tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
+                if tool_blocks:
+                    prompts_section += f"\nTools:\n{tool_blocks}\n"
 
         improve_prompt_template = self.get_prompt("improve_prompt_template")
+        tool_instructions = (
+            hierarchical_prompts.TOOL_INSTRUCTIONS if optimize_tools else ""
+        )
         improve_prompt_prompt = improve_prompt_template.format(
             prompts_section=prompts_section,
             failure_mode_name=root_cause.name,
             failure_mode_description=root_cause.description,
             failure_mode_root_cause=root_cause.root_cause,
+            tool_instructions=tool_instructions,
         )
 
         # Vary seed based on attempt to avoid cache hits and ensure different results
@@ -319,10 +334,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         Returns:
             Tuple of (improved_prompts_dict, improved_score, improved_experiment_result)
         """
-
-        # TODO: Refactor to use BaseOptimizer.evaluate() so trial accounting and
-        # early-stop logic are centralized instead of manually maintained here.
-
         # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
@@ -330,25 +341,65 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Generate improvement
         logger.debug(f"Generating improvement for failure mode: {root_cause.name}")
+        optimize_tools = bool(context.extra_params.get("optimize_tools"))
         improved_prompts_response = self._improve_prompt(
-            prompts=best_prompts, root_cause=root_cause, attempt=attempt
+            prompts=best_prompts,
+            root_cause=root_cause,
+            attempt=attempt,
+            optimize_tools=optimize_tools,
+        )
+        improved_chat_prompts_candidates = self._build_improved_candidates(
+            improved_prompts_response,
+            original_prompts,
+            best_prompts,
+            context,
+        )
+        logger.debug(
+            "Evaluating improvement for failure mode '%s' (attempt %s/%s)",
+            root_cause.name,
+            attempt,
+            max_attempts,
+        )
+        if not improved_chat_prompts_candidates:
+            return self._fallback_improvement(
+                best_prompts=best_prompts,
+                evaluation_dataset=evaluation_dataset,
+                metric=metric,
+                agent=agent,
+                n_samples=n_samples,
+                context=context,
+                best_score=best_score,
+                round_handle=round_handle,
+            )
+        return self._evaluate_improved_candidates(
+            improved_chat_prompts_candidates=improved_chat_prompts_candidates,
+            evaluation_dataset=evaluation_dataset,
+            metric=metric,
+            agent=agent,
+            n_samples=n_samples,
+            context=context,
+            round_handle=round_handle,
         )
 
+    def _build_improved_candidates(
+        self,
+        improved_prompts_response: Any,
+        original_prompts: dict[str, chat_prompt.ChatPrompt],
+        best_prompts: dict[str, chat_prompt.ChatPrompt],
+        context: OptimizationContext,
+    ) -> list[dict[str, chat_prompt.ChatPrompt]]:
+        """Build ChatPrompt candidates from the improvement response."""
         improved_chat_prompts_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
-        candidate_reasonings: list[str] = []
-        if isinstance(improved_prompts_response, list):
-            responses = improved_prompts_response
-        else:
-            responses = [improved_prompts_response]
-
+        responses = (
+            improved_prompts_response
+            if isinstance(improved_prompts_response, list)
+            else [improved_prompts_response]
+        )
         for response_item in responses:
             if not response_item:
                 continue
             improved_chat_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-            response_reasoning = ""
             for prompt_name, improved_prompt in response_item.items():
-                if not response_reasoning:
-                    response_reasoning = improved_prompt.reasoning
                 raw_messages = [x.model_dump() for x in improved_prompt.messages]
                 messages_as_dicts = [
                     message for message in raw_messages if _message_has_content(message)
@@ -371,8 +422,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 messages_as_dicts = apply_role_constraints(
                     original.get_messages(), messages_as_dicts, allowed_roles
                 )
-
-                improved_chat_prompts[prompt_name] = chat_prompt.ChatPrompt(
+                candidate_prompt = chat_prompt.ChatPrompt(
                     name=original.name,
                     messages=messages_as_dicts,
                     tools=best_prompts[prompt_name].tools,
@@ -380,39 +430,85 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     model=original.model,
                     model_parameters=original.model_kwargs,
                 )
+                candidate_prompt = self._apply_tool_updates_from_improvement(
+                    candidate_prompt=candidate_prompt,
+                    improved_prompt=improved_prompt,
+                    context=context,
+                )
+                improved_chat_prompts[prompt_name] = candidate_prompt
             improved_chat_prompts_candidates.append(improved_chat_prompts)
-            candidate_reasonings.append(response_reasoning)
+        return improved_chat_prompts_candidates
 
-        # Evaluate improved prompt
-        logger.debug(
-            f"Evaluating improvement for failure mode '{root_cause.name}' "
-            f"(attempt {attempt}/{max_attempts})"
+    def _apply_tool_updates_from_improvement(
+        self,
+        *,
+        candidate_prompt: chat_prompt.ChatPrompt,
+        improved_prompt: ImprovedPrompt,
+        context: OptimizationContext,
+    ) -> chat_prompt.ChatPrompt:
+        """Apply tool/parameter description updates from an ImprovedPrompt."""
+        if not context.extra_params.get("optimize_tools"):
+            return candidate_prompt
+        if not (
+            improved_prompt.tool_descriptions or improved_prompt.parameter_descriptions
+        ):
+            return candidate_prompt
+        allowed_tools = set(context.extra_params.get("tool_names") or [])
+        return segment_updates.apply_tool_updates_from_descriptions(
+            prompt=candidate_prompt,
+            tool_descriptions=improved_prompt.tool_descriptions,
+            parameter_descriptions=improved_prompt.parameter_descriptions,
+            allowed_tools=allowed_tools or None,
         )
 
-        if not improved_chat_prompts_candidates:
-            fallback_id = f"trial{context.trials_completed}_fallback"
-            fallback_score, fallback_result = self._evaluate_prompts_with_result(
-                prompts=best_prompts,
-                dataset=evaluation_dataset,
-                metric=metric,
-                agent=agent,
-                n_samples=n_samples,
-                context=context,
-                empty_score=best_score,
-                sampling_tag=fallback_id,
-            )
-            runtime.record_and_post_trial(
-                optimizer=self,
-                context=context,
-                prompt_or_payload=best_prompts,
-                score=fallback_score,
-                candidate_id=fallback_id,
-                round_handle=round_handle,
-                post_extras=None,
-                post_metrics=None,
-            )
-            return best_prompts, fallback_score, fallback_result
+    def _fallback_improvement(
+        self,
+        *,
+        best_prompts: dict[str, chat_prompt.ChatPrompt],
+        evaluation_dataset: opik.Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None,
+        n_samples: int | float | str | None,
+        context: OptimizationContext,
+        best_score: float,
+        round_handle: Any,
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
+        """Evaluate the current best prompt when no candidate improvements exist."""
+        fallback_id = f"trial{context.trials_completed}_fallback"
+        fallback_score, fallback_result = self._evaluate_prompts_with_result(
+            prompts=best_prompts,
+            dataset=evaluation_dataset,
+            metric=metric,
+            agent=agent,
+            n_samples=n_samples,
+            context=context,
+            empty_score=best_score,
+            sampling_tag=fallback_id,
+        )
+        runtime.record_and_post_trial(
+            optimizer=self,
+            context=context,
+            prompt_or_payload=best_prompts,
+            score=fallback_score,
+            candidate_id=fallback_id,
+            round_handle=round_handle,
+            post_extras=None,
+            post_metrics=None,
+        )
+        return best_prompts, fallback_score, fallback_result
 
+    def _evaluate_improved_candidates(
+        self,
+        *,
+        improved_chat_prompts_candidates: list[dict[str, chat_prompt.ChatPrompt]],
+        evaluation_dataset: opik.Dataset,
+        metric: MetricFunction,
+        agent: OptimizableAgent | None,
+        n_samples: int | float | str | None,
+        context: OptimizationContext,
+        round_handle: Any,
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
+        """Evaluate improved candidates and return the best bundle."""
         best_candidate_id = f"trial{context.trials_completed}_best0"
         best_prompt_bundle = improved_chat_prompts_candidates[0]
         best_score_local, best_result = self._evaluate_prompts_with_result(
@@ -461,12 +557,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 post_extras=None,
                 post_metrics=None,
             )
-
             if improved_score > best_score_local:
                 best_score_local = improved_score
                 best_prompt_bundle = improved_chat_prompts
                 best_result = improved_experiment_result
-
         return best_prompt_bundle, best_score_local, best_result
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
