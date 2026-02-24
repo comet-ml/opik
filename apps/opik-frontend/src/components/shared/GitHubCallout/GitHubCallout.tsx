@@ -1,5 +1,5 @@
 import React from "react";
-import { Info, SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink, Info } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ const GitHubCallout: React.FunctionComponent<GitHubCalloutProps> = ({
             rel="noreferrer"
           >
             GitHub ticket
-            <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+            <ExternalLink className="ml-0.5 size-3 shrink-0" />
           </a>
         </Button>
         to let us know!

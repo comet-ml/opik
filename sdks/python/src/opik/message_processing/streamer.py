@@ -3,14 +3,15 @@ import logging
 import time
 from typing import List, Optional
 
+from opik.file_upload import base_upload_manager
 from . import messages, message_queue, queue_consumer
 from .. import _logging
 from .. import synchronization
 from .preprocessing import (
     attachments_preprocessor,
     batching_preprocessor,
-    file_upload_preprocessor,
 )
+from .replay import replay_manager
 
 
 LOGGER = logging.getLogger(__name__)
@@ -23,14 +24,16 @@ class Streamer:
         queue_consumers: List[queue_consumer.QueueConsumer],
         attachments_preprocessor: attachments_preprocessor.AttachmentsPreprocessor,
         batch_preprocessor: batching_preprocessor.BatchingPreprocessor,
-        upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
+        file_uploader: base_upload_manager.BaseFileUploadManager,
+        fallback_replay_manager: replay_manager.ReplayManager,
     ) -> None:
         self._lock = threading.RLock()
         self._message_queue = queue
         self._queue_consumers = queue_consumers
         self._attachments_preprocessor = attachments_preprocessor
         self._batch_preprocessor = batch_preprocessor
-        self._upload_preprocessor = upload_preprocessor
+        self._file_upload_manager = file_uploader
+        self._fallback_replay_manager = fallback_replay_manager
 
         self._drain = False
 
@@ -38,6 +41,9 @@ class Streamer:
 
         self._start_queue_consumers()
         self._batch_preprocessor.start()
+
+        self._fallback_replay_manager.set_replay_callback(self.put)
+        self._fallback_replay_manager.start()
 
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
@@ -49,11 +55,6 @@ class Streamer:
                 # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
                 preprocessed_message = self._attachments_preprocessor.preprocess(
                     message
-                )
-
-                # do file uploads pre-processing second
-                preprocessed_message = self._upload_preprocessor.preprocess(
-                    preprocessed_message
                 )
 
                 # do batching pre-processing third
@@ -89,6 +90,8 @@ class Streamer:
             self._drain = True
 
         self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
+        self._fallback_replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
+        self._fallback_replay_manager.join(timeout)
 
         self.flush(timeout)
         self._close_queue_consumers()
@@ -108,6 +111,10 @@ class Streamer:
 
         self._batch_preprocessor.flush()
 
+        if self._fallback_replay_manager.has_server_connection:
+            # do replay only if we have a connection to the server
+            self._fallback_replay_manager.flush()
+
         start_time = time.time()
 
         synchronization.wait_for_done(
@@ -123,7 +130,7 @@ class Streamer:
                 timeout = 1.0
 
         # flushing upload manager is blocking operation
-        upload_flushed = self._upload_preprocessor.flush(
+        upload_flushed = self._file_upload_manager.flush(
             timeout=timeout, sleep_time=upload_sleep_time
         )
 

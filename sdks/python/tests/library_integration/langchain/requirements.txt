@@ -8,3 +8,4 @@ langchain_aws
 langchain-groq
 anthropic!=0.51.0  # 0.51.0 broke langchain_anthropic 07.05.2025
 langgraph
+langgraph-supervisor
