@@ -195,7 +195,7 @@ class DatasetItemResultMapper {
                 .orElse(null);
     }
 
-    private static String getDescription(Row row, RowMetadata rowMetadata) {
+    static String getDescription(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("description")) {
             return null;
         }

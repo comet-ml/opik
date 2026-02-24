@@ -2994,6 +2994,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
+                .description(DatasetItemResultMapper.getDescription(row, row.getMetadata()))
                 .source(Optional.ofNullable(row.get("source", String.class))
                         .map(com.comet.opik.api.DatasetItemSource::fromString)
                         .orElse(null))
