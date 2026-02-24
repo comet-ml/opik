@@ -65,33 +65,33 @@ SETTINGS index_granularity = 8192;
 
 -- Speeds up queries filtering by project_id (multi-project experiment views)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_project_id project_id TYPE minmax GRANULARITY 1;
 
 -- Speeds up queries filtering by optimization_id (optimizer experiment lookups)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_aggregates_optimization_id optimization_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_optimization_id optimization_id TYPE minmax GRANULARITY 1;
 
 -- Speeds up queries filtering by dataset_version_id (version-scoped experiment views)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_aggregates_dataset_version_id dataset_version_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_aggregates_dataset_version_id dataset_version_id TYPE minmax GRANULARITY 1;
 
 -- Speeds up queries filtering by dataset_item_id (item-level experiment views)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_item_aggregates_dataset_item_id dataset_item_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_dataset_item_id dataset_item_id TYPE minmax GRANULARITY 1;
 
 -- Speeds up queries filtering by trace_id (trace-linked experiment item lookups)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_item_aggregates_trace_id trace_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_trace_id trace_id TYPE minmax GRANULARITY 1;
 
 -- Speeds up queries filtering by project_id on experiment items
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_item_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
+    ADD INDEX idx_experiment_item_aggregates_project_id project_id TYPE minmax GRANULARITY 1;
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_project_id;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_optimization_id;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_dataset_version_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_item_aggregates_dataset_item_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_item_aggregates_trace_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_item_aggregates_project_id;
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}';
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_project_id;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_optimization_id;
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_dataset_version_id;
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}';
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}';
