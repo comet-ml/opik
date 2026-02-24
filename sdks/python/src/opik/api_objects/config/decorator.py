@@ -76,7 +76,10 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
         config_client = ConfigClient(client.rest_client)
 
         field_types = object.__getattribute__(instance, "__opik_field_types__")
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
+        project_name = (
+            object.__getattribute__(instance, "__opik_project_name__")
+            or client._project_name
+        )
         description = object.__getattribute__(instance, "__opik_description__")
 
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
@@ -139,7 +142,10 @@ def _maybe_refetch(instance: typing.Any) -> None:
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
         field_types = object.__getattribute__(instance, "__opik_field_types__")
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
+        project_name = (
+            object.__getattribute__(instance, "__opik_project_name__")
+            or client._project_name
+        )
         env_val = object.__getattribute__(instance, "__opik_env__")
 
         config_data = config_client.get_blueprint(
@@ -159,7 +165,10 @@ def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
         client = opik_client.get_client_cached()
         config_client = ConfigClient(client.rest_client)
         field_types = object.__getattribute__(instance, "__opik_field_types__")
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
+        project_name = (
+            object.__getattribute__(instance, "__opik_project_name__")
+            or client._project_name
+        )
 
         config_data = config_client.get_blueprint(
             project_name=project_name,

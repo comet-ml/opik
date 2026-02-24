@@ -61,7 +61,7 @@ class RawOptimizerConfigsClient:
     def get_blueprint(
         self,
         *,
-        project_name: typing.Optional[str] = None,
+        project_id: str,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -70,7 +70,7 @@ class RawOptimizerConfigsClient:
             "v1/private/optimizer-configs/blueprint/retrieve",
             method="GET",
             params={
-                "project_name": project_name,
+                "project_id": project_id,
                 "env": env,
                 "maskid": mask_id,
             },

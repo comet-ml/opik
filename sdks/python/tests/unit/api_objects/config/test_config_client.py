@@ -53,12 +53,14 @@ class TestCreateConfig:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         result = config_client.create_config(
             fields_with_values={
                 "temperature": (float, 0.6),
                 "name": (str, "agent"),
             },
+            project_name="my-project",
         )
 
         mock_rest_client.optimizer_configs.create_config.assert_called_once()
@@ -79,9 +81,11 @@ class TestCreateConfig:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"flag": (bool, False)},
+            project_name="my-project",
         )
 
         call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
@@ -99,6 +103,7 @@ class TestCreateConfig:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
@@ -108,7 +113,7 @@ class TestCreateConfig:
         call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
 
-    def test_create__with_project_name__get_blueprint_uses_same_project(
+    def test_create__with_project_name__get_blueprint_uses_resolved_project_id(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.optimizer_configs.create_config.return_value = (
@@ -117,6 +122,7 @@ class TestCreateConfig:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
@@ -124,7 +130,7 @@ class TestCreateConfig:
         )
 
         get_bp_kwargs = mock_rest_client.optimizer_configs.get_blueprint.call_args[1]
-        assert get_bp_kwargs.get("project_name") == "my-project"
+        assert get_bp_kwargs.get("project_id") == "proj-1"
 
     def test_create__with_project_id__passes_project_id_to_backend(
         self, config_client, mock_rest_client
@@ -135,9 +141,11 @@ class TestCreateConfig:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
+            project_name="my-project",
             project_id="proj-99",
         )
 
@@ -152,6 +160,7 @@ class TestGetBlueprint:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = _make_blueprint(
             blueprint_id="bp-789"
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         result = config_client.get_blueprint(project_name="my-project")
 
@@ -168,6 +177,7 @@ class TestGetBlueprint:
                 OptimizerConfigParameter(key="flag", type="string", value="true"),
             ]
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         result = config_client.get_blueprint(
             project_name="my-project",
@@ -188,6 +198,7 @@ class TestGetBlueprint:
         mock_rest_client.optimizer_configs.get_blueprint.return_value = (
             _make_blueprint()
         )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.get_blueprint(
             project_name="my-project",
@@ -195,7 +206,7 @@ class TestGetBlueprint:
         )
 
         mock_rest_client.optimizer_configs.get_blueprint.assert_called_once_with(
-            project_name="my-project",
+            project_id="proj-1",
             env=None,
             mask_id=mask_id,
         )

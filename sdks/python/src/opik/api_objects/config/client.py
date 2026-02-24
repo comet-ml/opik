@@ -7,6 +7,7 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.optimizer_config_detail import (
     OptimizerConfigBlueprint,
 )
+from opik.api_objects import rest_helpers
 from . import type_helpers
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ class ConfigClient:
     def create_config(
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
-        project_name: typing.Optional[str] = None,
+        project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> ConfigData:
@@ -58,14 +59,17 @@ class ConfigClient:
 
     def get_blueprint(
         self,
-        project_name: typing.Optional[str] = None,
+        project_name: str,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> ConfigData:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
         try:
             blueprint = self._rest_client.optimizer_configs.get_blueprint(
-                project_name=project_name,
+                project_id=project_id,
                 env=env,
                 mask_id=mask_id,
             )

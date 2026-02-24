@@ -394,31 +394,50 @@ class TestOpikClientConfigMethods:
     def test_get_config__no_project_name__uses_instance_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
-        with patch.object(
-            opik_client_._rest_client.optimizer_configs,
-            "get_blueprint",
-            return_value=_make_blueprint(),
-        ) as mock_get_blueprint:
+        with (
+            patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-1"),
+            ),
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ) as mock_get_blueprint,
+        ):
             opik_client_.get_config()
 
-        assert mock_get_blueprint.call_args[1]["project_name"] == "my-project"
+        assert mock_get_blueprint.call_args[1]["project_id"] == "proj-1"
 
     def test_get_config__explicit_project_name__overrides_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
-        with patch.object(
-            opik_client_._rest_client.optimizer_configs,
-            "get_blueprint",
-            return_value=_make_blueprint(),
-        ) as mock_get_blueprint:
+        with (
+            patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-2"),
+            ),
+            patch.object(
+                opik_client_._rest_client.optimizer_configs,
+                "get_blueprint",
+                return_value=_make_blueprint(),
+            ) as mock_get_blueprint,
+        ):
             opik_client_.get_config(project_name="other-project")
 
-        assert mock_get_blueprint.call_args[1]["project_name"] == "other-project"
+        assert mock_get_blueprint.call_args[1]["project_id"] == "proj-2"
 
     def test_create_config__no_project_name__uses_instance_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
+            patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-1"),
+            ),
             patch.object(
                 opik_client_._rest_client.optimizer_configs,
                 "create_config",
@@ -438,6 +457,11 @@ class TestOpikClientConfigMethods:
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
+            patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-1"),
+            ),
             patch.object(
                 opik_client_._rest_client.optimizer_configs,
                 "create_config",
@@ -460,6 +484,11 @@ class TestOpikClientConfigMethods:
 
         with (
             patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-1"),
+            ),
+            patch.object(
                 opik_client_._rest_client.optimizer_configs,
                 "create_config",
                 return_value=Mock(id="cfg-1"),
@@ -478,6 +507,11 @@ class TestOpikClientConfigMethods:
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
+            patch.object(
+                opik_client_._rest_client.projects,
+                "retrieve_project",
+                return_value=Mock(id="proj-1"),
+            ),
             patch.object(
                 opik_client_._rest_client.optimizer_configs,
                 "create_config",

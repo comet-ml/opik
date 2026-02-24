@@ -24,6 +24,7 @@ class Config:
         from opik.api_objects import opik_client
 
         client = opik_client.get_client_cached()
+        project_name = self._project_name or client._project_name
         config_client = ConfigClient(client.rest_client)
 
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
@@ -33,7 +34,7 @@ class Config:
 
         config_data = config_client.create_config(
             fields_with_values=fields_with_values,
-            project_name=self._project_name,
+            project_name=project_name,
             description=self._description,
         )
         self._apply_config_data(config_data)
@@ -81,6 +82,7 @@ class Config:
         from opik.api_objects import opik_client
 
         client = opik_client.get_client_cached()
+        project_name = self._project_name or client._project_name
         config_client = ConfigClient(client.rest_client)
 
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {
@@ -88,6 +90,7 @@ class Config:
         }
         config_data = config_client.create_config(
             fields_with_values=fields_with_values,
+            project_name=project_name,
             project_id=project_id,
             description=description,
         )

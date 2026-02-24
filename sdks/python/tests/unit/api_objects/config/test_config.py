@@ -80,6 +80,7 @@ class TestConfigInit:
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
     def test_init__happy_path__syncs_with_backend(self, mock_get_client):
         mock_client = mock.Mock()
+        mock_client._project_name = "default-project"
         mock_get_client.return_value = mock_client
 
         mock_client.rest_client.optimizer_configs.create_config.return_value = (
@@ -93,6 +94,9 @@ class TestConfigInit:
                 ],
                 description=None,
             )
+        )
+        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
+            id="proj-1"
         )
 
         config = Config(parameters={"temperature": 0.8})
@@ -112,6 +116,7 @@ class TestConfigUpdate:
         )
 
         mock_client = mock.Mock()
+        mock_client._project_name = "default-project"
         mock_get_client.return_value = mock_client
 
         mock_client.rest_client.optimizer_configs.create_config.return_value = (
@@ -123,6 +128,9 @@ class TestConfigUpdate:
                 values=[mock.Mock(key="temp", type="number", value=0.9)],
                 description="Updated",
             )
+        )
+        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
+            id="proj-1"
         )
 
         config.update(values={"temp": 0.9}, description="Updated")
@@ -138,12 +146,16 @@ class TestConfigUpdate:
         )
 
         mock_client = mock.Mock()
+        mock_client._project_name = "default-project"
         mock_get_client.return_value = mock_client
         mock_client.rest_client.optimizer_configs.create_config.return_value = (
             mock.Mock(id="cfg-1")
         )
         mock_client.rest_client.optimizer_configs.get_blueprint.return_value = (
             mock.Mock(id="bp-2", values=[], description="bump")
+        )
+        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
+            id="proj-1"
         )
 
         config.update(values={"temp": 0.9}, description="bump")
@@ -160,12 +172,16 @@ class TestConfigUpdate:
         )
 
         mock_client = mock.Mock()
+        mock_client._project_name = "default-project"
         mock_get_client.return_value = mock_client
         mock_client.rest_client.optimizer_configs.create_config.return_value = (
             mock.Mock(id="cfg-1")
         )
         mock_client.rest_client.optimizer_configs.get_blueprint.return_value = (
             mock.Mock(id="bp-2", values=[], description=None)
+        )
+        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
+            id="proj-1"
         )
 
         config.update(values={"temp": 0.9}, project_id="proj-42")
