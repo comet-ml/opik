@@ -1,5 +1,6 @@
 export interface Permissions {
   canViewExperiments: boolean;
+  canViewDatasets: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -10,6 +11,7 @@ export interface PermissionsContextValue {
 export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
   permissions: {
     canViewExperiments: true,
+    canViewDatasets: true,
   },
   isPending: false,
 };

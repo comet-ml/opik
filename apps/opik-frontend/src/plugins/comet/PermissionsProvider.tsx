@@ -6,16 +6,18 @@ import { PermissionsContextValue } from "@/types/permissions";
 const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const { canViewExperiments, isPending } = useUserPermission();
+  const { canViewExperiments, canViewDatasets, isPending } =
+    useUserPermission();
 
   const value: PermissionsContextValue = useMemo(
     () => ({
       permissions: {
         canViewExperiments,
+        canViewDatasets,
       },
       isPending,
     }),
-    [canViewExperiments, isPending],
+    [canViewExperiments, canViewDatasets, isPending],
   );
 
   return (
