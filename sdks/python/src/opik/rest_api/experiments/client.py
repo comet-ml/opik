@@ -178,6 +178,7 @@ class ExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -202,6 +203,8 @@ class ExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -236,6 +239,7 @@ class ExperimentsClient:
             metadata=metadata,
             tags=tags,
             type=type,
+            evaluation_method=evaluation_method,
             optimization_id=optimization_id,
             status=status,
             experiment_scores=experiment_scores,
@@ -887,6 +891,7 @@ class AsyncExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -911,6 +916,8 @@ class AsyncExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -948,6 +955,7 @@ class AsyncExperimentsClient:
             metadata=metadata,
             tags=tags,
             type=type,
+            evaluation_method=evaluation_method,
             optimization_id=optimization_id,
             status=status,
             experiment_scores=experiment_scores,
