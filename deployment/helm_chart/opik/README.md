@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.18](https://img.shields.io/badge/Version-1.10.18-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.18](https://img.shields.io/badge/AppVersion-1.10.18-informational?style=flat-square)
+![Version: 1.10.20](https://img.shields.io/badge/Version-1.10.20-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.20](https://img.shields.io/badge/AppVersion-1.10.20-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -244,6 +244,15 @@ Call opik api on http://localhost:5173/api
 | component.ai-backend.startupProbe.httpGet.path | string | `"/opik-ai/healthz"` |  |
 | component.ai-backend.startupProbe.httpGet.port | int | `8081` |  |
 | component.ai-backend.startupProbe.periodSeconds | int | `10` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -323,6 +332,15 @@ Call opik api on http://localhost:5173/api
 | component.frontend.aiBackendUpstreamConfig.proxy_connect_timeout | int | `90` |  |
 | component.frontend.aiBackendUpstreamConfig.proxy_read_timeout | int | `300` |  |
 | component.frontend.aiBackendUpstreamConfig.proxy_send_timeout | int | `300` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.frontend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.frontend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -394,6 +412,15 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
