@@ -15,6 +15,8 @@ from google.adk.agents import base_agent
 
 LOGGER = logging.getLogger(__name__)
 
+_adk_opentelemetry_tracers_patched = False
+
 
 def patch_adk(
     opik_client: opik_client.Opik,
@@ -64,6 +66,10 @@ def _patch_adk_opentelemetry_tracers(
     opik_client: opik_client.Opik,
     distributed_headers: Optional[DistributedTraceHeadersDict],
 ) -> None:
+    global _adk_opentelemetry_tracers_patched
+    if _adk_opentelemetry_tracers_patched:
+        return
+
     no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
         opik_client, distributed_headers=distributed_headers
     )
@@ -73,4 +79,6 @@ def _patch_adk_opentelemetry_tracers(
 
     base_agent.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
     base_agent.tracer.start_span = no_op_opik_tracer.start_span
+
+    _adk_opentelemetry_tracers_patched = True
     LOGGER.debug("Patched ADK tracers")
