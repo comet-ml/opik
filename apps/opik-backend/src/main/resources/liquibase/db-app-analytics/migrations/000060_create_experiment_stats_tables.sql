@@ -63,10 +63,6 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, experiment_id, id)
 SETTINGS index_granularity = 8192;
 
--- Speeds up queries filtering by dataset_id (used in experiment list endpoints)
-ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
-    ADD INDEX idx_experiment_aggregates_dataset_id dataset_id TYPE minmax GRANULARITY 4;
-
 -- Speeds up queries filtering by project_id (multi-project experiment views)
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}'
     ADD INDEX idx_experiment_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
@@ -91,7 +87,6 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_item_aggregates ON CLUSTER '{cluster}'
     ADD INDEX idx_experiment_item_aggregates_project_id project_id TYPE minmax GRANULARITY 4;
 
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_dataset_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_project_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_optimization_id;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_aggregates ON CLUSTER '{cluster}' DROP INDEX IF EXISTS idx_experiment_aggregates_dataset_version_id;
