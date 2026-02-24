@@ -5,8 +5,8 @@ from unittest import mock
 
 import pytest
 
-from opik.api_objects.config.cache import SharedConfigCache
-from opik.api_objects.config.decorator import config_decorator
+from opik.api_objects.agent_config.cache import SharedConfigCache
+from opik.api_objects.agent_config.decorator import agent_config_decorator
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -17,12 +17,12 @@ class TestConfigDecoratorValidation:
     def test_non_dataclass__raises_type_error(self):
         with pytest.raises(TypeError, match="can only be applied to dataclasses"):
 
-            @config_decorator
+            @agent_config_decorator
             class NotADataclass:
                 pass
 
     def test_dataclass__preserves_dataclass_status(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -30,7 +30,7 @@ class TestConfigDecoratorValidation:
         assert dataclasses.is_dataclass(MyConfig)
 
     def test_decorator__shared_cache_uses_default_ttl(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -44,7 +44,7 @@ class TestConfigDecoratorInit:
     def test_init__no_existing_blueprint__creates_config_with_all_fields(
         self, mock_backend
     ):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -68,7 +68,7 @@ class TestConfigDecoratorInit:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -86,7 +86,7 @@ class TestConfigDecoratorInit:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -105,7 +105,7 @@ class TestConfigDecoratorInit:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -128,7 +128,7 @@ class TestConfigDecoratorInit:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -145,7 +145,7 @@ class TestConfigDecoratorInit:
             side_effect=Exception("no backend"),
         ):
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 temp: float = 0.8
@@ -156,7 +156,7 @@ class TestConfigDecoratorInit:
 
 class TestConfigDecoratorFieldFiltering:
     def test_unsupported_field_types__excluded_from_backend_payload(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -174,7 +174,7 @@ class TestConfigDecoratorFieldFiltering:
         class BaseConfig:
             base_field: str = "base"
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ChildConfig(BaseConfig):
             child_field: int = 42
@@ -199,7 +199,7 @@ class TestConfigDecoratorMaskAndEnv:
     def test_mask_or_env__no_existing_blueprint__creates_config(
         self, mock_backend, decorator_kwargs
     ):
-        @config_decorator(**decorator_kwargs)
+        @agent_config_decorator(**decorator_kwargs)
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -223,7 +223,7 @@ class TestConfigDecoratorMaskAndEnv:
             [mock.Mock(key="MyConfig.temp", type="number", value=0.5)]
         )
 
-        @config_decorator(**decorator_kwargs)
+        @agent_config_decorator(**decorator_kwargs)
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -241,7 +241,7 @@ class TestConfigDecoratorMaskAndEnv:
         ids=["mask_id", "env"],
     )
     def test_mask_or_env__passed_to_get_blueprint(self, mock_backend, decorator_kwargs):
-        @config_decorator(**decorator_kwargs)
+        @agent_config_decorator(**decorator_kwargs)
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -257,11 +257,13 @@ class TestConfigDecoratorMaskAndEnv:
 
 class TestConfigDecoratorSpanMetadata:
     def test_field_access_inside_span__injects_metadata(self, mock_backend):
-        with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.context_storage"
+        ) as mock_cs:
             mock_span_data = mock.Mock()
             mock_cs.top_span_data.return_value = mock_span_data
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 temp: float = 0.8
@@ -271,8 +273,8 @@ class TestConfigDecoratorSpanMetadata:
 
             mock_span_data.update.assert_called()
             call_kwargs = mock_span_data.update.call_args[1]
-            assert "configuration" in call_kwargs["metadata"]
-            config = call_kwargs["metadata"]["configuration"]
+            assert "agent_configuration" in call_kwargs["metadata"]
+            config = call_kwargs["metadata"]["agent_configuration"]
             assert "blueprint_id" in config
             assert "values" in config
 
@@ -291,10 +293,12 @@ class TestConfigDecoratorSpanMetadata:
             metadata={"provider": "openai", "model": "gpt-4o"},
         )
 
-        with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.context_storage"
+        ) as mock_cs:
             mock_cs.top_span_data.return_value = span_data
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 temp: float = 0.8
@@ -303,24 +307,31 @@ class TestConfigDecoratorSpanMetadata:
             instance = MyConfig()
             _ = instance.temp
             assert span_data.metadata["provider"] == "openai"
-            assert "MyConfig.temp" in span_data.metadata["configuration"]["values"]
+            assert (
+                "MyConfig.temp" in span_data.metadata["agent_configuration"]["values"]
+            )
             assert (
                 "MyConfig.max_tokens"
-                not in span_data.metadata["configuration"]["values"]
+                not in span_data.metadata["agent_configuration"]["values"]
             )
 
             _ = instance.max_tokens
             assert span_data.metadata["provider"] == "openai"
-            assert "MyConfig.temp" in span_data.metadata["configuration"]["values"]
             assert (
-                "MyConfig.max_tokens" in span_data.metadata["configuration"]["values"]
+                "MyConfig.temp" in span_data.metadata["agent_configuration"]["values"]
+            )
+            assert (
+                "MyConfig.max_tokens"
+                in span_data.metadata["agent_configuration"]["values"]
             )
 
     def test_field_access_outside_span__no_injection(self, mock_backend):
-        with mock.patch("opik.api_objects.config.decorator.context_storage") as mock_cs:
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.context_storage"
+        ) as mock_cs:
             mock_cs.top_span_data.return_value = None
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 temp: float = 0.8
@@ -331,12 +342,12 @@ class TestConfigDecoratorSpanMetadata:
 
 class TestConfigDecoratorMultiClass:
     def test_two_classes_same_project__share_single_cache(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -349,12 +360,12 @@ class TestConfigDecoratorMultiClass:
         assert cache_m is cache_p
 
     def test_two_classes__keys_are_prefixed_with_class_name(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -372,12 +383,12 @@ class TestConfigDecoratorMultiClass:
         assert "PromptConfig.template" in all_keys
 
     def test_first_class_creates_only_its_keys(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -390,12 +401,12 @@ class TestConfigDecoratorMultiClass:
         assert keys == ["ModelConfig.temp"]
 
     def test_second_class_adds_extra_keys(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -423,12 +434,12 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -447,12 +458,12 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -474,12 +485,12 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -511,12 +522,12 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class ModelConfig:
             temp: float = 0.8
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class PromptConfig:
             template: str = "hello"
@@ -542,12 +553,12 @@ class TestConfigDecoratorMultiClass:
         assert p.template == "v2"
 
     def test_different_projects__separate_caches(self, mock_backend):
-        @config_decorator(project="proj-a")
+        @agent_config_decorator(project="proj-a")
         @dataclasses.dataclass
         class ConfigA:
             val: int = 1
 
-        @config_decorator(project="proj-b")
+        @agent_config_decorator(project="proj-b")
         @dataclasses.dataclass
         class ConfigB:
             val: int = 2
@@ -560,7 +571,7 @@ class TestConfigDecoratorMultiClass:
         assert cache_a is not cache_b
 
     def test_custom_name__uses_name_as_prefix(self, mock_backend):
-        @config_decorator(name="custom")
+        @agent_config_decorator(name="custom")
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -575,7 +586,7 @@ class TestConfigDecoratorMultiClass:
 
 class TestConfigDecoratorTTLEnvVar:
     def test_default_ttl(self, mock_backend):
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -587,11 +598,11 @@ class TestConfigDecoratorTTLEnvVar:
     def test_env_var_overrides_ttl(self, mock_backend, monkeypatch):
         monkeypatch.setenv("OPIK_CONFIG_TTL_SECONDS", "60")
 
-        from opik.api_objects.config.cache import clear_shared_caches
+        from opik.api_objects.agent_config.cache import clear_shared_caches
 
         clear_shared_caches()
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
@@ -606,7 +617,7 @@ class TestConfigDecoratorPromptFields:
         fake_prompt = mock.Mock(spec=Prompt)
         fake_prompt.__internal_api__version_id__ = "ver-abc"
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             system_prompt: Prompt = dataclasses.field(
@@ -625,7 +636,7 @@ class TestConfigDecoratorPromptFields:
         fake_prompt = mock.Mock(spec=ChatPrompt)
         fake_prompt.__internal_api__version_id__ = "ver-chat-1"
 
-        @config_decorator
+        @agent_config_decorator
         @dataclasses.dataclass
         class MyConfig:
             messages: ChatPrompt = dataclasses.field(
@@ -668,7 +679,7 @@ class TestConfigDecoratorPromptFields:
             return_value=fake_prompt,
         ):
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 system_prompt: Prompt = dataclasses.field(default=None)
@@ -702,7 +713,7 @@ class TestConfigDecoratorPromptFields:
             return_value=fake_chat_prompt,
         ):
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 messages: ChatPrompt = dataclasses.field(default=None)
@@ -736,7 +747,7 @@ class TestConfigDecoratorPromptFields:
             return_value=fake_chat_prompt,
         ):
 
-            @config_decorator
+            @agent_config_decorator
             @dataclasses.dataclass
             class MyConfig:
                 p: BasePrompt = dataclasses.field(default=None)

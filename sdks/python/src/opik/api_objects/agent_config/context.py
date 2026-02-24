@@ -8,7 +8,7 @@ _active_config_mask_var: contextvars.ContextVar[Optional[str]] = contextvars.Con
 
 
 @contextmanager
-def config_context(mask_id: str) -> Generator[None, None, None]:
+def agent_config_context(mask_id: str) -> Generator[None, None, None]:
     token = _active_config_mask_var.set(mask_id)
     try:
         yield

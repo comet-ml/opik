@@ -11,7 +11,7 @@ from .context import get_active_config_mask
 logger = logging.getLogger(__name__)
 
 
-def config_decorator(
+def agent_config_decorator(
     cls: typing.Optional[type] = None,
     *,
     name: typing.Optional[str] = None,
@@ -24,7 +24,7 @@ def config_decorator(
     def wrap(cls: type) -> type:
         if not dataclasses.is_dataclass(cls):
             raise TypeError(
-                f"@opik.config can only be applied to dataclasses, got {cls.__name__}"
+                f"@opik.agent_config can only be applied to dataclasses, got {cls.__name__}"
             )
 
         supported_fields = type_helpers.extract_dataclass_fields(cls)
@@ -312,7 +312,7 @@ def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
         prefixed_key = f"{class_prefix}.{attr}"
 
         config_metadata = {
-            "configuration": {
+            "agent_configuration": {
                 "blueprint_id": shared_cache.blueprint_id,
                 "values": {prefixed_key: shared_cache.values[prefixed_key]}
                 if prefixed_key in shared_cache.values

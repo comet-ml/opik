@@ -56,6 +56,6 @@ def mock_backend():
 
         yield _Backend()
 
-        from opik.api_objects.config.cache import clear_shared_caches
+        from opik.api_objects.agent_config.cache import clear_shared_caches
 
         clear_shared_caches()

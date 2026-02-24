@@ -391,7 +391,7 @@ def _make_blueprint(blueprint_id="bp-1", values=None, description=None):
 
 
 class TestOpikClientConfigMethods:
-    def test_get_config__no_project_name__uses_instance_default(self):
+    def test_get_agent_config__no_project_name__uses_instance_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -406,11 +406,11 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ) as mock_get_blueprint,
         ):
-            opik_client_.get_config()
+            opik_client_.get_agent_config()
 
         assert mock_get_blueprint.call_args[1]["project_id"] == "proj-1"
 
-    def test_get_config__explicit_project_name__overrides_default(self):
+    def test_get_agent_config__explicit_project_name__overrides_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -425,11 +425,11 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ) as mock_get_blueprint,
         ):
-            opik_client_.get_config(project_name="other-project")
+            opik_client_.get_agent_config(project_name="other-project")
 
         assert mock_get_blueprint.call_args[1]["project_id"] == "proj-2"
 
-    def test_create_config__no_project_name__uses_instance_default(self):
+    def test_create_agent_config__no_project_name__uses_instance_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -449,11 +449,11 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ),
         ):
-            opik_client_.create_config(parameters={"temp": 0.7})
+            opik_client_.create_agent_config(parameters={"temp": 0.7})
 
         assert mock_create.call_args[1]["project_name"] == "my-project"
 
-    def test_create_config__explicit_project_name__overrides_default(self):
+    def test_create_agent_config__explicit_project_name__overrides_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -473,13 +473,13 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ),
         ):
-            opik_client_.create_config(
+            opik_client_.create_agent_config(
                 parameters={"temp": 0.7}, project_name="other-project"
             )
 
         assert mock_create.call_args[1]["project_name"] == "other-project"
 
-    def test_update_config__no_project_name__uses_instance_default(self):
+    def test_update_agent_config__no_project_name__uses_instance_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -499,11 +499,11 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ),
         ):
-            opik_client_.update_config(parameters={"temp": 0.9})
+            opik_client_.update_agent_config(parameters={"temp": 0.9})
 
         assert mock_create.call_args[1]["project_name"] == "my-project"
 
-    def test_update_config__explicit_project_name__overrides_default(self):
+    def test_update_agent_config__explicit_project_name__overrides_default(self):
         opik_client_ = opik_client.Opik(project_name="my-project")
 
         with (
@@ -523,7 +523,7 @@ class TestOpikClientConfigMethods:
                 return_value=_make_blueprint(),
             ),
         ):
-            opik_client_.update_config(
+            opik_client_.update_agent_config(
                 parameters={"temp": 0.9}, project_name="other-project"
             )
 

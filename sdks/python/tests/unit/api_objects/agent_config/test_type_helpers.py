@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from opik.api_objects.config import type_helpers
+from opik.api_objects.agent_config import type_helpers
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt

@@ -4,8 +4,8 @@ import typing
 from .client import ConfigClient, ConfigData
 
 
-class Config:
-    """Programmatic handle for an Opik config (CRUD without the decorator)."""
+class AgentConfig:
+    """Programmatic handle for an Opik agent config (CRUD without the decorator)."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ class Config:
     def from_backend_data(
         cls,
         config_data: ConfigData,
-    ) -> "Config":
+    ) -> "AgentConfig":
         obj = cls.__new__(cls)
         obj._parameters = {}
         obj._project_name = None

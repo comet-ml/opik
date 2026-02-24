@@ -2,13 +2,13 @@ from unittest import mock
 
 import pytest
 
-from opik.api_objects.config.config import Config
-from opik.api_objects.config.client import ConfigData
+from opik.api_objects.agent_config.config import AgentConfig
+from opik.api_objects.agent_config.client import ConfigData
 
 
 @pytest.fixture
 def sample_config():
-    return Config.from_backend_data(
+    return AgentConfig.from_backend_data(
         config_data=ConfigData(
             blueprint_id="bp-1",
             values={"temp": 0.6, "name": "agent", "count": 10},
@@ -23,7 +23,7 @@ class TestConfigFromBackendData:
             values={"temperature": 0.6, "name": "agent"},
         )
 
-        config = Config.from_backend_data(config_data=config_data)
+        config = AgentConfig.from_backend_data(config_data=config_data)
 
         assert config.blueprint_id == "bp-1"
         assert config.values == {"temperature": 0.6, "name": "agent"}
@@ -34,7 +34,7 @@ class TestConfigFromBackendData:
             values={"items": [1, 2, 3]},
         )
 
-        config = Config.from_backend_data(config_data=config_data)
+        config = AgentConfig.from_backend_data(config_data=config_data)
         values = config.values
         values["items"].append(4)
 
@@ -99,7 +99,7 @@ class TestConfigInit:
             id="proj-1"
         )
 
-        config = Config(parameters={"temperature": 0.8})
+        config = AgentConfig(parameters={"temperature": 0.8})
 
         assert config.blueprint_id == "bp-new"
         mock_client.rest_client.optimizer_configs.create_config.assert_called_once()
@@ -108,7 +108,7 @@ class TestConfigInit:
 class TestConfigUpdate:
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
     def test_update__posts_new_blueprint_and_updates_state(self, mock_get_client):
-        config = Config.from_backend_data(
+        config = AgentConfig.from_backend_data(
             config_data=ConfigData(
                 blueprint_id="bp-1",
                 values={"temp": 0.6},
@@ -141,7 +141,7 @@ class TestConfigUpdate:
 
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
     def test_update__passes_description_to_blueprint(self, mock_get_client):
-        config = Config.from_backend_data(
+        config = AgentConfig.from_backend_data(
             config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
         )
 
@@ -167,7 +167,7 @@ class TestConfigUpdate:
 
     @mock.patch("opik.api_objects.opik_client.get_client_cached")
     def test_update__passes_project_id_to_backend(self, mock_get_client):
-        config = Config.from_backend_data(
+        config = AgentConfig.from_backend_data(
             config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
         )
 

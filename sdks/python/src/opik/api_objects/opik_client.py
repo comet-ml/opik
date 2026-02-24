@@ -47,8 +47,8 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .config.client import ConfigClient
-from .config.config import Config as ConfigHandle
+from .agent_config.client import ConfigClient
+from .agent_config.config import AgentConfig
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from ..config import (
@@ -2278,12 +2278,12 @@ class Opik:
             ids=[queue_id]
         )
 
-    def get_config(
+    def get_agent_config(
         self,
         project_name: Optional[str] = None,
         env: Optional[str] = None,
         mask_id: Optional[str] = None,
-    ) -> ConfigHandle:
+    ) -> AgentConfig:
         if project_name is None:
             project_name = self._project_name
         config_client_ = ConfigClient(self._rest_client)
@@ -2292,14 +2292,14 @@ class Opik:
             env=env,
             mask_id=mask_id,
         )
-        return ConfigHandle.from_backend_data(config_data=config_data)
+        return AgentConfig.from_backend_data(config_data=config_data)
 
-    def create_config(
+    def create_agent_config(
         self,
         parameters: Dict[str, Any],
         project_name: Optional[str] = None,
         description: Optional[str] = None,
-    ) -> ConfigHandle:
+    ) -> AgentConfig:
         if project_name is None:
             project_name = self._project_name
         config_client_ = ConfigClient(self._rest_client)
@@ -2313,15 +2313,15 @@ class Opik:
             project_name=project_name,
             description=description,
         )
-        return ConfigHandle.from_backend_data(config_data=config_data)
+        return AgentConfig.from_backend_data(config_data=config_data)
 
-    def update_config(
+    def update_agent_config(
         self,
         parameters: Dict[str, Any],
         project_name: Optional[str] = None,
         description: Optional[str] = None,
-    ) -> ConfigHandle:
-        return self.create_config(
+    ) -> AgentConfig:
+        return self.create_agent_config(
             parameters=parameters,
             project_name=project_name,
             description=description,

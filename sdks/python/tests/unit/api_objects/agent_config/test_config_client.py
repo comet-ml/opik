@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from opik.api_objects.config.client import ConfigClient, ConfigData
+from opik.api_objects.agent_config.client import ConfigClient, ConfigData
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.api_objects.prompt.base_prompt import BasePrompt
