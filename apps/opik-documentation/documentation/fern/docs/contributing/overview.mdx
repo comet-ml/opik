@@ -86,16 +86,16 @@ This is a vital way to help us improve Opik!
 
 ## Project Setup and Architecture
 
-The Opik project is made up of five main sub-projects:
+Opik is a monorepo with multiple services and SDKs. Common contributor entry points are:
 
-- `apps/opik-documentation`: The Opik documentation website (this site!)
-- `sdks/python`: The Opik Python SDK
-- `sdks/typescript`: The Opik TypeScript SDK
-- `sdks/opik_optimizer`: The Opik Agent Optimizer SDK
-- `apps/opik-frontend`: The Opik frontend application
-- `apps/opik-backend`: The Opik backend server
+- `apps/opik-backend`: Core Java backend API/services
+- `apps/opik-frontend`: React frontend application
+- `apps/opik-documentation`: Documentation website and docs source
+- `apps/opik-ai-backend`, `apps/opik-guardrails-backend`, `apps/opik-python-backend`, `apps/opik-sandbox-executor-python`: supporting backends and runtime services
+- `sdks/python`, `sdks/typescript`, `sdks/opik_optimizer`: SDKs and optimizer tooling
+- `tests_end_to_end`: E2E suites and helper services
 
-Opik relies on: Clickhouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
+Opik relies on: ClickHouse (traces, spans, feedback), MySQL (metadata), and Redis (caching).
 
 The local development environment uses convenient scripts (`./opik.sh` for Linux/Mac, `.\opik.ps1` for Windows) that manage Docker Compose automatically. Please see instructions in the [deployment/docker-compose/README.md](https://github.com/comet-ml/opik/blob/main/deployment/docker-compose/README.md) on GitHub for advanced usage.
 
@@ -107,6 +107,21 @@ To help AI assistants (like Cursor) better understand our codebase, we provide c
 - **Full Context**: [`https://www.comet.com/docs/opik/llms-full.txt`](https://www.comet.com/docs/opik/llms-full.txt) - Offers a more comprehensive context for in-depth assistance.
 
 You can point your AI tools to these URLs to provide them with relevant information about Opik.
+
+## AI-Assisted Contributions (Required Disclosure)
+
+AI assistance and authorship is allowed. Human authors remain fully accountable for correctness, licensing, and security.
+
+Rules:
+
+- Always run relevant tests/linters for touched code.
+- Always be explicit about human/users interaction with produced output.
+- Always review prior issue, pull-requests and code-base for existing solutions.
+- Always address any system generated reviews (Baz, Greptile).
+- Never submit unreviewed AI output.
+- Never include secrets, tokens, private prompts, internal system instructions, or customer-sensitive data in generated/public content.
+- Never disclose vulnerabilities, exploit steps, or incident details in public issues/PRs. Use private maintainer/security channels.
+- You must ensure every PR include an AI disclosure watermark block in the PR description: If AI is used, include a brief `## AI Assistance` note in the PR description with tool/model, scope, and confirmed human verification (if any); if no AI is used, omit that section entirely.
 
 _Review our [Contributor License Agreement (CLA)](https://github.com/comet-ml/opik/blob/main/CLA.md) if you haven't already._
 _Comment on [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) to show your support._

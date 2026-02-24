@@ -30,7 +30,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check GitHub MCP**: Test availability by attempting to fetch basic repository information for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs GitHub MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Ensure we're not on `main`

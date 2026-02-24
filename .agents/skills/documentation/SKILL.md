@@ -64,6 +64,15 @@ When documenting a feature, cover:
 - **Use `fern/img`** for documentation images (e.g. `apps/opik-documentation/documentation/fern/img/...`).
 - **Do not use `static/img`** for new assets; it is a legacy folder used by external integrations and cannot be deleted.
 - Reference images in docs as `/img/...` (e.g. `/img/tracing/openai_integration.png`).
+- In repos that define `docs.yaml`/`docs.yml`, treat that file as the routing source of truth; do not assume URLs mirror directory layout.
+
+## Internationalized READMEs
+
+Non-English README files (`readme_CN.md`, `readme_JP.md`, `readme_KO.md`, `readme_PT_BR.md`) are AI machine-translated from the English `README.md`.
+
+- Each non-English README must have a notice at the top (as a blockquote) warning that the file is AI-translated and welcoming improvements.
+- When the English README is updated with significant content changes, re-translate the affected non-English READMEs using AI and update accordingly.
+- Do not manually edit translated READMEs for content changes; update the English source and re-translate.
 
 ## Style
 

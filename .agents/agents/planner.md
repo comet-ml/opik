@@ -104,7 +104,7 @@ For each task:
 
 | Component | Files | Type of Change |
 |-----------|-------|----------------|
-| Backend | `path/to/file.java` | Add endpoint |
+| Backend | `path/to/file.java` | Add request validation for endpoint |
 | Frontend | `path/to/component.tsx` | New component |
 | SDK | `path/to/module.py` | New method |
 
