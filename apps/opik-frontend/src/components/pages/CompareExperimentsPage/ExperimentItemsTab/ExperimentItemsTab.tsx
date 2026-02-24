@@ -94,10 +94,6 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -155,7 +151,6 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_ID_ID,
   COLUMN_COMMENTS_ID,
-  USER_FEEDBACK_COLUMN_ID,
 ];
 
 export type ExperimentItemsTabProps = {
@@ -514,19 +509,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   ]);
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    return dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
