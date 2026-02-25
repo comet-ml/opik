@@ -4165,13 +4165,13 @@ class PromptResourceTest {
 
             assertThat(result.get(0).promptVersionId()).isEqualTo(version1.id());
             assertThat(result.get(0).commit()).isEqualTo(version1.commit());
-            assertThat(result.get(0).promptId()).isEqualTo(promptId1);
-            assertThat(result.get(0).promptName()).isEqualTo(prompt1.name());
+            assertThat(result.get(0).prompt().id()).isEqualTo(promptId1);
+            assertThat(result.get(0).prompt().name()).isEqualTo(prompt1.name());
 
             assertThat(result.get(1).promptVersionId()).isEqualTo(version2.id());
             assertThat(result.get(1).commit()).isEqualTo(version2.commit());
-            assertThat(result.get(1).promptId()).isEqualTo(promptId2);
-            assertThat(result.get(1).promptName()).isEqualTo(prompt2.name());
+            assertThat(result.get(1).prompt().id()).isEqualTo(promptId2);
+            assertThat(result.get(1).prompt().name()).isEqualTo(prompt2.name());
         }
 
         @Test
@@ -4209,8 +4209,8 @@ class PromptResourceTest {
             assertThat(result.get(1).promptVersionId()).isEqualTo(version1.id());
             assertThat(result.get(1).commit()).isEqualTo(version1.commit());
             // Both should point to the same prompt
-            assertThat(result.get(0).promptId()).isEqualTo(promptId);
-            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+            assertThat(result.get(0).prompt().id()).isEqualTo(promptId);
+            assertThat(result.get(1).prompt().id()).isEqualTo(promptId);
         }
 
         @Test
@@ -4225,12 +4225,10 @@ class PromptResourceTest {
             assertThat(result).hasSize(2);
             assertThat(result.get(0).commit()).isEqualTo(unknownCommit1);
             assertThat(result.get(0).promptVersionId()).isNull();
-            assertThat(result.get(0).promptId()).isNull();
-            assertThat(result.get(0).promptName()).isNull();
+            assertThat(result.get(0).prompt()).isNull();
             assertThat(result.get(1).commit()).isEqualTo(unknownCommit2);
             assertThat(result.get(1).promptVersionId()).isNull();
-            assertThat(result.get(1).promptId()).isNull();
-            assertThat(result.get(1).promptName()).isNull();
+            assertThat(result.get(1).prompt()).isNull();
         }
 
         @Test
@@ -4262,13 +4260,12 @@ class PromptResourceTest {
             // First entry: unknown commit - null prompt fields
             assertThat(result.get(0).commit()).isEqualTo(unknownCommit);
             assertThat(result.get(0).promptVersionId()).isNull();
-            assertThat(result.get(0).promptId()).isNull();
-            assertThat(result.get(0).promptName()).isNull();
+            assertThat(result.get(0).prompt()).isNull();
 
             // Second entry: known commit - has prompt fields
             assertThat(result.get(1).promptVersionId()).isEqualTo(version.id());
             assertThat(result.get(1).commit()).isEqualTo(version.commit());
-            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+            assertThat(result.get(1).prompt().id()).isEqualTo(promptId);
         }
 
         @Test
