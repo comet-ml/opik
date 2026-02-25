@@ -128,7 +128,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
