@@ -15,7 +15,8 @@ This workflow will:
 - Find the existing open PR for the branch (stop if none)
 - Fetch pending/unaddressed comments or review threads
 - Summarize findings and propose solutions or next actions
-- Ask for confirmation before proceeding with fixes or marking items as not needed
+- Ask for confirmation before proceeding with fixes, skipping, or replying
+- Post threaded replies on the PR using `gh api` (immediate for skips, deferred for fixes)
 
 ---
 
@@ -73,10 +74,61 @@ This workflow will:
 ### 5. Ask for Decisions and Next Steps
 
 - **Prompt**: For each item, ask whether to:
-  - Apply the proposed fix now (you will then make edits or create follow-up todos)
-  - Skip / mark as not needed (with justification)
-- **If user opts to fix**: Proceed with the proposed code changes or create follow-up todos
-- **If user opts to skip**: Confirm and log it as "won't fix" decision
+  - **Apply fix**: Make the code change now (you will then make edits or create follow-up todos)
+  - **Skip**: Mark as not needed with justification
+  - **Reply on PR**: Post a threaded reply to the comment on GitHub
+- **If user opts to fix**: Proceed with the proposed code changes or create follow-up todos. Track this comment for a deferred "Fixed" reply (see Step 6).
+- **If user opts to skip**: Post an immediate "Skipping" reply on the PR thread with the rationale (see Step 6), then log it as "won't fix" decision.
+- **If user opts to reply only**: Post a custom reply without making code changes.
+
+---
+
+### 6. Post Replies to PR
+
+Reply to PR review comments using `gh api` with threaded replies via `in_reply_to`.
+
+#### Reply Command Format
+
+```bash
+gh api repos/comet-ml/opik/pulls/{pr_number}/comments \
+  -f body="<reply text>" \
+  -F in_reply_to={comment_id}
+```
+
+#### AI Marker
+
+All auto-posted replies **must** include a footer marker to distinguish them from human-written replies:
+
+```
+🤖 *Reply posted via /address-github-pr-comments*
+```
+
+#### Immediate Replies ("Skipping")
+
+When the user opts to skip a comment, post the reply immediately:
+
+```
+Skipping — <brief rationale why this is not being addressed>
+
+🤖 *Reply posted via /address-github-pr-comments*
+```
+
+#### Deferred Replies ("Fixed")
+
+When the user opts to fix a comment, **defer the reply** until the fix is pushed to the remote:
+
+1. Track comments that need deferred replies (comment ID + description of fix)
+2. After all fixes are applied, prompt the user to commit and push
+3. Once `git push` completes, capture the commit SHA from the push output
+4. Post deferred replies referencing the commit:
+
+```
+Fixed in <commit_sha> — <brief description of what was changed>
+
+🤖 *Reply posted via /address-github-pr-comments*
+```
+
+If the user declines to push immediately, remind them which comments still need deferred replies and provide the reply commands they can run manually later.
 
 ---
 
@@ -108,17 +160,20 @@ The command is successful when:
 3. ✅ An open PR for the branch is found (or we clearly stop if not)
 4. ✅ Pending/unaddressed comments are listed (or we clearly state none)
 5. ✅ Proposed solutions are provided per item
-6. ✅ User can choose actions (fix, skip) per comment
+6. ✅ User can choose actions (fix, skip, reply) per comment
+7. ✅ "Skipping" replies posted immediately with AI marker
+8. ✅ "Fixed" replies posted after push with commit SHA and AI marker
 
 ---
 
 ## Notes
 
 - **Repository**: Always targets `comet-ml/opik`
-- **Comment Context**: This command focuses on analyzing and proposing fixes rather than replying to comments
-- **Reply Limitation**: GitHub MCP doesn't support proper replies to existing comment threads, so this option is not provided
+- **Replies via gh CLI**: Uses `gh api` with `in_reply_to` to post threaded replies on PR review comments. GitHub MCP is used for reading; `gh` CLI is used for posting replies.
+- **AI marker required**: Every auto-posted reply must include the `🤖 *Reply posted via /address-github-pr-comments*` footer — never omit it
+- **Deferred replies**: "Fixed" replies are only posted after the fix commit is pushed to remote. Never post a "Fixed" reply before the code is on the remote.
 - **Heuristics**: If unresolved review thread flags are not available via MCP, use best-effort heuristics (latest commit context, lack of author confirmation, not marked as outdated) and clearly label them
-- **User control**: Ask before proceeding with any fixes or marking items as not needed
+- **User control**: Ask before proceeding with any fixes, skipping, or posting replies
 - **Stateless**: Re-runs discovery and analysis on every invocation
 - **No Delete Operations**: This command only creates and updates content; it never deletes files, comments, or other content
 
