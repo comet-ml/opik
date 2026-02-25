@@ -23,6 +23,7 @@ import {
 } from "@/store/DatasetDraftStore";
 import { useToast } from "@/components/ui/use-toast";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -59,6 +60,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
   const [addTagDialogOpen, setAddTagDialogOpen] = useState<boolean>(false);
   const disabled = !selectedDatasetItems?.length;
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
@@ -188,6 +190,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           setExpansionDialogOpen(true);
           resetKeyRef.current = resetKeyRef.current + 1;
         }}
+        disabled={!canInteractWithApp}
       >
         <Sparkles className="mr-2 size-4" />
         Expand with AI
@@ -201,7 +204,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
             setAddTagDialogOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Tag />
         </Button>
@@ -227,7 +230,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           variant="outline"
           size="icon-sm"
           onClick={deleteDatasetItemsHandler}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

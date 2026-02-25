@@ -6,6 +6,7 @@ import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type DashboardsActionsPanelsProps = {
   dashboards: Dashboard[];
@@ -17,6 +18,7 @@ const DashboardsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !dashboards?.length;
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const { mutate } = useDashboardBatchDeleteMutation();
 
@@ -46,7 +48,7 @@ const DashboardsActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

@@ -42,6 +42,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: Prompt) => p.id;
 
@@ -180,6 +181,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const PromptsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -349,7 +351,7 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
+          <Button variant="default" size="sm" onClick={handleNewPromptClick} disabled={!canInteractWithApp}>
             Create new prompt
           </Button>
         </div>

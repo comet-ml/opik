@@ -42,6 +42,7 @@ import {
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (d: Dataset) => d.id;
 
@@ -168,6 +169,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -338,7 +340,7 @@ const DatasetsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
+          <Button variant="default" size="sm" onClick={handleNewDatasetClick} disabled={!canInteractWithApp}>
             Create new dataset
           </Button>
         </div>

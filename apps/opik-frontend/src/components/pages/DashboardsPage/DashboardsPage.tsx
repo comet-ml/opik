@@ -38,6 +38,7 @@ import {
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -65,6 +66,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DashboardsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const columnsDef: ColumnData<Dashboard>[] = useMemo(() => {
     return [
@@ -278,7 +280,7 @@ const DashboardsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDashboardClick}>
+          <Button variant="default" size="sm" onClick={handleNewDashboardClick} disabled={!canInteractWithApp}>
             Create new dashboard
           </Button>
         </div>

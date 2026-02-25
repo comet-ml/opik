@@ -15,10 +15,12 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useFeedbackDefinitionDeleteMutation from "@/api/feedback-definitions/useFeedbackDefinitionDeleteMutation";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
   CellContext<FeedbackDefinition, unknown>
 > = (context) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const feedbackDefinition = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -59,7 +61,7 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

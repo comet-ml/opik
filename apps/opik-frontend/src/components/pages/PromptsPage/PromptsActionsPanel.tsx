@@ -6,6 +6,7 @@ import { Prompt } from "@/types/prompts";
 import usePromptBatchDeleteMutation from "@/api/prompts/usePromptBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type PromptsActionsPanelsProps = {
   prompts: Prompt[];
@@ -17,6 +18,7 @@ const PromptsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !prompts?.length;
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const { mutate } = usePromptBatchDeleteMutation();
 
@@ -46,7 +48,7 @@ const PromptsActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

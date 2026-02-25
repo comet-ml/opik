@@ -19,6 +19,7 @@ import {
   useSetPanelExpanded,
 } from "@/store/DatasetExportStore";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -26,6 +27,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
 > = (context) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const dataset = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -97,7 +99,7 @@ export const DatasetRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

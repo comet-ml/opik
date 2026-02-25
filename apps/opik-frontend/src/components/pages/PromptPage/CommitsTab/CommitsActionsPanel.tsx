@@ -8,6 +8,7 @@ import ComparePromptVersionDialog from "@/components/pages/PromptPage/CommitsTab
 import AddTagDialog from "@/components/pages/PromptPage/CommitsTab/AddTagDialog";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CommitsActionsPanelsProps = {
   versions: PromptVersion[];
@@ -19,6 +20,7 @@ const CommitsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number | boolean>(false);
   const disabled = versions?.length === 0;
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const compareDisabled = versions?.length < 2;
 
   return (
@@ -43,7 +45,7 @@ const CommitsActionsPanel: React.FunctionComponent<
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Tag />
         </Button>
