@@ -54,11 +54,6 @@ export const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
   },
   {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
-  },
-  {
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
