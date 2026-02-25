@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Table, ChartLine } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -15,24 +15,18 @@ export interface ViewSelectorProps {
 }
 
 const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
-  const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
-
   const {
     permissions: { canViewDashboards },
   } = usePermissions();
 
-  const disabled =
-    (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) || !canViewDashboards;
+  const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
+  const disabled = value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges;
 
-  const getTooltipContent = () => {
-    if (!canViewDashboards) {
-      return "You do not have permission to view dashboards";
+  useEffect(() => {
+    if (value === VIEW_TYPE.DASHBOARDS && !canViewDashboards) {
+      onChange(VIEW_TYPE.DETAILS);
     }
-    if (value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges) {
-      return "Save or discard your changes before switching";
-    }
-    return null;
-  };
+  }, [canViewDashboards, value, onChange]);
 
   const content = (
     <ToggleGroup
@@ -63,9 +57,13 @@ const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
     </ToggleGroup>
   );
 
+  if (!canViewDashboards) {
+    return null;
+  }
+
   if (disabled) {
     return (
-      <TooltipWrapper content={getTooltipContent()}>
+      <TooltipWrapper content="Save or discard your changes before switching">
         <div>{content}</div>
       </TooltipWrapper>
     );
