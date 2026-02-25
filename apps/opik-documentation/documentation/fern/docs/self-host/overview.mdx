@@ -8,7 +8,7 @@ subtitle: High-level overview on how to self-host Opik
 title: Overview
 ---
 
-You can use Opik through [Comet's Managed Cloud offering](https://comet.com/site) or you can self-host Opik on your own infrastructure. When choosing to self-host Opik, you get access to all Opik features including tracing, evaluation, etc but without user management features.
+You can use Opik through [Comet's Managed Cloud offering](https://comet.com) or you can self-host Opik on your own infrastructure. When choosing to self-host Opik, you get access to all Opik features including tracing, evaluation, etc but without user management features.
 
 If you choose to self-host Opik, you can choose between two deployment options:
 
@@ -78,10 +78,14 @@ os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
 
 To learn more about how to manage you local Opik deployment, you can refer to our [local deployment guide](/self-host/local_deployment).
 
+## SDK version compatibility
+
+For self-hosted deployments, we recommend keeping the Opik server and SDKs on the latest versions for best compatibility. The Python SDK (`opik`), TypeScript SDK (`opik`), and Opik Agent Optimizer SDK (`opik-optimizer`) are designed to work with the latest Opik server release. Older SDK versions may not support newer server features, and newer SDK versions may require a minimum server version. Check the [changelog](https://www.comet.com/docs/opik/changelog) for version-specific compatibility notes.
+
 ## Advanced deployment options
 
 If you would like to deploy Opik on a Kubernetes cluster, we recommend following our Kubernetes deployment guide [here](/self-host/kubernetes).
 
 ## Comet managed deployments
 
-The Opik platform is being developed and maintained by the Comet team. If you are looking for a managed deployment solution, feel free to reach out to the Comet team at sales@comet.com or visit the [Comet website](https://comet.com/site) to learn more.
+The Opik platform is being developed and maintained by the Comet team. If you are looking for a managed deployment solution, feel free to reach out to the Comet team at sales@comet.com or visit the [Comet website](https://comet.com) to learn more.

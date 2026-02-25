@@ -15,29 +15,31 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const DEFAULT_LOADED_EXPERIMENT_ITEMS = 1000;
 const MORE_LOADED_EXPERIMENT_ITEMS = 10000;
-export const EXPERIMENTS_SELECT_QUERY_KEY = "experiments-select-box";
+const EXPERIMENTS_SELECT_QUERY_KEY = "experiments-select-box";
 
 const DEFAULT_EXPERIMENTS_SORTING: Sorting = [{ id: "created_at", desc: true }];
 
-export type UseExperimentsSelectDataParams = {
+type UseExperimentsSelectDataParams = {
   isLoadedMore?: boolean;
   sorting?: Sorting;
+  projectId?: string;
 };
 
-export type UseExperimentsSelectDataResponse = {
+type UseExperimentsSelectDataResponse = {
   experiments: Experiment[];
   total: number;
   isLoading: boolean;
 };
 
-export const useExperimentsSelectData = ({
+const useExperimentsSelectData = ({
   isLoadedMore,
   sorting = DEFAULT_EXPERIMENTS_SORTING,
+  projectId,
 }: UseExperimentsSelectDataParams): UseExperimentsSelectDataResponse => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const queryClient = useQueryClient();
 
-  // Find cached queries that match the current workspace and sorting
+  // Find cached queries that match the current workspace, sorting, and projectId
   // to avoid returning stale data from different contexts
   const cachedQueries = queryClient.getQueryCache().findAll({
     queryKey: [EXPERIMENTS_SELECT_QUERY_KEY],
@@ -46,10 +48,11 @@ export const useExperimentsSelectData = ({
       const queryParams = query.queryKey[1] as
         | UseExperimentsListParams
         | undefined;
-      // Only consider queries from the same workspace with matching sorting
+      // Only consider queries from the same workspace with matching sorting and projectId
       return (
         queryParams?.workspaceName === workspaceName &&
-        JSON.stringify(queryParams?.sorting) === JSON.stringify(sorting)
+        JSON.stringify(queryParams?.sorting) === JSON.stringify(sorting) &&
+        queryParams?.projectId === projectId
       );
     },
   });
@@ -84,6 +87,7 @@ export const useExperimentsSelectData = ({
         ? MORE_LOADED_EXPERIMENT_ITEMS
         : DEFAULT_LOADED_EXPERIMENT_ITEMS,
       sorting,
+      projectId,
       queryKey: EXPERIMENTS_SELECT_QUERY_KEY,
     },
     {
@@ -122,6 +126,7 @@ interface BaseExperimentsSelectBoxProps {
   customOptions?: DropdownOption<string>[];
   sorting?: Sorting;
   showClearButton?: boolean;
+  projectId?: string;
 }
 
 interface SingleSelectExperimentsProps extends BaseExperimentsSelectBoxProps {
@@ -150,12 +155,14 @@ const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
     customOptions,
     sorting,
     showClearButton = false,
+    projectId,
   } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const { experiments, total, isLoading } = useExperimentsSelectData({
     isLoadedMore,
     sorting,
+    projectId,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);

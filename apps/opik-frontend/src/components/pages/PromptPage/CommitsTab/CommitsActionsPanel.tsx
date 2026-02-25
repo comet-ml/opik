@@ -35,18 +35,17 @@ const CommitsActionsPanel: React.FunctionComponent<
         open={open === 2}
         setOpen={setOpen}
       />
-      <TooltipWrapper content="Add version tags">
+      <TooltipWrapper content="Manage version tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add version tags
+          <Tag />
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Compare commits">

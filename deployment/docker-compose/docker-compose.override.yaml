@@ -1,33 +1,40 @@
+# Docker Compose Override for Port Mapping
+# Port variables are set automatically by worktree-utils.sh for multi-worktree isolation
+
 services:
   mysql:
     ports:
-      - "3306:3306" # Exposing MySQL port to host
+      - "${MYSQL_PORT:-3306}:3306"
 
   redis:
     ports:
-      - "6379:6379" # Exposing Redis port to host
+      - "${REDIS_PORT:-6379}:6379"
 
   clickhouse:
     ports:
-      - "8123:8123" # Exposing ClickHouse HTTP port to host
-      - "9000:9000" # Exposing ClickHouse Native Protocol port to host
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
 
   zookeeper:
     ports:
-      - "2181:2181"
+      - "${ZOOKEEPER_PORT:-2181}:2181"
 
   minio:
     ports:
-      - "9001:9000"   # MinIO API Port
-      - "9090:9090"   # MinIO Web UI Console
+      - "${MINIO_API_PORT:-9001}:9000"
+      - "${MINIO_CONSOLE_PORT:-9090}:9090"
 
   backend:
     ports: !override
-      - "8080:8080" # Exposing backend HTTP port to host
-      - "3003:3003" # Exposing backend OpenAPI specification port to host
+      - "${OPIK_BACKEND_PORT:-8080}:8080"
+      - "3003:3003"
 
   python-backend:
     environment:
-      OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://host.docker.internal:8080}  # Default to host machine's backend
+      OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://host.docker.internal:${OPIK_BACKEND_PORT:-8080}}
     ports:
-      - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}" # Exposing Python backend HTTP port to host
+      - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}"
+
+  opik-ai-backend:
+    ports:
+      - "${OPIK_AI_BACKEND_PORT:-8081}:8081"

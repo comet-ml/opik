@@ -101,18 +101,17 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         />
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content="Manage tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add tags
+          <Tag />
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Delete">

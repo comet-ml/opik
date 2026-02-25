@@ -15,5 +15,6 @@ public record ExperimentGroupCriteria(
         String name,
         Set<ExperimentType> types,
         List<? extends Filter> filters,
-        UUID projectId) {
+        UUID projectId,
+        Boolean projectDeleted) {
 }

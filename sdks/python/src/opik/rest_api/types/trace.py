@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .error_info import ErrorInfo
+from .experiment_item_reference import ExperimentItemReference
 from .feedback_score import FeedbackScore
 from .guardrails_validation import GuardrailsValidation
 from .json_list_string import JsonListString
@@ -49,6 +50,11 @@ class Trace(UniversalBaseModel):
     Duration in milliseconds as a decimal number to support sub-millisecond precision
     """
 
+    ttft: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Time to first token in milliseconds
+    """
+
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TraceVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
@@ -57,6 +63,8 @@ class Trace(UniversalBaseModel):
     """
     List of unique provider names from all spans in this trace, sorted alphabetically
     """
+
+    experiment: typing.Optional[ExperimentItemReference] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -3,15 +3,16 @@ import math
 from typing import Any
 from collections.abc import Iterator
 
-from rich.panel import Panel
-from rich.text import Text
+import rich.panel
+import rich.text
 
 from ...api_objects import chat_prompt
+from ...constants import DEFAULT_PANEL_WIDTH
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
     display_messages,
-    display_text_block,
     display_renderable_with_prefix,
+    display_text_block,
 )
 from ...utils.display.format import format_score_progress
 from .display_utils import (
@@ -26,7 +27,43 @@ __all__ = [
     "display_optimized_prompt_diff",
 ]
 
-PANEL_WIDTH = 90
+
+def _display_box(
+    title: str,
+    content_lines: list[str],
+    title_style: str = "",
+    width: int = DEFAULT_PANEL_WIDTH,
+) -> None:
+    """Display a box with title and content using Rich panels.
+
+    Format matches chat prompts: simple header with role name, grey borders.
+    The box is displayed with a "│ " prefix to align with other output.
+    Width is the total box width including borders (excluding the "│ " prefix).
+
+    Args:
+        title: Title to display in the header (colored if title_style provided)
+        content_lines: List of content lines to display
+        title_style: Style for the title text only (borders remain grey/dim)
+        width: Total box width
+    """
+    content = "\n".join(content_lines).rstrip()
+    content_text = rich.text.Text(content)
+
+    if title_style:
+        styled_title = f"[bold {title_style}]{title}[/bold {title_style}]"
+    else:
+        styled_title = title
+
+    panel = rich.panel.Panel(
+        content_text,
+        title=styled_title,
+        title_align="left",
+        border_style="dim",
+        width=width,
+        padding=(1, 2),
+    )
+
+    display_renderable_with_prefix(panel, prefix="│ ")
 
 
 def display_retry_attempt(
@@ -314,7 +351,7 @@ def display_root_cause_analysis(verbose: int = 1) -> Iterator[Any]:
 def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]:
     """Context manager to display message during batch synthesis."""
     if verbose >= 1:
-        display_text_block("│   Synthesizing failure modes", style="cyan")
+        display_text_block("│   Synthesizing failure modes", style="bright_cyan")
 
     class Reporter:
         def set_completed(self, _num_unified_modes: int) -> None:
@@ -332,101 +369,94 @@ def display_hierarchical_synthesis(
     if verbose < 1:
         return
 
-    synthesis_content = Text()
-    synthesis_content.append(
-        f"Analyzed {total_test_cases} test cases across {num_batches} batches\n\n",
-        style="bold",
-    )
-    synthesis_content.append("Synthesis Notes:\n", style="cyan")
-    synthesis_content.append(synthesis_notes)
+    content_lines = [
+        f"Analyzed {total_test_cases} {'case' if total_test_cases == 1 else 'cases'} "
+        f"across {num_batches} {'batch' if num_batches == 1 else 'batches'}",
+        "",
+        "Synthesis Notes:",
+        synthesis_notes,
+    ]
 
-    panel = Panel(
-        synthesis_content,
+    display_text_block("│")
+    _display_box(
         title="🔍 Hierarchical Root Cause Analysis",
-        title_align="left",
-        border_style="cyan",
-        width=PANEL_WIDTH,
+        content_lines=content_lines,
+        title_style="bright_cyan",
     )
-
-    # Capture the panel as rendered text with ANSI styles and prefix each line
-    display_renderable_with_prefix(panel, prefix="│ ")
     display_text_block("│")
 
 
 def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
-    """Display identified failure modes in formatted panels."""
+    """Display identified failure modes in formatted boxes."""
     if verbose < 1:
         return
 
-    # Display header panel
-    header_panel = Panel(
-        Text(
-            f"Found {len(failure_modes)} distinct failure pattern{'s' if len(failure_modes) != 1 else ''}",
-            style="bold yellow",
-        ),
-        title="⚠️ IDENTIFIED FAILURE MODES",
-        title_align="left",
-        border_style="yellow",
-        width=PANEL_WIDTH,
+    display_text_block("│")
+    display_text_block(
+        f"│   ✓ Identified Failure Modes: Found {len(failure_modes)} distinct "
+        f"{'failure pattern' if len(failure_modes) == 1 else 'failure patterns'}",
+        style="bold bright_green",
     )
 
-    display_text_block("│")
-    display_renderable_with_prefix(header_panel, prefix="│ ")
-    display_text_block("│")
-
+    # Display each failure mode in its own box
+    total_modes = len(failure_modes)
     for idx, failure_mode in enumerate(failure_modes, 1):
-        # Create content for this failure mode
-        mode_content = Text()
-        mode_content.append(f"{failure_mode.name}\n\n", style="bold white")
-        mode_content.append("Description:\n", style="cyan")
-        mode_content.append(f"{failure_mode.description}\n\n")
-        mode_content.append("Root Cause:\n", style="cyan")
-        mode_content.append(f"{failure_mode.root_cause}")
+        display_text_block("│")
+        display_text_block(f"│   Failure {idx}/{total_modes}:")
+        content_lines = [
+            "Description:",
+            failure_mode.description,
+            "",
+            "Root Cause:",
+            failure_mode.root_cause,
+        ]
 
-        panel = Panel(
-            mode_content,
-            title=f"Failure Mode {idx}",
-            title_align="left",
-            border_style="red" if idx == 1 else "yellow",
-            width=PANEL_WIDTH,
+        _display_box(
+            title=failure_mode.name,
+            content_lines=content_lines,
+            title_style="yellow",
         )
 
-        display_renderable_with_prefix(panel, prefix="│ ")
-
-        if idx < len(failure_modes):
+        if idx < total_modes:
             display_text_block("│")
 
 
 @contextmanager
 def display_prompt_improvement(
-    failure_mode_name: str, verbose: int = 1
+    failure_mode_name: str,
+    failure_mode_index: int | None = None,
+    total_failure_modes: int | None = None,
+    verbose: int = 1,
 ) -> Iterator[Any]:
     """Context manager to display progress while generating improved prompt."""
     if verbose >= 1:
         display_text_block("│")
-        display_text_block("│   ")
-        display_text_block(
-            f"│   Addressing: {failure_mode_name}",
-            style="bold cyan",
-        )
+        display_text_block("│")
+
+        # Build the addressing message as a simple status line
+        if failure_mode_index is not None and total_failure_modes is not None:
+            message = f"│   Addressing failure mode ({failure_mode_index} of {total_failure_modes}): {failure_mode_name}"
+        else:
+            message = f"│   Addressing: {failure_mode_name}"
+
+        display_text_block(message, style="bold bright_cyan")
 
     class Reporter:
         def set_reasoning(self, reasoning: str) -> None:
             if verbose >= 1:
-                reasoning_content = Text()
-                reasoning_content.append("Improvement Strategy:\n", style="cyan")
-                reasoning_content.append(reasoning)
+                content_lines = [
+                    "Improvement Strategy:",
+                    reasoning,
+                ]
 
-                panel = Panel(
-                    reasoning_content,
+                display_text_block("│")
+                _display_box(
                     title="💡 Reasoning",
-                    title_align="left",
-                    border_style="blue",
-                    width=PANEL_WIDTH - 10,
-                    padding=(0, 1),
+                    content_lines=content_lines,
+                    title_style="bright_blue",
+                    width=DEFAULT_PANEL_WIDTH
+                    - 10,  # Slightly narrower for nested display
                 )
-
-                display_renderable_with_prefix(panel, prefix="│ ")
                 display_text_block("│   ")
 
     try:
@@ -453,12 +483,12 @@ def display_iteration_improvement(
     if improvement > 0:
         display_text_block(
             f"│   ✓ Improvement: {improvement_str} (from {best_score:.4f} to {current_score:.4f})",
-            style="green bold",
+            style="bold bright_green",
         )
     else:
         display_text_block(
             f"│   ✗ No improvement: {improvement_str} (score: {current_score:.4f}, best: {best_score:.4f})",
-            style="yellow",
+            style="bright_yellow",
         )
 
 

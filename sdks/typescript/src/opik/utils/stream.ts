@@ -43,7 +43,7 @@ export async function parseNdjsonStreamToArray<T>(
 
         try {
           const parsed = JSON.parse(line);
-          const result = serializer.parse(parsed);
+          const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
           if (result.ok) {
             results.push(result.value);
@@ -74,7 +74,7 @@ export async function parseNdjsonStreamToArray<T>(
     ) {
       try {
         const parsed = JSON.parse(buffer);
-        const result = serializer.parse(parsed);
+        const result = serializer.parse(parsed, { unrecognizedObjectKeys: "strip" });
 
         if (result.ok) {
           results.push(result.value);

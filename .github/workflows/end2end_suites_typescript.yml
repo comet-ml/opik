@@ -86,6 +86,8 @@ jobs:
             - name: Install Opik (Local)
               env:
                 OPIK_USAGE_REPORT_ENABLED: false
+                # Avoid Buildx Bake concurrent image export collisions in CI.
+                COMPOSE_BAKE: false
               run: |
                 cd ${{ github.workspace }}
                 TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build

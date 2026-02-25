@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -71,7 +72,8 @@ export const DashboardRowActionsCell: React.FunctionComponent<
             <Copy className="mr-2 size-4" />
             Clone
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleDelete}>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleDelete} variant="destructive">
             <Trash className="mr-2 size-4" />
             Delete
           </DropdownMenuItem>
@@ -99,6 +101,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
         title="Delete dashboard"
         description="Are you sure you want to delete this dashboard?"
         confirmText="Delete dashboard"
+        confirmButtonVariant="destructive"
       />
     </div>
   );

@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
-import isEqual from "fast-deep-equal";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
@@ -47,9 +46,8 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import usePromptVersionById from "@/api/prompts/usePromptVersionById";
-import usePromptByIdApi from "@/api/prompts/usePromptById";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -73,7 +71,6 @@ const PlaygroundPrompt = ({
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
-  const loadedChatPromptRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -99,29 +96,24 @@ const PlaygroundPrompt = ({
   // Get the loaded chat prompt ID from the prompt data
   const selectedChatPromptId = prompt?.loadedChatPromptId;
 
-  // Fetch chat prompt data when selected
-  const { data: chatPromptData, isSuccess: chatPromptDataLoaded } =
-    usePromptByIdApi(
-      {
-        promptId: selectedChatPromptId!,
-      },
-      {
-        enabled: !!selectedChatPromptId,
-      },
-    );
-
-  // Fetch chat prompt version when chat prompt is loaded
-  const {
-    data: chatPromptVersionData,
-    isSuccess: chatPromptVersionDataLoaded,
-  } = usePromptVersionById(
-    {
-      versionId: chatPromptData?.latest_version?.id || "",
+  const handleChatPromptMessagesLoaded = useCallback(
+    (newMessages: LLMMessage[], promptName: string) => {
+      setLastImportedPromptName(promptName);
+      updatePrompt(promptId, { messages: newMessages });
     },
-    {
-      enabled: !!chatPromptData?.latest_version?.id && chatPromptDataLoaded,
-    },
+    [promptId, updatePrompt],
   );
+
+  const {
+    chatPromptData,
+    loadedChatPromptRef,
+    chatPromptTemplate,
+    hasUnsavedChatPromptChanges,
+  } = useLoadChatPrompt({
+    selectedChatPromptId,
+    messages,
+    onMessagesLoaded: handleChatPromptMessagesLoaded,
+  });
 
   const provider = providerResolver(model);
 
@@ -129,66 +121,6 @@ const PlaygroundPrompt = ({
     () => datasetVariables || [],
     [datasetVariables],
   );
-
-  // Memoize the template JSON to avoid costly JSON.stringify on every render
-  const chatPromptTemplate = useMemo(
-    () =>
-      JSON.stringify(
-        messages.map((msg) => ({ role: msg.role, content: msg.content })),
-      ),
-    [messages],
-  );
-
-  // Check if loaded chat prompt has unsaved changes
-  const hasUnsavedChatPromptChanges = useMemo(() => {
-    const hasContent = messages.length > 0;
-
-    // Return false if no content or no chat prompt is selected
-    if (!hasContent || !selectedChatPromptId) {
-      return false;
-    }
-
-    // Return false if chat prompt data hasn't loaded yet or doesn't match
-    if (!chatPromptData || chatPromptData.id !== selectedChatPromptId) {
-      return false;
-    }
-
-    // Return false if version data hasn't loaded yet
-    if (!chatPromptVersionData?.template) {
-      return false;
-    }
-
-    // Parse both templates as objects to compare semantically, not by string formatting
-    // IMPORTANT: Only compare role and content, ignore text prompt metadata fields
-    try {
-      const currentTemplate = JSON.parse(chatPromptTemplate);
-      const loadedTemplate = JSON.parse(chatPromptVersionData.template);
-
-      // Normalize both templates to only include role and content
-      const normalizeTemplate = (
-        template: Array<{
-          role: string;
-          content: unknown;
-          promptId?: string;
-          promptVersionId?: string;
-        }>,
-      ) => template.map(({ role, content }) => ({ role, content }));
-
-      const normalizedCurrent = normalizeTemplate(currentTemplate);
-      const normalizedLoaded = normalizeTemplate(loadedTemplate);
-
-      return !isEqual(normalizedCurrent, normalizedLoaded);
-    } catch {
-      // If parsing fails, fall back to string comparison
-      return !isEqual(chatPromptTemplate, chatPromptVersionData.template);
-    }
-  }, [
-    selectedChatPromptId,
-    chatPromptData,
-    chatPromptVersionData,
-    chatPromptTemplate,
-    messages.length,
-  ]);
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -329,64 +261,6 @@ const PlaygroundPrompt = ({
     },
     [promptId, updatePrompt],
   );
-
-  // Effect to populate messages when chat prompt data is loaded
-  useEffect(() => {
-    // Create a unique key for this chat prompt load (prompt ID + version ID)
-    const chatPromptKey =
-      selectedChatPromptId && chatPromptVersionData
-        ? `${selectedChatPromptId}-${chatPromptVersionData.id}`
-        : null;
-
-    if (
-      chatPromptVersionData?.template &&
-      selectedChatPromptId &&
-      chatPromptData &&
-      chatPromptVersionDataLoaded &&
-      chatPromptKey &&
-      loadedChatPromptRef.current !== chatPromptKey // Prevent duplicate loads
-    ) {
-      try {
-        // Mark this chat prompt as loaded to prevent race conditions
-        loadedChatPromptRef.current = chatPromptKey;
-
-        // Parse the JSON string from template
-        const parsedMessages = JSON.parse(chatPromptVersionData.template);
-
-        // Convert to LLMMessage format - this will OVERWRITE existing messages
-        // Clear any text prompt metadata (promptId, promptVersionId) from chat prompts
-        const newMessages: LLMMessage[] = parsedMessages.map(
-          (msg: { role: string; content: unknown }) =>
-            generateDefaultLLMPromptMessage({
-              role: msg.role as LLM_MESSAGE_ROLE,
-              content: msg.content as LLMMessage["content"],
-              // Explicitly exclude promptId and promptVersionId to ensure
-              // chat prompts don't carry text prompt metadata
-            }),
-        );
-
-        // Save the imported prompt name for later use when saving
-        setLastImportedPromptName(chatPromptData.name);
-
-        // Update the prompt with new messages (overwrites existing)
-        updatePrompt(promptId, { messages: newMessages });
-      } catch (error) {
-        console.error("Failed to parse chat prompt:", error);
-      }
-    }
-
-    // Reset the ref when chat prompt is deselected
-    if (!selectedChatPromptId) {
-      loadedChatPromptRef.current = null;
-    }
-  }, [
-    chatPromptVersionData,
-    promptId,
-    updatePrompt,
-    selectedChatPromptId,
-    chatPromptData,
-    chatPromptVersionDataLoaded,
-  ]);
 
   // Handler for saving chat prompt
   const handleSaveChatPrompt = useCallback(() => {

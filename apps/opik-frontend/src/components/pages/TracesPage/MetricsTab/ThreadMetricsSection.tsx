@@ -8,7 +8,6 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import {
   METRIC_NAME_TYPE,
   INTERVAL_TYPE,
@@ -25,6 +24,7 @@ import {
   durationYTickFormatter,
   tokenYTickFormatter,
 } from "./utils";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 
 const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
   {
@@ -46,11 +46,6 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     id: "number_of_messages",
     label: "Message count",
     type: COLUMN_TYPE.number,
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
   },
   {
     id: "created_at",
@@ -127,15 +122,6 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             placeholder: "Select score",
           },
         },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
-          },
-        },
       },
     }),
     [projectId],
@@ -171,6 +157,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            renderValue={renderScoreTooltipValue}
             chartType={CHART_TYPE.line}
             threadFilters={threadFilters}
           />

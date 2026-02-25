@@ -1,7 +1,10 @@
 import * as fs from 'fs';
 import chalk from 'chalk';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import clack from '../utils/clack';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type AddEditorRulesStepOptions = {
   installDir: string;
@@ -18,20 +21,13 @@ export const addEditorRulesStep = async ({
 
     await fs.promises.mkdir(docsDir, { recursive: true });
 
+    const rulesDir = path.join(__dirname, 'rules');
     const frameworkRules = await fs.promises.readFile(
-      path.join(__dirname, '..', 'utils', 'rules', rulesName),
+      path.join(rulesDir, rulesName),
       'utf8',
     );
-    const universalRulesPath = path.join(
-      __dirname,
-      '..',
-      'utils',
-      'rules',
-      'universal.md',
-    );
-
     const universalRules = await fs.promises.readFile(
-      universalRulesPath,
+      path.join(rulesDir, 'universal.md'),
       'utf8',
     );
 

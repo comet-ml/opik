@@ -27,7 +27,6 @@ import {
   OPERATORS_MAP,
 } from "@/constants/filters";
 import { createFilter } from "@/lib/filters";
-import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -36,14 +35,11 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
-import { SPAN_TYPE } from "@/types/traces";
-import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { DropdownOption } from "@/types/shared";
 import { FilterOperator } from "@/types/filters";
-import { SelectItem } from "@/components/ui/select";
-import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 
 // Trace-specific columns for automation rule filtering
 export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
@@ -346,74 +342,10 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             placeholder: "Select score",
           },
         },
-        ...(isThreadScope
-          ? {
-              status: {
-                keyComponentProps: {
-                  options: [
-                    { value: ThreadStatus.ACTIVE, label: "Active" },
-                    { value: ThreadStatus.INACTIVE, label: "Inactive" },
-                  ],
-                  placeholder: "Select status",
-                },
-              },
-            }
-          : {}),
-        ...(isSpanScope
-          ? {
-              type: {
-                keyComponentProps: {
-                  options: [
-                    {
-                      value: SPAN_TYPE.general,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
-                    },
-                    {
-                      value: SPAN_TYPE.tool,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
-                    },
-                    {
-                      value: SPAN_TYPE.llm,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
-                    },
-                    ...(isGuardrailsEnabled
-                      ? [
-                          {
-                            value: SPAN_TYPE.guardrail,
-                            label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
-                          },
-                        ]
-                      : []),
-                  ],
-                  placeholder: "Select type",
-                  renderOption: (option: DropdownOption<SPAN_TYPE>) => {
-                    return (
-                      <SelectItem
-                        key={option.value}
-                        value={option.value}
-                        withoutCheck
-                        wrapperAsChild={true}
-                      >
-                        <div className="flex w-full items-center gap-1.5">
-                          <BaseTraceDataTypeIcon type={option.value} />
-                          {option.label}
-                        </div>
-                      </SelectItem>
-                    );
-                  },
-                },
-              },
-            }
-          : {}),
+        ...(isSpanScope ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [
-      projectId,
-      isThreadScope,
-      isSpanScope,
-      isGuardrailsEnabled,
-      ruleDictionaryOperators,
-    ],
+    [projectId, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
   );
 
   const handleAddFilter = useCallback(() => {

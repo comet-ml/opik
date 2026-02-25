@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -86,6 +86,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   onQueueCreated,
   queue: defaultQueue,
 }) => {
+  const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -156,7 +158,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[790px]">
+      <DialogContent
+        className="max-w-lg sm:max-w-[790px]"
+        hideOverlay={isNestedDialogOpen}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -299,6 +304,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                             valueField="name"
                             multiselect
                             showSelectAll
+                            onInnerDialogOpenChange={setIsNestedDialogOpen}
                             className={cn({
                               "border-destructive": Boolean(
                                 validationErrors?.message,

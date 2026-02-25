@@ -28,6 +28,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     vertexaiProviderEnabled: core.serialization.boolean(),
     bedrockProviderEnabled: core.serialization.boolean(),
     customllmProviderEnabled: core.serialization.boolean(),
+    ollamaProviderEnabled: core.serialization.boolean(),
     collaboratorsTabEnabled: core.serialization.boolean(),
 });
 
@@ -53,6 +54,7 @@ export declare namespace ServiceTogglesConfig {
         vertexaiProviderEnabled: boolean;
         bedrockProviderEnabled: boolean;
         customllmProviderEnabled: boolean;
+        ollamaProviderEnabled: boolean;
         collaboratorsTabEnabled: boolean;
     }
 }

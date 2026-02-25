@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Explore Opik Documentation
+    url: https://www.comet.com/docs/opik
+    about: New to Opik? read our documentation to get setup.
+  - name: Ask Opik Community Support
+    url: https://chat.comet.com
+    about: Ask usage questions in the community before opening an issue.

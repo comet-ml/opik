@@ -60,6 +60,9 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -144,6 +147,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
@@ -695,8 +699,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                         metadata,
                         visibility_mode
                     FROM traces
@@ -847,7 +851,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+                """ + TagOperations.tagUpdateFragment("s.tags") + """
+                as tags
             FROM dataset_items AS s
             WHERE s.workspace_id = :workspace_id
             <if(ids)> AND s.id IN :ids <endif>
@@ -855,7 +860,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
@@ -1142,8 +1147,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
-        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, limit, lastRetrievedId);
+        return getItems(datasetId, limit, lastRetrievedId, List.of());
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters) {
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
@@ -1153,6 +1163,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
 
+            // Add filter support
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId)
                     .bind("limit", limit)
@@ -1160,6 +1176,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            // Bind filter parameters
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");
@@ -1650,11 +1671,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> template.add("data", data.toString()));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        TagOperations.configureTagTemplate(template, update, mergeTags);
 
         return template;
     }
@@ -1668,8 +1686,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        TagOperations.bindTagParams(statement, update);
     }
 
     @Override

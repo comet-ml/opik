@@ -70,6 +70,13 @@ export interface BaseTraceData {
   guardrails_validations?: GuardrailValidation[];
 }
 
+export interface ExperimentItemReference {
+  id: string;
+  name: string;
+  dataset_id: string;
+  dataset_item_id: string;
+}
+
 export interface Trace extends BaseTraceData {
   span_count?: number;
   llm_span_count?: number;
@@ -79,6 +86,7 @@ export interface Trace extends BaseTraceData {
   workspace_name?: string;
   visibility_mode?: TRACE_VISIBILITY_MODE;
   span_feedback_scores?: TraceFeedbackScore[];
+  experiment?: ExperimentItemReference;
 }
 
 export enum SPAN_TYPE {

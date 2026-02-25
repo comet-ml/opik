@@ -12,6 +12,7 @@ import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.TagOperations;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.WorkspaceConfigurationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -168,7 +169,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
         return traceThreadIdService.getTraceThreadIdByThreadModelId(threadModelId)
                 .switchIfEmpty(Mono.error(failWithNotFound("Thread", threadModelId)))
                 .flatMap(traceThreadIdModel -> traceThreadDAO.updateThread(threadModelId,
-                        traceThreadIdModel.projectId(), threadUpdate));
+                        traceThreadIdModel.projectId(), threadUpdate))
+                .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     @Override
@@ -178,7 +180,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
         boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
         List<UUID> threadModelIds = new ArrayList<>(batchUpdate.ids());
         return traceThreadDAO.bulkUpdate(threadModelIds, batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()));
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' threads", batchUpdate.ids().size()))
+                .onErrorResume(TagOperations::mapTagLimitError);
     }
 
     @Override
@@ -248,18 +251,19 @@ class TraceThreadServiceImpl implements TraceThreadService {
                                     log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
                                 })
                         .flatMap(count -> Mono.fromCallable(() -> {
-                            List<TraceThreadModel> reopenedThreads = existingThreads.stream()
-                                    .filter(TraceThreadModel::isInactive)
-                                    .toList();
-
-                            if (reopenedThreads.isEmpty()) {
+                            // Trigger ThreadsReopened for all existing threads that received new traces,
+                            // regardless of their status. This ensures consistent behavior for score deletion
+                            // and other side effects, independent of the thread status concept.
+                            // Note: The event is named "Reopened" because internally threads still have
+                            // an active/inactive status, even though this is hidden from the UI.
+                            if (existingThreads.isEmpty()) {
                                 return Mono.empty();
                             }
-                            log.info("Reopened '{}' trace threads for projectId: '{}'", reopenedThreads.size(),
-                                    projectId);
+                            log.info("Processing '{}' threads with new traces for projectId: '{}'",
+                                    existingThreads.size(), projectId);
 
                             eventBus.post(new ThreadsReopened(
-                                    reopenedThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
+                                    existingThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
                                     projectId,
                                     context.get(RequestContext.WORKSPACE_ID),
                                     context.get(RequestContext.USER_NAME)));

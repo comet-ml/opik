@@ -193,18 +193,17 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         Expand with AI
       </Button>
 
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content="Manage tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setAddTagDialogOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add tags
+          <Tag />
         </Button>
       </TooltipWrapper>
 

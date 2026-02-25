@@ -1,0 +1,45 @@
+---
+description: Multimodal agent optimization tutorial inspired by a self-driving car example.
+headline: Multimodal agent optimizer tutorial | Opik Documentation
+og:description: Learn how to optimize a multimodal agent and link to the full external guide.
+og:site_name: Opik Documentation
+og:title: Multimodal Agent Optimization Tutorial
+subtitle: Tutorial example inspired by a self-driving car vision agent
+title: Multimodal Agent Optimization Tutorial
+---
+
+This tutorial outlines how to optimize a multimodal agent (vision + text) and links to the full walkthrough for a self-driving car scenario. The SDK already includes a working example script and dataset you can run locally.
+
+<Callout>
+  Full guide: [Automatic prompt optimization for multimodal vision agents (self-driving car example)](https://towardsdatascience.com/automatic-prompt-optimization-for-multimodal-vision-agents-a-self-driving-car-example/).
+</Callout>
+
+<Callout>
+  Codebase entry point: [`sdks/opik_optimizer/scripts/multimodal_example.py`](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/scripts/multimodal_example.py) using the driving hazard dataset in [`sdks/opik_optimizer/src/opik_optimizer/datasets/driving_hazard.py`](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/src/opik_optimizer/datasets/driving_hazard.py).
+</Callout>
+
+## What is the multimodal optimizer example?
+
+The SDK includes a complete example that optimizes a vision agent on a driving hazard dataset. It demonstrates how to pass image content parts through `ChatPrompt`, score outputs, and compare trials in the Optimization Studio.
+
+## Why use optimizers here?
+
+Multimodal prompts are sensitive to phrasing and output structure. Running HRPO or MetaPrompt helps you converge on safer, more consistent outputs without rewriting prompts manually.
+
+## How the SDK example works
+
+1. `multimodal_example.py` loads the driving hazard dataset (images + hazard labels).
+2. A multimodal `ChatPrompt` inserts an image URL content part next to the textual instruction.
+3. The metric (Levenshtein ratio) scores predicted hazard text against the expected label.
+4. HRPO optimizes the prompt using the training split, with a small validation split for ranking.
+5. Results display in the Opik UI (Optimization runs and trial details).
+
+<Note>
+  Screenshot placeholder: multimodal trial comparisons and failure analysis.
+</Note>
+
+## Next steps
+
+- Explore the full SDK script and adapt the dataset to your own vision tasks.
+- Use pass@k evaluation (`n` parameter) to reduce stochastic failures.
+- Read the full external guide for the complete workflow and visuals.

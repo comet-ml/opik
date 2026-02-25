@@ -33,6 +33,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     vertexai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="vertexaiProviderEnabled")]
     bedrock_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="bedrockProviderEnabled")]
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
+    ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
     collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
 
     if IS_PYDANTIC_V2:

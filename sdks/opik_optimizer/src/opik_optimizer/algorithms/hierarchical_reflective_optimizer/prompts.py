@@ -33,6 +33,7 @@ Provide a list of failure modes, each with a name, description, and root cause."
 
 
 # Prompt template for synthesizing multiple batch analyses
+# FIXME: If single batch then this results on a failure mode saying you asked batch but gave single
 SYNTHESIS_PROMPT = """You are synthesizing root cause analyses from multiple batches of evaluation results.
 
 BATCH ANALYSES:
@@ -52,14 +53,16 @@ Your task is to synthesize these batch-level analyses into a unified root cause 
    - Consider the severity and frequency of each failure
    - Eliminate one-off or minor issues unless they're particularly impactful
 
-3. PROVIDE SYNTHESIS NOTES:
+3. PROVIDE SYNTHESIS NOTES (PLAIN TEXT ONLY):
+   - Use plain text bullets (e.g., "- item")
+   - Do NOT use markdown formatting, headings, or bold/italic
    - Briefly explain which batch-level patterns were merged and why
    - Note any cross-batch trends or patterns
    - Highlight the most critical areas for improvement
 
 Provide:
 1. A unified list of failure modes (name, description, root cause)
-2. Synthesis notes explaining your analysis process and key findings"""
+2. Synthesis notes as plain text bullets explaining your analysis process and key findings"""
 
 
 # Prompt template for improving prompts based on failure modes
@@ -91,6 +94,19 @@ INSTRUCTIONS FOR IMPROVING THE PROMPTS:
 
 6. **Be Specific**: Ensure your changes provide concrete, actionable guidance that directly addresses the identified failure mode.
 
+{tool_instructions}
+
 Do not remove any variables or placeholders from any prompt message. You can reposition them within the same message content if needed but never remove them.
 
-Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompts for ALL prompt names provided above."""
+Provide your reasoning for the changes you made, explaining WHY each change addresses the failure mode, and then provide the improved prompts for ALL prompt names provided above.
+"""
+
+
+TOOL_INSTRUCTIONS = """7. **Tools (if present)**: You may update tool descriptions and tool parameter descriptions only.
+   - Do NOT add/remove tools.
+   - Do NOT rename tools.
+   - Do NOT modify parameter schemas (only descriptions).
+   - If you update tools, include:
+     - tool_descriptions: list of {name, description}
+     - parameter_descriptions: list of {tool_name, parameters:[{name, description}]}
+"""

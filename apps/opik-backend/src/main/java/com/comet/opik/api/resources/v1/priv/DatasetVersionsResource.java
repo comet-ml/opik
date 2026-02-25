@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRestore;
+import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
@@ -73,6 +74,30 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.ok(versionPage).build();
+    }
+
+    @POST
+    @Path("/retrieve")
+    @Operation(operationId = "retrieveDatasetVersion", summary = "Retrieve dataset version by name", description = "Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset version", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response retrieveVersion(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRetrieveRequest.class))) @Valid @NotNull DatasetVersionRetrieveRequest request) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieving version '{}' for dataset '{}' on workspace '{}'", request.versionName(), datasetId,
+                workspaceId);
+        DatasetVersion version = versionService.getVersionByName(datasetId, request.versionName());
+        log.info("Found version '{}' for dataset '{}' on workspace '{}'", request.versionName(), datasetId,
+                workspaceId);
+
+        return Response.ok(version).build();
     }
 
     @PATCH

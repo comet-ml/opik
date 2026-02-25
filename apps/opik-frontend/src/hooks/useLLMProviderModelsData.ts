@@ -166,6 +166,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
+      label: "Claude Sonnet 4.6",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      label: "Claude Opus 4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
       label: "Claude Opus 4.5",
     },
@@ -192,22 +200,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
       label: "Claude Haiku 4.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
-      label: "Claude Haiku 3.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3,
-      label: "Claude Haiku 3",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_5_SONNET_20241022,
-      label: "Claude 3.5 Sonnet 2024-10-22",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_3_OPUS_20240229,
-      label: "Claude 3 Opus 2024-02-29",
     },
   ],
 
@@ -269,28 +261,8 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthracite-org/magnum-v4-72b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_HAIKU,
-      label: "anthropic/claude-3-haiku",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_OPUS,
-      label: "anthropic/claude-3-opus",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU,
-      label: "anthropic/claude-3.5-haiku",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022,
-      label: "anthropic/claude-3.5-haiku-20241022",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5,
       label: "anthropic/claude-haiku-4.5",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET,
-      label: "anthropic/claude-3.5-sonnet",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET,
@@ -313,12 +285,20 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.5",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+      label: "anthropic/claude-opus-4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_5,
       label: "anthropic/claude-sonnet-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6,
+      label: "anthropic/claude-sonnet-4.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_AFM_4_5B,
@@ -512,6 +492,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06,
       label: "google/gemini-2.5-pro-preview-05-06",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_PRO_PREVIEW,
+      label: "google/gemini-3.1-pro-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_FLASH_PREVIEW,
@@ -1118,6 +1102,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/auto",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
+      label: "openrouter/free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
       label: "perplexity/sonar",
     },
@@ -1433,6 +1421,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.GEMINI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
+      label: "Gemini 3.1 Pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_FLASH,
       label: "Gemini 3 Flash",
     },
@@ -1476,6 +1468,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.VERTEX_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO,
+      label: "Gemini 3.1 Pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,
       label: "Gemini 3 Pro",
     },
@@ -1518,6 +1514,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.CUSTOM]: [
+    // the list will be fully populated based on the provider config response
+  ],
+
+  [PROVIDER_TYPE.OLLAMA]: [
     // the list will be fully populated based on the provider config response
   ],
 

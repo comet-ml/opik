@@ -16,6 +16,7 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
@@ -146,6 +147,7 @@ public class DatasetsResource {
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
+            @QueryParam("type") @Schema(description = "Filter datasets by type (dataset or evaluation_suite)") DatasetType type,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -156,6 +158,7 @@ public class DatasetsResource {
                 .withExperimentsOnly(withExperimentsOnly)
                 .promptId(promptId)
                 .withOptimizationsOnly(withOptimizationsOnly)
+                .type(type)
                 .filters(queryFilters)
                 .build();
 
@@ -418,8 +421,13 @@ public class DatasetsResource {
         var userName = requestContext.get().getUserName();
         var visibility = requestContext.get().getVisibility();
 
+        // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
+        @SuppressWarnings("unchecked")
+        List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
+
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request, visibility)
+        var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);

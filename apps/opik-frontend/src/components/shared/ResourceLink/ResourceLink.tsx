@@ -1,7 +1,6 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  ArrowUpRight,
   ChartLine,
   Database,
   FileTerminal,
@@ -21,6 +20,7 @@ import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { TagProps } from "@/components/ui/tag";
 import { Filter } from "@/types/filters";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export enum RESOURCE_TYPE {
   project,
@@ -28,6 +28,7 @@ export enum RESOURCE_TYPE {
   datasetItem,
   prompt,
   experiment,
+  experimentItem,
   optimization,
   trial,
   annotationQueue,
@@ -77,6 +78,14 @@ export const RESOURCE_MAP = {
     label: "experiment",
     color: "var(--color-burgundy)",
   },
+  [RESOURCE_TYPE.experimentItem]: {
+    url: "/$workspaceName/experiments/$datasetId/compare",
+    icon: FlaskConical,
+    param: "datasetId",
+    deleted: "Deleted experiment item",
+    label: "experiment item",
+    color: "var(--color-burgundy)",
+  },
   [RESOURCE_TYPE.optimization]: {
     url: "/$workspaceName/optimizations/$datasetId/compare",
     icon: SparklesIcon,
@@ -116,6 +125,7 @@ export const RESOURCE_MAP = {
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
+    search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
   },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
@@ -124,6 +134,7 @@ export const RESOURCE_MAP = {
     deleted: "Deleted threads",
     label: "threads",
     color: "var(--thread-icon-text)",
+    search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.threads },
   },
 };
 
@@ -139,6 +150,7 @@ type ResourceLinkProps = {
   gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
+  isSmall?: boolean;
   isDeleted?: boolean;
   className?: string;
 };
@@ -155,6 +167,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   gapSize = 2,
   tooltipContent = "",
   asTag = false,
+  isSmall = false,
   isDeleted = false,
   className,
 }) => {
@@ -173,7 +186,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
     <Link
       to={props.url}
       params={linkParams}
-      search={search}
+      search={{ ...("search" in props ? props.search : {}), ...search }}
       onClick={(event) => event.stopPropagation()}
       className="max-w-full"
       disabled={deleted}
@@ -190,6 +203,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               gapSize === 3 && "gap-3",
               gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
+              isSmall && "size-8 justify-center",
               className,
             )}
           >
@@ -202,26 +216,18 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               )}
               style={{ color: props.color }}
             />
-            <div
-              className={cn(
-                "truncate",
-                variant === "transparent" && [
-                  "text-muted-slate",
-                  "comet-body-s-accented",
-                ],
-              )}
-            >
-              {text}
-            </div>
-            {!deleted && (
-              <ArrowUpRight
+            {!isSmall && (
+              <div
                 className={cn(
-                  "shrink-0 text-muted-slate",
-                  iconsSize === 3 && "size-3",
-                  iconsSize === 4 && "size-4",
-                  iconsSize === 5 && "size-5",
+                  "truncate",
+                  variant === "transparent" && [
+                    "text-muted-slate",
+                    "comet-body-s-accented",
+                  ],
                 )}
-              />
+              >
+                {text}
+              </div>
             )}
           </Tag>
         </TooltipWrapper>

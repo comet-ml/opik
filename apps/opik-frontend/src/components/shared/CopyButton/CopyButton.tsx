@@ -1,9 +1,29 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Button, ButtonProps } from "@/components/ui/button";
+import { cva, VariantProps } from "class-variance-authority";
+import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Check, Copy } from "lucide-react";
 import copy from "clipboard-copy";
 import { useToast } from "@/components/ui/use-toast";
+
+const successIconContainerVariants = cva(
+  "flex items-center justify-center [&>svg]:shrink-0",
+  {
+    variants: {
+      size: {
+        icon: "size-10 [&>svg]:size-4",
+        "icon-lg": "size-11 [&>svg]:size-4",
+        "icon-sm": "size-8 [&>svg]:size-3.5",
+        "icon-xs": "size-7 [&>svg]:size-3.5",
+        "icon-2xs": "size-6 [&>svg]:size-3",
+        "icon-3xs": "size-4 [&>svg]:size-3",
+      },
+    },
+    defaultVariants: {
+      size: "icon-sm",
+    },
+  },
+);
 
 type CopyButtonProps = {
   text: string;
@@ -14,7 +34,7 @@ type CopyButtonProps = {
   className?: string;
   id?: string;
   "data-fs-element"?: string;
-} & Pick<ButtonProps, "size">;
+} & VariantProps<typeof successIconContainerVariants>;
 
 const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
   text,
@@ -50,8 +70,8 @@ const CopyButton: React.FunctionComponent<CopyButtonProps> = ({
 
   if (showSuccessIcon) {
     return (
-      <div className="flex size-8 items-center justify-center">
-        <Check className="size-4" />
+      <div className={successIconContainerVariants({ size })}>
+        <Check />
       </div>
     );
   }

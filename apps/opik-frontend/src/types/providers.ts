@@ -6,6 +6,7 @@ export enum PROVIDER_TYPE {
   OPEN_ROUTER = "openrouter",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  OLLAMA = "ollama",
   CUSTOM = "custom-llm",
   BEDROCK = "bedrock",
   OPIK_FREE = "opik-free",
@@ -50,17 +51,15 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O4_MINI = "o4-mini",
 
   //  <----- anthropic
+  CLAUDE_OPUS_4_6 = "claude-opus-4-6",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
+  CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
-  CLAUDE_HAIKU_3_5 = "claude-3-5-haiku-20241022",
-  CLAUDE_HAIKU_3 = "claude-3-haiku-20240307",
-  CLAUDE_3_5_SONNET_20241022 = "claude-3-5-sonnet-20241022",
-  CLAUDE_3_OPUS_20240229 = "claude-3-opus-20240229",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -81,19 +80,16 @@ export enum PROVIDER_MODEL_TYPE {
   AMAZON_NOVA_PREMIER_V1 = "amazon/nova-premier-v1",
   AMAZON_NOVA_PRO_V1 = "amazon/nova-pro-v1",
   ANTHRACITE_ORG_MAGNUM_V4_72B = "anthracite-org/magnum-v4-72b",
-  ANTHROPIC_CLAUDE_3_HAIKU = "anthropic/claude-3-haiku",
-  ANTHROPIC_CLAUDE_3_OPUS = "anthropic/claude-3-opus",
-  ANTHROPIC_CLAUDE_3_5_HAIKU = "anthropic/claude-3.5-haiku",
-  ANTHROPIC_CLAUDE_3_5_HAIKU_20241022 = "anthropic/claude-3.5-haiku-20241022",
-  ANTHROPIC_CLAUDE_3_5_SONNET = "anthropic/claude-3.5-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET = "anthropic/claude-3.7-sonnet",
   ANTHROPIC_CLAUDE_3_7_SONNET_THINKING = "anthropic/claude-3.7-sonnet:thinking",
   ANTHROPIC_CLAUDE_HAIKU_4_5 = "anthropic/claude-haiku-4.5",
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
   ANTHROPIC_CLAUDE_OPUS_4_5 = "anthropic/claude-opus-4.5",
+  ANTHROPIC_CLAUDE_OPUS_4_6 = "anthropic/claude-opus-4.6",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
+  ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
   ARCEE_AI_AFM_4_5B = "arcee-ai/afm-4.5b",
   ARCEE_AI_CODER_LARGE = "arcee-ai/coder-large",
   ARCEE_AI_MAESTRO_REASONING = "arcee-ai/maestro-reasoning",
@@ -148,6 +144,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW = "google/gemini-2.5-pro-preview",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06 = "google/gemini-2.5-pro-preview-05-06",
+  GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
@@ -320,6 +317,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_O4_MINI_HIGH = "openai/o4-mini-high",
   OPENGVLAB_INTERNVL3_78B = "opengvlab/internvl3-78b",
   OPENROUTER_AUTO = "openrouter/auto",
+  OPENROUTER_FREE = "openrouter/free",
   PERPLEXITY_SONAR = "perplexity/sonar",
   PERPLEXITY_SONAR_DEEP_RESEARCH = "perplexity/sonar-deep-research",
   PERPLEXITY_SONAR_PRO = "perplexity/sonar-pro",
@@ -411,6 +409,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_4_6_EXACTO = "z-ai/glm-4.6:exacto",
 
   //   <----- gemini
+  GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_3_FLASH = "gemini-3-flash-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
   GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
@@ -424,6 +423,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
+  VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06 = "vertex_ai/gemini-2.5-pro-preview-05-06",
@@ -465,7 +465,7 @@ export interface BaseProviderKey {
 }
 
 export interface StandardProviderObject extends BaseProviderKey {
-  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM>;
+  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM | PROVIDER_TYPE.OLLAMA>;
   base_url?: never;
   provider_name?: never;
 }
@@ -476,7 +476,16 @@ export interface CustomProviderObject extends BaseProviderKey {
   base_url: string;
 }
 
-export type ProviderObject = StandardProviderObject | CustomProviderObject;
+export interface OllamaProviderObject extends BaseProviderKey {
+  provider: PROVIDER_TYPE.OLLAMA;
+  provider_name: string;
+  base_url: string;
+}
+
+export type ProviderObject =
+  | StandardProviderObject
+  | CustomProviderObject
+  | OllamaProviderObject;
 
 export type PartialProviderKeyUpdate = Partial<
   Omit<BaseProviderKey, "provider">
@@ -503,6 +512,13 @@ export interface LLMOpenAIConfigsType {
   maxConcurrentRequests?: number;
 }
 
+export type AnthropicThinkingEffort =
+  | "adaptive"
+  | "low"
+  | "medium"
+  | "high"
+  | "max";
+
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
@@ -510,6 +526,7 @@ export interface LLMAnthropicConfigsType {
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
+  thinkingEffort?: AnthropicThinkingEffort;
 }
 
 export interface LLMOpenRouterConfigsType {

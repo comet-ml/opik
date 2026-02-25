@@ -77,7 +77,7 @@ vi.mock("@/evaluation/models/modelsFactory", async (importOriginal) => {
       // For string IDs or undefined, return a new MockModel instance
       if (MockModelForFactory) {
         return new MockModelForFactory(
-          typeof model === "string" ? model : "gpt-4o"
+          typeof model === "string" ? model : "gpt-5-nano"
         );
       }
       // Fallback for edge cases
@@ -125,6 +125,7 @@ describe("evaluatePrompt", () => {
       insert: vi.fn(),
       name: "test-dataset",
       id: "dataset-123",
+      getVersionInfo: vi.fn().mockResolvedValue({ id: "version-123", versionName: "v1" }),
     } as unknown as Dataset<Record<string, unknown>>;
 
     // Setup mock Experiment

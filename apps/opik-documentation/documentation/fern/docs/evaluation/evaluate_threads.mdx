@@ -130,10 +130,10 @@ filter_string='id = "0197ad2a"'
 ```
 
 You can combine multiple filter strings using the `AND` operator. For example, if you want to evaluate only threads
-that have a specific ID and have a specific status, you can use the following filter string:
+that have a specific ID and were created after a certain date, you can use the following filter string:
 
 ```python
-filter_string='id = "0197ad2a" AND status = "inactive"'
+filter_string='id = "0197ad2a" AND start_time > "2024-01-01T00:00:00Z"'
 ```
 
 **Supported filter fields and operators**
@@ -196,11 +196,10 @@ Not only you will be able to see the score values, but the LLM-judge reasoning b
 </Frame>
 
 <Note>
-  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
-  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
-
-You can only evaluate/score threads that are inactive.
-
+  **SDK Evaluation vs. Manual Feedback:**
+  - When using the SDK's `evaluate_threads` function, only threads marked as "inactive" (after the cooldown period) are evaluated. This ensures you're scoring complete conversations.
+  - You can manually add feedback scores to any thread at any time through the UI or API, regardless of its status.
+  - For thread-level online evaluation rules (automatic scoring), Opik waits for a configurable "cooldown period" after the last activity before running the rules.
 </Note>
 
 ## Multi-Value Feedback Scores for Threads

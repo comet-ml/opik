@@ -21,7 +21,7 @@ export interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
   /** Message templates with {{placeholders}} to be formatted with dataset variables */
   messages: OpikMessage[];
 
-  /** Model to use for generation. Can be model ID string, LanguageModel instance, or OpikBaseModel instance. Defaults to gpt-4o */
+  /** Model to use for generation. Can be model ID string, LanguageModel instance, or OpikBaseModel instance. Defaults to gpt-5-nano */
   model?: SupportedModelId | LanguageModel | OpikBaseModel;
 
   /** Template engine type for variable substitution. Defaults to mustache */
@@ -58,7 +58,7 @@ export interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
  *   messages: [
  *     { role: 'user', content: 'Translate to {{language}}: {{text}}' }
  *   ],
- *   model: 'gpt-4o', // or omit to use default model
+ *   model: 'gpt-5-nano', // or omit to use default model
  *   temperature: 0.7,
  *   seed: 42,
  *   scoringMetrics: [new Equals()],
@@ -66,7 +66,7 @@ export interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
  *
  * // Using pre-configured LanguageModel instance
  * import { openai } from '@ai-sdk/openai';
- * const customModel = openai('gpt-4o', { structuredOutputs: true });
+ * const customModel = openai('gpt-5-nano', { structuredOutputs: true });
  * const result2 = await evaluatePrompt({
  *   dataset,
  *   messages: [

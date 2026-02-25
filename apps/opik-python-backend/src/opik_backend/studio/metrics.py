@@ -245,37 +245,122 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str) -> Callable:
     return metric_fn
 
 
+def _interpolate_template(template: str, dataset_item: Dict[str, Any]) -> str:
+    """Interpolate dataset item fields into a template string.
+    
+    Replaces {{field_name}} placeholders with values from the dataset item.
+    If a field is not found, the placeholder is left unchanged.
+    
+    Supports field names with alphanumerics, underscores, dots, and hyphens
+    (e.g., {{answer}}, {{user.name}}, {{answer-key}}).
+    
+    Args:
+        template: String containing {{field_name}} placeholders
+        dataset_item: Dictionary of dataset item fields
+        
+    Returns:
+        Interpolated string with placeholders replaced by values
+        
+    Example:
+        >>> _interpolate_template("Expected: {{answer}}", {"answer": "42"})
+        "Expected: 42"
+    """
+    import re
+    
+    def replace_match(match):
+        field_name = match.group(1).strip()
+        if field_name in dataset_item:
+            return str(dataset_item[field_name])
+        return match.group(0)  # Leave unchanged if not found
+    
+    # Match field names with alphanumerics, underscores, dots, and hyphens
+    return re.sub(r'\{\{\s*([\w.-]+)\s*\}\}', replace_match, template)
+
+
+def _has_template_placeholders(text: str) -> bool:
+    """Check if text contains {{field_name}} template placeholders."""
+    import re
+    return bool(re.search(r'\{\{', text))
+
+
 @MetricFactory.register("geval")
 def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
     """Build a GEval metric function.
     
     Uses an LLM to evaluate outputs based on custom criteria.
+    Supports dataset item field interpolation using {{field_name}} syntax
+    in task_introduction and evaluation_criteria.
     
     Args:
         params: Metric parameters
-            - task_introduction (str): Description of the task being evaluated
-            - evaluation_criteria (str): Criteria for evaluation
+            - task_introduction (str): Description of the task being evaluated.
+              Can include {{field_name}} placeholders for dataset item fields.
+            - evaluation_criteria (str): Criteria for evaluation.
+              Can include {{field_name}} placeholders for dataset item fields.
         model: LLM model to use for evaluation
         
     Returns:
         Metric function
+        
+    Example:
+        With evaluation_criteria="Check if output matches expected: {{answer}}"
+        and dataset_item={"answer": "Paris"}, the LLM judge will see:
+        "Check if output matches expected: Paris"
     """
-    task_intro = params.get("task_introduction", "Evaluate the output")
-    eval_criteria = params.get("evaluation_criteria", "")
-    geval_metric = GEval(
-        task_introduction=task_intro,
-        evaluation_criteria=eval_criteria,
-        model=model
+    # Normalize nullable params to strings - callers may pass explicit None
+    task_intro_template = params.get("task_introduction") or "Evaluate the output"
+    eval_criteria_template = params.get("evaluation_criteria") or ""
+    
+    # Check if templates contain placeholders that need runtime interpolation
+    needs_interpolation = (
+        _has_template_placeholders(task_intro_template) or 
+        _has_template_placeholders(eval_criteria_template)
     )
     
-    def metric_fn(dataset_item, llm_output):
-        return geval_metric.score(
-            input=dataset_item,
-            output=llm_output
+    if not needs_interpolation:
+        # No placeholders - create single reusable GEval instance (original behavior)
+        geval_metric = GEval(
+            task_introduction=task_intro_template,
+            evaluation_criteria=eval_criteria_template,
+            model=model
         )
+        
+        def metric_fn(dataset_item, llm_output):
+            # Note: GEval.score() only accepts 'output' - dataset_item context is embedded
+            # in task_introduction/evaluation_criteria via template interpolation, not passed
+            # separately. GEval's score() ignores any extra kwargs (**ignored_kwargs).
+            return geval_metric.score(output=llm_output)
+        
+        metric_fn.__name__ = "geval"
+        return metric_fn
     
-    metric_fn.__name__ = "geval"
-    return metric_fn
+    # Has placeholders - interpolate at evaluation time
+    # Note: Each unique interpolated criteria will generate its own chain-of-thought,
+    # which is cached by GEval. This is expected behavior for customized evaluation.
+    logger.info("GEval metric using template interpolation for dataset item fields")
+    
+    def metric_fn_with_interpolation(dataset_item, llm_output):
+        # Normalize dataset_item to prevent TypeError if None is passed
+        item = dataset_item or {}
+        # Interpolate dataset item fields into templates
+        task_intro = _interpolate_template(task_intro_template, item)
+        eval_criteria = _interpolate_template(eval_criteria_template, item)
+        
+        # Create GEval with interpolated values
+        # GEval internally caches chain-of-thought by (task_intro, criteria, model)
+        geval_metric = GEval(
+            task_introduction=task_intro,
+            evaluation_criteria=eval_criteria,
+            model=model
+        )
+        
+        # Note: GEval.score() only accepts 'output' - dataset_item context is already
+        # embedded in task_introduction/evaluation_criteria above via interpolation.
+        # GEval's score() ignores any extra kwargs (**ignored_kwargs).
+        return geval_metric.score(output=llm_output)
+    
+    metric_fn_with_interpolation.__name__ = "geval"
+    return metric_fn_with_interpolation
 
 
 @MetricFactory.register("json_schema_validator")

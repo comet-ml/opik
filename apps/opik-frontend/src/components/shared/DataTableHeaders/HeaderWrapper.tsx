@@ -9,6 +9,7 @@ type CustomColumnMeta = {
   type?: COLUMN_TYPE;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  statisticTooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
 };
 
@@ -33,6 +34,7 @@ const HeaderWrapper = <TData,>({
   const type = metaData?.type;
   const statisticKey = metaData?.statisticKey;
   const statisticDataFormater = metaData?.statisticDataFormater;
+  const statisticTooltipFormater = metaData?.statisticTooltipFormater;
   const supportsPercentiles = metaData?.supportsPercentiles;
   const { columnsStatistic } = tableMetadata || {};
 
@@ -67,6 +69,7 @@ const HeaderWrapper = <TData,>({
             columnsStatistic={columnsStatistic}
             statisticKey={statisticKey}
             dataFormater={statisticDataFormater}
+            tooltipFormater={statisticTooltipFormater}
             supportsPercentiles={supportsPercentiles}
           />
         </div>

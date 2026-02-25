@@ -13,6 +13,9 @@ type PluginStore = {
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
   WorkspacePreloader: React.ComponentType<{ children: React.ReactNode }> | null;
+  PermissionsProvider: React.ComponentType<{
+    children: React.ReactNode;
+  }> | null;
   GoogleColabCard: React.ComponentType<GoogleColabCardCoreProps> | null;
   RetentionBanner: React.ComponentType<{
     onChangeHeight: (height: number) => void;
@@ -21,6 +24,7 @@ type PluginStore = {
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
+  WorkspaceSelector: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -33,11 +37,13 @@ const PLUGIN_NAMES = [
   "GetStartedPage",
   "GoogleColabCard",
   "WorkspacePreloader",
+  "PermissionsProvider",
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
+  "WorkspaceSelector",
   "init",
 ];
 
@@ -48,11 +54,13 @@ const usePluginsStore = create<PluginStore>((set) => ({
   GetStartedPage: null,
   GoogleColabCard: null,
   WorkspacePreloader: null,
+  PermissionsProvider: null,
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
+  WorkspaceSelector: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

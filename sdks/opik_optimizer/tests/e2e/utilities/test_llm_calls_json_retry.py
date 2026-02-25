@@ -23,7 +23,7 @@ class JsonRetryResponse(BaseModel):
 def _mock_bad_response() -> Any:
     message = SimpleNamespace(content='{"value": 1', parsed=None)
     choice = SimpleNamespace(message=message, finish_reason="stop")
-    return SimpleNamespace(choices=[choice], model="gpt-4o-mini")
+    return SimpleNamespace(choices=[choice], model="openai/gpt-5-nano")
 
 
 @pytest.mark.e2e
@@ -34,7 +34,7 @@ def test_call_model_retries_with_json_instructions_live(
     if not os.environ.get("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY not set - skipping live test")
 
-    model = os.environ.get("OPIK_TEST_MODEL", "gpt-4o-mini")
+    model = os.environ.get("OPIK_TEST_MODEL", "openai/gpt-5-nano")
     original_completion = litellm.completion
     call_count = {"n": 0}
 

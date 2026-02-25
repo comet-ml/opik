@@ -1,4 +1,4 @@
-import md5 from "md5";
+export const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 
 export const COLOR_VARIANTS = [
   "gray",
@@ -14,23 +14,35 @@ export const COLOR_VARIANTS = [
 ] as const;
 
 export type ColorVariant = (typeof COLOR_VARIANTS)[number];
+export type ExtendedColorVariant = ColorVariant | "primary" | "default";
 
-export const COLOR_VARIANTS_MAP: Record<ColorVariant, string> = {
-  gray: "var(--color-gray)",
-  purple: "var(--color-purple)",
-  burgundy: "var(--color-burgundy)",
-  pink: "var(--color-pink)",
-  red: "var(--color-red)",
-  orange: "var(--color-orange)",
-  yellow: "var(--color-yellow)",
-  green: "var(--color-green)",
-  turquoise: "var(--color-turquoise)",
-  blue: "var(--color-blue)",
+export const COLOR_VARIANTS_MAP: Record<
+  ExtendedColorVariant,
+  { css: string; hex: string }
+> = {
+  gray: { css: "var(--color-gray)", hex: "#64748b" },
+  purple: { css: "var(--color-purple)", hex: "#8b5cf6" },
+  burgundy: { css: "var(--color-burgundy)", hex: "#bf399e" },
+  pink: { css: "var(--color-pink)", hex: "#f43f5e" },
+  red: { css: "var(--color-red)", hex: "#ef4444" },
+  orange: { css: "var(--color-orange)", hex: "#f97316" },
+  yellow: { css: "var(--color-yellow)", hex: "#eab308" },
+  green: { css: "var(--color-green)", hex: "#10b981" },
+  turquoise: { css: "var(--color-turquoise)", hex: "#06b6d4" },
+  blue: { css: "var(--color-blue)", hex: "#3b82f6" },
+  primary: { css: "var(--color-primary)", hex: "#6366f1" },
+  default: { css: "var(--color-gray)", hex: "#64748b" },
 };
 
-export function getRandomColorByLabel(label: string): string {
-  const hash = md5(label);
-  const numericHash = parseInt(hash.slice(-8), 16);
-  const index = numericHash % COLOR_VARIANTS.length;
-  return COLOR_VARIANTS_MAP[COLOR_VARIANTS[index]];
-}
+export const PRESET_HEX_COLORS = COLOR_VARIANTS.map(
+  (v) => COLOR_VARIANTS_MAP[v].hex,
+);
+
+export const DEFAULT_HEX_COLOR = COLOR_VARIANTS_MAP.blue.hex;
+
+export const CSS_VAR_TO_HEX: Record<string, string> = Object.fromEntries(
+  [...COLOR_VARIANTS, "primary" as const].map((v) => [
+    COLOR_VARIANTS_MAP[v].css,
+    COLOR_VARIANTS_MAP[v].hex,
+  ]),
+);

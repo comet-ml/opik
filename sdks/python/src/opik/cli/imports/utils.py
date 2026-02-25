@@ -1,5 +1,6 @@
 """Common utilities for import functionality."""
 
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import opik
@@ -90,7 +91,7 @@ def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str
     dataset_name = getattr(dataset, "name", None)
     dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
     raise Exception(
-        f"Failed to create dataset item. " f"Content: {new_item!r}{dataset_info}"
+        f"Failed to create dataset item. Content: {new_item!r}{dataset_info}"
     )
 
 
@@ -170,6 +171,84 @@ def clean_feedback_scores(
         cleaned_scores.append(cleaned_score)
 
     return cleaned_scores if cleaned_scores else None
+
+
+def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort spans in topological order to ensure parents are processed before children.
+
+    This function performs a level-order traversal (breadth-first) of the span tree,
+    ensuring that all parent spans are processed before their children, regardless
+    of how deep the hierarchy goes.
+
+    Args:
+        spans_info: List of span dictionaries, each with 'id' and optional 'parent_span_id'
+
+    Returns:
+        List of spans sorted in topological order (parents before children)
+    """
+    if not spans_info:
+        return []
+
+    # Build children map: parent_id -> list of child spans
+    # Also track all span IDs to detect missing parent references
+    children_map: Dict[str, List[Dict[str, Any]]] = {}
+    root_spans: List[Dict[str, Any]] = []
+    all_span_ids = {span.get("id") for span in spans_info if span.get("id")}
+
+    for span in spans_info:
+        parent_span_id = span.get("parent_span_id")
+
+        if not parent_span_id:
+            # Root span (no parent)
+            root_spans.append(span)
+        elif parent_span_id in all_span_ids:
+            # Child span with valid parent reference - add to children map
+            if parent_span_id not in children_map:
+                children_map[parent_span_id] = []
+            children_map[parent_span_id].append(span)
+        else:
+            # Span references a parent that doesn't exist - treat as root span
+            # This handles corrupted data gracefully
+            root_spans.append(span)
+
+    # Perform level-order traversal (breadth-first)
+    result: List[Dict[str, Any]] = []
+    visited: set[str] = set()
+
+    # If no root spans exist (e.g., cycles), seed queue with all spans
+    # This ensures we process all spans even in cyclic or disconnected graphs
+    queue: deque[Dict[str, Any]]
+    if not root_spans:
+        queue = deque(spans_info)
+    else:
+        queue = deque(root_spans)
+
+    while queue:
+        current = queue.popleft()
+        current_id = current.get("id")
+
+        # Skip if already visited (prevents infinite loops in cycles)
+        if current_id and current_id in visited:
+            continue
+
+        result.append(current)
+        if current_id:
+            visited.add(current_id)
+
+        # Add all children of current span to queue (only if not visited)
+        if current_id and current_id in children_map:
+            for child in children_map[current_id]:
+                child_id = child.get("id")
+                if child_id and child_id not in visited:
+                    queue.append(child)
+
+    # Append any spans not yet visited (handles disconnected components)
+    for span in spans_info:
+        span_id = span.get("id")
+        if span_id and span_id not in visited:
+            result.append(span)
+
+    return result
 
 
 def print_import_summary(stats: Dict[str, int]) -> None:

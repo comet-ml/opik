@@ -1,15 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
-import { MANAGEMENT_PERMISSION } from "@/plugins/comet/constants/permissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
-import {
-  getPermissionByType,
-  getPermissionStatusByKey,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 
 const useUserPermission = (config?: { enabled?: boolean }) => {
   const configEnabled = config?.enabled ?? true;
@@ -22,7 +17,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
-  const { data: userPermissions } = useUserPermissions(
+  const isEnabled = configEnabled && !isAdmin;
+  const { data: userPermissions, isPending } = useUserPermissions(
     {
       organizationId: currentOrganization?.id || "",
       userName: userName || "",
@@ -30,7 +26,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     {
       refetchOnMount: true,
       // there is no need in permissions, if a user is admin
-      enabled: configEnabled && !isAdmin,
+      enabled: isEnabled,
     },
   );
 
@@ -46,11 +42,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const isWorkspaceOwner = useMemo(
     () =>
       isAdmin ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.MANAGEMENT,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.MANAGEMENT,
       ),
     [workspacePermissions, isAdmin],
   );
@@ -58,51 +52,31 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const canInviteMembers = useMemo(
     () =>
       isWorkspaceOwner ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.INVITE_USERS,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.INVITE_USERS,
       ),
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const getPermissionStatus = useCallback(
-    (permissionKey: MANAGEMENT_PERMISSION) => {
-      if (!currentOrganization) return false;
+  const canViewExperiments = useMemo(() => {
+    if (isWorkspaceOwner) return true;
 
-      if (
-        permissionKey ===
-        MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
-      ) {
-        return false;
-      }
+    const permissionValue = getUserPermissionValue(
+      workspacePermissions,
+      ManagementPermissionsNames.EXPERIMENT_VIEW,
+    );
 
-      if (isAdmin) return true;
+    // should default to true if the permission is not found
+    return permissionValue !== false;
+  }, [workspacePermissions, isWorkspaceOwner]);
 
-      if (!userPermissions?.length || !workspacePermissions?.length) {
-        return false;
-      }
-
-      return getPermissionStatusByKey({
-        permissionKey,
-        inviteUsersStatus: canInviteMembers,
-        onlyAdminsCanInviteOutsideOrganizationStatus:
-          currentOrganization?.onlyAdminsInviteByEmail,
-        managementStatus: isWorkspaceOwner,
-      });
-    },
-    [
-      canInviteMembers,
-      isWorkspaceOwner,
-      isAdmin,
-      currentOrganization,
-      userPermissions?.length,
-      workspacePermissions?.length,
-    ],
-  );
-
-  return { canInviteMembers, isWorkspaceOwner, getPermissionStatus };
+  return {
+    canInviteMembers,
+    isWorkspaceOwner,
+    canViewExperiments,
+    isPending: isEnabled && isPending,
+  };
 };
 
 export default useUserPermission;

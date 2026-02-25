@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Database, Plus } from "lucide-react";
+import { FileTerminal, Plus } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import useAppStore from "@/store/AppStore";
 import { cn } from "@/lib/utils";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import SelectBoxClearWrapper from "@/components/shared/SelectBoxClearWrapper/SelectBoxClearWrapper";
@@ -93,7 +94,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         </div>
       ) : (
         <div className="flex w-full items-center text-light-slate">
-          <Database className="mr-2 size-4" />
+          <FileTerminal className="mr-2 size-4" />
           <span className="truncate font-normal">
             {filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT
               ? "Load chat prompt"
@@ -113,19 +114,18 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
 
   const actionPanel = useMemo(() => {
     return asNewOption ? (
-      <div className="px-0.5">
+      <>
         <Separator className="my-1" />
-        <button
-          className="flex h-10 w-full flex-nowrap items-center px-4 text-foreground"
+        <ListAction
           onClick={() => {
             onValueChange(undefined);
             setOpen(false);
           }}
         >
-          <Plus className="mr-2 size-4 shrink-0" />
-          <span>Save as a new prompt</span>
-        </button>
-      </div>
+          <Plus className="size-3.5 shrink-0" />
+          Save as new
+        </ListAction>
+      </>
     ) : undefined;
   }, [asNewOption, onValueChange]);
 
@@ -159,7 +159,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         renderTitle={(option) => {
           return (
             <div className="flex w-full min-w-1 flex-nowrap items-center text-foreground">
-              <Database className="mr-2 size-4 shrink-0" />
+              <FileTerminal className="mr-2 size-4 shrink-0" />
               <span className="truncate">{option.label}</span>
             </div>
           );

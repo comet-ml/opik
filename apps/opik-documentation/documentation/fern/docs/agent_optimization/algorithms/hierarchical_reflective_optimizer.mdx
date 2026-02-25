@@ -15,6 +15,11 @@ specific failure modes in your prompts. It analyzes evaluation results, identifi
 failures, and generates targeted improvements to address each failure mode systematically.
 
 <Note>
+  In code, use the `HRPO` class (for example `from opik_optimizer import HRPO`). The underlying module name still uses
+  `hierarchical_reflective_optimizer` for backwards compatibility.
+</Note>
+
+<Note>
   `HRPO` is ideal when you have a complex prompt that you want to refine
   based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
   this optimizer systematically analyzes failures, identifies root causes, and makes surgical
@@ -116,7 +121,7 @@ optimization_result.display()
 The optimizer has the following parameters:
 
 
-<ParamField path="model" type="str" optional={true} defaultValue="gpt-4o">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
+<ParamField path="model" type="str" optional={true} defaultValue="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
 <ParamField path="n_threads" type="int" optional={true} defaultValue="12" />
 <ParamField path="verbose" type="int" optional={true} defaultValue="1">Controls internal logging/progress bars (0=off, 1=on).</ParamField>
 <ParamField path="seed" type="int" optional={true} defaultValue="42">Random seed for reproducibility (default: 42)</ParamField>

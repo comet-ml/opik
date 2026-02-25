@@ -30,6 +30,7 @@ from .utils import (
     clean_feedback_scores,
     clean_usage_for_import,
     debug_print,
+    sort_spans_topologically,
 )
 from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
@@ -829,12 +830,9 @@ def _import_traces_from_projects_directory(
                 # Build span_id_map to translate parent_span_id references
                 span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
 
-                # First pass: create all spans and build span_id_map
-                # We need to create spans in order so parent spans exist before children
-                # Sort spans to process root spans (no parent) first, then children
-                root_spans = [s for s in spans_info if not s.get("parent_span_id")]
-                child_spans = [s for s in spans_info if s.get("parent_span_id")]
-                sorted_spans = root_spans + child_spans
+                # Sort spans topologically to ensure parents are processed before children
+                # This handles multi-level hierarchies correctly
+                sorted_spans = sort_spans_topologically(spans_info)
 
                 for span_info in sorted_spans:
                     # Clean feedback scores to remove read-only fields

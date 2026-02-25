@@ -272,9 +272,10 @@ conversation_length_metric = ConversationLengthMetric()
 quality_metric = ConversationQualityMetric(model="gpt-4o")
 
 # Evaluate threads in your project
+# Note: SDK evaluation automatically filters for inactive threads
 results = evaluate_threads(
     project_name="my_chatbot_project",
-    filter_string='status = "inactive"',
+    filter_string='thread_id contains "user-session"',
     eval_project_name="chatbot_evaluation",
     metrics=[conversation_length_metric, quality_metric],
     trace_input_transform=lambda x: x["input"],

@@ -4,6 +4,8 @@ import { UserPlus } from "lucide-react";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
+import useWorkspaceRoles from "@/plugins/comet/api/useWorkspaceRoles";
+import useWorkspaceUsersRoles from "@/plugins/comet/api/useWorkspaceUsersRoles";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useWorkspaceEmailInvites from "@/plugins/comet/useWorkspaceEmailInvites";
@@ -22,10 +24,7 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
@@ -34,9 +33,12 @@ import {
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
+import WorkspaceMemberWarningCell from "./WorkspaceMemberWarningCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import { WorkspaceRolesProvider } from "./WorkspaceRolesContext";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
+const WARNING_COLUMN_ID = "warning";
 
 const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
   {
@@ -59,6 +61,12 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
       const dateString = new Date(row.joinedAt).toISOString();
       return formatDate(dateString);
     },
+  },
+  {
+    id: WARNING_COLUMN_ID,
+    label: "Warning",
+    type: COLUMN_TYPE.errors,
+    cell: WorkspaceMemberWarningCell as never,
   },
   {
     id: "role",
@@ -85,6 +93,9 @@ const CollaboratorsTab = () => {
   const currentOrganization = useCurrentOrganization();
   const { isWorkspaceOwner } = useUserPermission();
 
+  const isPermissionsManagementEnabled =
+    currentOrganization?.workspaceRolesEnabled ?? false;
+
   const { data: workspaceMembers = [], isPending } = useAllWorkspaceMembers(
     { workspaceId: workspaceId || "" },
     {
@@ -104,6 +115,23 @@ const CollaboratorsTab = () => {
     organizationId: currentOrganization?.id || "",
   });
 
+  const { data: workspaceRoles = [], isPending: isWorkspaceRolesPending } =
+    useWorkspaceRoles(
+      { organizationId: currentOrganization?.id || "" },
+      {
+        enabled:
+          Boolean(currentOrganization?.id) && isPermissionsManagementEnabled,
+      },
+    );
+
+  const { data: workspaceUsersRoles = [], isPending: isUsersRolesPending } =
+    useWorkspaceUsersRoles(
+      { workspaceId: workspaceId || "" },
+      {
+        enabled: Boolean(workspaceId) && isPermissionsManagementEnabled,
+      },
+    );
+
   const { data: invitedMembers = [], isPending: isInvitedMembersPending } =
     useWorkspaceEmailInvites(
       { workspaceId: workspaceId || "" },
@@ -113,16 +141,20 @@ const CollaboratorsTab = () => {
     );
 
   const columns = useMemo(() => {
+    const columnsToUse = isPermissionsManagementEnabled
+      ? DEFAULT_COLUMNS
+      : DEFAULT_COLUMNS.filter((col) => col.id !== WARNING_COLUMN_ID);
+
     return [
       ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
-        DEFAULT_COLUMNS,
+        columnsToUse,
         {},
       ),
       generateActionsColumDef({
         cell: WorkspaceMemberActionsCell,
       }),
     ];
-  }, []);
+  }, [isPermissionsManagementEnabled]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -144,12 +176,12 @@ const CollaboratorsTab = () => {
         (permission) => permission.userName === userName,
       )?.permissions;
 
-      const permissionByType = getPermissionByType(
+      const isWorkspaceOwner = !!getUserPermissionValue(
         userPermissions || [],
         ManagementPermissionsNames.MANAGEMENT,
       );
 
-      const role = isUserPermissionValid(permissionByType?.permissionValue)
+      const role = isWorkspaceOwner
         ? WORKSPACE_ROLE_TYPE.owner
         : WORKSPACE_ROLE_TYPE.member;
 
@@ -160,11 +192,19 @@ const CollaboratorsTab = () => {
           (memberInOrg?.userName || memberInOrg?.email) === uniqueName,
       );
 
+      const userRoleData = workspaceUsersRoles.find(
+        (userRole) => userRole.userName === uniqueName,
+      );
+
       return {
         id: uniqueName,
-        role,
+        role: isPermissionsManagementEnabled
+          ? userRoleData?.roleName || "No role assigned"
+          : role,
+        roleId: userRoleData?.roleId,
         isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
         permissions: userPermissions || [],
+        permissionMismatch: userRoleData?.permissionMismatch,
         ...member,
       };
     });
@@ -184,19 +224,33 @@ const CollaboratorsTab = () => {
     permissionsData,
     organizationMembers,
     search,
+    workspaceUsersRoles,
+    isPermissionsManagementEnabled,
   ]);
 
   const renderTable = () => {
-    if (isPending || isPermissionsPending || isInvitedMembersPending) {
+    const isLoading =
+      isPending ||
+      isPermissionsPending ||
+      isInvitedMembersPending ||
+      (isPermissionsManagementEnabled &&
+        (isUsersRolesPending || isWorkspaceRolesPending));
+
+    if (isLoading) {
       return <Loader />;
     }
 
     return (
-      <DataTable
-        columns={columns}
-        data={tableData}
-        resizeConfig={resizeConfig}
-      />
+      <WorkspaceRolesProvider
+        roles={workspaceRoles}
+        isLoading={isWorkspaceRolesPending}
+      >
+        <DataTable
+          columns={columns}
+          data={tableData}
+          resizeConfig={resizeConfig}
+        />
+      </WorkspaceRolesProvider>
     );
   };
 

@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 import {
-  getPermissionByType,
-  isUserPermissionValid,
+  getUserPermissionValue,
   updatePermissionByType,
 } from "@/plugins/comet/lib/permissions";
 import {
@@ -12,7 +11,6 @@ import {
   WORKSPACE_MEMBER_VALUE,
   WORKSPACE_OWNER_VALUE,
 } from "@/plugins/comet/constants/permissions";
-import { useLoggedInUserName } from "@/store/AppStore";
 
 export interface WorkspaceMemberPermission {
   key: ManagementPermissionsNames;
@@ -22,18 +20,12 @@ export interface WorkspaceMemberPermission {
 
 const useManageUsersRolePopover = (
   permissions: UserPermission[] = [],
-  username: string,
-  ifChangeWsRoleDisabled: boolean,
-  ifUserAdmin: boolean,
   setPermissions: (permissions: UserPermission[]) => void,
 ) => {
-  const currentUserName = useLoggedInUserName();
-  const wsManagementPermissionValue = getPermissionByType(
+  const wsManagementPermissionValue = getUserPermissionValue(
     permissions,
     ManagementPermissionsNames.MANAGEMENT,
-  )?.permissionValue;
-  const ifChangeMadeForCurrentUser = currentUserName === username;
-  const isDisabled = ifChangeWsRoleDisabled || ifUserAdmin;
+  );
 
   const onRadioChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,11 +58,9 @@ const useManageUsersRolePopover = (
         label: "Invite Users (IU)",
         text: "Invite users to workspace",
         value: ManagementPermissionsNames.INVITE_USERS,
-        checked: isUserPermissionValid(
-          getPermissionByType(
-            permissions,
-            ManagementPermissionsNames.INVITE_USERS,
-          )?.permissionValue,
+        checked: !!getUserPermissionValue(
+          permissions,
+          ManagementPermissionsNames.INVITE_USERS,
         ),
         disabled: false,
         color: "primary" as const,
@@ -80,7 +70,7 @@ const useManageUsersRolePopover = (
 
     return {
       controlType: "radio" as const,
-      controlValue: wsManagementPermissionValue,
+      controlValue: wsManagementPermissionValue?.toString(),
       onChange: onRadioChange,
       options: [
         {
@@ -96,32 +86,19 @@ const useManageUsersRolePopover = (
           label: "Workspace Member",
           text: "Limited permissions. You can give customized ones",
           controlType: "radio" as const,
-          disabled: isDisabled,
-          tooltip: isDisabled
-            ? {
-                arrow: true,
-                title: ifChangeMadeForCurrentUser
-                  ? "You can't update your own role"
-                  : "You can't change the role, since this user is an organization admin",
-                placement: "left" as const,
-              }
-            : null,
-          list:
-            wsManagementPermissionValue === WORKSPACE_MEMBER_VALUE
-              ? {
-                  options: checkboxOptions,
-                  controlType: "checkbox" as const,
-                  onChange: onCheckboxChange,
-                }
-              : null,
+          list: wsManagementPermissionValue
+            ? null
+            : {
+                options: checkboxOptions,
+                controlType: "checkbox" as const,
+                onChange: onCheckboxChange,
+              },
         },
       ],
     };
   }, [
     permissions,
     wsManagementPermissionValue,
-    ifChangeMadeForCurrentUser,
-    isDisabled,
     onRadioChange,
     onCheckboxChange,
   ]);

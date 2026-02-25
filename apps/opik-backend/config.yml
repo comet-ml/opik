@@ -678,6 +678,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Ollama provider is enabled
+  ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}

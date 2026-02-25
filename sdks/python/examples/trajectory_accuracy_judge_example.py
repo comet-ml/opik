@@ -55,9 +55,9 @@ def run_basic_example(metric: TrajectoryAccuracy):
 
         # Validate result format
         assert isinstance(result.value, float), "Score should be a float"
-        assert (
-            0.0 <= result.value <= 1.0
-        ), f"Score {result.value} should be between 0.0 and 1.0"
+        assert 0.0 <= result.value <= 1.0, (
+            f"Score {result.value} should be between 0.0 and 1.0"
+        )
         assert isinstance(result.reason, str), "Explanation should be a string"
         assert len(result.reason) > 0, "Explanation should not be empty"
 

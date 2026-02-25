@@ -201,7 +201,7 @@ def get_task_context(
     num_examples: int = 3,
     columns: list[str] | None = None,
     max_tokens: int = 2000,
-    model: str = "gpt-4",
+    model: str = constants.DEFAULT_MODEL,
     extract_metric_understanding: bool = True,
     seed: int | None = None,
 ) -> tuple[str, int]:

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import colabLogo from "/images/colab-logo.png";
 
 export type GoogleColabCardCoreProps = {
@@ -22,7 +22,7 @@ const GoogleColabCardCore: React.FC<GoogleColabCardCoreProps> = ({ link }) => {
               <img src={colabLogo} alt="colab logo" className="h-[27px] w-8" />
             </div>
 
-            <SquareArrowOutUpRight className="ml-2 size-4 shrink-0" />
+            <ExternalLink className="ml-2 size-4 shrink-0" />
           </a>
         </Button>
       </div>

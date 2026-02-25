@@ -54,12 +54,14 @@ export interface Organization {
   academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
   onlyAdminsInviteByEmail: boolean;
+  workspaceRolesEnabled: boolean;
 }
 
 export enum ManagementPermissionsNames {
   MANAGEMENT = "management",
   PROJECT_VISIBILITY = "project_visibility",
   INVITE_USERS = "invite_users_to_workspace",
+  EXPERIMENT_VIEW = "experiment_view",
 }
 
 export interface UserPermission {
@@ -87,6 +89,31 @@ export interface OrganizationMember {
 export interface WorkspaceMember extends APIWorkspaceMember {
   id: string;
   role: string;
+  roleId?: string;
   isAdmin: boolean;
   permissions: UserPermission[];
+  permissionMismatch?: {
+    message: string;
+  };
+}
+
+export enum WorkspaceRoleType {
+  DEFAULT = "DEFAULT",
+  CUSTOM = "CUSTOM",
+}
+
+export interface WorkspaceRole {
+  roleId: string;
+  roleName: string;
+  description: string;
+  roleType: WorkspaceRoleType;
+  permissions: string[];
+  organizationId?: string;
+  inheritedRoleId?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+  lastUpdatedBy?: string | null;
+  lastUpdatedAt?: string | null;
+  usersCount?: number;
+  workspacesCount?: number;
 }

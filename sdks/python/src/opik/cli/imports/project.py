@@ -6,10 +6,16 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
+from opik import id_helpers
 from rich.console import Console
 
 from .experiment import recreate_experiments
-from .utils import matches_name_pattern, clean_feedback_scores, clean_usage_for_import
+from .utils import (
+    matches_name_pattern,
+    clean_feedback_scores,
+    clean_usage_for_import,
+    sort_spans_topologically,
+)
 
 console = Console()
 
@@ -91,15 +97,18 @@ def import_projects_from_directory(
                             trace_info.get("feedback_scores")
                         )
 
+                        original_start_time = (
+                            datetime.fromisoformat(
+                                trace_info["start_time"].replace("Z", "+00:00")
+                            )
+                            if trace_info.get("start_time")
+                            else None
+                        )
+
                         trace = client.trace(
+                            id=id_helpers.generate_id(timestamp=original_start_time),
                             name=trace_info.get("name", "imported_trace"),
-                            start_time=(
-                                datetime.fromisoformat(
-                                    trace_info["start_time"].replace("Z", "+00:00")
-                                )
-                                if trace_info.get("start_time")
-                                else None
-                            ),
+                            start_time=original_start_time,
                             end_time=(
                                 datetime.fromisoformat(
                                     trace_info["end_time"].replace("Z", "+00:00")
@@ -126,12 +135,9 @@ def import_projects_from_directory(
                             str, str
                         ] = {}  # Maps original span ID to new span ID
 
-                        # Sort spans to process root spans (no parent) first, then children
-                        root_spans = [
-                            s for s in spans_info if not s.get("parent_span_id")
-                        ]
-                        child_spans = [s for s in spans_info if s.get("parent_span_id")]
-                        sorted_spans = root_spans + child_spans
+                        # Sort spans topologically to ensure parents are processed before children
+                        # This handles multi-level hierarchies correctly
+                        sorted_spans = sort_spans_topologically(spans_info)
 
                         for span_info in sorted_spans:
                             # Clean feedback scores to remove read-only fields

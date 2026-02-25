@@ -144,8 +144,8 @@ def main() -> None:
     opik.set_tracing_active(False)
     time_without_tracing = measure_performance(process_data, test_data, iterations=50)
 
-    print(f"Average time with tracing: {time_with_tracing*1000:.2f}ms")
-    print(f"Average time without tracing: {time_without_tracing*1000:.2f}ms")
+    print(f"Average time with tracing: {time_with_tracing * 1000:.2f}ms")
+    print(f"Average time without tracing: {time_without_tracing * 1000:.2f}ms")
 
     if time_with_tracing > time_without_tracing:
         overhead = (

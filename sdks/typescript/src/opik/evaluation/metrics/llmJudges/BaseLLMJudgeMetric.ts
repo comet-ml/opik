@@ -82,7 +82,7 @@ export abstract class BaseLLMJudgeMetric extends BaseMetric {
    *
    * @param name - The name of the metric
    * @param options - Configuration options
-   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-4o'.
+   * @param options.model - The language model to use. Can be a string (model ID), LanguageModel instance, or OpikBaseModel instance. Defaults to 'gpt-5-nano'.
    * @param options.trackMetric - Whether to track the metric. Defaults to true.
    * @param options.temperature - Temperature setting (0.0-2.0). Controls randomness. Lower values make output more focused and deterministic.
    * @param options.seed - Random seed for reproducible outputs. Useful for testing and debugging.

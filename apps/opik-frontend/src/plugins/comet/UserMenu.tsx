@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { Link, useMatches, useNavigate } from "@tanstack/react-router";
+import { useMatches } from "@tanstack/react-router";
 import copy from "clipboard-copy";
-import sortBy from "lodash/sortBy";
 import {
   Book,
   Check,
@@ -11,6 +10,7 @@ import {
   KeyRound,
   LogOut,
   Settings,
+  Settings2,
   Shield,
   UserPlus,
   Zap,
@@ -22,7 +22,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -39,29 +38,24 @@ import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { useDateFormat } from "@/hooks/useDateFormat";
 import DateFormatDropdown from "@/components/shared/DateFormatDropdown/DateFormatDropdown";
 import { APP_VERSION } from "@/constants/app";
+import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import api from "./api";
-import {
-  Organization,
-  ORGANIZATION_PLAN_ENTERPRISE,
-  ORGANIZATION_ROLE_TYPE,
-} from "./types";
+import { ORGANIZATION_PLAN_ENTERPRISE, ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl, isOnPremise, isProduction } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const UserMenu = () => {
-  const navigate = useNavigate();
   const matches = useMatches();
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
@@ -75,10 +69,6 @@ const UserMenu = () => {
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
-    enabled: !!user?.loggedIn,
-  });
-
-  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
     enabled: !!user?.loggedIn,
   });
 
@@ -118,8 +108,7 @@ const UserMenu = () => {
     isLoading ||
     !organizations ||
     !userPermissions ||
-    !allWorkspaces ||
-    !userInvitedWorkspaces
+    !allWorkspaces
   ) {
     return null;
   }
@@ -136,10 +125,6 @@ const UserMenu = () => {
     return org.id === workspace?.organizationId;
   });
 
-  const organizationUserWorkspaces = userInvitedWorkspaces.filter(
-    (workspace) => workspace.organizationId === organization?.id,
-  );
-
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
@@ -150,23 +135,6 @@ const UserMenu = () => {
 
   const isLLMOnlyOrganization =
     organization?.role === ORGANIZATION_ROLE_TYPE.opik;
-
-  const handleChangeOrganization = (newOrganization: Organization) => {
-    const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
-      (workspace) => workspace.organizationId === newOrganization.id,
-    );
-
-    const newWorkspace =
-      newOrganizationWorkspaces.find((workspace) => workspace.default) ||
-      newOrganizationWorkspaces[0];
-
-    if (newWorkspace) {
-      navigate({
-        to: "/$workspaceName",
-        params: { workspaceName: newWorkspace.workspaceName },
-      });
-    }
-  };
 
   const renderAvatar = (clickable = false) => {
     return (
@@ -307,49 +275,6 @@ const UserMenu = () => {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="cursor-pointer">
-                <span className="comet-body-s-accented pr-1">Workspace:</span>
-                <span className="comet-body-s truncate">{workspaceName}</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent className="w-60">
-                  <div className="max-h-[200px] overflow-auto">
-                    {sortBy(organizationUserWorkspaces, "workspaceName").map(
-                      (workspace) => (
-                        <Link
-                          key={workspace.workspaceName}
-                          to={`/${workspace.workspaceName}`}
-                        >
-                          <DropdownMenuCheckboxItem
-                            checked={workspaceName === workspace.workspaceName}
-                          >
-                            <TooltipWrapper content={workspace.workspaceName}>
-                              <span className="truncate">
-                                {workspace.workspaceName}
-                              </span>
-                            </TooltipWrapper>
-                          </DropdownMenuCheckboxItem>
-                        </Link>
-                      ),
-                    )}
-                  </div>
-                  <DropdownMenuSeparator />
-                  <a
-                    className="flex justify-center"
-                    href={buildUrl(
-                      "account-settings/workspaces",
-                      workspaceName,
-                    )}
-                  >
-                    <Button variant="link">View all workspaces</Button>
-                  </a>
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
             <a href={buildUrl("account-settings", workspaceName)}>
               <DropdownMenuItem className="cursor-pointer">
                 <Settings className="mr-2 size-4" />
@@ -365,7 +290,7 @@ const UserMenu = () => {
               >
                 <DropdownMenuItem className="cursor-pointer">
                   <Shield className="mr-2 size-4" />
-                  <span>Admin Dashboard</span>
+                  <span>{ADMIN_DASHBOARD_LABEL}</span>
                 </DropdownMenuItem>
               </a>
             ) : null}
@@ -377,25 +302,34 @@ const UserMenu = () => {
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent className="w-60">
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onClick={() => {
-                        copy(user.apiKeys[0]);
-                        toast({ description: "Successfully copied API Key" });
-                      }}
-                    >
-                      <span className="truncate">
+                    <div className="flex h-10 items-center justify-between gap-2 px-4">
+                      <span className="comet-body-s truncate text-foreground">
                         {maskAPIKey(user.apiKeys[0])}
                       </span>
-                      <Copy className="ml-2 size-3 shrink-0" />
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <a
-                      className="comet-body-s flex justify-center"
-                      href={buildUrl("account-settings/apiKeys", workspaceName)}
-                    >
-                      <Button variant="link">Manage API keys</Button>
-                    </a>
+                      <div className="flex shrink-0 items-center gap-1 text-light-slate">
+                        <button
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          onClick={() => {
+                            copy(user.apiKeys[0]);
+                            toast({
+                              description: "Successfully copied API Key",
+                            });
+                          }}
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                        <div className="mx-0.5 h-3.5 w-px bg-border" />
+                        <a
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          href={buildUrl(
+                            "account-settings/apiKeys",
+                            workspaceName,
+                          )}
+                        >
+                          <Settings2 className="size-3.5" />
+                        </a>
+                      </div>
+                    </div>
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
@@ -417,36 +351,6 @@ const UserMenu = () => {
                 <span>Docs</span>
               </DropdownMenuItem>
             </a>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-border text-xs">
-                  {organization?.name.charAt(0).toUpperCase()}
-                </span>
-                <span className="comet-body-s truncate">
-                  {organization?.name}
-                </span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent className="w-60">
-                  <div className="max-h-[200px] overflow-auto">
-                    {sortBy(organizations, "name").map((org) => (
-                      <DropdownMenuCheckboxItem
-                        checked={organization?.name === org.name}
-                        key={org.name}
-                        onClick={() => handleChangeOrganization(org)}
-                      >
-                        <TooltipWrapper content={org.name}>
-                          <span className="truncate">{org.name}</span>
-                        </TooltipWrapper>
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </div>
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>

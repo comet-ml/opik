@@ -45,7 +45,7 @@ import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
-  mapColumnDataFields,
+  migrateSelectedColumns,
 } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
@@ -60,7 +60,6 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-
 const getRowId = (d: ExperimentsCompare) => d.id;
 
 const calculateVerticalAlignment = (count: number) =>
@@ -72,6 +71,7 @@ const REFETCH_INTERVAL = 30000;
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
 
 const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "compare-trials-columns-width";
 const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
@@ -94,11 +94,21 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_ID_ID];
+
+const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID (Dataset item)",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+    size: 165,
+  },
+];
 
 export type TrialItemsTabProps = {
   objectiveName?: string;
@@ -114,7 +124,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   experiments,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
   });
@@ -173,9 +182,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   });
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -200,21 +213,22 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      truncate: truncationEnabled,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
     useCompareExperimentsColumns(
@@ -326,14 +340,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
 
-    // Generate color map for consistent colors
     const colorMap =
       objectiveName && sortedScoreNames.length > 0
         ? generateDistinctColorMap(
             objectiveName,
             sortedScoreNames.filter((name) => name !== objectiveName),
           )
-        : {};
+        : undefined;
 
     // Get score value from the first experiment (same as CompareTrialsDetails)
     const firstExperiment = experiments?.[0];
@@ -347,7 +360,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       cell: CompareExperimentsFeedbackScoreCell as never,
       customMeta: {
         experimentsIds,
-        feedbackKey: scoreName,
+        scoreName,
         colorMap,
         scoreValue: firstExperiment?.feedback_scores?.find(
           (s) => s.name === scoreName,
@@ -370,14 +383,16 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const retVal = [
-      mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
-        id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        size: 165,
-      }),
+      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
+        DEFAULT_COLUMNS.map((col) => ({
+          ...col,
+          verticalAlignment: calculateVerticalAlignment(experimentsCount),
+        })),
+        {
+          selectedColumns,
+          columnsOrder,
+        },
+      ),
     ];
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
@@ -563,6 +578,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -571,7 +587,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={datasetColumnsData}
+            columns={[...DEFAULT_COLUMNS, ...datasetColumnsData]}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
@@ -592,6 +608,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

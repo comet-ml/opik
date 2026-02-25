@@ -14,7 +14,7 @@ type NoDataWrapperProps = {
 };
 
 type NoAnnotationQueuesPageProps = {
-  openModal: () => void;
+  openModal?: () => void;
   height?: number;
   Wrapper: React.FC<NoDataWrapperProps>;
   className?: string;
@@ -45,10 +45,12 @@ const NoAnnotationQueuesPage: React.FC<NoAnnotationQueuesPageProps> = ({
               Read documentation
             </a>
           </Button>
-          <Button onClick={openModal}>
-            <Plus className="mr-2 size-4" />
-            Create your first queue
-          </Button>
+          {openModal && (
+            <Button onClick={openModal}>
+              <Plus className="mr-2 size-4" />
+              Create your first queue
+            </Button>
+          )}
         </>
       }
     ></Wrapper>

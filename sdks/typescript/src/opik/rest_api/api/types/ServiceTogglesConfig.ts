@@ -21,5 +21,6 @@ export interface ServiceTogglesConfig {
     vertexaiProviderEnabled: boolean;
     bedrockProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
+    ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
 }

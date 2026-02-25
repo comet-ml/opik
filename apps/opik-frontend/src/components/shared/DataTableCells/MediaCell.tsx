@@ -4,7 +4,7 @@ import isString from "lodash/isString";
 import { ROW_HEIGHT } from "@/types/shared";
 import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
 import { isParsedMediaData } from "@/lib/images";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 

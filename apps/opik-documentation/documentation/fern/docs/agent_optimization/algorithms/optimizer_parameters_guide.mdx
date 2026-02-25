@@ -133,28 +133,6 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - **Max Parallel Batches**: Increase (8-10) for faster analysis with good API rate limits, decrease (2-3) for limited quotas
 - **N-Trials**: More trials (5-7) for thorough optimization, fewer (2-3) for quick improvement
 
-### MiproOptimizer
-
-**Purpose**: Implements MIPRO algorithm for complex agent and tool-using prompt optimization.
-
-**Specific Parameters:**
-- **`auto`** (Literal["light", "medium", "heavy"], default: "light"): Optimization intensity level
-  - `"light"`: Fast optimization with minimal exploration
-  - `"medium"`: Balanced optimization with moderate exploration
-  - `"heavy"`: Thorough optimization with extensive exploration
-- **`n_threads`** (int, default: 6): Number of parallel threads for evaluation
-- **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
-
-**Use Cases:**
-- Complex multi-step reasoning tasks
-- Agent workflows requiring tool usage
-- Tasks benefiting from programmatic prompt optimization
-- Multi-agent or interactive optimization scenarios
-
-**Parameter Tuning:**
-- **Auto Level**: Start with "light" for quick results, use "heavy" for maximum optimization
-- **Model Selection**: Use more capable models (gpt-4, claude-3) for complex reasoning tasks
-
 ### GepaOptimizer
 
 **Purpose**: Wraps the GEPA package for single-turn system prompt optimization with reflection.

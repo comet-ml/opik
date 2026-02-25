@@ -1,0 +1,18 @@
+---
+description: Security requirements
+alwaysApply: true
+---
+# Security
+
+## Never
+- Hardcode secrets, API keys, tokens
+- Commit .env files or credentials
+- Log sensitive data (passwords, tokens, PII)
+- Trust user input without validation
+- Use string concatenation for SQL queries
+
+## Always
+- Use parameterized queries for SQL
+- Validate input at API boundaries
+- Use environment variables for secrets
+- Sanitize user input before rendering

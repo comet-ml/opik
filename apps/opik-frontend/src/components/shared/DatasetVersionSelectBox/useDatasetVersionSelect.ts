@@ -12,7 +12,6 @@ interface UseDatasetVersionSelectParams {
   workspaceName: string;
   search: string;
   openDatasetId: string | null;
-  selectedDatasetId: string | null;
 }
 
 export interface UseDatasetVersionSelectReturn {
@@ -30,7 +29,6 @@ export default function useDatasetVersionSelect({
   workspaceName,
   search,
   openDatasetId,
-  selectedDatasetId,
 }: UseDatasetVersionSelectParams): UseDatasetVersionSelectReturn {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
@@ -50,8 +48,8 @@ export default function useDatasetVersionSelect({
   );
   const datasetTotal = datasetsData?.total ?? 0;
 
-  // Load versions for either the hovered dataset or the selected dataset
-  const datasetIdForVersions = openDatasetId || selectedDatasetId;
+  // Only load versions when actively hovering a dataset
+  const datasetIdForVersions = openDatasetId;
 
   const { data: versionsData, isLoading: isLoadingVersions } =
     useDatasetVersionsList(

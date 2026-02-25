@@ -23,5 +23,10 @@ data:
   {{- range $envkey, $envvalue := $value.env }}
   {{ $envkey }}: {{ $envvalue | quote }}
   {{- end }}
+  {{- if eq $key "python-backend" }}
+  {{- if not (hasKey $value.env "PYTHON_CODE_EXECUTOR_IMAGE_TAG") }}
+  PYTHON_CODE_EXECUTOR_IMAGE_TAG: {{ $.Chart.AppVersion | quote }}
+  {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

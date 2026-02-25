@@ -57,7 +57,8 @@ export const durationYTickFormatter = (value: number) =>
  */
 export const renderCostTooltipValue = ({
   value,
-}: ChartTooltipRenderValueArguments) => formatCost(value as number);
+}: ChartTooltipRenderValueArguments) =>
+  formatCost(value as number, { modifier: "full" });
 
 /**
  * Formats Y-axis tick values for cost charts

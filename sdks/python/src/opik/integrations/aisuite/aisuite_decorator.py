@@ -40,9 +40,9 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in chat.completion.create(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in chat.completion.create(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}

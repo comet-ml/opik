@@ -4,25 +4,32 @@ import debounce from "lodash/debounce";
 import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import useUserPermission from "@/plugins/comet/useUserPermission";
-import { getKeyForChangingRole } from "@/plugins/comet/lib/permissions";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
-import useWorkspace from "@/plugins/comet/useWorkspace";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
+import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/useUpdateWorkspaceUsersPermissionsMutation";
+import { useUpdateWorkspaceUserRoleMutation } from "@/plugins/comet/api/useUpdateWorkspaceUserRoleMutation";
 import { useLoggedInUserName } from "@/store/AppStore";
 import useManageUsersRolePopover from "./useManageUsersRolePopover";
+import { useWorkspaceRolesContext } from "@/plugins/comet/WorkspaceRolesContext";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
   const row = context.row.original;
   const isInvitedByEmail = !row.isMember;
+  const isOrganizationAdmin = row.isAdmin;
 
   const currentUserName = useLoggedInUserName();
 
-  const { getPermissionStatus } = useUserPermission();
-
   const workspace = useWorkspace();
+
+  const { roles: workspaceRoles } = useWorkspaceRolesContext();
+
+  const currentOrganization = useCurrentOrganization();
+  const isPermissionsManagementEnabled =
+    currentOrganization?.workspaceRolesEnabled ?? false;
 
   const [popoverData, setPopoverData] = useState<WorkspaceMember | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
@@ -30,6 +37,9 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const { mutate: updateWorkspaceUsersPermissions } =
     useUpdateWorkspaceUsersPermissionsMutation();
+
+  const { mutate: updateWorkspaceUserRole } =
+    useUpdateWorkspaceUserRoleMutation();
 
   const debouncedUpdatePermissions = useMemo(
     () =>
@@ -60,15 +70,6 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     };
   }, [debouncedUpdatePermissions]);
 
-  const ifChangeWsRoleDisabled =
-    !currentUserName ||
-    !getPermissionStatus(
-      getKeyForChangingRole(
-        currentUserName,
-        popoverData?.userName || popoverData?.email || "",
-      ),
-    );
-
   const setPermissions = (newPermissions: UserPermission[]) => {
     const userName = popoverData?.userName || popoverData?.email;
 
@@ -88,26 +89,68 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const decisionTreeProps = useManageUsersRolePopover(
     popoverData?.permissions || [],
-    popoverData?.userName || "",
-    ifChangeWsRoleDisabled,
-    !!popoverData?.isAdmin,
     setPermissions,
   );
 
+  const isOwnRole =
+    !!currentUserName &&
+    (row.userName === currentUserName || row.email === currentUserName);
+
+  const isRoleChangeDisabled =
+    isInvitedByEmail ||
+    isOwnRole ||
+    (!isPermissionsManagementEnabled && isOrganizationAdmin);
+
   const trigger = (
     <SelectTrigger
-      className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent"
+      className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent [&>span]:block [&>span]:truncate"
       onClick={(e) => {
         e.stopPropagation();
-        if (isInvitedByEmail) {
+        if (isRoleChangeDisabled) {
           e.preventDefault();
         }
       }}
-      disabled={isInvitedByEmail}
+      disabled={isRoleChangeDisabled}
     >
       <SelectValue placeholder={value}>{value}</SelectValue>
     </SelectTrigger>
   );
+
+  const handleValueChange = (newValue: string) => {
+    if (isPermissionsManagementEnabled) {
+      const userName = row.userName || row.email;
+      if (workspace?.workspaceId && userName) {
+        updateWorkspaceUserRole({
+          userName,
+          roleId: newValue,
+          workspaceId: workspace.workspaceId,
+        });
+      }
+    } else {
+      const syntheticEvent = {
+        target: { value: newValue },
+      } as React.ChangeEvent<HTMLInputElement>;
+      decisionTreeProps.onChange(syntheticEvent);
+      shouldKeepOpenRef.current = true;
+    }
+  };
+
+  const selectValue = isPermissionsManagementEnabled
+    ? row.roleId || ""
+    : decisionTreeProps.controlValue || "";
+
+  const getTooltipContent = () => {
+    if (isOwnRole) {
+      return "You can't update your own role";
+    }
+    if (isOrganizationAdmin) {
+      return "You can't change the role, since this user is an organization admin";
+    }
+    if (isInvitedByEmail) {
+      return "Cannot change roles for users invited by email";
+    }
+    return "";
+  };
 
   return (
     <CellWrapper
@@ -115,7 +158,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       tableMetadata={context.table.options.meta}
     >
       <Select
-        value={decisionTreeProps.controlValue || ""}
+        value={selectValue}
         open={isSelectOpen}
         onOpenChange={(open) => {
           if (!open && shouldKeepOpenRef.current) {
@@ -123,27 +166,25 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
             return;
           }
           setIsSelectOpen(open);
-          if (open && !isInvitedByEmail) {
+          if (open && !isRoleChangeDisabled) {
             setPopoverData(row);
           }
         }}
-        onValueChange={(newValue) => {
-          const syntheticEvent = {
-            target: { value: newValue },
-          } as React.ChangeEvent<HTMLInputElement>;
-          decisionTreeProps.onChange(syntheticEvent);
-          shouldKeepOpenRef.current = true;
-        }}
-        disabled={isInvitedByEmail}
+        onValueChange={handleValueChange}
+        disabled={isRoleChangeDisabled}
       >
-        {isInvitedByEmail ? (
-          <TooltipWrapper content="Cannot change roles for users invited by email">
+        {isRoleChangeDisabled ? (
+          <TooltipWrapper content={getTooltipContent()}>
             {trigger}
           </TooltipWrapper>
         ) : (
           trigger
         )}
-        <WorkspaceRolePopover {...decisionTreeProps} />
+        {isPermissionsManagementEnabled ? (
+          <WorkspaceRolesSelectContent roles={workspaceRoles} />
+        ) : (
+          <WorkspaceRolePopover {...decisionTreeProps} />
+        )}
       </Select>
     </CellWrapper>
   );

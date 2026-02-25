@@ -22,6 +22,8 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
     outcome = yield
 
     try:
+        if outcome is None:
+            return
         report = outcome.get_result()
         if report.when == "call":
             item.report = report

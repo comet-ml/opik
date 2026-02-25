@@ -9,6 +9,7 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  group?: string;
   action?: {
     href?: string;
   };
@@ -37,6 +38,7 @@ export const COLUMN_DATASET_ID = "dataset_id";
 export const COLUMN_PROJECT_ID = "project_id";
 export const COLUMN_DURATION_ID = "duration";
 export const COLUMN_CUSTOM_ID = "custom";
+export const COLUMN_EXPERIMENT_ID = "experiment_id";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
 export const COLUMN_DATA_ID = "data";
@@ -96,6 +98,7 @@ export type ColumnData<T> = {
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  statisticTooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
   sortable?: boolean;
   disposable?: boolean;
@@ -179,6 +182,10 @@ export interface AggregatedFeedbackScore {
   name: string;
   value: number;
 }
+
+export type FeedbackScoreDisplay = AggregatedFeedbackScore & {
+  colorKey?: string;
+};
 
 export interface AggregatedDuration {
   p50: number;

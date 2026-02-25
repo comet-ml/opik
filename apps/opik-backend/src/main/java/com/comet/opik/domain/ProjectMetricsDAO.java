@@ -649,7 +649,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_TRACE_COUNT = """
             %s
             SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM traces_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -664,7 +664,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             %s
             SELECT <bucket> AS bucket,
                    <group_expression> AS group_name,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM traces_filtered t
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
@@ -688,7 +688,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
-                    nullIf(sum(value), 0) AS value
+                    sum(value) AS value
             FROM spans_dedup
             GROUP BY bucket
             ORDER BY bucket
@@ -718,7 +718,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT <bucket> AS bucket,
                    group_name,
-                   nullIf(sum(value), 0) AS value
+                   sum(value) AS value
             FROM spans_dedup
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
@@ -746,7 +746,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT <bucket> AS bucket,
                     name,
-                    nullIf(sum(value), 0) AS value
+                    sum(value) AS value
             FROM spans_dedup
             GROUP BY name, bucket
             ORDER BY name, bucket
@@ -780,7 +780,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT <bucket> AS bucket,
                     group_name,
-                    nullIf(sum(value), 0) AS value
+                    sum(value) AS value
             FROM spans_dedup
             GROUP BY group_name, bucket
             ORDER BY group_name, bucket
@@ -830,7 +830,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
             %s
             SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT g.id), 0) AS failed_cnt
+                   count(DISTINCT g.id) AS failed_cnt
             FROM traces_filtered AS t
                 JOIN guardrails AS g ON g.entity_id = t.id
             WHERE g.result = 'failed'
@@ -847,7 +847,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             %s
             SELECT <bucket> AS bucket,
                    <group_expression> AS group_name,
-                   nullIf(count(DISTINCT g.id), 0) AS failed_cnt
+                   count(DISTINCT g.id) AS failed_cnt
             FROM traces_filtered AS t
                 JOIN guardrails AS g ON g.entity_id = t.id
             WHERE g.result = 'failed'
@@ -947,7 +947,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_SPAN_COUNT = """
             %s
             SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM spans_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -962,7 +962,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             %s
             SELECT <bucket> AS bucket,
                    <group_expression> AS group_name,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM spans_filtered s
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name
@@ -980,7 +980,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT <bucket> AS bucket,
                     name,
-                    nullIf(sum(value), 0) AS value
+                    sum(value) AS value
             FROM spans_usage
             GROUP BY name, bucket
             ORDER BY name, bucket
@@ -1004,7 +1004,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             SELECT <bucket> AS bucket,
                     group_name,
-                    nullIf(sum(value), 0) AS value
+                    sum(value) AS value
             FROM spans_usage
             GROUP BY group_name, bucket
             ORDER BY group_name, bucket
@@ -1118,7 +1118,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COUNT = """
             %s
             SELECT <bucket> AS bucket,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM threads_filtered
             GROUP BY bucket
             ORDER BY bucket
@@ -1133,7 +1133,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             %s
             SELECT <bucket> AS bucket,
                    <group_expression> AS group_name,
-                   nullIf(count(DISTINCT id), 0) as count
+                   count(DISTINCT id) as count
             FROM threads_filtered t
             GROUP BY bucket, group_name
             ORDER BY bucket, group_name

@@ -400,7 +400,7 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper showLoadingOverlay={showLoadingOverlay}>
+    <TableWrapper>
       <DataTableTooltipContext>
         <Table
           ref={tableRef}
@@ -437,10 +437,11 @@ const DataTable = <TData, TValue>({
                         key={header.id}
                         data-header-id={header.id}
                         style={{
-                          zIndex: TABLE_HEADER_Z_INDEX,
+                          zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
                           ...getCommonPinningStyles({
                             column: header.column,
                             isHeader: true,
+                            isLastHeaderRow: isLastRow,
                             table,
                           }),
                         }}
@@ -470,6 +471,7 @@ const DataTable = <TData, TValue>({
             table={table}
             renderRow={renderRow}
             renderNoData={renderNoData}
+            showLoadingOverlay={showLoadingOverlay}
           />
         </Table>
       </DataTableTooltipContext>

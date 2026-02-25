@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -99,16 +99,16 @@
     "@typescript-eslint/parser": "^8.28.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^3.3.2",
+    "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.24.2",
     "eslint": "^9.23.0",
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@sentry/node": "^10.11.0",
-    "glob": "^11.0.1",
+    "@sentry/node": "^10.38.0",
+    "glob": "^11.1.0",
     "node-fetch": "^3.3.2",
-    "opik": "^1.7.2",
+    "opik": "^1.10.9",
     "uuid": "^11.0.3"
   }
 }

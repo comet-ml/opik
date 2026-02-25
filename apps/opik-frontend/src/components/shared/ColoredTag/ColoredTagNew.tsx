@@ -1,15 +1,17 @@
 import React, { useMemo } from "react";
 import { cva } from "class-variance-authority";
 
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { generateTagVariant } from "@/lib/traces";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { cn } from "@/lib/utils";
 
 export interface ColoredTagNewProps {
   label: string;
+  colorKey?: string;
   className?: string;
   size?: "sm" | "default";
+  readOnly?: boolean;
 }
 
 const labelVariants = cva("min-w-0 flex-1 truncate text-muted-slate", {
@@ -26,12 +28,16 @@ const labelVariants = cva("min-w-0 flex-1 truncate text-muted-slate", {
 
 const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
   label,
+  colorKey,
   className,
   size = "default",
+  readOnly = false,
 }) => {
+  const { getColor } = useWorkspaceColorMap();
+  const effectiveColorKey = colorKey ?? label;
   const color = useMemo(
-    () => TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
-    [label],
+    () => getColor(effectiveColorKey),
+    [effectiveColorKey, getColor],
   );
 
   return (
@@ -42,9 +48,13 @@ const ColoredTagNew: React.FunctionComponent<ColoredTagNewProps> = ({
         className,
       )}
     >
-      <div
-        className="grow-0 rounded-[2px] bg-[var(--bg-color)] p-1"
-        style={{ "--bg-color": color } as React.CSSProperties}
+      <ColorIndicator
+        label={label}
+        colorKey={effectiveColorKey}
+        color={color}
+        variant="square"
+        className="grow-0"
+        readOnly={readOnly}
       />
       <TooltipWrapper content={label} stopClickPropagation>
         <div className={cn(labelVariants({ size }))}>{label}</div>

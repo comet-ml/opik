@@ -601,14 +601,14 @@ export class ExperimentsClient {
     public findFeedbackScoreNames(
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames(request, requestOptions));
     }
 
     private async __findFeedbackScoreNames(
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { experimentIds } = request;
         const _queryParams: Record<string, unknown> = {
             experiment_ids: experimentIds,
@@ -639,7 +639,7 @@ export class ExperimentsClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.experiments.findFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
@@ -688,12 +688,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupResponse>> {
-        const { groups, types, name, projectId, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
             project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -776,12 +777,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsAggregationsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupAggregationsResponse>> {
-        const { groups, types, name, projectId, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
             project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

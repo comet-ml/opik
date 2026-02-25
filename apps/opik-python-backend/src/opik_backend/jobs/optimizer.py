@@ -120,6 +120,9 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
             **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
         }
         
+        # Mark subprocess as Optimization Studio execution (SDK display behavior).
+        env_vars["OPIK_OPTIMIZATION_STUDIO"] = "true"
+        
         # Pass Opik API key if provided (for cloud deployment)
         if context.opik_api_key:
             env_vars["OPIK_API_KEY"] = context.opik_api_key

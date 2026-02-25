@@ -1,0 +1,39 @@
+---
+description: End-to-end ARC-AGI optimization walkthrough with Opik Agent Optimizer.
+headline: ARC-AGI optimizer tutorial | Opik Documentation
+og:description: Learn how to structure ARC-AGI tasks, evaluate candidate programs, and optimize prompts with Opik Agent Optimizer.
+og:site_name: Opik Documentation
+og:title: ARC-AGI Optimization Tutorial
+subtitle: Tutorial example using ARC-AGI style code tasks
+title: ARC-AGI Optimization Tutorial
+---
+
+This guide introduces ARC-AGI, why it is a strong fit for optimizer-driven prompt iteration, and where to find the full, runnable implementation in the SDK.
+
+<Callout>
+  Codebase entry point: [`sdks/opik_optimizer/scripts/arc_agi/tasks_optimizer.py`](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/scripts/arc_agi/tasks_optimizer.py) and the ARC-AGI utilities in [`sdks/opik_optimizer/scripts/arc_agi/`](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/scripts/arc_agi).
+</Callout>
+
+## What is ARC-AGI?
+
+ARC-AGI tasks are grid-based reasoning puzzles that test an agent’s ability to infer transformation rules from a few examples. They are a natural fit for optimization because small prompt changes can dramatically improve generalization across tasks.
+
+## Why use optimizers here?
+
+ARC-AGI evaluation is deterministic and repeatable, which makes it ideal for iterative optimization. HRPO is especially useful because it captures failure modes and proposes targeted fixes.
+
+## How the SDK implementation works
+
+The SDK ships a full ARC-AGI workflow you can run locally:
+
+1. **Dataset loader**: [`sdks/opik_optimizer/src/opik_optimizer/datasets/arc_agi2.py`](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/src/opik_optimizer/datasets/arc_agi2.py) loads ARC-AGI-2 tasks and embeds optional grid images.
+2. **Prompt templates**: `sdks/opik_optimizer/scripts/arc_agi/prompts/` contains system and HRPO prompt templates.
+3. **Evaluator + metrics**: `sdks/opik_optimizer/scripts/arc_agi/utils/code_evaluator.py` executes candidate solvers and scores ARC-AGI metrics via `utils/metrics.py`.
+4. **Optimizer wiring**: `tasks_optimizer.py` connects dataset, HRPO, metrics, and logging into a repeatable run.
+
+If you want to run the code as-is, start with the `tasks_optimizer.py` entry point and follow the CLI flags listed at the top of that file.
+
+## Next steps
+
+- Explore the ARC-AGI scripts in the repo and swap in your own datasets or prompt templates.
+- Review the run summaries under `scripts/arc_agi/` to compare optimizer iterations.

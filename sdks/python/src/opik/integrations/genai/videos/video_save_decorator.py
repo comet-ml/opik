@@ -60,7 +60,7 @@ def _create_video_save_decorator(
 
     def decorator(func: Callable[[str], None]) -> Callable[[str], None]:
         @functools.wraps(func)
-        def wrapper(file: str) -> Any:
+        def wrapper(file: str) -> None:
             with opik.start_as_current_span(
                 name="video.save",
                 input={"file": str(file)},
@@ -69,7 +69,7 @@ def _create_video_save_decorator(
                 type="general",
                 project_name=project_name,
             ) as span_data:
-                result = func(file)
+                func(file)
                 if upload_video:
                     span_data.update(
                         attachments=[
@@ -78,7 +78,7 @@ def _create_video_save_decorator(
                             )
                         ]
                     )
-                return result
+                return None
 
         return wrapper
 

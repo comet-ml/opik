@@ -23,12 +23,14 @@ import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
 import com.comet.opik.infrastructure.llm.freemodel.FreeModelModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
+import com.comet.opik.infrastructure.llm.ollama.OllamaModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
 import com.comet.opik.infrastructure.usagelimit.UsageLimitModule;
+import com.comet.opik.infrastructure.web.DatasetTypeParamConverter;
 import com.comet.opik.infrastructure.web.InstantParamConverter;
 import com.comet.opik.utils.JsonBigDecimalDeserializer;
 import com.comet.opik.utils.JsonUtils;
@@ -98,7 +100,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new FreeModelModule())
+                        new OllamaModule(), new FreeModelModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
@@ -142,5 +144,6 @@ public class OpikApplication extends Application<OpikConfiguration> {
 
         jersey.register(JsonProcessingExceptionMapper.class);
         jersey.register(InstantParamConverter.class);
+        jersey.register(DatasetTypeParamConverter.class);
     }
 }

@@ -19,6 +19,8 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.evaluator_item_write import EvaluatorItemWrite
+from ..types.execution_policy_write import ExecutionPolicyWrite
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -26,7 +28,9 @@ from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
+from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
+from .types.find_datasets_request_type import FindDatasetsRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -154,6 +158,7 @@ class DatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -174,6 +179,8 @@ class DatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -200,6 +207,7 @@ class DatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
+            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,
@@ -211,6 +219,7 @@ class DatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -224,6 +233,8 @@ class DatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -245,7 +256,13 @@ class DatasetsClient:
         client.datasets.create_dataset(name='name', )
         """
         _response = self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -908,7 +925,10 @@ class DatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -928,7 +948,13 @@ class DatasetsClient:
 
         span_id : typing.Optional[str]
 
+        description : typing.Optional[str]
+
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -951,7 +977,10 @@ class DatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data
@@ -1104,6 +1133,7 @@ class DatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1119,6 +1149,8 @@ class DatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1132,6 +1164,7 @@ class DatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            filters=filters,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1288,6 +1321,38 @@ class DatasetsClient:
         """
         _response = self._raw_client.restore_dataset_version(
             id, version_ref=version_ref, request_options=request_options
+        )
+        return _response.data
+
+    def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.retrieve_dataset_version(id='id', version_name='v1', )
+        """
+        _response = self._raw_client.retrieve_dataset_version(
+            id, version_name=version_name, request_options=request_options
         )
         return _response.data
 
@@ -1467,6 +1532,7 @@ class AsyncDatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1487,6 +1553,8 @@ class AsyncDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -1516,6 +1584,7 @@ class AsyncDatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
+            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,
@@ -1527,6 +1596,7 @@ class AsyncDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -1540,6 +1610,8 @@ class AsyncDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -1564,7 +1636,13 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2286,7 +2364,10 @@ class AsyncDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2306,7 +2387,13 @@ class AsyncDatasetsClient:
 
         span_id : typing.Optional[str]
 
+        description : typing.Optional[str]
+
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2332,7 +2419,10 @@ class AsyncDatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data
@@ -2497,6 +2587,7 @@ class AsyncDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2512,6 +2603,8 @@ class AsyncDatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2525,6 +2618,7 @@ class AsyncDatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            filters=filters,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -2701,6 +2795,41 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.restore_dataset_version(
             id, version_ref=version_ref, request_options=request_options
+        )
+        return _response.data
+
+    async def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.retrieve_dataset_version(id='id', version_name='v1', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.retrieve_dataset_version(
+            id, version_name=version_name, request_options=request_options
         )
         return _response.data
 

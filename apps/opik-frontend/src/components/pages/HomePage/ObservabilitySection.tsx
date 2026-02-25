@@ -25,8 +25,8 @@ import { formatDate } from "@/lib/date";
 import { convertColumnDataToColumn } from "@/lib/table";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { get } from "lodash";
-import { formatNumericData } from "@/lib/utils";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -55,11 +55,7 @@ export const SHARED_COLUMNS = [
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row: ProjectWithStatistic) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: (row: ProjectWithStatistic) => get(row, "feedback_scores", []),
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: ProjectWithStatistic) => row.name,
@@ -141,6 +137,8 @@ const ObservabilitySection: React.FunctionComponent = () => {
                   workspaceName,
                 },
                 search: {
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {
                       operator: "is_not_empty",

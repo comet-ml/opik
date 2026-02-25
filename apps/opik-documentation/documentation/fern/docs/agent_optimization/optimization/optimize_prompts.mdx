@@ -21,7 +21,7 @@ Use this playbook whenever you need to improve a prompt (single-turn or agentic)
 | Scenario | Recommended optimizer |
 | --- | --- |
 | General prompt copy edits | [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) |
-| Complex failure analysis | [HRPO](/agent_optimization/algorithms/hierarchical_reflective_optimizer) |
+| Complex failure analysis | [HRPO](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) |
 | Need diverse candidates | [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) |
 | Few-shot heavy prompts | [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
 | Tune sampling params | [Parameter optimizer](/agent_optimization/algorithms/parameter_optimizer) |
@@ -50,6 +50,43 @@ result = optimizer.optimize_prompt(
 - Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
 - For optimizers with inner-loop evaluations (HRPO, GEPA), set `n_samples_minibatch` to keep those steps lightweight.
 - Use `n_samples_strategy` to keep subsampling deterministic (default: `"random_sorted"`).
+
+### Optimize tools (MCP)
+
+Tool optimization is now documented separately. Use it when you want to improve MCP tool
+descriptions without changing prompt text.
+
+- [Optimize tools (MCP)](/agent_optimization/optimization/optimize_tools)
+
+### Target specific sections inside a prompt (advanced)
+
+If you need finer control than roles (for example, only optimize a specific assistant message),
+use `prompt_segments` to extract and update parts by segment ID.
+
+Intent/Trigger: use segment-level updates when you need to constrain changes to exact message segments.
+
+- Required parameters: `prompt`, `dataset`, `metric`
+- Optional parameters: segment update args (`updates` passed to `prompt_segments.apply_segment_updates`)
+- Minimal valid payload: `optimizer.optimize_prompt(prompt=updated_prompt, dataset=my_dataset, metric=answer_quality)`
+
+```python
+from opik_optimizer.utils import prompt_segments
+
+segments = prompt_segments.extract_prompt_segments(my_prompt)
+for segment in segments:
+    print(segment.segment_id, segment.role)
+
+# Update only message:1 (second message)
+updates = {"message:1": "User question: {user_query}"}
+updated_prompt = prompt_segments.apply_segment_updates(my_prompt, updates)
+
+# Use the updated prompt in optimization (the original prompt is unchanged)
+result = optimizer.optimize_prompt(
+    prompt=updated_prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+)
+```
 
 ### Optimize multiple prompts together
 
@@ -108,7 +145,7 @@ result = optimizer.optimize_prompt(
 
 ## Related guides
 
-- [Optimization Studio](/agent_optimization/optimization/optimization_studio)
+- [Optimization Studio](/agent_optimization/optimization_studio)
 - [Define datasets](/agent_optimization/optimization/define_datasets)
 - [Define metrics](/agent_optimization/optimization/define_metrics)
 - [Chaining optimizers](/agent_optimization/advanced/chaining_optimizers)

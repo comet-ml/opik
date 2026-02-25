@@ -82,6 +82,10 @@ pip-log.txt
 # Claude Code
 .claude/
 .mcp.json
+CLAUDE.md
+.codex
+AGENTS.override.md
+.agents/generated/
 
 # Cursor
 .cursor
@@ -103,3 +107,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 *~
+
+# Generated diagrams (local artifacts from /share-diagram command)
+/diagrams/

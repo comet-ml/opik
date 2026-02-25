@@ -16,6 +16,32 @@ def add_warning_filters() -> None:
         "ignore",
         message="Enable tracemalloc to get the object allocation traceback",
     )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"(?s)The secret `HF_TOKEN` does not exist in your Colab secrets\..*",
+        category=UserWarning,
+        module=r"huggingface_hub\.utils\._auth",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"You are sending unauthenticated requests.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Some weights of the model checkpoint.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Some weights of the model checkpoint were not used when initializing.*",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message=r"Unused arguments passed to model\.forward.*",
+    )
 
     class NoEventLoopFilterLiteLLM(logging.Filter):
         def filter(self, record: Any) -> bool:

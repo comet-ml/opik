@@ -107,33 +107,31 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content="Manage tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add tags
+          <Tag />
         </Button>
       </TooltipWrapper>
       {(type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans) && (
         <TooltipWrapper content="Evaluate">
           <Button
             variant="outline"
-            size="sm"
+            size="icon-sm"
             onClick={() => {
               setOpen(4);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
           >
-            <Brain className="mr-2 size-4" />
-            Evaluate
+            <Brain />
           </Button>
         </TooltipWrapper>
       )}

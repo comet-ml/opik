@@ -1,0 +1,298 @@
+---
+headline: SAML SSO Configuration | Opik Documentation
+og:description: Learn how to configure SAML-based single sign-on for your Opik organization with enterprise identity providers.
+og:site_name: Opik Documentation
+og:title: 'Configure SAML SSO in Opik: Step-by-Step Guide'
+subtitle: Setting up SAML-based single sign-on with your identity provider
+title: SAML SSO
+---
+
+SAML (Security Assertion Markup Language) SSO allows your users to authenticate using your organization's identity provider (IdP). This guide walks you through configuring SAML SSO for your Opik organization.
+
+<Note>
+SAML SSO is available on Enterprise plans. This feature is not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable this feature for your Opik deployment.
+</Note>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Organization admin access** to Opik
+- **Admin access** to your identity provider (Okta, Azure AD, OneLogin, etc.)
+- **Enterprise plan** enabled for your organization
+- **Email domain** you want to use for SSO (e.g., `company.com`)
+
+## Configuration overview
+
+Setting up SAML SSO involves two main steps:
+
+1. **Configure your IdP**: Add Opik as a SAML application in your identity provider.
+2. **Configure Opik**: Enter your IdP's SAML settings in Opik's admin dashboard.
+
+## Step 1: Gather Opik's SAML settings
+
+Before configuring your IdP, you'll need Opik's Service Provider (SP) settings.
+
+Navigate to **Admin Dashboard** > **SSO Configuration** to view:
+
+| Setting | Value |
+| --- | --- |
+| **SP Entity ID** | `https://www.comet.com/opik/saml/metadata/<organization-id>` |
+| **ACS URL** | `https://www.comet.com/opik/saml/acs/<organization-id>` |
+
+<Tip>
+The exact URLs will be displayed in your SSO configuration page. Copy them directly from there to avoid typos.
+</Tip>
+
+## Step 2: Configure your identity provider
+
+Add Opik as a new SAML application in your IdP. The specific steps vary by provider, but you'll generally need to:
+
+1. Create a new SAML application.
+2. Enter Opik's SP Entity ID and ACS URL.
+3. Configure attribute mappings (see below).
+4. Download or copy the IdP metadata (Entity ID, SSO URL, certificate).
+
+### Required attribute mappings
+
+Your IdP must send the following attributes in the SAML assertion:
+
+| Attribute name | Description | Required |
+| --- | --- | --- |
+| `guid` | Unique identifier for the user | Yes |
+| `email` | User's email address | Yes |
+| `firstName` | User's first name | Recommended |
+| `lastName` | User's last name | Recommended |
+
+### Workspace sync attributes (optional)
+
+If you want to automatically assign users to workspaces based on IdP attributes:
+
+| Attribute name | Description |
+| --- | --- |
+| `workspaces` | Comma-separated list of workspace names |
+| `groups` | User's group memberships (can be mapped to workspaces) |
+
+<Note>
+Attribute names may need to be configured as custom attributes or claims in your IdP. The exact configuration depends on your identity provider.
+</Note>
+
+## Step 3: Configure Opik
+
+Once your IdP is configured, enter the settings in Opik:
+
+1. Navigate to **Admin Dashboard** > **SSO Configuration**.
+2. Select **SAML** as the SSO protocol.
+3. Enter the following settings:
+
+### Required SAML settings
+
+| Field | Description | Example |
+| --- | --- | --- |
+| **Domain** | Email domain for SSO users | `company.com` |
+| **SP Entity ID** | Your Service Provider Entity ID | `https://www.comet.com/opik/saml/metadata/...` |
+| **SP ACS URL** | Assertion Consumer Service URL | `https://www.comet.com/opik/saml/acs/...` |
+| **IdP Entity ID** | Your IdP's Entity ID | `https://idp.company.com/...` |
+| **IdP SSO URL** | URL where users authenticate | `https://idp.company.com/sso/saml` |
+| **IdP X.509 Certificate** | Public certificate for signature verification | `-----BEGIN CERTIFICATE-----...` |
+
+### Optional SAML settings
+
+| Field | Description | Default |
+| --- | --- | --- |
+| **SP Private Key** | Private key for signed requests | Not required |
+| **Sync Workspaces** | Enable automatic workspace assignment | Disabled |
+| **IdP Debug** | Enable verbose logging for troubleshooting | Disabled |
+| **Default Workspace** | Workspace for users without workspace attributes | Organization default |
+
+## Field reference
+
+### SP Entity ID
+
+The Service Provider Entity ID uniquely identifies Opik to your IdP. This value should be:
+
+- Copied exactly as shown in the Opik SSO configuration page.
+- Entered in your IdP's SAML application configuration.
+- Consistent between Opik and your IdP (case-sensitive).
+
+### ACS URL (Assertion Consumer Service)
+
+The ACS URL is where your IdP sends the SAML assertion after successful authentication:
+
+- Must be an HTTPS URL.
+- Must match exactly between Opik and your IdP configuration.
+- Opik validates this URL when processing assertions.
+
+### IdP Entity ID
+
+Your identity provider's unique identifier. Find this in your IdP's SAML metadata or configuration:
+
+- **Okta**: Found in the SAML setup instructions or metadata XML.
+- **Azure AD**: The "Identifier (Entity ID)" in the SAML configuration.
+- **OneLogin**: The "Issuer URL" in the SSO settings.
+
+### IdP SSO URL
+
+The URL where users are redirected to authenticate. This is the entry point for the SAML authentication flow:
+
+- Usually ends in `/sso/saml` or similar.
+- Found in your IdP's SAML configuration or metadata.
+
+### IdP X.509 Certificate
+
+The public certificate used to verify SAML assertion signatures:
+
+- Must be in PEM format (starting with `-----BEGIN CERTIFICATE-----`).
+- Download from your IdP's SAML configuration.
+- Multiple certificates can be provided if your IdP is rotating keys.
+
+<Warning>
+**Certificate expiration**: SAML certificates expire. Monitor expiration dates and update before they expire to avoid authentication disruptions.
+</Warning>
+
+## Workspace synchronization
+
+Enable workspace sync to automatically assign users to workspaces based on IdP attributes.
+
+### Enabling workspace sync
+
+1. In the SSO configuration, enable **Sync Workspaces**.
+2. Configure your IdP to send workspace information as a SAML attribute.
+3. Map the attribute to Opik workspace names.
+
+### How workspace sync works
+
+When a user authenticates via SAML with workspace sync enabled:
+
+1. Opik reads the workspace attribute from the SAML assertion.
+2. User is added to the specified workspaces (created if they don't exist).
+3. User is removed from workspaces not listed in the attribute.
+
+<Warning>
+**Workspace sync override**: When enabled, workspace sync overrides manual workspace assignments on each login. Users will only have access to workspaces specified by your IdP.
+</Warning>
+
+### Attribute format for workspaces
+
+The workspace attribute should contain a comma-separated list of workspace names:
+
+```
+engineering,data-science,ml-platform
+```
+
+Ensure workspace names match exactly (case-sensitive).
+
+## IdP-specific configuration guides
+
+<Tabs>
+<Tab value="okta" title="Okta">
+
+### Configuring Okta
+
+1. In Okta Admin Console, go to **Applications** > **Create App Integration**.
+2. Select **SAML 2.0** and click **Next**.
+3. Enter an app name (e.g., "Opik") and click **Next**.
+4. Configure SAML settings:
+   - **Single Sign-On URL**: Your ACS URL from Opik
+   - **Audience URI (SP Entity ID)**: Your SP Entity ID from Opik
+   - **Name ID format**: EmailAddress
+   - **Application username**: Email
+5. Add attribute statements:
+   - `guid` → `user.id`
+   - `email` → `user.email`
+   - `firstName` → `user.firstName`
+   - `lastName` → `user.lastName`
+6. Complete the wizard and assign users/groups.
+7. Copy the **IdP Issuer**, **Single Sign-On URL**, and **X.509 Certificate** to Opik.
+
+</Tab>
+<Tab value="azure-ad" title="Azure AD">
+
+### Configuring Azure AD
+
+1. In Azure Portal, go to **Azure Active Directory** > **Enterprise applications**.
+2. Click **New application** > **Create your own application**.
+3. Select **Integrate any other application you don't find in the gallery**.
+4. Go to **Single sign-on** > **SAML**.
+5. Edit **Basic SAML Configuration**:
+   - **Identifier (Entity ID)**: Your SP Entity ID from Opik
+   - **Reply URL (ACS URL)**: Your ACS URL from Opik
+6. Edit **Attributes & Claims**:
+   - Ensure `email` claim is configured
+   - Add custom claims for `guid`, `firstName`, `lastName`
+7. Download the **Certificate (Base64)**.
+8. Copy the **Azure AD Identifier** and **Login URL** to Opik.
+
+</Tab>
+<Tab value="onelogin" title="OneLogin">
+
+### Configuring OneLogin
+
+1. In OneLogin Admin, go to **Applications** > **Add App**.
+2. Search for "SAML Custom Connector (Advanced)" and add it.
+3. Configure the application:
+   - **Audience (EntityID)**: Your SP Entity ID from Opik
+   - **ACS URL**: Your ACS URL from Opik
+   - **ACS URL Validator**: Your ACS URL (escaped for regex)
+4. Go to **Parameters** and add:
+   - `guid` → User ID
+   - `email` → Email
+   - `firstName` → First Name
+   - `lastName` → Last Name
+5. Go to **SSO** tab and copy:
+   - **Issuer URL** → IdP Entity ID
+   - **SAML 2.0 Endpoint** → IdP SSO URL
+   - **X.509 Certificate** → IdP Certificate
+
+</Tab>
+</Tabs>
+
+## Testing the configuration
+
+After configuring both Opik and your IdP:
+
+1. **Open an incognito/private browser window** (to avoid cached sessions).
+2. Navigate to Opik's login page.
+3. Enter an email address with your configured domain.
+4. You should be redirected to your IdP for authentication.
+5. After authenticating, you should be redirected back to Opik and logged in.
+
+<Tip>
+**Debug mode**: If you encounter issues, enable **IdP Debug** in the SSO configuration to see detailed logs.
+</Tip>
+
+## Troubleshooting
+
+### Common issues
+
+| Issue | Possible cause | Solution |
+| --- | --- | --- |
+| "Invalid SAML response" | Certificate mismatch | Verify the IdP certificate is correctly copied |
+| User not redirected to IdP | Domain not configured | Check the domain setting matches user email |
+| "User not found" | Missing required attributes | Verify `guid` and `email` attributes are mapped |
+| Wrong workspace assignment | Attribute mapping issue | Check workspace attribute format and sync settings |
+| Certificate validation error | Expired certificate | Update the IdP certificate |
+
+### Troubleshooting checklist
+
+1. **Verify domain configuration**: Ensure the email domain matches your SSO configuration.
+2. **Check Entity IDs**: Both SP and IdP Entity IDs must match exactly (case-sensitive).
+3. **Validate ACS URL**: The ACS URL must be identical in both Opik and your IdP.
+4. **Review attribute mapping**: Ensure `guid` and `email` attributes are sent by your IdP.
+5. **Check certificate format**: Certificate should be in PEM format with headers.
+6. **Test with debug enabled**: Enable IdP Debug to see detailed error messages.
+7. **Check IdP logs**: Review your identity provider's logs for SAML errors.
+
+### Getting help
+
+If you continue to experience issues:
+
+1. Gather debug logs with IdP Debug enabled.
+2. Capture the SAML assertion (available in browser developer tools or IdP logs).
+3. Contact Opik support with the logs and assertion for assistance.
+
+## Next steps
+
+- [Configure OIDC](/administration/authentication/oidc) as an alternative SSO method.
+- [Set up JWT authentication](/administration/authentication/jwt) for programmatic access.
+- [Manage users](/administration/admin-dashboard/users) and their workspace assignments.

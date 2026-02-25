@@ -171,11 +171,10 @@ Similarly, for the Python metrics, you have the `Conversation` object available 
 ]
 ```
 
-The sampled threads are scored only after the threads are marked as inactive. This is to ensure that the scoring is done on the full context of the conversation.
+For online scoring rules on threads, Opik waits for a "cooldown period" after the last activity in a thread
+before running the evaluation. This ensures the scoring is done on the full context of the conversation.
 
 <Note>
-  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
-  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
-
-  You can only evaluate/score threads that are inactive.
+  The default cooldown period is 15 minutes but can be configured at the workspace level under "Thread online scoring rule cooldown period".
+  For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
 </Note>

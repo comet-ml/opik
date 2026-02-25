@@ -1,3 +1,6 @@
+import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
+import get from "lodash/get";
 import { QueryClient } from "@tanstack/react-query";
 import {
   FEEDBACK_SCORE_TYPE,
@@ -5,7 +8,14 @@ import {
   Trace,
   TraceFeedbackScore,
 } from "@/types/traces";
-import { AggregatedFeedbackScore } from "@/types/shared";
+import {
+  AggregatedFeedbackScore,
+  COLUMN_EXPERIMENT_SCORES_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+  SCORE_TYPE_EXPERIMENT,
+  SCORE_TYPE_FEEDBACK,
+  ScoreType,
+} from "@/types/shared";
 import {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -15,7 +25,8 @@ import {
 import { UseCompareExperimentsListResponse } from "@/api/datasets/useCompareExperimentsList";
 import { UseTracesListResponse } from "@/api/traces/useTracesList";
 import { UseSpansListResponse } from "@/api/traces/useSpansList";
-import { isUndefined } from "lodash";
+import { formatNumericData } from "@/lib/utils";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 
 export const FEEDBACK_SCORE_SOURCE_MAP = {
   [FEEDBACK_SCORE_TYPE.online_scoring]: "Online evaluation",
@@ -455,4 +466,130 @@ export const aggregateMultiAuthorFeedbackScore = (
     category_name: aggregatedCategoryName || undefined,
     reason: aggregatedReason || undefined,
   };
+};
+
+export const SCORE_DISPLAY_PRECISION = 2;
+export const SCORE_CHART_PRECISION = 4;
+
+export const formatScoreDisplay = (value: number | string): string =>
+  isNumber(value) ? formatNumericData(value, SCORE_DISPLAY_PRECISION) : value;
+
+export const formatScoreChartValue = (value: number | string): string =>
+  isNumber(value) ? formatNumericData(value, SCORE_CHART_PRECISION) : value;
+
+export const renderScoreTooltipValue = ({
+  value,
+}: ChartTooltipRenderValueArguments) =>
+  formatScoreChartValue(value as number | string);
+
+export const getScoreDisplayName = (
+  name: string,
+  scoreType: ScoreType,
+): string => {
+  return scoreType === SCORE_TYPE_EXPERIMENT ? name : `${name} (avg)`;
+};
+
+export const buildScoreColumnId = (
+  scoreName: string,
+  scoreType: ScoreType = SCORE_TYPE_FEEDBACK,
+): string => {
+  const prefix =
+    scoreType === SCORE_TYPE_EXPERIMENT
+      ? COLUMN_EXPERIMENT_SCORES_ID
+      : COLUMN_FEEDBACK_SCORES_ID;
+  return `${prefix}.${scoreName}`;
+};
+
+export const buildScoreLabel = (
+  scoreName: string,
+  scoreType: ScoreType = SCORE_TYPE_FEEDBACK,
+): string => {
+  return getScoreDisplayName(scoreName, scoreType);
+};
+
+export type ParsedScoreColumn = {
+  scoreName: string;
+  scoreType: ScoreType;
+};
+
+export const parseScoreColumnId = (
+  columnId: string,
+): ParsedScoreColumn | null => {
+  if (columnId.startsWith(`${COLUMN_EXPERIMENT_SCORES_ID}.`)) {
+    return {
+      scoreName: columnId.substring(COLUMN_EXPERIMENT_SCORES_ID.length + 1),
+      scoreType: SCORE_TYPE_EXPERIMENT,
+    };
+  }
+  if (columnId.startsWith(`${COLUMN_FEEDBACK_SCORES_ID}.`)) {
+    return {
+      scoreName: columnId.substring(COLUMN_FEEDBACK_SCORES_ID.length + 1),
+      scoreType: SCORE_TYPE_FEEDBACK,
+    };
+  }
+  return null;
+};
+
+export type RowWithScores = {
+  experiment_scores?: AggregatedFeedbackScore[];
+  feedback_scores?: AggregatedFeedbackScore[];
+};
+
+export const getExperimentScore = (
+  columnId: string,
+  row: RowWithScores,
+): AggregatedFeedbackScore | undefined => {
+  const parsed = parseScoreColumnId(columnId);
+  if (!parsed) return undefined;
+
+  const scores =
+    parsed.scoreType === SCORE_TYPE_EXPERIMENT
+      ? row.experiment_scores
+      : row.feedback_scores;
+
+  return scores?.find((s) => s.name === parsed.scoreName);
+};
+
+export interface FormattedScore {
+  name: string;
+  value: string | number;
+}
+
+export const transformExperimentScores = (
+  row:
+    | {
+        feedback_scores?: AggregatedFeedbackScore[];
+        experiment_scores?: AggregatedFeedbackScore[];
+      }
+    | Record<string, unknown>,
+): FormattedScore[] => {
+  const formatScores = (key: string, scoreType: ScoreType): FormattedScore[] =>
+    (get(row, key, []) as AggregatedFeedbackScore[]).map((score) => ({
+      ...score,
+      name: getScoreDisplayName(score.name, scoreType),
+      value: formatNumericData(score.value),
+    }));
+
+  return [
+    ...formatScores(SCORE_TYPE_FEEDBACK, SCORE_TYPE_FEEDBACK),
+    ...formatScores(SCORE_TYPE_EXPERIMENT, SCORE_TYPE_EXPERIMENT),
+  ];
+};
+
+export const combineExperimentScoresAsMap = (row: {
+  feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
+}): Record<string, number> => {
+  const result: Record<string, number> = {};
+
+  (row.feedback_scores ?? []).forEach((score) => {
+    result[getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK)] = score.value;
+  });
+
+  (row.experiment_scores ?? []).forEach((score) => {
+    result[getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT)] =
+      score.value;
+  });
+
+  return result;
 };
