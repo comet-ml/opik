@@ -11,6 +11,7 @@ from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.api_objects.span.span_data import SpanData
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
 class TestConfigDecoratorValidation:
@@ -629,7 +630,7 @@ class TestConfigDecoratorPromptFields:
         call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
         values = call_kwargs["blueprint"]["values"]
         prompt_param = next(v for v in values if v["key"] == "MyConfig.system_prompt")
-        assert prompt_param["type"] == "string"
+        assert prompt_param["type"] == "prompt"
         assert prompt_param["value"] == "ver-abc"
 
     def test_chat_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
@@ -726,7 +727,7 @@ class TestConfigDecoratorPromptFields:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.p", type="string", value="ver-base")]
+            [mock.Mock(key="MyConfig.p", type="prompt", value="ver-base")]
         )
 
         version_detail = mock.Mock()
@@ -755,3 +756,76 @@ class TestConfigDecoratorPromptFields:
             instance = MyConfig()
 
         assert instance.p is fake_chat_prompt
+
+    def test_prompt_version_field__sent_to_backend_as_version_id(self, mock_backend):
+        fake_version = mock.Mock(spec=PromptVersionDetail)
+        fake_version.id = "ver-pv-abc"
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            version: PromptVersionDetail = dataclasses.field(
+                default_factory=lambda: fake_version
+            )
+
+        MyConfig()
+
+        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
+        values = call_kwargs["blueprint"]["values"]
+        param = next(v for v in values if v["key"] == "MyConfig.version")
+        assert param["type"] == "prompt_version"
+        assert param["value"] == "ver-pv-abc"
+
+    def test_existing_blueprint_prompt_version_field__resolves_to_prompt_version_detail(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(
+                    key="MyConfig.version",
+                    type="prompt_version",
+                    value="ver-pv-backend",
+                )
+            ]
+        )
+
+        fake_version_detail = mock.Mock(spec=PromptVersionDetail)
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = fake_version_detail
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            version: PromptVersionDetail = dataclasses.field(default=None)
+
+        instance = MyConfig()
+
+        assert instance.version is fake_version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.assert_called_with(
+            "ver-pv-backend"
+        )
+        mock_backend.client.rest_client.prompts.get_prompt_by_id.assert_not_called()
+
+    def test_existing_blueprint_prompt_version_field__resolution_fails__field_omitted(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [
+                mock.Mock(
+                    key="MyConfig.version",
+                    type="prompt_version",
+                    value="ver-pv-bad",
+                )
+            ]
+        )
+        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.side_effect = (
+            Exception("not found")
+        )
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            version: PromptVersionDetail = dataclasses.field(default=None)
+
+        instance = MyConfig()
+
+        assert instance.version is None

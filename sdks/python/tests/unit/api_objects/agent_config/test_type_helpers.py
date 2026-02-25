@@ -9,6 +9,7 @@ from opik.api_objects.agent_config import type_helpers
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
 class TestIsPromptType:
@@ -94,6 +95,7 @@ class TestIsSupportedType:
             (Prompt, True),
             (ChatPrompt, True),
             (BasePrompt, True),
+            (PromptVersionDetail, True),
         ],
         ids=[
             "str",
@@ -111,6 +113,7 @@ class TestIsSupportedType:
             "Prompt",
             "ChatPrompt",
             "BasePrompt",
+            "PromptVersionDetail",
         ],
     )
     def test_supported_types__returns_true(self, py_type, expected):
@@ -172,8 +175,14 @@ class TestPythonTypeToBackendType:
         [Prompt, ChatPrompt, BasePrompt],
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
-    def test_prompt_types__return_string(self, py_type):
-        assert type_helpers.python_type_to_backend_type(py_type) == "string"
+    def test_prompt_types__return_prompt(self, py_type):
+        assert type_helpers.python_type_to_backend_type(py_type) == "prompt"
+
+    def test_prompt_version_type__returns_prompt_version(self):
+        assert (
+            type_helpers.python_type_to_backend_type(PromptVersionDetail)
+            == "prompt_version"
+        )
 
 
 class TestPythonValueToBackendValue:
@@ -224,6 +233,14 @@ class TestPythonValueToBackendValue:
         prompt = mock.Mock()
         prompt.__internal_api__version_id__ = "ver-abc"
         assert type_helpers.python_value_to_backend_value(prompt, py_type) == "ver-abc"
+
+    def test_prompt_version_value__returns_id(self):
+        version = mock.Mock(spec=PromptVersionDetail)
+        version.id = "ver-pv-123"
+        assert (
+            type_helpers.python_value_to_backend_value(version, PromptVersionDetail)
+            == "ver-pv-123"
+        )
 
 
 class TestBackendValueToPythonValue:
@@ -286,7 +303,7 @@ class TestBackendValueToPythonValue:
     )
     def test_prompt_type__returns_raw_version_id_string(self, py_type):
         result = type_helpers.backend_value_to_python_value(
-            "ver-xyz", "string", py_type
+            "ver-xyz", "prompt", py_type
         )
         assert result == "ver-xyz"
 
@@ -297,7 +314,21 @@ class TestBackendValueToPythonValue:
     )
     def test_prompt_type__none_value__returns_none(self, py_type):
         assert (
-            type_helpers.backend_value_to_python_value(None, "string", py_type) is None
+            type_helpers.backend_value_to_python_value(None, "prompt", py_type) is None
+        )
+
+    def test_prompt_version_type__returns_raw_version_id_string(self):
+        result = type_helpers.backend_value_to_python_value(
+            "ver-pv-xyz", "prompt_version", PromptVersionDetail
+        )
+        assert result == "ver-pv-xyz"
+
+    def test_prompt_version_type__none_value__returns_none(self):
+        assert (
+            type_helpers.backend_value_to_python_value(
+                None, "prompt_version", PromptVersionDetail
+            )
+            is None
         )
 
 

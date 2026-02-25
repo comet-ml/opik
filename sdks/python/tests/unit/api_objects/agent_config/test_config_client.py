@@ -11,6 +11,7 @@ from opik.rest_api.types.optimizer_config_detail import (
     OptimizerConfigCreateResponse,
     OptimizerConfigParameter,
 )
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
 def _make_create_response():
@@ -384,6 +385,56 @@ class TestGetBlueprint:
 
         assert mock_rest_client.prompts.get_prompt_version_by_id.call_count == 2
         assert mock_rest_client.prompts.get_prompt_by_id.call_count == 2
+
+    def test_get_blueprint__prompt_version_field__resolves_to_prompt_version_detail(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = _make_blueprint(
+            values=[
+                OptimizerConfigParameter(
+                    key="version", type="prompt_version", value="ver-pv-111"
+                ),
+            ]
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        fake_version_detail = mock.Mock(spec=PromptVersionDetail)
+        mock_rest_client.prompts.get_prompt_version_by_id.return_value = (
+            fake_version_detail
+        )
+
+        result = config_client.get_blueprint(
+            project_name="my-project",
+            field_types={"version": PromptVersionDetail},
+        )
+
+        assert result.values["version"] is fake_version_detail
+        mock_rest_client.prompts.get_prompt_version_by_id.assert_called_once_with(
+            "ver-pv-111"
+        )
+        mock_rest_client.prompts.get_prompt_by_id.assert_not_called()
+
+    def test_get_blueprint__prompt_version_field__resolution_fails__omits_key(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = _make_blueprint(
+            values=[
+                OptimizerConfigParameter(
+                    key="version", type="prompt_version", value="ver-pv-bad"
+                ),
+            ]
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+        mock_rest_client.prompts.get_prompt_version_by_id.side_effect = Exception(
+            "not found"
+        )
+
+        result = config_client.get_blueprint(
+            project_name="my-project",
+            field_types={"version": PromptVersionDetail},
+        )
+
+        assert "version" not in result.values
 
     @pytest.mark.parametrize(
         "mask_id",

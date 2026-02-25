@@ -3,6 +3,7 @@ import json
 import typing
 
 from opik.api_objects.prompt.base_prompt import BasePrompt
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 SUPPORTED_PRIMITIVE_TYPES = (str, int, float, bool)
 
@@ -18,10 +19,16 @@ def is_prompt_type(py_type: typing.Any) -> bool:
     return isinstance(py_type, type) and issubclass(py_type, BasePrompt)
 
 
+def is_prompt_version_type(py_type: typing.Any) -> bool:
+    return py_type is PromptVersionDetail
+
+
 def is_supported_type(py_type: typing.Any) -> bool:
     if py_type in SUPPORTED_PRIMITIVE_TYPES:
         return True
     if is_prompt_type(py_type):
+        return True
+    if is_prompt_version_type(py_type):
         return True
     origin = typing.get_origin(py_type)
     if origin is list:
@@ -39,7 +46,9 @@ def python_type_to_backend_type(py_type: typing.Any) -> str:
     if py_type in _PYTHON_TO_BACKEND_TYPE:
         return _PYTHON_TO_BACKEND_TYPE[py_type]
     if is_prompt_type(py_type):
-        return "string"
+        return "prompt"
+    if is_prompt_version_type(py_type):
+        return "prompt_version"
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return "json"
@@ -55,6 +64,8 @@ def python_value_to_backend_value(value: typing.Any, py_type: typing.Any) -> str
         return value
     if is_prompt_type(py_type):
         return value.__internal_api__version_id__
+    if is_prompt_version_type(py_type):
+        return value.id
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return json.dumps(value)
@@ -84,6 +95,9 @@ def backend_value_to_python_value(
         return str(value)
 
     if is_prompt_type(py_type):
+        return str(value)
+
+    if is_prompt_version_type(py_type):
         return str(value)
 
     origin = typing.get_origin(py_type)

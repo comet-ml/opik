@@ -10,6 +10,7 @@ from opik.rest_api.types.optimizer_config_detail import (
 from opik.api_objects import rest_helpers
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 from . import type_helpers
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,12 @@ def _resolve_prompt_from_version_id(
     return Prompt.from_fern_prompt_version(
         name=prompt_detail.name, prompt_version=version_detail
     )
+
+
+def _resolve_prompt_version_from_version_id(
+    rest_client_: rest_client.OpikApi, version_id: str
+) -> PromptVersionDetail:
+    return rest_client_.prompts.get_prompt_version_by_id(version_id)
 
 
 @dataclasses.dataclass
@@ -49,7 +56,10 @@ class ConfigClient:
     ) -> typing.Dict[str, typing.Any]:
         backend_values = []
         for field_name, (py_type, value) in fields_with_values.items():
-            if type_helpers.is_prompt_type(py_type) and value is None:
+            if (
+                type_helpers.is_prompt_type(py_type)
+                or type_helpers.is_prompt_version_type(py_type)
+            ) and value is None:
                 continue
             backend_values.append(
                 {
@@ -259,6 +269,20 @@ class ConfigClient:
                     except Exception:
                         logger.debug(
                             "Failed to resolve prompt version %s",
+                            raw_value,
+                            exc_info=True,
+                        )
+                        del values[key]
+                elif type_helpers.is_prompt_version_type(py_type) and isinstance(
+                    raw_value, str
+                ):
+                    try:
+                        values[key] = _resolve_prompt_version_from_version_id(
+                            self._rest_client, raw_value
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Failed to resolve prompt version detail %s",
                             raw_value,
                             exc_info=True,
                         )
