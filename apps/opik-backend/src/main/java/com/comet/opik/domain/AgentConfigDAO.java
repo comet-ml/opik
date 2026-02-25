@@ -191,6 +191,7 @@ interface AgentConfigDAO {
                 AND e.blueprint_id = b.id
             WHERE b.workspace_id = :workspace_id
                 AND b.project_id = :project_id
+                AND b.type = 'blueprint'
             GROUP BY b.id, b.project_id, b.type, b.description, b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
             ORDER BY b.created_at DESC
             LIMIT :limit OFFSET :offset
@@ -202,7 +203,7 @@ interface AgentConfigDAO {
             @Bind("offset") int offset);
 
     @SqlQuery("SELECT COUNT(*) FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id")
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint'")
     long countBlueprints(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId);

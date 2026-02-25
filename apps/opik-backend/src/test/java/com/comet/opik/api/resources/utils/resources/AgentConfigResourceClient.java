@@ -174,4 +174,26 @@ public class AgentConfigResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
     }
+
+    public AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size,
+            String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/history")
+                .queryParam("project_id", projectId)
+                .queryParam("page", page)
+                .queryParam("size", size)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(com.comet.opik.domain.AgentBlueprint.BlueprintPage.class);
+            }
+
+            return null;
+        }
+    }
 }

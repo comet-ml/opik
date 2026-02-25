@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.resources.AgentConfigResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentBlueprint.BlueprintType;
+import com.comet.opik.domain.AgentConfigEnv;
 import com.comet.opik.domain.AgentConfigValue;
 import com.comet.opik.domain.AgentConfigValue.ValueType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -635,6 +636,101 @@ class AgentConfigResourceTest {
                     arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("dev", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Blueprint History:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetBlueprintHistory {
+
+        private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
+
+        @Test
+        @DisplayName("Success: get paginated history with tagged blueprints, excludes masks")
+        void getHistory() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Initial config")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Update temp")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.NUMBER)
+                                    .build()))
+                    .build();
+
+            var blueprint2Id = agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("This mask should NOT appear in history")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint2Id)
+                                    .build()))
+                    .build();
+
+            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            var historyPage = agentConfigResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            assertThat(historyPage).isNotNull();
+            assertThat(historyPage.page()).isEqualTo(1);
+            assertThat(historyPage.size()).isEqualTo(10);
+            assertThat(historyPage.total()).isEqualTo(2);
+            assertThat(historyPage.content()).hasSize(2);
+
+            var expectedBlueprints = List.of(
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("Update temp")
+                            .envs(List.of("prod"))
+                            .build(),
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("Initial config")
+                            .envs(null)
+                            .build());
+
+            assertThat(historyPage.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(BLUEPRINT_IGNORED_FIELDS)
+                    .isEqualTo(expectedBlueprints);
+        }
+
+        @Test
+        @DisplayName("when config does not exist, then return 404")
+        void getHistory__whenConfigNotFound__thenReturn404() {
+            agentConfigResourceClient.getHistory(UUID.randomUUID(), 1, 10, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 }

@@ -17,7 +17,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -182,8 +184,8 @@ public class AgentConfigResource {
     })
     public Response getBlueprintHistory(
             @QueryParam("project_id") UUID projectId,
-            @QueryParam("page") @jakarta.validation.constraints.Min(1) @jakarta.ws.rs.DefaultValue("1") int page,
-            @QueryParam("size") @jakarta.validation.constraints.Min(1) @jakarta.ws.rs.DefaultValue("10") int size) {
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
         log.info("Retrieving blueprint history for project '{}', page {}, size {}", projectId, page, size);
 
