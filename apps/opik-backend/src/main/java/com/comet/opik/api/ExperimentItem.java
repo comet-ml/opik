@@ -55,7 +55,9 @@ public record ExperimentItem(
         @JsonView({
                 ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({ExperimentItem.View.Compare.class,
-                ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode traceVisibilityMode){
+                ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode traceVisibilityMode,
+        @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String description){
 
     public static class View {
         public static class Write {
