@@ -18,7 +18,7 @@ import {
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
-import { MessageContent } from "@/types/llm";
+import { LLMMessage, MessageContent } from "@/types/llm";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -31,6 +31,7 @@ interface NamedPromptContent {
 
 interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
+  messages?: LLMMessage[];
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
@@ -178,6 +179,7 @@ const useLoadPlayground = () => {
     (options: LoadPlaygroundOptions = {}) => {
       const {
         promptContent = "",
+        messages,
         promptId,
         promptVersionId,
         autoImprove = false,
@@ -190,7 +192,17 @@ const useLoadPlayground = () => {
       let promptIds: string[];
       let promptMap: Record<string, ReturnType<typeof generateDefaultPrompt>>;
 
-      if (namedPrompts && namedPrompts.length > 0) {
+      if (messages && messages.length > 0) {
+        const newPrompt = generateDefaultPrompt({
+          initPrompt: { messages },
+          setupProviders: providerKeys,
+          lastPickedModel,
+          providerResolver: calculateModelProvider,
+          modelResolver: calculateDefaultModel,
+        });
+        promptIds = [newPrompt.id];
+        promptMap = { [newPrompt.id]: newPrompt };
+      } else if (namedPrompts && namedPrompts.length > 0) {
         // Multi-agent: create a separate Playground prompt for each named prompt
         const prompts = namedPrompts.map((np) =>
           createPromptFromContent(np.content, {
@@ -242,6 +254,10 @@ const useLoadPlayground = () => {
       setDatasetVersionKey,
       isVersioningEnabled,
       workspaceName,
+      calculateModelProvider,
+      calculateDefaultModel,
+      lastPickedModel,
+      providerKeys,
     ],
   );
 
