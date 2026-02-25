@@ -204,7 +204,7 @@ public class PromptResource {
     @Operation(operationId = "getPromptsByCommits", summary = "Get prompts by commits", description = "Get prompts by prompt version commits", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
     })
-    @JsonView({Prompt.View.Public.class})
+    @JsonView({Prompt.View.Detail.class})
     public Response getPromptsByCommits(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionCommitsRequest.class))) @Valid PromptVersionCommitsRequest request) {
 

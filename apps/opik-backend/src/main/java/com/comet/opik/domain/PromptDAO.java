@@ -212,7 +212,34 @@ interface PromptDAO {
                 p.created_at,
                 p.created_by,
                 p.last_updated_at,
-                p.last_updated_by
+                p.last_updated_by,
+                (
+                    SELECT COUNT(pv2.id)
+                    FROM prompt_versions pv2
+                    WHERE pv2.prompt_id = p.id
+                    AND pv2.workspace_id = p.workspace_id
+                ) AS version_count,
+                (
+                    SELECT JSON_OBJECT(
+                        'id', pv3.id,
+                        'prompt_id', pv3.prompt_id,
+                        'commit', pv3.commit,
+                        'template', pv3.template,
+                        'metadata', pv3.metadata,
+                        'change_description', pv3.change_description,
+                        'type', pv3.type,
+                        'tags', pv3.tags,
+                        'created_at', pv3.created_at,
+                        'created_by', pv3.created_by,
+                        'last_updated_at', pv3.last_updated_at,
+                        'last_updated_by', pv3.last_updated_by
+                    )
+                    FROM prompt_versions pv3
+                    WHERE pv3.prompt_id = p.id
+                    AND pv3.workspace_id = p.workspace_id
+                    ORDER BY pv3.id DESC
+                    LIMIT 1
+                ) AS latest_version
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.commit IN (<commits>) AND pv.workspace_id = :workspace_id

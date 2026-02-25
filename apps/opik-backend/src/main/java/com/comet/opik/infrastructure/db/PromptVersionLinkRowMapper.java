@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.utils.JsonUtils;
@@ -20,8 +21,12 @@ public class PromptVersionLinkRowMapper implements RowMapper<PromptVersionLink> 
     private static final TypeReference<Set<String>> SET_TYPE_REFERENCE = new TypeReference<>() {
     };
 
+    private final PromptVersionColumnMapper promptVersionColumnMapper = new PromptVersionColumnMapper();
+
     @Override
     public PromptVersionLink map(ResultSet rs, StatementContext ctx) throws SQLException {
+        PromptVersion latestVersion = promptVersionColumnMapper.map(rs, "latest_version", ctx);
+
         var prompt = Prompt.builder()
                 .id(rs.getObject("id", UUID.class))
                 .name(rs.getString("name"))
@@ -41,6 +46,11 @@ public class PromptVersionLinkRowMapper implements RowMapper<PromptVersionLink> 
                                 .map(Timestamp::toInstant)
                                 .orElse(null))
                 .lastUpdatedBy(rs.getString("last_updated_by"))
+                .versionCount(
+                        Optional.ofNullable(rs.getObject("version_count"))
+                                .map(v -> ((Number) v).longValue())
+                                .orElse(null))
+                .latestVersion(latestVersion)
                 .build();
 
         return PromptVersionLink.builder()

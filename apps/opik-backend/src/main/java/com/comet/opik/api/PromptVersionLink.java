@@ -14,7 +14,7 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersionLink(
         @JsonView( {
-                Prompt.View.Public.class}) UUID promptVersionId,
-        @JsonView({Prompt.View.Public.class}) String commit,
-        @JsonView({Prompt.View.Public.class}) @Nullable Prompt prompt){
+                Prompt.View.Public.class, Prompt.View.Detail.class}) UUID promptVersionId,
+        @JsonView({Prompt.View.Public.class, Prompt.View.Detail.class}) String commit,
+        @JsonView({Prompt.View.Public.class, Prompt.View.Detail.class}) @Nullable Prompt prompt){
 }
