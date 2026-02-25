@@ -20,8 +20,7 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { SPAN_TYPE } from "@/types/traces";
-import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { getSpanTypeFilterConfig } from "@/lib/span-type-filter";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -127,37 +126,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             placeholder: "Select score",
           },
         },
-        ...(isSpanMetric
-          ? {
-              type: {
-                keyComponentProps: {
-                  options: [
-                    {
-                      value: SPAN_TYPE.general,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
-                    },
-                    {
-                      value: SPAN_TYPE.tool,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
-                    },
-                    {
-                      value: SPAN_TYPE.llm,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
-                    },
-                    ...(isGuardrailsEnabled
-                      ? [
-                          {
-                            value: SPAN_TYPE.guardrail,
-                            label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
-                          },
-                        ]
-                      : []),
-                  ],
-                  placeholder: "Select type",
-                },
-              },
-            }
-          : {}),
+        ...(isSpanMetric ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
     [projectId, dataType, isGuardrailsEnabled, isSpanMetric],
