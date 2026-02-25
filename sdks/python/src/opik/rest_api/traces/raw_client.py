@@ -21,6 +21,7 @@ from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -1104,7 +1105,7 @@ class RawTracesClient:
 
     def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[typing.List[str]]:
+    ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -1117,7 +1118,7 @@ class RawTracesClient:
 
         Returns
         -------
-        HttpResponse[typing.List[str]]
+        HttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -1131,9 +1132,9 @@ class RawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1145,7 +1146,7 @@ class RawTracesClient:
 
     def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[typing.List[str]]:
+    ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Trace Threads Feedback Score names
 
@@ -1158,7 +1159,7 @@ class RawTracesClient:
 
         Returns
         -------
-        HttpResponse[typing.List[str]]
+        HttpResponse[FeedbackScoreNamesPublic]
             Find Trace Threads Feedback Score names
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -1172,9 +1173,9 @@ class RawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -3183,7 +3184,7 @@ class AsyncRawTracesClient:
 
     async def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[typing.List[str]]:
+    ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -3196,7 +3197,7 @@ class AsyncRawTracesClient:
 
         Returns
         -------
-        AsyncHttpResponse[typing.List[str]]
+        AsyncHttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -3210,9 +3211,9 @@ class AsyncRawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -3224,7 +3225,7 @@ class AsyncRawTracesClient:
 
     async def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[typing.List[str]]:
+    ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Trace Threads Feedback Score names
 
@@ -3237,7 +3238,7 @@ class AsyncRawTracesClient:
 
         Returns
         -------
-        AsyncHttpResponse[typing.List[str]]
+        AsyncHttpResponse[FeedbackScoreNamesPublic]
             Find Trace Threads Feedback Score names
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -3251,9 +3252,9 @@ class AsyncRawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

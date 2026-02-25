@@ -892,14 +892,14 @@ export class SpansClient {
     public findFeedbackScoreNames1(
         request: OpikApi.FindFeedbackScoreNames1Request = {},
         requestOptions?: SpansClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames1(request, requestOptions));
     }
 
     private async __findFeedbackScoreNames1(
         request: OpikApi.FindFeedbackScoreNames1Request = {},
         requestOptions?: SpansClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { projectId, type: type_ } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
@@ -937,7 +937,7 @@ export class SpansClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.spans.findFeedbackScoreNames1.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
