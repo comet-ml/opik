@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
-import com.comet.opik.domain.OptimizerConfigValue.ValueType;
+import com.comet.opik.domain.AgentConfigValue.ValueType;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 

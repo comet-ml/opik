@@ -1,11 +1,11 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.OptimizerConfigCreate;
-import com.comet.opik.api.OptimizerConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.OptimizerBlueprint;
-import com.comet.opik.domain.OptimizerConfigService;
+import com.comet.opik.domain.AgentBlueprint;
+import com.comet.opik.domain.AgentConfigService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,38 +35,38 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.UUID;
 
-@Path("/v1/private/optimizer-configs")
+@Path("/v1/private/agent-configs")
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Optimizer Configs", description = "Optimizer configuration management")
-public class OptimizerConfigResource {
+@Tag(name = "Agent Configs", description = "Agent configuration management")
+public class AgentConfigResource {
 
-    private final @NonNull OptimizerConfigService optimizerConfigService;
+    private final @NonNull AgentConfigService agentConfigService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
     @Path("/")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Write.class)
-    @Operation(operationId = "createOptimizerConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
-            @ApiResponse(responseCode = "201", description = "Blueprint created", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+    @JsonView(com.comet.opik.domain.AgentConfig.View.Write.class)
+    @Operation(operationId = "createAgentConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
+            @ApiResponse(responseCode = "201", description = "Blueprint created", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    public Response createOptimizerConfig(
-            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizerConfigCreate.class))) @Valid OptimizerConfigCreate request,
+    public Response createAgentConfig(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigCreate.class))) @Valid AgentConfigCreate request,
             @Context UriInfo uriInfo) {
 
         log.info("Creating blueprint for project '{}'", request.projectName());
 
-        OptimizerBlueprint createdBlueprint = optimizerConfigService.createOrUpdateConfig(request);
+        AgentBlueprint createdBlueprint = agentConfigService.createOrUpdateConfig(request);
 
         log.info("Created blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
         URI location = uriInfo.getBaseUriBuilder()
-                .path("v1/private/optimizer-configs/blueprint/{blueprint_id}")
+                .path("v1/private/agent-configs/blueprint/{blueprint_id}")
                 .build(createdBlueprint.id());
 
         return Response.created(location)
@@ -77,9 +77,9 @@ public class OptimizerConfigResource {
     @GET
     @Path("/blueprint/retrieve")
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
+    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
     @Operation(operationId = "getLatestBlueprint", summary = "Retrieve latest blueprint", description = "Retrieves the latest blueprint for a project", responses = {
-            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -89,7 +89,7 @@ public class OptimizerConfigResource {
 
         log.info("Retrieving latest blueprint for project '{}'", projectId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getLatestBlueprint(projectId, maskId);
+        AgentBlueprint blueprint = agentConfigService.getLatestBlueprint(projectId, maskId);
 
         return Response.ok(blueprint).build();
     }
@@ -97,9 +97,9 @@ public class OptimizerConfigResource {
     @GET
     @Path("/blueprint/{blueprint_id}")
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
+    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
     @Operation(operationId = "getBlueprintById", summary = "Retrieve blueprint by ID", description = "Retrieves a specific blueprint by its ID", responses = {
-            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -109,7 +109,7 @@ public class OptimizerConfigResource {
 
         log.info("Retrieving blueprint '{}'", blueprintId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintById(blueprintId, maskId);
+        AgentBlueprint blueprint = agentConfigService.getBlueprintById(blueprintId, maskId);
 
         return Response.ok(blueprint).build();
     }
@@ -117,9 +117,9 @@ public class OptimizerConfigResource {
     @GET
     @Path("/blueprint/env/{env_name}")
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
+    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
     @Operation(operationId = "getBlueprintByEnv", summary = "Retrieve blueprint by environment", description = "Retrieves the blueprint associated with a specific environment", responses = {
-            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -130,7 +130,7 @@ public class OptimizerConfigResource {
 
         log.info("Retrieving blueprint by environment '{}' for project '{}'", envName, projectId);
 
-        OptimizerBlueprint blueprint = optimizerConfigService.getBlueprintByEnv(projectId, envName, maskId);
+        AgentBlueprint blueprint = agentConfigService.getBlueprintByEnv(projectId, envName, maskId);
 
         return Response.ok(blueprint).build();
     }
@@ -138,9 +138,9 @@ public class OptimizerConfigResource {
     @GET
     @Path("/delta/{blueprint_id}")
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.Public.class)
+    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
     @Operation(operationId = "getDeltaById", summary = "Retrieve delta by blueprint ID", description = "Retrieves only the changes (delta) introduced in a specific blueprint", responses = {
-            @ApiResponse(responseCode = "200", description = "Delta retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.class))),
+            @ApiResponse(responseCode = "200", description = "Delta retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -148,7 +148,7 @@ public class OptimizerConfigResource {
 
         log.info("Retrieving delta for blueprint '{}'", blueprintId);
 
-        OptimizerBlueprint delta = optimizerConfigService.getDeltaById(blueprintId);
+        AgentBlueprint delta = agentConfigService.getDeltaById(blueprintId);
 
         return Response.ok(delta).build();
     }
@@ -162,11 +162,11 @@ public class OptimizerConfigResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response createOrUpdateEnvs(
-            @RequestBody(content = @Content(schema = @Schema(implementation = OptimizerConfigEnvUpdate.class))) @Valid OptimizerConfigEnvUpdate request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigEnvUpdate.class))) @Valid AgentConfigEnvUpdate request) {
 
         log.info("Creating or updating environments for project '{}'", request.projectId());
 
-        optimizerConfigService.createOrUpdateEnvs(request);
+        agentConfigService.createOrUpdateEnvs(request);
 
         return Response.noContent().build();
     }
@@ -174,9 +174,9 @@ public class OptimizerConfigResource {
     @GET
     @Path("/history")
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.OptimizerConfig.View.History.class)
+    @JsonView(com.comet.opik.domain.AgentConfig.View.History.class)
     @Operation(operationId = "getBlueprintHistory", summary = "Get blueprint history", description = "Retrieves paginated blueprint history for a project", responses = {
-            @ApiResponse(responseCode = "200", description = "History retrieved", content = @Content(schema = @Schema(implementation = OptimizerBlueprint.BlueprintPage.class))),
+            @ApiResponse(responseCode = "200", description = "History retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.BlueprintPage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -187,7 +187,7 @@ public class OptimizerConfigResource {
 
         log.info("Retrieving blueprint history for project '{}', page {}, size {}", projectId, page, size);
 
-        OptimizerBlueprint.BlueprintPage historyPage = optimizerConfigService.getHistory(projectId, page, size);
+        AgentBlueprint.BlueprintPage historyPage = agentConfigService.getHistory(projectId, page, size);
 
         return Response.ok(historyPage).build();
     }

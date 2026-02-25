@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
-import com.comet.opik.api.OptimizerConfigCreate;
+import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -15,19 +15,19 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class OptimizerConfigResourceClient {
+public class AgentConfigResourceClient {
 
-    private static final String RESOURCE_PATH = "%s/v1/private/optimizer-configs";
+    private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public OptimizerConfigResourceClient(ClientSupport client) {
+    public AgentConfigResourceClient(ClientSupport client) {
         this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
     }
 
-    public UUID createOptimizerConfig(OptimizerConfigCreate request, String apiKey,
+    public UUID createAgentConfig(AgentConfigCreate request, String apiKey,
             String workspaceName, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -48,7 +48,7 @@ public class OptimizerConfigResourceClient {
         }
     }
 
-    public Response createOptimizerConfigWithResponse(OptimizerConfigCreate request, String apiKey,
+    public Response createAgentConfigWithResponse(AgentConfigCreate request, String apiKey,
             String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -58,7 +58,7 @@ public class OptimizerConfigResourceClient {
                 .post(Entity.json(request));
     }
 
-    public Response createOptimizerConfigWithResponse(String body, String apiKey, String workspaceName) {
+    public Response createAgentConfigWithResponse(String body, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)

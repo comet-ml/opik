@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.OptimizerConfigCreate;
-import com.comet.opik.api.OptimizerConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -27,28 +27,28 @@ import java.util.stream.Collectors;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
-@ImplementedBy(OptimizerConfigServiceImpl.class)
-public interface OptimizerConfigService {
+@ImplementedBy(AgentConfigServiceImpl.class)
+public interface AgentConfigService {
 
-    OptimizerBlueprint createOrUpdateConfig(@NonNull OptimizerConfigCreate request);
+    AgentBlueprint createOrUpdateConfig(@NonNull AgentConfigCreate request);
 
-    OptimizerBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId);
+    AgentBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId);
 
-    OptimizerBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId);
+    AgentBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId);
 
-    OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
+    AgentBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
 
-    OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId);
+    AgentBlueprint getDeltaById(@NonNull UUID blueprintId);
 
-    void createOrUpdateEnvs(@NonNull OptimizerConfigEnvUpdate request);
+    void createOrUpdateEnvs(@NonNull AgentConfigEnvUpdate request);
 
-    OptimizerBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size);
+    AgentBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class OptimizerConfigServiceImpl implements OptimizerConfigService {
+class AgentConfigServiceImpl implements AgentConfigService {
 
     private final @NonNull Provider<com.comet.opik.infrastructure.auth.RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
@@ -56,7 +56,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     private final @NonNull ProjectService projectService;
 
     @Override
-    public OptimizerBlueprint createOrUpdateConfig(@NonNull OptimizerConfigCreate request) {
+    public AgentBlueprint createOrUpdateConfig(@NonNull AgentConfigCreate request) {
         Preconditions.checkArgument(request.projectId() != null || request.projectName() != null,
                 "Either projectId or projectName must be provided");
 
@@ -68,7 +68,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         UUID projectId = resolveProjectId(request, workspaceId, userName);
 
         return transactionTemplate.inTransaction(WRITE, handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
             UUID configId = getOrCreateConfig(dao, request, projectId, workspaceId, userName);
 
@@ -76,7 +76,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         });
     }
 
-    private UUID resolveProjectId(OptimizerConfigCreate request, String workspaceId, String userName) {
+    private UUID resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
         if (request.projectId() != null) {
             return request.projectId();
         }
@@ -90,13 +90,13 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     private UUID getOrCreateConfig(
-            OptimizerConfigDAO dao,
-            OptimizerConfigCreate request,
+            AgentConfigDAO dao,
+            AgentConfigCreate request,
             UUID projectId,
             String workspaceId,
             String userName) {
 
-        OptimizerConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
+        AgentConfig existingConfig = dao.getConfigByProjectId(workspaceId, projectId);
 
         if (existingConfig != null) {
             return existingConfig.id();
@@ -111,9 +111,9 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         return configId;
     }
 
-    private OptimizerBlueprint createBlueprint(
-            OptimizerConfigDAO dao,
-            OptimizerConfigCreate request,
+    private AgentBlueprint createBlueprint(
+            AgentConfigDAO dao,
+            AgentConfigCreate request,
             UUID configId,
             UUID projectId,
             String workspaceId,
@@ -124,7 +124,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         log.info("Creating blueprint '{}' for config '{}'", blueprintId, configId);
 
         List<String> keys = request.blueprint().values().stream()
-                .map(OptimizerConfigValue::key)
+                .map(AgentConfigValue::key)
                 .toList();
 
         log.info("Closing values for keys: {}", keys);
@@ -150,8 +150,8 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     private void insertValues(
-            OptimizerConfigDAO dao,
-            List<OptimizerConfigValue> values,
+            AgentConfigDAO dao,
+            List<AgentConfigValue> values,
             UUID configId,
             UUID projectId,
             UUID validFromBlueprintId,
@@ -172,15 +172,15 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId) {
+    public AgentBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieving latest blueprint for project '{}' in workspace '{}'", projectId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
             if (config == null) {
                 throw new NotFoundException("No configuration found for project '" + projectId + "'");
             }
@@ -190,13 +190,13 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId) {
+    public AgentBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieving blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
             UUID projectId = dao.getProjectIdByBlueprintId(workspaceId, blueprintId);
             if (projectId == null) {
@@ -208,16 +208,16 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId) {
+    public AgentBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieving blueprint by environment '{}' for project '{}' in workspace '{}'", envName, projectId,
                 workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
             if (config == null) {
                 throw new NotFoundException("No configuration found for project '" + projectId + "'");
             }
@@ -231,14 +231,14 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         });
     }
 
-    private OptimizerBlueprint getBlueprintWithDetails(
-            OptimizerConfigDAO dao,
+    private AgentBlueprint getBlueprintWithDetails(
+            AgentConfigDAO dao,
             UUID projectId,
             String workspaceId,
             UUID blueprintId,
             UUID maskId) {
 
-        OptimizerBlueprint blueprint = blueprintId != null
+        AgentBlueprint blueprint = blueprintId != null
                 ? dao.getBlueprintById(workspaceId, blueprintId)
                 : dao.getLatestBlueprint(workspaceId, projectId);
 
@@ -246,7 +246,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
             throw new NotFoundException("Blueprint not found");
         }
 
-        List<OptimizerConfigValue> values = dao.getValuesByBlueprintId(
+        List<AgentConfigValue> values = dao.getValuesByBlueprintId(
                 workspaceId, projectId, blueprint.id());
 
         if (maskId != null) {
@@ -263,20 +263,20 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint getDeltaById(@NonNull UUID blueprintId) {
+    public AgentBlueprint getDeltaById(@NonNull UUID blueprintId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieving delta for blueprint '{}' in workspace '{}'", blueprintId, workspaceId);
 
         return transactionTemplate.inTransaction(handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            OptimizerBlueprint blueprint = dao.getBlueprintById(workspaceId, blueprintId);
+            AgentBlueprint blueprint = dao.getBlueprintById(workspaceId, blueprintId);
             if (blueprint == null) {
                 throw new NotFoundException("Blueprint '" + blueprintId + "' not found");
             }
 
-            List<OptimizerConfigValue> deltaValues = dao.getValuesDeltaByBlueprintId(
+            List<AgentConfigValue> deltaValues = dao.getValuesDeltaByBlueprintId(
                     workspaceId, blueprint.projectId(), blueprintId);
 
             return blueprint.toBuilder()
@@ -286,7 +286,7 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public void createOrUpdateEnvs(@NonNull OptimizerConfigEnvUpdate request) {
+    public void createOrUpdateEnvs(@NonNull AgentConfigEnvUpdate request) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID projectId = request.projectId();
@@ -295,28 +295,28 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
                 request.envs().size(), projectId, workspaceId);
 
         transactionTemplate.inTransaction(WRITE, handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
             if (config == null) {
                 throw new NotFoundException("No configuration found for project '" + projectId + "'");
             }
 
             List<String> envNames = request.envs().stream()
-                    .map(OptimizerConfigEnv::envName)
+                    .map(AgentConfigEnv::envName)
                     .toList();
 
-            List<OptimizerConfigEnv> existingEnvs = dao.getEnvsByNames(workspaceId, projectId, envNames);
+            List<AgentConfigEnv> existingEnvs = dao.getEnvsByNames(workspaceId, projectId, envNames);
             Set<String> existingEnvNames = existingEnvs.stream()
-                    .map(OptimizerConfigEnv::envName)
+                    .map(AgentConfigEnv::envName)
                     .collect(Collectors.toSet());
 
-            List<OptimizerConfigEnv> newEnvs = request.envs().stream()
+            List<AgentConfigEnv> newEnvs = request.envs().stream()
                     .filter(env -> !existingEnvNames.contains(env.envName()))
                     .map(env -> env.toBuilder().id(idGenerator.generateId()).build())
                     .toList();
 
-            List<OptimizerConfigEnv> envsToUpdate = request.envs().stream()
+            List<AgentConfigEnv> envsToUpdate = request.envs().stream()
                     .filter(env -> existingEnvNames.contains(env.envName()))
                     .toList();
 
@@ -335,24 +335,24 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
     }
 
     @Override
-    public OptimizerBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size) {
+    public AgentBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Retrieving blueprint history for project '{}', page {}, size {}", projectId, page, size);
 
         return transactionTemplate.inTransaction(handle -> {
-            OptimizerConfigDAO dao = handle.attach(OptimizerConfigDAO.class);
+            AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            OptimizerConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
             if (config == null) {
                 throw new NotFoundException("No configuration found for project '" + projectId + "'");
             }
 
             int offset = (page - 1) * size;
-            List<OptimizerBlueprint> blueprints = dao.getBlueprintHistory(workspaceId, projectId, size, offset);
+            List<AgentBlueprint> blueprints = dao.getBlueprintHistory(workspaceId, projectId, size, offset);
             long total = dao.countBlueprints(workspaceId, projectId);
 
-            return OptimizerBlueprint.BlueprintPage.builder()
+            return AgentBlueprint.BlueprintPage.builder()
                     .page(page)
                     .size(size)
                     .total(total)
@@ -361,29 +361,29 @@ class OptimizerConfigServiceImpl implements OptimizerConfigService {
         });
     }
 
-    private List<OptimizerConfigValue> applyMask(
-            OptimizerConfigDAO dao,
+    private List<AgentConfigValue> applyMask(
+            AgentConfigDAO dao,
             String workspaceId,
             UUID projectId,
             UUID maskId,
-            List<OptimizerConfigValue> blueprintValues) {
+            List<AgentConfigValue> blueprintValues) {
 
-        OptimizerBlueprint mask = dao.getBlueprintById(workspaceId, maskId);
+        AgentBlueprint mask = dao.getBlueprintById(workspaceId, maskId);
         if (mask == null) {
             throw new NotFoundException("Mask blueprint '" + maskId + "' not found");
         }
-        Preconditions.checkArgument(mask.type() == OptimizerBlueprint.BlueprintType.MASK,
+        Preconditions.checkArgument(mask.type() == AgentBlueprint.BlueprintType.MASK,
                 "Blueprint '%s' is not a mask", maskId);
 
-        List<OptimizerConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(
+        List<AgentConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(
                 workspaceId, projectId, maskId);
 
-        Map<String, OptimizerConfigValue> valueMap = blueprintValues.stream()
+        Map<String, AgentConfigValue> valueMap = blueprintValues.stream()
                 .collect(Collectors.toMap(
-                        OptimizerConfigValue::key,
+                        AgentConfigValue::key,
                         v -> v));
 
-        for (OptimizerConfigValue maskValue : maskDelta) {
+        for (AgentConfigValue maskValue : maskDelta) {
             valueMap.put(maskValue.key(), maskValue);
         }
 

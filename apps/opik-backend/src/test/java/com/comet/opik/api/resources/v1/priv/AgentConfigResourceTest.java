@@ -1,6 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.OptimizerConfigCreate;
+import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -11,12 +11,12 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.OptimizerConfigResourceClient;
+import com.comet.opik.api.resources.utils.resources.AgentConfigResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
-import com.comet.opik.domain.OptimizerBlueprint;
-import com.comet.opik.domain.OptimizerBlueprint.BlueprintType;
-import com.comet.opik.domain.OptimizerConfigValue;
-import com.comet.opik.domain.OptimizerConfigValue.ValueType;
+import com.comet.opik.domain.AgentBlueprint;
+import com.comet.opik.domain.AgentBlueprint.BlueprintType;
+import com.comet.opik.domain.AgentConfigValue;
+import com.comet.opik.domain.AgentConfigValue.ValueType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -51,7 +51,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Optimizer Config Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class OptimizerConfigResourceTest {
+class AgentConfigResourceTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -86,13 +86,13 @@ class OptimizerConfigResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private OptimizerConfigResourceClient optimizerConfigResourceClient;
+    private AgentConfigResourceClient optimizerConfigResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         String baseUrl = TestUtils.getBaseUrl(client);
-        this.optimizerConfigResourceClient = new OptimizerConfigResourceClient(client);
+        this.optimizerConfigResourceClient = new AgentConfigResourceClient(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
 
         ClientSupportUtils.config(client);
@@ -112,49 +112,49 @@ class OptimizerConfigResourceTest {
     @Nested
     @DisplayName("Create Optimizer Config:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class CreateOptimizerConfig {
+    class CreateAgentConfig {
 
         @Test
         @DisplayName("Success: should create optimizer config with blueprint")
-        void createOptimizerConfig() {
+        void createAgentConfig() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var values = List.of(
-                    OptimizerConfigValue.builder()
+                    AgentConfigValue.builder()
                             .key("model")
                             .value("gpt-4")
                             .type(ValueType.STRING)
                             .build(),
-                    OptimizerConfigValue.builder()
+                    AgentConfigValue.builder()
                             .key("temperature")
                             .value("0.7")
                             .type(ValueType.NUMBER)
                             .build());
 
-            var blueprint = OptimizerBlueprint.builder()
+            var blueprint = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
                     .description("Initial configuration")
                     .values(values)
                     .build();
 
-            var request = OptimizerConfigCreate.builder()
+            var request = AgentConfigCreate.builder()
                     .projectId(projectId)
                     .blueprint(blueprint)
                     .build();
 
-            optimizerConfigResourceClient.createOptimizerConfig(request, API_KEY,
+            optimizerConfigResourceClient.createAgentConfig(request, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_CREATED);
         }
 
         @ParameterizedTest
         @MethodSource
         @DisplayName("when request is invalid, then return validation error")
-        void createOptimizerConfig__whenRequestIsInvalid__thenReturnValidationError(
-                OptimizerConfigCreate request, int expectedStatusCode, Object expectedBody,
+        void createAgentConfig__whenRequestIsInvalid__thenReturnValidationError(
+                AgentConfigCreate request, int expectedStatusCode, Object expectedBody,
                 Class<?> expectedResponseClass) {
 
-            try (var actualResponse = optimizerConfigResourceClient.createOptimizerConfigWithResponse(request, API_KEY,
+            try (var actualResponse = optimizerConfigResourceClient.createAgentConfigWithResponse(request, API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatusCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -164,18 +164,18 @@ class OptimizerConfigResourceTest {
             }
         }
 
-        Stream<Arguments> createOptimizerConfig__whenRequestIsInvalid__thenReturnValidationError() {
+        Stream<Arguments> createAgentConfig__whenRequestIsInvalid__thenReturnValidationError() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var validValues = List.of(
-                    OptimizerConfigValue.builder()
+                    AgentConfigValue.builder()
                             .key("model")
                             .value("gpt-4")
                             .type(ValueType.STRING)
                             .build());
 
-            var validBlueprint = OptimizerBlueprint.builder()
+            var validBlueprint = AgentBlueprint.builder()
                     .type(BlueprintType.BLUEPRINT)
                     .description("Test")
                     .values(validValues)
@@ -184,7 +184,7 @@ class OptimizerConfigResourceTest {
             return Stream.of(
                     // Blueprint validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(null)
                                     .build(),
@@ -194,7 +194,7 @@ class OptimizerConfigResourceTest {
 
                     // Blueprint type validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder().type(null).build())
                                     .build(),
@@ -204,7 +204,7 @@ class OptimizerConfigResourceTest {
 
                     // Values validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder().values(null).build())
                                     .build(),
@@ -213,7 +213,7 @@ class OptimizerConfigResourceTest {
                             ErrorMessage.class),
 
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder().values(List.of()).build())
                                     .build(),
@@ -223,11 +223,11 @@ class OptimizerConfigResourceTest {
 
                     // Value key validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder()
                                             .values(List.of(
-                                                    OptimizerConfigValue.builder()
+                                                    AgentConfigValue.builder()
                                                             .key(null)
                                                             .value("test")
                                                             .type(ValueType.STRING)
@@ -239,11 +239,11 @@ class OptimizerConfigResourceTest {
                             ErrorMessage.class),
 
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder()
                                             .values(List.of(
-                                                    OptimizerConfigValue.builder()
+                                                    AgentConfigValue.builder()
                                                             .key("")
                                                             .value("test")
                                                             .type(ValueType.STRING)
@@ -256,11 +256,11 @@ class OptimizerConfigResourceTest {
 
                     // Value value validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder()
                                             .values(List.of(
-                                                    OptimizerConfigValue.builder()
+                                                    AgentConfigValue.builder()
                                                             .key("test")
                                                             .value(null)
                                                             .type(ValueType.STRING)
@@ -273,11 +273,11 @@ class OptimizerConfigResourceTest {
 
                     // Value type validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder()
                                             .values(List.of(
-                                                    OptimizerConfigValue.builder()
+                                                    AgentConfigValue.builder()
                                                             .key("test")
                                                             .value("value")
                                                             .type(null)
@@ -290,7 +290,7 @@ class OptimizerConfigResourceTest {
 
                     // Description max length validation
                     arguments(
-                            OptimizerConfigCreate.builder()
+                            AgentConfigCreate.builder()
                                     .projectId(projectId)
                                     .blueprint(validBlueprint.toBuilder()
                                             .description("a".repeat(256))

@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
-import com.comet.opik.domain.OptimizerBlueprint.BlueprintType;
+import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import org.jdbi.v3.core.argument.AbstractArgumentFactory;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.config.ConfigRegistry;

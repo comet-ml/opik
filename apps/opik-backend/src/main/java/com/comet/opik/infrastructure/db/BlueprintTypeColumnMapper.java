@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
-import com.comet.opik.domain.OptimizerBlueprint.BlueprintType;
+import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import org.jdbi.v3.core.mapper.ColumnMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 

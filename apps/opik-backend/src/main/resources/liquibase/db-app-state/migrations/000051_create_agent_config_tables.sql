@@ -1,8 +1,8 @@
 --liquibase formatted sql
---changeset borystkachenko:000051_create_optimizer_config_tables
---comment: Create optimizer configuration tables
+--changeset borystkachenko:000051_create_agent_config_tables
+--comment: Create agent configuration tables
 
-CREATE TABLE IF NOT EXISTS optimizer_config (
+CREATE TABLE IF NOT EXISTS agent_config (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -10,11 +10,11 @@ CREATE TABLE IF NOT EXISTS optimizer_config (
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(100) NOT NULL,
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    CONSTRAINT optimizer_config_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_config_workspace_id_uk UNIQUE (workspace_id, project_id)
+    CONSTRAINT agent_config_pk PRIMARY KEY (id),
+    CONSTRAINT agent_config_workspace_id_uk UNIQUE (workspace_id, project_id)
 );
 
-CREATE TABLE IF NOT EXISTS optimizer_blueprint (
+CREATE TABLE IF NOT EXISTS agent_blueprint (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -25,11 +25,11 @@ CREATE TABLE IF NOT EXISTS optimizer_blueprint (
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(100) NOT NULL,
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    CONSTRAINT optimizer_blueprint_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_blueprint_workspace_config_id_uk UNIQUE (workspace_id, project_id, id)
+    CONSTRAINT agent_blueprint_pk PRIMARY KEY (id),
+    CONSTRAINT agent_blueprint_workspace_config_id_uk UNIQUE (workspace_id, project_id, id)
 );
 
-CREATE TABLE IF NOT EXISTS optimizer_config_values (
+CREATE TABLE IF NOT EXISTS agent_config_values (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS optimizer_config_values (
     type ENUM('string', 'number', 'prompt', 'promptversion') NOT NULL DEFAULT 'string',
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
-    CONSTRAINT optimizer_config_values_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, `key`)
+    CONSTRAINT agent_config_values_pk PRIMARY KEY (id),
+    CONSTRAINT agent_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, `key`)
 );
 
-CREATE TABLE IF NOT EXISTS optimizer_config_envs (
+CREATE TABLE IF NOT EXISTS agent_config_envs (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -54,11 +54,11 @@ CREATE TABLE IF NOT EXISTS optimizer_config_envs (
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_by VARCHAR(100) NOT NULL,
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-    CONSTRAINT optimizer_config_envs_pk PRIMARY KEY (id),
-    CONSTRAINT optimizer_config_envs_workspace_config_env_uk UNIQUE (workspace_id, project_id, env_name)
+    CONSTRAINT agent_config_envs_pk PRIMARY KEY (id),
+    CONSTRAINT agent_config_envs_workspace_config_env_uk UNIQUE (workspace_id, project_id, env_name)
 );
 
---rollback DROP TABLE IF EXISTS optimizer_config_envs;
---rollback DROP TABLE IF EXISTS optimizer_config_values;
---rollback DROP TABLE IF EXISTS optimizer_blueprint;
---rollback DROP TABLE IF EXISTS optimizer_config;
+--rollback DROP TABLE IF EXISTS agent_config_envs;
+--rollback DROP TABLE IF EXISTS agent_config_values;
+--rollback DROP TABLE IF EXISTS agent_blueprint;
+--rollback DROP TABLE IF EXISTS agent_config;

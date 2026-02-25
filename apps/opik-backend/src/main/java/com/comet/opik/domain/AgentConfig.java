@@ -11,7 +11,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record OptimizerConfig(
+public record AgentConfig(
         UUID id,
         UUID projectId,
         String createdBy,
