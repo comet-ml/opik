@@ -35,3 +35,10 @@ export interface PromptVersion {
   tags?: string[];
   type?: PROMPT_TYPE;
 }
+
+export interface PromptCommitInfo {
+  prompt_version_id?: string;
+  commit: string;
+  prompt_id?: string;
+  prompt_name?: string;
+}

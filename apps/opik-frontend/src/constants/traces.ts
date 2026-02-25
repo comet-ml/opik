@@ -18,6 +18,8 @@ export enum PROJECT_TAB {
   metrics = "metrics",
   evaluators = "rules",
   annotationQueues = "annotation-queues",
+  configuration = "configuration",
+  deploymentHistory = "deployment-history",
 }
 
 export const METADATA_AGENT_GRAPH_KEY = "_opik_graph_definition";
