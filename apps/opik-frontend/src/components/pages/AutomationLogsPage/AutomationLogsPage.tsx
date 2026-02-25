@@ -37,6 +37,9 @@ const BASE_COLUMNS: ColumnData<EvaluatorRuleLogItemWithId>[] = [
     label: "Timestamp",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
     size: 180,
   },
   {

@@ -6,11 +6,13 @@ import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
-import { getDateFormatFromLocalStorage } from "@/hooks/useDateFormat";
 
 dayjs.extend(utc);
 dayjs.extend(duration);
 dayjs.extend(customParseFormat);
+
+export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mmA";
+const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ssA";
 
 type FormatDateConfig = {
   utc?: boolean;
@@ -22,15 +24,8 @@ export const formatDate = (
   value: string,
   { utc = false, includeSeconds = false, format }: FormatDateConfig = {},
 ) => {
-  const storedFormat = getDateFormatFromLocalStorage();
-
-  let dateTimeFormat = format || storedFormat;
-
-  if (!format && includeSeconds) {
-    dateTimeFormat = includeSeconds
-      ? "MM/DD/YY hh:mm:ss A"
-      : "MM/DD/YY hh:mm A";
-  }
+  const dateTimeFormat =
+    format || (includeSeconds ? DATE_FORMAT_WITH_SECONDS : DEFAULT_DATE_FORMAT);
 
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {
@@ -53,7 +48,7 @@ export const getTimeFromNow = (value: string): string => {
   const diffHours = now.diff(date, "hour");
   const diffDays = now.diff(date, "day");
 
-  if (diffMinutes < 0) return date.format("MMM D, YYYY");
+  if (diffMinutes < 0) return date.format("D MMM YYYY");
   if (diffMinutes < 1) return "< 1 min ago";
   if (diffMinutes < 60) return `${diffMinutes} mins ago`;
   if (diffHours < 24)
@@ -62,8 +57,8 @@ export const getTimeFromNow = (value: string): string => {
     return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
 
   return date.year() === now.year()
-    ? date.format("MMM D")
-    : date.format("MMM D, YYYY");
+    ? date.format("D MMM")
+    : date.format("D MMM YYYY");
 };
 
 export const makeStartOfMinute = (value: string) => {

@@ -150,12 +150,18 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     label: "Start time",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "input",
