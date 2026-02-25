@@ -6,6 +6,7 @@ import { Alert } from "@/types/alerts";
 import useAlertsBatchDeleteMutation from "@/api/alerts/useAlertsBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type AlertsActionsPanelsProps = {
   alerts: Alert[];
@@ -17,6 +18,7 @@ const AlertsActionsPanel: React.FunctionComponent<AlertsActionsPanelsProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !alerts?.length;
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const { mutate } = useAlertsBatchDeleteMutation();
 
@@ -46,7 +48,7 @@ const AlertsActionsPanel: React.FunctionComponent<AlertsActionsPanelsProps> = ({
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash className="size-4" />
         </Button>

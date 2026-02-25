@@ -36,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
@@ -103,6 +104,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const newFeedbackDefinitionDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -231,6 +233,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
             variant="default"
             size="sm"
             onClick={handleNewFeedbackDefinitionClick}
+            disabled={!canInteractWithApp}
           >
             Create new feedback definition
           </Button>

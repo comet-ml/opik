@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import EditVersionDialog from "./EditVersionDialog";
 
 type CustomMeta = {
@@ -25,6 +26,7 @@ const RESTORE_KEY = 2;
 const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   context,
 ) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const version = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -71,7 +73,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

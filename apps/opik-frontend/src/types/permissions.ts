@@ -1,5 +1,8 @@
+import { WRITE_ACTIONS_ENABLED } from "@/config";
+
 export interface Permissions {
   canViewExperiments: boolean;
+  canInteractWithApp: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -10,6 +13,7 @@ export interface PermissionsContextValue {
 export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
   permissions: {
     canViewExperiments: true,
+    canInteractWithApp: WRITE_ACTIONS_ENABLED,
   },
   isPending: false,
 };
