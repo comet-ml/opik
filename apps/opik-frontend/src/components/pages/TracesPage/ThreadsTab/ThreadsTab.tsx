@@ -247,6 +247,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   "start_time",
   "end_time",
   "first_message",
@@ -259,7 +260,6 @@ const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
   "total_estimated_cost",
   "tags",
   COLUMN_COMMENTS_ID,
-  COLUMN_ID_ID,
   "created_by",
 ];
 

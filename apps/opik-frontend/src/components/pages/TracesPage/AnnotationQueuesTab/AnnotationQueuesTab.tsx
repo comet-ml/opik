@@ -173,6 +173,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   "instructions",
   "items_count",
@@ -180,7 +181,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_FEEDBACK_SCORES_ID,
   "scope",
   "last_updated_at",
-  COLUMN_ID_ID,
   "created_at",
   "created_by",
   "reviewers",

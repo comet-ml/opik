@@ -34,6 +34,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -81,6 +82,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   "last_updated_at",
   "trace_count",
@@ -97,7 +99,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "tags",
   "description",
   "created_at",
-  "id",
   "created_by",
   COLUMN_GUARDRAILS_ID,
 ];

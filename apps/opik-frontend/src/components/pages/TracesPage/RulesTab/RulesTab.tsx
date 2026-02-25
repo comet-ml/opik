@@ -118,12 +118,12 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   "enabled",
   "sampling_rate",
   "scope",
   "last_updated_at",
-  COLUMN_ID_ID,
   "created_at",
   "created_by",
 ];

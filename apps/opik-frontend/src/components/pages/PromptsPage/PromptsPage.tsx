@@ -16,6 +16,7 @@ import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -180,6 +181,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   "version_count",
   "template_structure",
@@ -187,7 +189,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "tags",
   "description",
   "created_at",
-  "id",
   "created_by",
 ];
 

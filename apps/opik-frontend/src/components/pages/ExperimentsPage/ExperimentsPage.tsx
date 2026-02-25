@@ -104,6 +104,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
   "dataset_version",
@@ -120,7 +121,6 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_COMMENTS_ID,
   "tags",
   COLUMN_METADATA_ID,
-  COLUMN_ID_ID,
   "created_by",
 ];
 

@@ -282,6 +282,7 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
 ];
 
 const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   "start_time",
   "end_time",
   "input",
@@ -299,12 +300,12 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "llm_span_count",
   "thread_id",
   COLUMN_EXPERIMENT_ID,
-  COLUMN_ID_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
 ];
 
 const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   "start_time",
   "end_time",
   "input",
@@ -319,7 +320,6 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   "total_estimated_cost",
   "tags",
   COLUMN_COMMENTS_ID,
-  COLUMN_ID_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
 ];

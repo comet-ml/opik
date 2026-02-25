@@ -168,12 +168,12 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
   "status",
   "num_trials",
   "objective_name",
   "created_at",
   "optimizer",
-  COLUMN_ID_ID,
   "created_by",
 ];
 
