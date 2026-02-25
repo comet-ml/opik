@@ -8,6 +8,8 @@ import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -23,6 +25,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -194,6 +197,28 @@ public class PromptResource {
         promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/retrieve-by-commits")
+    @Operation(operationId = "getPromptsByCommits", summary = "Get prompts by commits", description = "Get prompts by prompt version commits", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
+    })
+    @JsonView({Prompt.View.Public.class})
+    public Response getPromptsByCommits(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionCommitsRequest.class))) @Valid PromptVersionCommitsRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompts by commits, count '{}', on workspace_id '{}'",
+                request.commits().size(), workspaceId);
+
+        var prompts = promptService.getByCommits(request.commits());
+
+        log.info("Got prompts by commits, count '{}', on workspace_id '{}'",
+                prompts.size(), workspaceId);
+
+        return Response.ok(prompts).build();
     }
 
     @POST

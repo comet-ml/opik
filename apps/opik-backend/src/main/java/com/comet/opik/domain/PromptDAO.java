@@ -1,12 +1,15 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Prompt;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.infrastructure.db.PromptVersionColumnMapper;
+import com.comet.opik.infrastructure.db.PromptVersionLinkRowMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
@@ -17,6 +20,7 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -195,4 +199,21 @@ interface PromptDAO {
     @SqlUpdate("UPDATE prompts SET last_updated_by = :lastUpdatedBy, last_updated_at = CURRENT_TIMESTAMP(6) WHERE id = :id AND workspace_id = :workspaceId")
     void updateLastUpdatedAt(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
+
+    @SqlQuery("""
+            SELECT
+                pv.id AS prompt_version_id,
+                pv.commit,
+                p.id,
+                p.name
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.commit IN (<commits>) AND pv.workspace_id = :workspace_id
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    @RegisterRowMapper(PromptVersionLinkRowMapper.class)
+    List<PromptVersionLink> findPromptsByCommits(
+            @Define("commits") @BindList("commits") Collection<String> commits,
+            @Bind("workspace_id") String workspaceId);
 }

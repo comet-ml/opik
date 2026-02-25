@@ -6,6 +6,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.PromptVersionUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
@@ -25,6 +26,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptVersionResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
@@ -158,6 +160,7 @@ class PromptResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private PromptResourceClient promptResourceClient;
     private PromptVersionResourceClient promptVersionResourceClient;
 
     @BeforeAll
@@ -165,6 +168,7 @@ class PromptResourceTest {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
         this.promptVersionResourceClient = new PromptVersionResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
@@ -4116,6 +4120,173 @@ class PromptResourceTest {
             Prompt updatedPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
             assertThat(updatedPrompt.lastUpdatedAt()).isAfter(initialLastUpdatedAt);
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompts By Commits")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptsByCommits {
+
+        @Test
+        @DisplayName("Success: should return prompts for given commits")
+        void getPromptsByCommits() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two prompts, each with a version
+            var prompt1 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId1 = createPrompt(prompt1, apiKey, workspaceName);
+            UUID promptId2 = createPrompt(prompt2, apiKey, workspaceName);
+
+            var version1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt1.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId1).build())
+                            .build(),
+                    apiKey, workspaceName);
+            var version2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt2.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId2).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            // Call the endpoint
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(version1.commit(), version2.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+
+            assertThat(result.get(0).promptVersionId()).isEqualTo(version1.id());
+            assertThat(result.get(0).commit()).isEqualTo(version1.commit());
+            assertThat(result.get(0).promptId()).isEqualTo(promptId1);
+            assertThat(result.get(0).promptName()).isEqualTo(prompt1.name());
+
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version2.id());
+            assertThat(result.get(1).commit()).isEqualTo(version2.commit());
+            assertThat(result.get(1).promptId()).isEqualTo(promptId2);
+            assertThat(result.get(1).promptName()).isEqualTo(prompt2.name());
+        }
+
+        @Test
+        @DisplayName("Success: should preserve input order")
+        void getPromptsByCommitsPreservesInputOrder() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+            var version2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            // Request in reverse order
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(version2.commit(), version1.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).promptVersionId()).isEqualTo(version2.id());
+            assertThat(result.get(0).commit()).isEqualTo(version2.commit());
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version1.id());
+            assertThat(result.get(1).commit()).isEqualTo(version1.commit());
+            // Both should point to the same prompt
+            assertThat(result.get(0).promptId()).isEqualTo(promptId);
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("when commits not found, then return null prompt and version id")
+        void getPromptsByCommitsWhenCommitsNotFoundReturnsNullPromptAndVersionId() {
+            var unknownCommit1 = UUID.randomUUID().toString();
+            var unknownCommit2 = UUID.randomUUID().toString();
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(unknownCommit1, unknownCommit2), API_KEY, TEST_WORKSPACE);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit1);
+            assertThat(result.get(0).promptVersionId()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
+            assertThat(result.get(1).commit()).isEqualTo(unknownCommit2);
+            assertThat(result.get(1).promptVersionId()).isNull();
+            assertThat(result.get(1).promptId()).isNull();
+            assertThat(result.get(1).promptName()).isNull();
+        }
+
+        @Test
+        @DisplayName("when mix of known and unknown commits, then return correct results")
+        void getPromptsByCommitsWhenMixOfKnownAndUnknownReturnsCorrectResults() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            var unknownCommit = UUID.randomUUID().toString();
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(unknownCommit, version.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+
+            // First entry: unknown commit - null prompt fields
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit);
+            assertThat(result.get(0).promptVersionId()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
+
+            // Second entry: known commit - has prompt fields
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version.id());
+            assertThat(result.get(1).commit()).isEqualTo(version.commit());
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("when empty list, then return 422 validation error")
+        void getPromptsByCommitsWhenEmptyListReturnsValidationError() {
+            var request = PromptVersionCommitsRequest.builder()
+                    .commits(List.of())
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("retrieve-by-commits")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(request))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
         }
     }
 }
