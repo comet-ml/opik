@@ -20,6 +20,10 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { SPAN_TYPE } from "@/types/traces";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -52,6 +56,10 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
 
   const filters = (controllerField.value as Filter[]) || [];
   const isSpanMetric = filterType === "span";
+
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const filterColumns = useMemo(() => {
     if (filterType === "thread") return THREAD_FILTER_COLUMNS;
@@ -119,9 +127,40 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             placeholder: "Select score",
           },
         },
+        ...(isSpanMetric
+          ? {
+              type: {
+                keyComponentProps: {
+                  options: [
+                    {
+                      value: SPAN_TYPE.general,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
+                    },
+                    {
+                      value: SPAN_TYPE.tool,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
+                    },
+                    {
+                      value: SPAN_TYPE.llm,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
+                    },
+                    ...(isGuardrailsEnabled
+                      ? [
+                          {
+                            value: SPAN_TYPE.guardrail,
+                            label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
+                          },
+                        ]
+                      : []),
+                  ],
+                  placeholder: "Select type",
+                },
+              },
+            }
+          : {}),
       },
     }),
-    [projectId, dataType],
+    [projectId, dataType, isGuardrailsEnabled, isSpanMetric],
   );
 
   useEffect(() => {
