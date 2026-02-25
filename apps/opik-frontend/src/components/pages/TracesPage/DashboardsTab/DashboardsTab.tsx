@@ -24,6 +24,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import { PROJECT_TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -35,12 +36,15 @@ interface DashboardsTabProps {
 const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   projectId,
 }) => {
+  const workspaceName = useActiveWorkspaceName();
+
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
-    localStorageKey: DASHBOARD_LOCAL_STORAGE_KEY_PREFIX,
+    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
     defaultValue: null as string | null,
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
+    syncLocalStorageAcrossTabs: false,
   });
 
   useEffect(() => {

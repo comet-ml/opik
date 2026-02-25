@@ -21,6 +21,7 @@ type UseQueryParamAndLocalStorageStateParams<T> = {
   queryParamConfig: QueryParamConfig<T>;
   queryOptions?: QueryParamOptions;
   syncQueryWithLocalStorageOnInit?: boolean;
+  syncLocalStorageAcrossTabs?: boolean;
 };
 
 const useQueryParamAndLocalStorageState = <T>({
@@ -30,11 +31,13 @@ const useQueryParamAndLocalStorageState = <T>({
   queryParamConfig,
   queryOptions = QUERY_OPTIONS,
   syncQueryWithLocalStorageOnInit = false,
+  syncLocalStorageAcrossTabs = true,
 }: UseQueryParamAndLocalStorageStateParams<T>) => {
   const [localStorageValue, setLocalStorageValue] = useLocalStorageState<T>(
     localStorageKey,
     {
       defaultValue,
+      storageSync: syncLocalStorageAcrossTabs,
     },
   );
 

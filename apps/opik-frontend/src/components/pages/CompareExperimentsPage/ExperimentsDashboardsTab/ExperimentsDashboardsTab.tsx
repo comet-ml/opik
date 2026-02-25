@@ -26,6 +26,7 @@ import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CompareExperimentsButton from "@/components/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import { Separator } from "@/components/ui/separator";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-experiments-dashboard";
@@ -37,12 +38,15 @@ interface ExperimentsDashboardsTabProps {
 const ExperimentsDashboardsTab: React.FunctionComponent<
   ExperimentsDashboardsTabProps
 > = ({ experimentsIds }) => {
+  const workspaceName = useActiveWorkspaceName();
+
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
-    localStorageKey: DASHBOARD_LOCAL_STORAGE_KEY_PREFIX,
+    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
     defaultValue: null as string | null,
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
+    syncLocalStorageAcrossTabs: false,
   });
 
   useEffect(() => {
