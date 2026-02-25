@@ -69,6 +69,7 @@ class BaseTrackDecorator(abc.ABC):
         flush: bool = False,
         project_name: Optional[str] = None,
         create_duplicate_root_span: bool = True,
+        capture_source: bool = False,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -87,6 +88,10 @@ class BaseTrackDecorator(abc.ABC):
             flush: Whether to flush the client after logging.
             project_name: The name of the project to log data.
             create_duplicate_root_span: Whether to create a root span duplicating the root trace data.
+            capture_source: Whether to capture and log the function source code as a comment.
+                This uses Python's inspect.getsource() and may fail for functions defined
+                in interactive sessions, notebooks, or compiled code. Default is False.
+                WARNING: Source code may contain sensitive information like API keys or secrets.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
@@ -116,6 +121,7 @@ class BaseTrackDecorator(abc.ABC):
             flush=flush,
             project_name=project_name,
             create_duplicate_root_span=create_duplicate_root_span,
+            capture_source=capture_source,
         )
 
         if callable(name):
@@ -454,13 +460,18 @@ class BaseTrackDecorator(abc.ABC):
             kwargs=kwargs,
         )
 
-        return add_start_candidates(
+        span_creation_result = add_start_candidates(
             start_span_parameters=track_start_options.start_span_parameters,
             opik_distributed_trace_headers=track_start_options.opik_distributed_trace_headers,
             opik_args_data=track_start_options.opik_args,
             tracing_active=tracing_runtime_config.is_tracing_active(),
             create_duplicate_root_span=track_options.create_duplicate_root_span,
         )
+
+        if track_options.capture_source and tracing_runtime_config.is_tracing_active():
+            self._add_source_code_comment(func, span_creation_result)
+
+        return span_creation_result
 
     def _after_call(
         self,
@@ -560,6 +571,43 @@ class BaseTrackDecorator(abc.ABC):
 
         if flush:
             client.flush()
+
+    def _add_source_code_comment(
+        self,
+        func: Callable,
+        span_creation_result: span_creation_handler.SpanCreationResult,
+    ) -> None:
+        """
+        Add source code as a comment to the created trace or span.
+        """
+        source_code = inspect_helpers.get_function_source(func)
+        if source_code is None:
+            return
+
+        try:
+            client = opik_client.get_client_cached()
+
+            comment_text = f"```python\n{source_code}\n```"
+
+            if span_creation_result.trace_data is not None:
+                client._rest_client.traces.add_trace_comment(
+                    id_=span_creation_result.trace_data.id,
+                    text=comment_text,
+                )
+            elif (
+                span_creation_result.should_process_span_data
+                and span_creation_result.span_data is not None
+            ):
+                client._rest_client.spans.add_span_comment(
+                    id_=span_creation_result.span_data.id,
+                    text=comment_text,
+                )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to add source code comment for function %s: %s",
+                inspect_helpers.get_function_name(func),
+                str(e),
+            )
 
     @abc.abstractmethod
     def _streams_handler(
