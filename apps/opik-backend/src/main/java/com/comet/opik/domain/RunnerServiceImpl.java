@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.runner.ConnectRequest;
 import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
+import com.comet.opik.api.runner.DebugGraph;
+import com.comet.opik.api.runner.DebugSession;
 import com.comet.opik.api.runner.LogEntry;
 import com.comet.opik.api.runner.PairResponse;
 import com.comet.opik.api.runner.Runner;
@@ -176,6 +178,9 @@ class RunnerServiceImpl implements RunnerService {
         jobData.put("status", "pending");
         jobData.put("inputs", unwrapJsonNode(request.inputs()));
         jobData.put("project", request.project());
+        if (Boolean.TRUE.equals(request.debug())) {
+            jobData.put("debug", "true");
+        }
         jobData.put("created_at", now.toString());
 
         var jobMap = redissonClient.<String, String>getMap(JOB_KEY_PREFIX + jobId, StringCodec.INSTANCE);
@@ -256,6 +261,69 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
         return entries;
+    }
+
+    private static final String DEBUG_KEY_PREFIX = "opik:debug:";
+
+    @Override
+    public DebugSession getDebugSession(@NonNull String sessionId) {
+        String key = DEBUG_KEY_PREFIX + sessionId;
+        var bucket = redissonClient.<String>getBucket(key, StringCodec.INSTANCE);
+        String raw = bucket.get();
+
+        if (raw == null) {
+            throw new NotFoundException("Debug session not found: " + sessionId);
+        }
+
+        try {
+            var node = JsonUtils.getJsonNodeFromString(raw);
+            return DebugSession.builder()
+                    .sessionId(node.path("session_id").asText())
+                    .traceId(node.path("trace_id").asText())
+                    .cursor(node.path("cursor").asInt())
+                    .totalNodes(node.path("total_nodes").asInt())
+                    .status(node.path("status").asText())
+                    .currentNode(node.get("current_node"))
+                    .lastSpanId(node.path("last_span_id").asText())
+                    .lastNode(node.get("last_node"))
+                    .build();
+        } catch (Exception e) {
+            throw new NotFoundException("Failed to parse debug session: " + sessionId);
+        }
+    }
+
+    @Override
+    public void sendDebugCommand(@NonNull String sessionId, @NonNull String command) {
+        String cmdKey = DEBUG_KEY_PREFIX + sessionId + ":commands";
+        var cmdList = redissonClient.<String>getList(cmdKey, StringCodec.INSTANCE);
+        cmdList.add(0, command);
+        log.info("Sent debug command '{}' to session '{}'", command, sessionId);
+    }
+
+    @Override
+    public void endDebugSession(@NonNull String sessionId) {
+        sendDebugCommand(sessionId, "end");
+    }
+
+    @Override
+    public DebugGraph getDebugGraph(@NonNull String sessionId) {
+        String graphKey = DEBUG_KEY_PREFIX + sessionId + ":graph";
+        var bucket = redissonClient.<String>getBucket(graphKey, StringCodec.INSTANCE);
+        String raw = bucket.get();
+
+        if (raw == null) {
+            throw new NotFoundException("Debug graph not found for session: " + sessionId);
+        }
+
+        try {
+            var nodes = JsonUtils.readTree(raw);
+            return DebugGraph.builder()
+                    .sessionId(sessionId)
+                    .nodes(nodes)
+                    .build();
+        } catch (Exception e) {
+            throw new NotFoundException("Failed to parse debug graph for session: " + sessionId);
+        }
     }
 
     private String unwrapJsonNode(com.fasterxml.jackson.databind.JsonNode node) {
@@ -353,6 +421,7 @@ class RunnerServiceImpl implements RunnerService {
                 .stdout(data.get("stdout"))
                 .project(data.get("project"))
                 .traceId(data.get("trace_id"))
+                .debugSessionId(data.get("debug_session_id"))
                 .createdAt(parseInstant(data.get("created_at")))
                 .startedAt(parseInstant(data.get("started_at")))
                 .completedAt(parseInstant(data.get("completed_at")))

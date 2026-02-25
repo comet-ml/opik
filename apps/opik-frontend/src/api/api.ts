@@ -60,6 +60,8 @@ export const DASHBOARD_KEY = "dashboard";
 export const RUNNERS_KEY = "runners";
 export const RUNNER_JOBS_KEY = "runner-jobs";
 export const RUNNER_JOB_LOGS_KEY = "runner-job-logs";
+export const DEBUG_SESSION_KEY = "debug-session";
+export const DEBUG_GRAPH_KEY = "debug-graph";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

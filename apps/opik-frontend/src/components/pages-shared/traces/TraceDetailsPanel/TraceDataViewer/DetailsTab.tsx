@@ -17,12 +17,16 @@ type DetailsTabProps = {
   data: Trace | Span;
   isLoading: boolean;
   search?: string;
+  editable?: boolean;
+  onSave?: (newInput: object) => void;
 };
 
 const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
   data,
   isLoading,
   search,
+  editable,
+  onSave,
 }) => {
   // Use unified media hook to fetch all media and get transformed data
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
@@ -82,6 +86,8 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
                 preserveKey="syntax-highlighter-trace-sidebar-input"
                 search={search}
                 withSearch
+                editable={editable}
+                onSave={onSave}
               />
             )}
           </AccordionContent>

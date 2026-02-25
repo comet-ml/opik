@@ -328,6 +328,21 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
 
+            graph_node_id: Optional[str] = None
+            from ..runner import graph_capture
+            if graph_capture.is_active():
+                span_data = context_storage.top_span_data()
+                if span_data is not None:
+                    func_inputs = inspect_helpers.extract_inputs(func, args, kwargs)
+                    graph_node_id = graph_capture.record_before(
+                        func=func,
+                        inputs=func_inputs,
+                        span_id=span_data.id,
+                        trace_id=span_data.trace_id,
+                        parent_span_id=span_data.parent_span_id,
+                        span_type=track_options.type,
+                    )
+
             result = None
             error_info: Optional[ErrorInfoDict] = None
             func_exception = None
@@ -343,6 +358,9 @@ class BaseTrackDecorator(abc.ABC):
                 )
                 error_info = error_info_collector.collect(exception)
                 func_exception = exception
+
+            if graph_node_id is not None:
+                graph_capture.record_after(graph_node_id, result)
 
             stream_or_stream_manager = self._streams_handler(
                 result,

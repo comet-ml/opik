@@ -7,11 +7,15 @@ import {
   ChevronRight,
   Clock,
   Coins,
+  FastForward,
   Hash,
   MessageSquareMore,
   PenLine,
+  Play,
+  Rewind,
   Tag,
   TriangleAlert,
+  X,
 } from "lucide-react";
 
 import useTreeDetailsStore, {
@@ -19,6 +23,7 @@ import useTreeDetailsStore, {
   TreeNode,
   TreeNodeConfig,
 } from "@/components/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
+import { DebugSession } from "@/types/runners";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -53,6 +58,11 @@ type VirtualizedTreeViewerProps = {
   config: TreeNodeConfig;
   rowId: string;
   onRowIdChange: (id: string) => void;
+  debugSession?: DebugSession;
+  onDebugStepForward?: () => void;
+  onDebugStepBack?: () => void;
+  onDebugRunToEnd?: () => void;
+  onDebugEnd?: () => void;
 };
 
 const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
@@ -60,6 +70,11 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
   config,
   rowId,
   onRowIdChange,
+  debugSession,
+  onDebugStepForward,
+  onDebugStepBack,
+  onDebugRunToEnd,
+  onDebugEnd,
 }) => {
   const { flattenedTree, expandedTreeRows, toggleExpand } =
     useTreeDetailsStore();
@@ -416,7 +431,65 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                         {name}
                       </span>
                     </TooltipWrapper>
-                    {node.data.hasError && (
+                    {debugSession &&
+                      (node.id === debugSession.last_span_id ||
+                        (!debugSession.last_span_id &&
+                          node.data.type === TRACE_TYPE_FOR_TREE)) && (
+                        <>
+                          <div className="flex-auto" />
+                          <div
+                            className="flex items-center gap-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TooltipWrapper content="Step back">
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={onDebugStepBack}
+                                disabled={debugSession.cursor <= 0}
+                              >
+                                <Rewind className="size-3" />
+                              </Button>
+                            </TooltipWrapper>
+                            <TooltipWrapper content="Step forward">
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={onDebugStepForward}
+                                disabled={
+                                  debugSession.cursor >=
+                                  debugSession.total_nodes
+                                }
+                              >
+                                <Play className="size-3" />
+                              </Button>
+                            </TooltipWrapper>
+                            <TooltipWrapper content="Run to end">
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={onDebugRunToEnd}
+                                disabled={
+                                  debugSession.cursor >=
+                                  debugSession.total_nodes
+                                }
+                              >
+                                <FastForward className="size-3" />
+                              </Button>
+                            </TooltipWrapper>
+                            <TooltipWrapper content="End debug">
+                              <Button
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={onDebugEnd}
+                              >
+                                <X className="size-3" />
+                              </Button>
+                            </TooltipWrapper>
+                          </div>
+                        </>
+                      )}
+                    {node.data.hasError && !debugSession && (
                       <>
                         <div className="flex-auto" />
                         <TooltipWrapper

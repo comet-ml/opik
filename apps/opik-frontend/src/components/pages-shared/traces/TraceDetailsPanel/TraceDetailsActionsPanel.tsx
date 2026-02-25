@@ -4,6 +4,7 @@ import FileSaver from "file-saver";
 import { json2csv } from "json-2-csv";
 import get from "lodash/get";
 import {
+  Bug,
   Copy,
   MessagesSquare,
   MoreHorizontal,
@@ -98,6 +99,7 @@ type TraceDetailsActionsPanelProps = {
   setGraph: OnChangeFn<boolean | null | undefined>;
   hasAgentGraph: boolean;
   setActiveSection: (v: DetailsActionSectionValue) => void;
+  onStartDebug?: (agentName: string) => void;
 };
 
 const TraceDetailsActionsPanel: React.FunctionComponent<
@@ -119,6 +121,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   hasAgentGraph,
   treeData,
   setActiveSection,
+  onStartDebug,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
@@ -668,6 +671,16 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                     Replay on {agent.name}
                   </DropdownMenuItem>
                 ))}
+                {onStartDebug &&
+                  runnerAgents.map((agent) => (
+                    <DropdownMenuItem
+                      key={`debug-${agent.name}`}
+                      onClick={() => onStartDebug(agent.name)}
+                    >
+                      <Bug className="mr-2 size-4" />
+                      Debug {agent.name}
+                    </DropdownMenuItem>
+                  ))}
               </>
             )}
             <DropdownMenuSeparator />

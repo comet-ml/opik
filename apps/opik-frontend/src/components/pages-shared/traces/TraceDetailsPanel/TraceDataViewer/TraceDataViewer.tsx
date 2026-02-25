@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 
 import { AgentGraphData, Span, Trace } from "@/types/traces";
+import { DebugSession } from "@/types/runners";
+import useDebugStep from "@/api/runners/useDebugStep";
 import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
@@ -55,6 +57,8 @@ type TraceDataViewerProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
+  debugSession?: DebugSession;
+  debugSessionId?: string | null;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -67,7 +71,28 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   setActiveSection,
   isSpansLazyLoading,
   search,
+  debugSession,
+  debugSessionId,
 }) => {
+  const debugStepMutation = useDebugStep();
+
+  const isInputEditable =
+    debugSession != null &&
+    debugSession.last_span_id === data.id &&
+    debugSession.last_node != null;
+
+  const handleExecuteNode = useCallback(
+    (newInput: object) => {
+      if (!debugSessionId || !debugSession?.last_node) return;
+      const nodeId = debugSession.last_node.node_id;
+      debugStepMutation.mutate({
+        sessionId: debugSessionId,
+        command: `execute_node:${nodeId}:${JSON.stringify(newInput)}`,
+      });
+    },
+    [debugSessionId, debugSession, debugStepMutation],
+  );
+
   const rootScrollRef = useRef<HTMLDivElement>(null);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
@@ -366,6 +391,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               data={data}
               isLoading={isSpanInputOutputLoading}
               search={search}
+              editable={isInputEditable}
+              onSave={isInputEditable ? handleExecuteNode : undefined}
             />
           </TabsContent>
           <TabsContent value="feedback_scores">

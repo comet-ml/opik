@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.runner.ConnectRequest;
 import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
+import com.comet.opik.api.runner.DebugGraph;
+import com.comet.opik.api.runner.DebugSession;
 import com.comet.opik.api.runner.LogEntry;
 import com.comet.opik.api.runner.PairResponse;
 import com.comet.opik.api.runner.Runner;
@@ -30,4 +32,12 @@ public interface RunnerService {
     RunnerJob getJob(@NonNull String jobId);
 
     List<LogEntry> getJobLogs(@NonNull String jobId, int offset);
+
+    DebugSession getDebugSession(@NonNull String sessionId);
+
+    void sendDebugCommand(@NonNull String sessionId, @NonNull String command);
+
+    void endDebugSession(@NonNull String sessionId);
+
+    DebugGraph getDebugGraph(@NonNull String sessionId);
 }

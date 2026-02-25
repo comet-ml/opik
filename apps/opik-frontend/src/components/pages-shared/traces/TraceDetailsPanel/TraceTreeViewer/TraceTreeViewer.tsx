@@ -10,6 +10,7 @@ import {
 } from "./helpers";
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Span, Trace } from "@/types/traces";
+import { DebugSession } from "@/types/runners";
 import { Filters } from "@/types/filters";
 import {
   LOGS_TYPE,
@@ -56,6 +57,11 @@ type TraceTreeViewerProps = {
   setSearch: OnChangeFn<string | undefined>;
   filters: Filters;
   setFilters: OnChangeFn<Filters>;
+  debugSession?: DebugSession;
+  onDebugStepForward?: () => void;
+  onDebugStepBack?: () => void;
+  onDebugRunToEnd?: () => void;
+  onDebugEnd?: () => void;
 };
 
 const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
@@ -68,6 +74,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
   setSearch,
   filters,
   setFilters,
+  debugSession,
+  onDebugStepForward,
+  onDebugStepBack,
+  onDebugRunToEnd,
+  onDebugEnd,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceSpans = useMemo(() => spans ?? [], [spans]);
@@ -287,6 +298,11 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
             config={config}
             rowId={rowId}
             onRowIdChange={onSelectRow}
+            debugSession={debugSession}
+            onDebugStepForward={onDebugStepForward}
+            onDebugStepBack={onDebugStepBack}
+            onDebugRunToEnd={onDebugRunToEnd}
+            onDebugEnd={onDebugEnd}
           />
         ) : (
           <NoData message="No results" icon={null} />

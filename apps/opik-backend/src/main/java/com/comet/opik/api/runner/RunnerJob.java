@@ -22,6 +22,7 @@ public record RunnerJob(
         String stdout,
         String project,
         String traceId,
+        String debugSessionId,
         Instant createdAt,
         Instant startedAt,
         Instant completedAt) {

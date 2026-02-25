@@ -3,6 +3,9 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.runner.ConnectRequest;
 import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
+import com.comet.opik.api.runner.DebugGraph;
+import com.comet.opik.api.runner.DebugSession;
+import com.comet.opik.api.runner.DebugStepRequest;
 import com.comet.opik.api.runner.LogEntry;
 import com.comet.opik.api.runner.PairResponse;
 import com.comet.opik.api.runner.Runner;
@@ -17,6 +20,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -156,5 +160,61 @@ public class RunnersResource {
         List<LogEntry> logs = runnerService.getJobLogs(jobId, offset);
 
         return Response.ok(logs).build();
+    }
+
+    @GET
+    @Path("/debug/{sessionId}")
+    @Operation(operationId = "getDebugSession", summary = "Get debug session", description = "Get the current state of a debug session", responses = {
+            @ApiResponse(responseCode = "200", description = "Debug session state"),
+            @ApiResponse(responseCode = "404", description = "Session not found")
+    })
+    public Response getDebugSession(@PathParam("sessionId") String sessionId) {
+        log.info("Getting debug session '{}'", sessionId);
+
+        DebugSession session = runnerService.getDebugSession(sessionId);
+
+        return Response.ok(session).build();
+    }
+
+    @POST
+    @Path("/debug/{sessionId}/step")
+    @Operation(operationId = "sendDebugStep", summary = "Send debug command", description = "Send a step command to a debug session", responses = {
+            @ApiResponse(responseCode = "204", description = "Command sent")
+    })
+    public Response sendDebugStep(
+            @PathParam("sessionId") String sessionId,
+            @NotNull @Valid DebugStepRequest request) {
+        log.info("Sending debug command '{}' to session '{}'", request.command(), sessionId);
+
+        runnerService.sendDebugCommand(sessionId, request.command());
+
+        return Response.noContent().build();
+    }
+
+    @DELETE
+    @Path("/debug/{sessionId}")
+    @Operation(operationId = "endDebugSession", summary = "End debug session", description = "End a debug session", responses = {
+            @ApiResponse(responseCode = "204", description = "Session ended")
+    })
+    public Response endDebugSession(@PathParam("sessionId") String sessionId) {
+        log.info("Ending debug session '{}'", sessionId);
+
+        runnerService.endDebugSession(sessionId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/debug/{sessionId}/graph")
+    @Operation(operationId = "getDebugGraph", summary = "Get debug graph", description = "Get the call graph for a debug session", responses = {
+            @ApiResponse(responseCode = "200", description = "Debug graph"),
+            @ApiResponse(responseCode = "404", description = "Session not found")
+    })
+    public Response getDebugGraph(@PathParam("sessionId") String sessionId) {
+        log.info("Getting debug graph for session '{}'", sessionId);
+
+        DebugGraph graph = runnerService.getDebugGraph(sessionId);
+
+        return Response.ok(graph).build();
     }
 }

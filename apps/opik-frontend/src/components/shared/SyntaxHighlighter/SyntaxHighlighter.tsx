@@ -23,6 +23,8 @@ export type SyntaxHighlighterProps = {
   scrollPosition?: number;
   onScrollPositionChange?: OnChangeFn<number>;
   maxHeight?: string;
+  editable?: boolean;
+  onSave?: (newInput: object) => void;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -34,6 +36,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   scrollPosition,
   onScrollPositionChange,
   maxHeight,
+  editable,
+  onSave,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
@@ -75,7 +79,7 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
     />
   );
 
-  if (code.mode === MODE_TYPE.pretty) {
+  if (code.mode === MODE_TYPE.pretty && !editable) {
     return (
       <MarkdownHighlighter
         codeOutput={code}
@@ -104,6 +108,8 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
       scrollRef={scrollRef}
       onScroll={handleScroll}
       maxHeight={maxHeight}
+      editable={editable}
+      onSave={onSave}
     />
   );
 };

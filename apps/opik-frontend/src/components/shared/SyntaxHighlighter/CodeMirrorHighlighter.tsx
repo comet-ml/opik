@@ -1,6 +1,7 @@
 import React, {
   ReactNode,
   useRef,
+  useState,
   useEffect,
   useCallback,
   useMemo,
@@ -30,6 +31,8 @@ export interface CodeMirrorHighlighterProps {
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   maxHeight?: string;
+  editable?: boolean;
+  onSave?: (newInput: object) => void;
 }
 
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
@@ -43,10 +46,55 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   scrollRef,
   onScroll,
   maxHeight,
+  editable,
+  onSave,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
   const theme = useCodemirrorTheme();
   const searchPanelTheme = useSearchPanelTheme();
+
+  useEffect(() => {
+    if (!editable) {
+      setIsEditing(false);
+      setEditValue("");
+    }
+  }, [editable]);
+
+  const handleChange = useCallback(
+    (value: string) => {
+      if (editable) {
+        setIsEditing(true);
+        setEditValue(value);
+      }
+    },
+    [editable],
+  );
+
+  const handleRun = useCallback(() => {
+    try {
+      const parsed = JSON.parse(editValue);
+      onSave?.(parsed);
+      setIsEditing(false);
+    } catch {
+      // Invalid JSON — do nothing
+    }
+  }, [editValue, onSave]);
+
+  const handleCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditValue("");
+    if (viewRef.current) {
+      viewRef.current.dispatch({
+        changes: {
+          from: 0,
+          to: viewRef.current.state.doc.length,
+          insert: codeOutput.message,
+        },
+      });
+    }
+  }, [codeOutput.message]);
 
   const {
     extension: searchExtension,
@@ -96,11 +144,46 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
     [localSearchValue, searchValue, initSearch],
   );
 
+  const extensions = useMemo(() => {
+    const exts = [
+      EditorView.lineWrapping,
+      EditorView.contentAttributes.of({ tabindex: "0" }),
+      searchPanelTheme,
+      searchExtension,
+      hyperLink,
+      base64Extension,
+      EXTENSION_MAP[codeOutput.mode] as LRLanguage,
+    ];
+    if (!editable) {
+      exts.unshift(
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+      );
+    }
+    return exts;
+  }, [editable, searchPanelTheme, searchExtension, base64Extension, codeOutput.mode]);
+
   return (
     <SyntaxHighlighterLayout
       leftHeader={modeSelector}
       rightHeader={
         <>
+          {editable && isEditing && (
+            <>
+              <button
+                onClick={handleRun}
+                className="comet-body-xs-accented rounded bg-primary px-2 py-0.5 text-white hover:bg-primary/90"
+              >
+                Run
+              </button>
+              <button
+                onClick={handleCancel}
+                className="comet-body-xs-accented rounded border px-2 py-0.5 hover:bg-muted"
+              >
+                Cancel
+              </button>
+            </>
+          )}
           {withSearch && (
             <SyntaxHighlighterSearch
               searchValue={localSearchValue}
@@ -113,26 +196,19 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
         </>
       }
     >
-      <CodeMirror
-        theme={theme}
-        value={codeOutput.message}
-        basicSetup={{
-          searchKeymap: false,
-        }}
-        extensions={[
-          EditorView.lineWrapping,
-          EditorState.readOnly.of(true),
-          EditorView.editable.of(false),
-          EditorView.contentAttributes.of({ tabindex: "0" }),
-          searchPanelTheme,
-          searchExtension,
-          hyperLink,
-          base64Extension,
-          EXTENSION_MAP[codeOutput.mode] as LRLanguage,
-        ]}
-        maxHeight={maxHeight || "700px"}
-        onCreateEditor={handleCreateEditor}
-      />
+      <div className={editable ? "rounded border border-dashed border-primary/30" : ""}>
+        <CodeMirror
+          theme={theme}
+          value={codeOutput.message}
+          basicSetup={{
+            searchKeymap: false,
+          }}
+          extensions={extensions}
+          maxHeight={maxHeight || "700px"}
+          onCreateEditor={handleCreateEditor}
+          onChange={editable ? handleChange : undefined}
+        />
+      </div>
     </SyntaxHighlighterLayout>
   );
 };
