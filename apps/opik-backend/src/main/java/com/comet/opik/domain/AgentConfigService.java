@@ -344,6 +344,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
             AgentConfig config = requireConfig(dao, workspaceId, projectId);
+            validateBlueprintReferences(dao, workspaceId, projectId, request.envs());
 
             List<String> envNames = request.envs().stream()
                     .map(AgentConfigEnv::envName)
@@ -362,8 +363,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
             List<AgentConfigEnv> envsToUpdate = request.envs().stream()
                     .filter(env -> existingEnvNames.contains(env.envName()))
                     .toList();
-
-            validateBlueprintReferences(dao, workspaceId, projectId, request.envs());
 
             if (!newEnvs.isEmpty()) {
                 log.info("Inserting {} new environments", newEnvs.size());
