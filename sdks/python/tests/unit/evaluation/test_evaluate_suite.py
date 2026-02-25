@@ -1,7 +1,7 @@
 """Unit tests for evaluate_suite function — specifically that it passes
 evaluation_method='evaluation_suite' when creating the experiment."""
 
-from unittest import mock
+import unittest.mock as mock
 
 from opik.evaluation import evaluator as evaluator_module
 
