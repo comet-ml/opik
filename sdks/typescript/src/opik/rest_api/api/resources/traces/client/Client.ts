@@ -1367,14 +1367,14 @@ export class TracesClient {
     public findFeedbackScoreNames2(
         request: OpikApi.FindFeedbackScoreNames2Request = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames2(request, requestOptions));
     }
 
     private async __findFeedbackScoreNames2(
         request: OpikApi.FindFeedbackScoreNames2Request = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { projectId } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
@@ -1405,7 +1405,7 @@ export class TracesClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.traces.findFeedbackScoreNames2.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
@@ -1444,14 +1444,14 @@ export class TracesClient {
     public findTraceThreadsFeedbackScoreNames(
         request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findTraceThreadsFeedbackScoreNames(request, requestOptions));
     }
 
     private async __findTraceThreadsFeedbackScoreNames(
         request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { projectId } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
@@ -1482,7 +1482,7 @@ export class TracesClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.traces.findTraceThreadsFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,

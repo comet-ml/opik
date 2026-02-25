@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
@@ -86,6 +87,8 @@ public interface PromptService {
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
+
+    List<PromptVersionLink> getByCommits(List<String> commits);
 }
 
 @Singleton
@@ -688,6 +691,31 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
+    public List<PromptVersionLink> getByCommits(@NonNull List<String> commits) {
+        if (commits.isEmpty()) {
+            return List.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            Map<String, PromptVersionLink> linksByCommit = promptDAO
+                    .findPromptsByCommits(commits, workspaceId).stream()
+                    .collect(toMap(PromptVersionLink::commit, Function.identity(),
+                            (existing, duplicate) -> existing));
+
+            return commits.stream()
+                    .map(commit -> linksByCommit.getOrDefault(commit,
+                            PromptVersionLink.builder()
+                                    .commit(commit)
+                                    .build()))
+                    .toList();
+        });
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,

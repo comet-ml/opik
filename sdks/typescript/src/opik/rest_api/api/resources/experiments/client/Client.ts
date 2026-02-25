@@ -601,14 +601,14 @@ export class ExperimentsClient {
     public findFeedbackScoreNames(
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames(request, requestOptions));
     }
 
     private async __findFeedbackScoreNames(
         request: OpikApi.FindFeedbackScoreNamesRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { experimentIds } = request;
         const _queryParams: Record<string, unknown> = {
             experiment_ids: experimentIds,
@@ -639,7 +639,7 @@ export class ExperimentsClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.experiments.findFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
