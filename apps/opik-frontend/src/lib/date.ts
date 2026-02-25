@@ -11,8 +11,8 @@ dayjs.extend(utc);
 dayjs.extend(duration);
 dayjs.extend(customParseFormat);
 
-export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mmA";
-const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ssA";
+export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mm A";
+const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ss A";
 
 type FormatDateConfig = {
   utc?: boolean;
