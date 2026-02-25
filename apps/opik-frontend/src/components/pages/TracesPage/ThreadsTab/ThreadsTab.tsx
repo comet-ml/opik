@@ -297,6 +297,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       updateType: "replaceIn",
     },
   );
+  const trimmedSearch = (search as string).trim().toLowerCase();
 
   const { data: feedbackScoresNames, isPending: isFeedbackScoresNamesPending } =
     useThreadsFeedbackScoresNames({
@@ -381,7 +382,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         filters,
         page: page as number,
         size: size as number,
-        search: search as string,
+        search: trimmedSearch,
         truncate: truncationEnabled,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -552,8 +553,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       projectId,
       projectName,
       enableUserFeedbackEditing: true,
+      searchText: !isPlaceholderData ? trimmedSearch : undefined,
     }),
-    [projectId, projectName],
+    [projectId, projectName, trimmedSearch, isPlaceholderData],
   );
 
   const columns = useMemo(() => {
