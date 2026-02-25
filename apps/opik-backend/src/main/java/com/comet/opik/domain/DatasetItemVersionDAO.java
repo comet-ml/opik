@@ -1184,7 +1184,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                """ + TagOperations.tagUpdateFragment("src.tags")
+                """
+            + TagOperations.tagUpdateFragment("src.tags")
             + """
                         as tags,
                         <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
