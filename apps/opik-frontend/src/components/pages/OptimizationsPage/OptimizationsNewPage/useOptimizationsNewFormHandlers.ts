@@ -273,7 +273,6 @@ export const useOptimizationsNewFormHandlers = () => {
 
   return {
     form,
-    workspaceName,
     isSubmitting,
     datasetId,
     optimizerType,

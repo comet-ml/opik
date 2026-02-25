@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
-  PLAYGROUND_SELECTED_DATASET_KEY,
   PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
 import {
@@ -61,13 +60,6 @@ const PlaygroundPrompts = ({
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
 
-  const [, setDatasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_KEY,
-    {
-      defaultValue: null,
-    },
-  );
-
   const [, setDatasetVersionKey] = useLocalStorageState<string | null>(
     PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
     {
@@ -94,7 +86,6 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
-    setDatasetId(null);
     setDatasetVersionKey(null);
     setSelectedRuleIds(null);
     clearCreatedExperiments();
@@ -108,7 +99,6 @@ const PlaygroundPrompts = ({
     calculateModelProvider,
     calculateDefaultModel,
     setPromptMap,
-    setDatasetId,
     setDatasetVersionKey,
     setSelectedRuleIds,
     clearCreatedExperiments,
