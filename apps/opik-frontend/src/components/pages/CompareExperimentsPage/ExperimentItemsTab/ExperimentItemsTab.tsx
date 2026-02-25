@@ -410,7 +410,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return [
       {
         id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
+        label: "Dataset item ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
@@ -700,7 +700,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ),
       {
         id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
+        label: "Dataset item ID",
         type: COLUMN_TYPE.string,
       },
       ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({

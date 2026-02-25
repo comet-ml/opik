@@ -103,7 +103,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_ID_ID];
 const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "ID (Dataset item)",
+    label: "Dataset item ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
     size: 165,
