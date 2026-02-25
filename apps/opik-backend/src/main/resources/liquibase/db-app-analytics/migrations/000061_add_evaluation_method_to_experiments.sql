@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset JetoPistola:000060_add_evaluation_method_to_experiments
+--changeset JetoPistola:000061_add_evaluation_method_to_experiments
 --comment: Add evaluation_method field to experiments table to distinguish how an experiment was created
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}'
