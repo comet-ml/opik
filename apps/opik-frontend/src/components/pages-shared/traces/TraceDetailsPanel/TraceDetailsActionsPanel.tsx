@@ -54,7 +54,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
-import { getSpanTypeFilterConfig } from "@/lib/span-type-filter";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,

@@ -20,7 +20,7 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { getSpanTypeFilterConfig } from "@/lib/span-type-filter";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {

@@ -104,7 +104,7 @@ import {
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { GuardrailResult } from "@/types/guardrails";
-import { getSpanTypeFilterConfig } from "@/lib/span-type-filter";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
 import {

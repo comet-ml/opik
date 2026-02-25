@@ -35,7 +35,7 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
-import { getSpanTypeFilterConfig } from "@/lib/span-type-filter";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { DropdownOption } from "@/types/shared";
