@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
+from opik.api_objects.dataset import dataset_item
 from opik.evaluation.metrics import (
     arguments_helpers,
     base_metric,
@@ -11,6 +12,8 @@ from opik.evaluation.metrics import (
     arguments_validator,
 )
 from opik.evaluation.scorers import scorer_wrapper_metric
+from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.evaluation.types import ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
@@ -31,10 +34,98 @@ def _has_evaluation_span_parameter(func: Callable) -> bool:
         return False
 
 
+def split_into_regular_and_task_span_metrics(
+    scoring_metrics: List[base_metric.BaseMetric],
+) -> Tuple[List[base_metric.BaseMetric], List[base_metric.BaseMetric]]:
+    """
+    Separate metrics into regular and task-span categories.
+
+    Args:
+        scoring_metrics: List of metrics to analyze.
+
+    Returns:
+        Tuple of (regular_metrics, task_span_metrics).
+    """
+    regular_metrics: List[base_metric.BaseMetric] = []
+    task_span_metrics: List[base_metric.BaseMetric] = []
+
+    for metric in scoring_metrics:
+        if _has_evaluation_span_parameter(metric.score):
+            task_span_metrics.append(metric)
+        else:
+            regular_metrics.append(metric)
+
+    return regular_metrics, task_span_metrics
+
+
+def _extract_item_evaluators(
+    item: dataset_item.DatasetItem,
+    evaluator_model: Optional[str],
+) -> List[base_metric.BaseMetric]:
+    """
+    Extract evaluators from dataset item.
+
+    If the item has evaluator configs, instantiate LLMJudge evaluators from them.
+
+    Args:
+        item: The dataset item.
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+    Returns:
+        List of evaluator instances extracted from the item.
+    """
+    if not item.evaluators:
+        return []
+
+    evaluators: List[base_metric.BaseMetric] = []
+    for evaluator_item in item.evaluators:
+        try:
+            if evaluator_item.type == "llm_judge":
+                config = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                evaluator = llm_judge.LLMJudge.from_config(
+                    config, init_kwargs={"model": evaluator_model}
+                )
+                evaluators.append(evaluator)
+            else:
+                LOGGER.warning(
+                    "Unsupported evaluator type: %s. Only 'llm_judge' is supported.",
+                    evaluator_item.type,
+                )
+        except Exception:
+            LOGGER.error(
+                "Failed to instantiate evaluator from config: %s",
+                evaluator_item.config,
+                exc_info=True,
+            )
+            raise
+
+    return evaluators
+
+
+def build_metrics_evaluator(
+    item: Optional[dataset_item.DatasetItem],
+    regular_metrics: List[base_metric.BaseMetric],
+    scoring_key_mapping: ScoringKeyMappingType,
+    evaluator_model: Optional[str],
+) -> "MetricsEvaluator":
+    """Build a MetricsEvaluator with suite-level + item-level metrics."""
+    all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
+    if item is not None:
+        item_evaluators = _extract_item_evaluators(
+            item, evaluator_model=evaluator_model
+        )
+        all_metrics.extend(item_evaluators)
+
+    return MetricsEvaluator(
+        scoring_metrics=all_metrics,
+        scoring_key_mapping=scoring_key_mapping,
+    )
+
+
 def _compute_metric_scores(
     scoring_metrics: List[base_metric.BaseMetric],
     mapped_scoring_inputs: Dict[str, Any],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
+    scoring_key_mapping: ScoringKeyMappingType,
     dataset_item_content: Dict[str, Any],
     task_output: Dict[str, Any],
 ) -> List[score_result.ScoreResult]:
@@ -44,7 +135,7 @@ def _compute_metric_scores(
     Args:
         scoring_metrics: List of metrics to compute
         mapped_scoring_inputs: Scoring inputs after key mapping (will be used for regular metrics)
-        scoring_key_mapping: Optional mapping for renaming score arguments
+        scoring_key_mapping: Mapping for renaming score arguments (empty dict if no mapping)
         dataset_item_content: Dataset item content (will be used for ScorerWrapperMetric)
         task_output: Task output (will be used for ScorerWrapperMetric)
 
@@ -127,7 +218,7 @@ class MetricsEvaluator:
     def __init__(
         self,
         scoring_metrics: List[base_metric.BaseMetric],
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
+        scoring_key_mapping: ScoringKeyMappingType,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
@@ -150,16 +241,19 @@ class MetricsEvaluator:
         """Get list of regular scoring metrics."""
         return self._regular_metrics
 
+    @property
+    def scoring_key_mapping(self) -> ScoringKeyMappingType:
+        """Get the scoring key mapping."""
+        return self._scoring_key_mapping
+
     def _analyze_metrics(
         self,
         scoring_metrics: List[base_metric.BaseMetric],
     ) -> None:
         """Separate metrics into regular and task-span categories."""
-        for metric in scoring_metrics:
-            if _has_evaluation_span_parameter(metric.score):
-                self._task_span_metrics.append(metric)
-            else:
-                self._regular_metrics.append(metric)
+        self._regular_metrics, self._task_span_metrics = (
+            split_into_regular_and_task_span_metrics(scoring_metrics)
+        )
 
         if self.has_task_span_metrics:
             LOGGER.debug(

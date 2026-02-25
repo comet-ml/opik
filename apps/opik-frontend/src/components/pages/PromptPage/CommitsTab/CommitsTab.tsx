@@ -21,7 +21,7 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   convertColumnDataToColumn,
   isColumnSortable,
@@ -94,7 +94,7 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",

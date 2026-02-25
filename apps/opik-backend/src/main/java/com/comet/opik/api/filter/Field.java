@@ -26,6 +26,7 @@ public interface Field {
     String SPAN_FEEDBACK_SCORES_QUERY_PARAM = "span_feedback_scores";
     String EXPERIMENT_SCORES_QUERY_PARAM = "experiment_scores";
     String DURATION_QUERY_PARAM = "duration";
+    String TTFT_QUERY_PARAM = "ttft";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String DATASET_ID_QUERY_PARAM = "dataset_id";
     String PROJECT_ID_QUERY_PARAM = "project_id";

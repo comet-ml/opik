@@ -339,7 +339,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 data_hash,
                 tags,
                 evaluators_hash,
-                execution_policy_hash
+                execution_policy_hash,
+                description_hash
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -354,6 +355,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_item_id,
                 dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
+                description,
                 trace_id,
                 span_id,
                 source,
@@ -744,6 +746,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.id AS id,
                     div_dedup.dataset_item_id AS dataset_item_id,
                     div_dedup.data AS data,
+                    div_dedup.description AS description,
                     div_dedup.source AS source,
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
@@ -961,6 +964,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :datasetId AS dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                 COALESCE(di.data, map()) AS data,
+                di.description AS description,
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
@@ -1062,6 +1066,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :datasetId,
                 COALESCE(di.data, map()),
                 di.trace_id,
+                di.description,
                 di.span_id,
                 di.source,
                 di.tags,
@@ -1094,6 +1099,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 dataset_version_id,
                 data,
+                description,
                 metadata,
                 source,
                 trace_id,
@@ -1118,6 +1124,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         :dataset_id,
                         :dataset_version_id,
                         :data<item.index>,
+                        :description<item.index>,
                         :metadata<item.index>,
                         :source<item.index>,
                         :trace_id<item.index>,
@@ -1148,6 +1155,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 dataset_version_id,
                 data,
+                description,
                 metadata,
                 source,
                 trace_id,
@@ -1171,38 +1179,43 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> :data <else> src.data <endif> as data,
+                <if(description)> :description <else> src.description <endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
-                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """
+            + TagOperations.tagUpdateFragment("src.tags")
+            + """
+                        as tags,
+                        <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                        <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
+                        src.item_created_at,
+                        now64(9) as item_last_updated_at,
+                        src.item_created_by,
+                        :userName as item_last_updated_by,
+                        now64(9) as created_at,
+                        now64(9) as last_updated_at,
+                        :userName as created_by,
+                        :userName as last_updated_by,
+                        src.workspace_id
+                    FROM (
+                        SELECT *
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND dataset_version_id = :baseVersionId
+                        <if(item_ids)>
+                        AND dataset_item_id IN :itemIds
+                        <endif>
+                        <if(dataset_item_filters)>
+                        AND <dataset_item_filters>
+                        <endif>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY dataset_item_id
+                    ) AS src
+                    SETTINGS short_circuit_function_evaluation = 'force_enable'
+                    """;
 
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
             INSERT INTO dataset_item_versions (
@@ -1211,6 +1224,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 dataset_version_id,
                 data,
+                description,
                 metadata,
                 source,
                 trace_id,
@@ -1234,13 +1248,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.dataset_id,
                 :newVersionId as dataset_version_id,
                 <if(data)> mapFromArrays(:data_keys, :data_values) <else> src.data <endif> as data,
+                <if(description)> :description <else> src.description <endif> as description,
                 src.metadata,
                 src.source,
                 src.trace_id,
                 src.span_id,
                 <if(tags)> :tags <else> src.tags <endif> as tags,
                 <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
+                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -1272,6 +1287,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 dataset_version_id,
                 data,
+                description,
                 metadata,
                 source,
                 trace_id,
@@ -1295,6 +1311,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
                 src.data,
+                src.description,
                 src.metadata,
                 src.source,
                 src.trace_id,
@@ -1392,6 +1409,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_item_id,
                 dataset_id,
                 data,
+                description,
                 source,
                 trace_id,
                 span_id,
@@ -1425,6 +1443,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_item_id,
                 dataset_id,
                 data,
+                description,
                 source,
                 trace_id,
                 span_id,
@@ -1826,6 +1845,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .orElseGet(HashSet::new);
                         var evaluatorsHash = row.get("evaluators_hash", Long.class);
                         var executionPolicyHash = row.get("execution_policy_hash", Long.class);
+                        var descriptionHash = row.get("description_hash", Long.class);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
@@ -1834,6 +1854,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .tags(tags)
                                 .evaluatorsHash(evaluatorsHash)
                                 .executionPolicyHash(executionPolicyHash)
+                                .descriptionHash(descriptionHash)
                                 .build();
                     }))
                     .collectList()
@@ -2379,10 +2400,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (edit.tags() != null) {
                         template.add("tags", true);
                     }
+                    if (edit.description() != null) {
+                        template.add("description", true);
+                    }
                     if (edit.evaluators() != null) {
                         template.add("evaluators", true);
                     }
-                    if (edit.executionPolicy() != null) {
+                    if (Boolean.TRUE.equals(edit.clearExecutionPolicy())) {
+                        template.add("clear_execution_policy", true);
+                    } else if (edit.executionPolicy() != null) {
                         template.add("execution_policy", true);
                     }
 
@@ -2400,13 +2426,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         statement.bind("data_keys", dataAsStrings.keySet().toArray(new String[0]));
                         statement.bind("data_values", dataAsStrings.values().toArray(new String[0]));
                     }
+                    if (edit.description() != null) {
+                        statement.bind("description", edit.description());
+                    }
                     if (edit.tags() != null) {
                         statement.bind("tags", edit.tags().toArray(new String[0]));
                     }
                     if (edit.evaluators() != null) {
                         statement.bind("evaluators", serializeEvaluators(edit.evaluators()));
                     }
-                    if (edit.executionPolicy() != null) {
+                    if (!Boolean.TRUE.equals(edit.clearExecutionPolicy()) && edit.executionPolicy() != null) {
                         statement.bind("execution_policy",
                                 serializeExecutionPolicy(edit.executionPolicy()));
                     }
@@ -2503,16 +2532,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    template.add("tags", true);
-                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
-                        template.add("merge_tags", true);
-                    }
+                if (batchUpdate.update().description() != null) {
+                    template.add("description", true);
                 }
+
+                TagOperations.configureTagTemplate(template, batchUpdate.update(),
+                        Boolean.TRUE.equals(batchUpdate.mergeTags()));
+
                 if (batchUpdate.update().evaluators() != null) {
                     template.add("evaluators", true);
                 }
-                if (batchUpdate.update().executionPolicy() != null) {
+                if (Boolean.TRUE.equals(batchUpdate.update().clearExecutionPolicy())) {
+                    template.add("clear_execution_policy", true);
+                } else if (batchUpdate.update().executionPolicy() != null) {
                     template.add("execution_policy", true);
                 }
 
@@ -2558,13 +2590,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
+                if (batchUpdate.update().description() != null) {
+                    statement.bind("description", batchUpdate.update().description());
                 }
+
+                TagOperations.bindTagParams(statement, batchUpdate.update());
+
                 if (batchUpdate.update().evaluators() != null) {
                     statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
                 }
-                if (batchUpdate.update().executionPolicy() != null) {
+                if (!Boolean.TRUE.equals(batchUpdate.update().clearExecutionPolicy())
+                        && batchUpdate.update().executionPolicy() != null) {
                     statement.bind("execution_policy",
                             serializeExecutionPolicy(batchUpdate.update().executionPolicy()));
                 }
@@ -2618,6 +2654,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .bind("id" + i, item.id().toString())
                         .bind("dataset_item_id" + i, stableItemId.toString())
                         .bind("data" + i, dataAsStrings)
+                        .bind("description" + i, item.description() != null ? item.description() : "")
                         .bind("metadata" + i, "")
                         .bind("source" + i, item.source() != null ? item.source().getValue() : "sdk")
                         .bind("trace_id" + i, DatasetItemResultMapper.getOrDefault(item.traceId()))
@@ -2937,11 +2974,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)));
+                    .flatMap(result -> result
+                            .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)));
         });
     }
 
-    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row) {
+    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
         // Map data field - stored as Map<String, String> in ClickHouse
         Map<String, com.fasterxml.jackson.databind.JsonNode> data = Optional.ofNullable(row.get("data", Map.class))
                 .filter(m -> !m.isEmpty())
@@ -2958,6 +2996,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
+                .description(DatasetItemResultMapper.getDescription(row, rowMetadata))
                 .source(Optional.ofNullable(row.get("source", String.class))
                         .map(com.comet.opik.api.DatasetItemSource::fromString)
                         .orElse(null))
@@ -2973,6 +3012,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .map(java.util.Arrays::asList)
                         .map(Set::copyOf)
                         .orElse(null))
+                .evaluators(DatasetItemResultMapper.getEvaluators(row, rowMetadata))
+                .executionPolicy(DatasetItemResultMapper.getExecutionPolicy(row, rowMetadata))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -3041,7 +3082,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("workspace_id", workspaceId);
 
                 return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)))
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {

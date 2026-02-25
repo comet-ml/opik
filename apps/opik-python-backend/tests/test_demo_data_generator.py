@@ -12,6 +12,7 @@ def test_create_demo_data_structure(httpserver):
     ## Mocking the HTTP server to simulate the API calls to Opik Backend
     baseUrl = httpserver.url_for("/")
 
+    httpserver.expect_request("/is-alive/ping", method="GET").respond_with_data("pong", status=200)
     httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_data(status=404)
     httpserver.expect_request("/v1/private/projects", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
@@ -106,6 +107,7 @@ def test_create_demo_data_idempotence(httpserver):
     ## Mocking the HTTP server to simulate the API calls to Opik Backend
     baseUrl = httpserver.url_for("/")
 
+    httpserver.expect_request("/is-alive/ping", method="GET").respond_with_data("pong", status=200)
     httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_json({ "id": str(uuid6.uuid7()) })
 
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_handler(fail_on_request)

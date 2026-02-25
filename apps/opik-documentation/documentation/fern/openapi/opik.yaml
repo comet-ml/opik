@@ -1410,6 +1410,14 @@ paths:
         schema:
           type: string
           description: "Filter datasets by name (partial match, case insensitive)"
+      - name: type
+        in: query
+        schema:
+          type: string
+          description: Filter datasets by type (dataset or evaluation_suite)
+          enum:
+          - dataset
+          - evaluation_suite
       - name: sorting
         in: query
         schema:
@@ -2541,9 +2549,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/experiments/groups:
     get:
       tags:
@@ -4559,9 +4565,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/spans/{spanId}/comments/{commentId}:
     get:
       tags:
@@ -5157,9 +5161,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/threads/feedback-scores/names:
     get:
       tags:
@@ -5179,9 +5181,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/stats:
     get:
       tags:
@@ -8958,6 +8958,14 @@ components:
             type: string
             readOnly: true
           readOnly: true
+        evaluators:
+          type: array
+          description: Default evaluators for items in this version
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         created_at:
           type: string
           format: date-time
@@ -8972,6 +8980,40 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+      description: Default evaluators for items in this version
+      readOnly: true
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Default execution policy for items in this version
+      readOnly: true
     DatasetItemChanges_Public:
       type: object
     DatasetItemBatchUpdate:
@@ -9050,13 +9092,43 @@ components:
           $ref: "#/components/schemas/JsonNode"
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item description
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
             description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         evaluators:
           type: array
           description: Evaluators
@@ -9064,6 +9136,10 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        clear_execution_policy:
+          type: boolean
+          description: "When true, clears the item-level execution policy (falls back\
+            \ to dataset-level)"
       description: Dataset item update request
     EvaluatorItem:
       required:
@@ -9106,6 +9182,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9209,6 +9290,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9278,6 +9364,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9536,6 +9625,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -9880,6 +9972,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -10152,6 +10247,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10364,6 +10464,9 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
@@ -10398,36 +10501,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    EvaluatorItem_Public:
-      required:
-      - config
-      - name
-      - type
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        type:
-          type: string
-          enum:
-          - llm_judge
-          - code_metric
-        config:
-          $ref: "#/components/schemas/JsonNode_Public"
-    ExecutionPolicy_Public:
-      type: object
-      properties:
-        runs_per_item:
-          maximum: 100
-          minimum: 1
-          type: integer
-          format: int32
-        pass_threshold:
-          maximum: 100
-          minimum: 1
-          type: integer
-          format: int32
     ExperimentItem_Public:
       required:
       - dataset_item_id
@@ -10739,10 +10812,34 @@ components:
           minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
             maxLength: 100
             minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         type:
           type: string
           enum:
@@ -11793,6 +11890,20 @@ components:
         prompt_name:
           type: string
           readOnly: true
+    FeedbackScoreNames_Public:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreName_Public"
+    ScoreName_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
     ExperimentGroupResponse:
       type: object
       properties:
@@ -14343,6 +14454,8 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: |
@@ -14350,16 +14463,17 @@ components:
             - If merge_tags is true, these tags will be added to existing tags.
             - If merge_tags is false, these tags will replace all existing tags.
             - null: preserve existing tags (no change).
-            - empty set: clear all tags merge_tags is false.
+            - empty set: clear all tags when merge_tags is false.
           items:
-            minLength: 1
+            maxLength: 100
+            minLength: 0
             type: string
             description: |
               Tags to set or merge with existing tags. Follows PATCH semantics:
               - If merge_tags is true, these tags will be added to existing tags.
               - If merge_tags is false, these tags will replace all existing tags.
               - null: preserve existing tags (no change).
-              - empty set: clear all tags merge_tags is false.
+              - empty set: clear all tags when merge_tags is false.
       description: |
         Update to apply to prompt versions.
         Note: Prompt versions are immutable by design.
@@ -14501,10 +14615,38 @@ components:
         provider:
           type: string
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         usage:
           type: object
           additionalProperties:
@@ -14978,10 +15120,38 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonListString"
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
@@ -15016,9 +15186,31 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
             type: string
     TraceThreadBatchIdentifier:
       type: object

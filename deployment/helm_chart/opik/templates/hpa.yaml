@@ -40,5 +40,9 @@ spec:
           type: AverageValue
           averageValue: {{ $value.autoscaling.targetMemoryAverageValue }}
     {{- end }}
+  {{- with $value.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- end }}
 {{- end }}

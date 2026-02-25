@@ -270,7 +270,7 @@ npm test
 
 ## Examples
 
-Check out the [examples directory](../../../../../../examples) for more usage examples.
+Check out the [examples directory](../../../../examples) for more usage examples.
 
 ## Documentation
 

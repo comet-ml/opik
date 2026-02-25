@@ -29,8 +29,8 @@ pnpm add opik-langchain
 ### Requirements
 
 - Node.js ≥ 18
-- LangChain (`@langchain/core` ≥ 0.3.42)
-- Opik SDK (automatically installed as a dependency)
+- LangChain (`@langchain/core` ≥ 0.3.78)
+- Opik SDK (`opik` peer dependency)
 
 ## Quick Start
 

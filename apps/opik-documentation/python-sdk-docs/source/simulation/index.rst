@@ -39,7 +39,7 @@ Here's a simple example of how to use the simulation module:
    # Create a simulated user
    user_simulator = SimulatedUser(
        persona="You are a frustrated customer who wants a refund",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
    # Define your agent

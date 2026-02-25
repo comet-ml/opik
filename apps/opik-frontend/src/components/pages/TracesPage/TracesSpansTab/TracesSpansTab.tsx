@@ -41,7 +41,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
   ColumnsStatistic,
-  DropdownOption,
   DynamicColumn,
   HeaderIconType,
   ROW_HEIGHT,
@@ -51,7 +50,7 @@ import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
-import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
+import { BaseTraceData, Span, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
@@ -90,8 +89,9 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -105,9 +105,7 @@ import {
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { GuardrailResult } from "@/types/guardrails";
-import { SelectItem } from "@/components/ui/select";
-import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
-import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
 import {
@@ -148,13 +146,19 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "input",
@@ -357,48 +361,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
-        type: {
-          keyComponentProps: {
-            options: [
-              {
-                value: SPAN_TYPE.general,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
-              },
-              {
-                value: SPAN_TYPE.tool,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
-              },
-              {
-                value: SPAN_TYPE.llm,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
-              },
-              ...(isGuardrailsEnabled
-                ? [
-                    {
-                      value: SPAN_TYPE.guardrail,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
-                    },
-                  ]
-                : []),
-            ],
-            placeholder: "Select type",
-            renderOption: (option: DropdownOption<SPAN_TYPE>) => {
-              return (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  withoutCheck
-                  wrapperAsChild={true}
-                >
-                  <div className="flex w-full items-center gap-1.5">
-                    <BaseTraceDataTypeIcon type={option.value} />
-                    {option.label}
-                  </div>
-                </SelectItem>
-              );
-            },
-          },
-        },
+        ...getSpanTypeFilterConfig(isGuardrailsEnabled),
         [COLUMN_METADATA_ID]: {
           keyComponent: TracesOrSpansPathsAutocomplete,
           keyComponentProps: {

@@ -150,6 +150,7 @@ class DatasetItemResultMapper {
             return DatasetItem.builder()
                     .id(row.get("id", UUID.class))
                     .data(data)
+                    .description(getDescription(row, rowMetadata))
                     .source(Optional.ofNullable(row.get("source", String.class))
                             .map(DatasetItemSource::fromString)
                             .orElse(null))
@@ -184,7 +185,7 @@ class DatasetItemResultMapper {
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
     };
 
-    private static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
+    static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("evaluators")) {
             return null;
         }
@@ -194,7 +195,16 @@ class DatasetItemResultMapper {
                 .orElse(null);
     }
 
-    private static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
+    static String getDescription(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("description")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("description", String.class))
+                .filter(s -> !s.isBlank())
+                .orElse(null);
+    }
+
+    static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("execution_policy")) {
             return null;
         }

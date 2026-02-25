@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.domain.TagOperations;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -620,13 +621,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.last_updated_by,
                 tt.created_at,
                 now64(6) as last_updated_at,
-                <if(tags)><if(merge_tags)>arrayConcat(tt.tags, :tags)<else>:tags<endif><else>tt.tags<endif> as tags,
+                """ + TagOperations.tagUpdateFragment("tt.tags") + """
+                as tags,
                 tt.sampling_per_rule,
                 tt.scored_at
             FROM trace_threads tt
             WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
             ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
-            LIMIT 1 BY tt.id;
+            LIMIT 1 BY tt.id
+            SETTINGS short_circuit_function_evaluation = 'force_enable';
             """;
 
     @Override
@@ -656,17 +659,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private ST newBulkUpdateTemplate(TraceThreadUpdate update, String sql, boolean mergeTags) {
         var template = TemplateUtils.newST(sql);
 
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+        TagOperations.configureTagTemplate(template, update, mergeTags);
 
         return template;
     }
 
     private void bindBulkUpdateParams(TraceThreadUpdate update, Statement statement) {
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        TagOperations.bindTagParams(statement, update);
     }
 }

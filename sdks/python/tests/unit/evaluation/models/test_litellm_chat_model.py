@@ -101,7 +101,16 @@ def test_models_factory_default_model(monkeypatch):
 
     default_instance = models_factory.get(None)
 
-    assert default_instance.model_name == "gpt-5-nano"
+    assert default_instance.model_name == "openai/gpt-5-nano"
+
+
+def test_models_factory_default_model_from_env(monkeypatch):
+    _install_litellm_stub(monkeypatch)
+    monkeypatch.setenv("OPIK_DEFAULT_LLM", "gpt-4o-mini")
+
+    default_instance = models_factory.get(None)
+
+    assert default_instance.model_name == "gpt-4o-mini"
 
 
 def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
@@ -114,6 +123,31 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     )
 
     assert "temperature" not in model._completion_kwargs
+    assert any(
+        "temperature" in record.message and "Dropping" in record.message
+        for record in caplog.records
+    )
+
+    caplog.clear()
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+    assert not caplog.records
+
+
+def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
+    monkeypatch, caplog
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    caplog.set_level(logging.WARNING)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="openai/gpt-5-nano",
+        temperature=1e-8,
+    )
+
     assert any(
         "temperature" in record.message and "Dropping" in record.message
         for record in caplog.records

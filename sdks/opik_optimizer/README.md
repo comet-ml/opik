@@ -15,9 +15,9 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 ## 🎯 Key Features
 
-* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()`
 * **Optimizer Chaining**: Results from one optimizer can be used as input for another
-* **MCP Support**: Built-in support for Model Context Protocol tool calling
+* **MCP Support**: Built-in support for Model Context Protocol tool calling with `ChatPrompt.tools`
 * **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 * **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 * **Multimodal Prompts**: Supports OpenAI-style content parts (text, image, audio, video) across optimizers
@@ -170,15 +170,37 @@ The `result` object contains the optimized prompt, evaluation scores, and other 
 
 The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
 
-## Tool Optimization (MCP) - Beta
+## Tool & Prompt Optimization
 
-The Opik Agent Optimizer supports **true tool optimization** for MCP (Model Context Protocol) tools. This feature is currently in **Beta** and supported by the **MetaPrompt Optimizer**.
+Opik separates prompt optimization, tool use, and tool optimization so you can target exactly what changes.
+Tool optimization is currently supported by all optimizers except `FewShotBayesianOptimizer`, `ParameterOptimizer` and `GEPAOptimizer`.
 
-### Key Features
+### Prompt Optimization vs Tool Optimization
 
-* **MCP Tool Optimization** - Optimize MCP tool descriptions and usage patterns (Beta)
-* **Tool-Aware Analysis** - The optimizer understands MCP tool schemas and usage patterns
-* **Multi-step Workflow Support** - Optimize complex agent workflows involving MCP tools
+* Prompt optimization (`optimize_prompts`) controls which prompt roles may be edited.
+  You can restrict edits to `"user"` (or any role) while keeping system/assistant messages fixed.
+* Tool use means the agent can call tools during evaluation (function calling or MCP). This is enabled
+  by default when tools are present. You can disable tool use by setting `model_kwargs={"allow_tool_use": False}`.
+* Tool optimization (`optimize_tools`) updates tool descriptions and parameter descriptions only.
+  Schemas, tool names, and tool lists are unchanged. Set `optimize_tools=True` to optimize all tools or pass
+  a dict of `{tool_name: bool}` to choose specific tools.
+
+This separation is intentional: you can keep MCP client templates (system/assistant messages)
+fixed while still improving the tool signatures embedded in `ChatPrompt.tools`.
+
+To avoid overly large tool optimization tasks, `optimize_tools=True` is limited by
+`DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE` (default: 3). Use a tool-selection dict to keep it under the limit.
+
+For verbose tool-calling logs (tool names + arguments), set `OPIK_OPTIMIZER_LOG_LEVEL=DEBUG`.
+
+You can inspect optimizer capabilities at runtime:
+
+```python
+optimizer = MetaPromptOptimizer(model="gpt-5")
+print(optimizer.supports_prompt_optimization)
+print(optimizer.supports_tool_optimization)
+print(optimizer.supports_multimodal)
+```
 
 ### Agent Function Calling (Not Tool Optimization)
 
@@ -218,18 +240,126 @@ optimizer = GepaOptimizer(model="gpt-4o-mini")
 result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
 ```
 
-### True Tool Optimization (MCP) - Beta
+### Target Specific Prompt Segments (Advanced)
+
+If you need to optimize *only parts* of a prompt (for example, a specific assistant message
+injected by an MCP client), you can use `utils.prompt_segments` to identify and update specific
+segments by ID. This is useful when you want finer control than role-based optimization.
 
 ```python
-from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer import ChatPrompt
+from opik_optimizer.utils import prompt_segments
 
-# MCP tool optimization is currently in Beta
-# See scripts/litellm_metaprompt_context7_mcp_example.py for working examples
-optimizer = MetaPromptOptimizer(model="gpt-4")
-# MCP tools are configured through mcp.json manifests
+prompt = ChatPrompt(
+    system="You are a reliable assistant.",
+    messages=[
+        {"role": "assistant", "content": "MCP instructions here."},
+        {"role": "user", "content": "{user_query}"},
+    ],
+)
+
+# Inspect segments (system, message:0, message:1, tools...)
+segments = prompt_segments.extract_prompt_segments(prompt)
+for segment in segments:
+    print(segment.segment_id, segment.role, segment.content)
+
+# Update only the user message (message:1). apply_segment_updates returns a new
+# ChatPrompt and does not mutate the original prompt.
+updates = {"message:1": "User question: {user_query}"}
+updated_prompt = prompt_segments.apply_segment_updates(prompt, updates)
+```
+
+Note: The segment IDs are stable (e.g., `system`, `user`, `message:0`, `tool:<name>`).
+Use these IDs to target exactly the part you want to optimize.
+
+### Tool Optimization (MCP)
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+
+# See scripts/litellm_metaprompt_context7_mcp_example.py or
+# scripts/litellm_metaprompt_context7_remote_example.py for working examples.
+optimizer = MetaPromptOptimizer(model="gpt-5")
+
+# MCP tools can be configured as OpenAI-style tool entries (local or remote)
+prompt = ChatPrompt(
+    system="Use the docs tool when needed.",
+    user="{user_query}",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "$CONTEXT7_API_KEY"},
+            "allowed_tools": ["resolve-library-id", "query-docs"],
+        }
+    ],
+)
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    optimize_tools=True,  # optimize tool descriptions + parameter descriptions
+)
 ```
 
 For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
+
+### Tool Configuration Formats
+
+#### Function Calling Tools
+
+```python
+prompt = ChatPrompt(
+    system="Use tools when needed.",
+    user="{question}",
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "Search Wikipedia abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"}
+                    },
+                    "required": ["query"],
+                },
+            },
+        }
+    ],
+)
+```
+
+#### MCP Tools (OpenAI-Style Entries)
+
+```python
+tools = [
+    {
+        "type": "mcp",
+        "server_label": "context7",
+        "server_url": "https://mcp.context7.com/mcp",
+        "headers": {"CONTEXT7_API_KEY": "$CONTEXT7_API_KEY"},
+        "allowed_tools": ["resolve-library-id", "query-docs"],
+    }
+]
+```
+
+#### Cursor MCP Config
+
+```python
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "$CONTEXT7_API_KEY"},
+        }
+    }
+}
+# ChatPrompt accepts Cursor style MCP config directly in `tools`.
+prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
+```
 
 ## Deprecation Warnings
 
@@ -264,7 +394,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 ```
 
-### MCP Integration (Beta)
+### MCP Integration
 
 The optimizer includes utilities for MCP tool integration:
 
@@ -272,14 +402,47 @@ The optimizer includes utilities for MCP tool integration:
 # Install MCP Python SDK
 pip install mcp
 
-# Run MCP examples (Beta)
+# Run MCP examples
 python scripts/litellm_metaprompt_context7_mcp_example.py
+python scripts/litellm_metaprompt_context7_remote_example.py
 ```
 
-Underlying utilities are available in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`.
+Underlying utilities are available in `src/opik_optimizer/{utils/toolcalling,utils/prompt_segments}.py`.
+
+Local vs remote MCP configuration examples:
+
+```python
+local_tool = {
+    "type": "mcp",
+    "server_label": "local_docs",
+    "command": "npx",
+    "args": ["-y", "@upstash/context7-mcp"],
+    "env": {},
+    "allowed_tools": ["get-library-docs"],
+}
+
+remote_tool = {
+    "type": "mcp",
+    "server_label": "remote_docs",
+    "server_url": "https://mcp.example.com",
+    "headers": {"Authorization": "Bearer $TOKEN"},
+    "allowed_tools": ["search-docs"],
+}
+
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    }
+}
+# Cursor config can be passed directly as ChatPrompt.tools
+prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
+```
 
 <Note>
-  **Important:** True tool optimization (MCP) is currently in **Beta**. Most examples show **agent optimization** (optimizing prompts for agents that use tools), which is different from optimizing the tools themselves.
+  **Important:** Tool optimization (MCP) optimizes tool descriptions/signatures. This is different from agent optimization, which optimizes prompt text while tools are used at runtime.
 </Note>
 
 ## Development

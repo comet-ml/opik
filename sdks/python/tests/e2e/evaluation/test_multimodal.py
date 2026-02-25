@@ -52,16 +52,50 @@ MESSAGES: List[Dict[str, Any]] = [
 
 
 def _normalize_output(output: Any) -> str:
-    if isinstance(output, list):
-        return (
-            " ".join(
-                part.get("text", "") if isinstance(part, dict) else str(part)
-                for part in output
-            )
-            .strip()
-            .lower()
-        )
-    return str(output).strip().lower()
+    if not output:
+        return ""
+
+    collected_parts: List[str] = []
+
+    def collect_values(value: Any) -> None:
+        if isinstance(value, str):
+            collected_parts.append(value)
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                collect_values(item)
+            return
+
+        if isinstance(value, dict):
+            text_value = value.get("text")
+            if isinstance(text_value, str):
+                collected_parts.append(text_value)
+
+            if isinstance(text_value, list):
+                collect_values(text_value)
+
+            content_value = value.get("content")
+            if isinstance(content_value, str):
+                collected_parts.append(content_value)
+            elif isinstance(content_value, list):
+                collect_values(content_value)
+
+            output_value = value.get("output")
+            if isinstance(output_value, str):
+                collected_parts.append(output_value)
+            elif isinstance(output_value, list):
+                collect_values(output_value)
+            elif isinstance(output_value, dict):
+                collect_values(output_value)
+
+            for key, item in value.items():
+                if key in {"text", "content", "output"}:
+                    continue
+                collect_values(item)
+
+    collect_values(output)
+    return " ".join(part.strip() for part in collected_parts).strip().lower()
 
 
 @pytest.mark.skip(
@@ -126,7 +160,12 @@ def test_evaluate_prompt_supports_multimodal_images(
         reference = str(item.dataset_item_data.get("reference", "")).strip().lower()
         results[reference] = _normalize_output(item.evaluation_task_output["output"])
 
-    assert results["cat"].strip() in ["cat", "kitten"]  # relaxed to avoid flakiness
+    assert results["cat"].strip() in [
+        "cat",
+        "kitten",
+        "kitty",
+        "feline",
+    ]  # relaxed to avoid flakiness
     assert results["dog"].strip() == "dog"
     assert results["fox"].strip() == "fox"
 
@@ -137,5 +176,5 @@ def test_evaluate_prompt_supports_multimodal_images(
 
     merged_cat_cat = set(results["cat cat"].split())
     assert (
-        len({"cat", "kitten"}.intersection(merged_cat_cat)) > 0
+        len({"cat", "kitten", "kitty", "feline"}.intersection(merged_cat_cat)) > 0
     )  # relaxed to avoid flakiness

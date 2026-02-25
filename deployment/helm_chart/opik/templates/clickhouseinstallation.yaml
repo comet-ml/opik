@@ -24,19 +24,46 @@ spec:
       {{ .Values.clickhouse.adminUser.username }}/networks/ip:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
-      {{- if .Values.clickhouse.monitoring.enabled }}
-      {{- if .Values.clickhouse.monitoring.useSecret.enabled }}
+      {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
+      {{- if and .Values.clickhouse.monitoring.useSecret .Values.clickhouse.monitoring.useSecret.enabled }}
       {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
-      {{- else }}
+      {{- else if .Values.clickhouse.monitoring.password }}
       {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
       {{- end }}
       {{ .Values.clickhouse.monitoring.username }}/networks/ip:
-        - '127.0.0.1/32'
         - '0.0.0.0/0'
       {{- end }}
-    {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- range .Values.clickhouse.additionalUsers }}
+      {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
+      {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ .secretname | default $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
+      {{- else }}
+      {{ .username }}/password: {{ .password }}
+      {{- end }}
+      {{- if .profile }}
+      {{ .username }}/profile: {{ .profile }}
+      {{- end }}
+      {{- if .allow_databases }}
+      {{ .username }}/allow_databases:
+        {{- toYaml .allow_databases | nindent 8 }}
+      {{- end }}
+      {{ .username }}/networks/ip:
+      {{- if .networks }}
+        {{- toYaml .networks | nindent 8 }}
+      {{- else }}
+        - '0.0.0.0/0'
+      {{- end }}
+      {{- end }}
+    {{- if or .Values.clickhouse.additionalProfiles (and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username) }}
     profiles:
+      {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
       {{ .Values.clickhouse.monitoring.username }}/readonly: 1
+      {{- end }}
+      {{- range .Values.clickhouse.additionalProfiles }}
+      {{- $profileName := .name }}
+      {{- range $key, $value := .settings }}
+      {{ $profileName }}/{{ $key }}: {{ $value }}
+      {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.clickhouse.configuration }}
@@ -67,7 +94,9 @@ spec:
         templates:
           podTemplate: {{ .Values.clickhouse.templates.podTemplate }}
           serviceTemplate: {{ .Values.clickhouse.templates.serviceTemplate }}
+          {{- if .Values.clickhouse.templates.clusterServiceTemplate }}
           clusterServiceTemplate: {{ .Values.clickhouse.templates.clusterServiceTemplate }}
+          {{- end }}
           replicaServiceTemplate: {{ .Values.clickhouse.templates.replicaServiceTemplate }}
           volumeClaimTemplate: {{ .Values.clickhouse.templates.volumeClaimTemplate }}
   templates:
@@ -103,6 +132,10 @@ spec:
             readinessProbe:
               {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
             {{- end }}
+            {{- with .Values.clickhouse.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
           {{- if .Values.clickhouse.backupServer.enabled }}
           - name: clickhouse-backup
             image: {{ .Values.clickhouse.backupServer.image }}
@@ -122,6 +155,10 @@ spec:
             ports:
             - name: ch-backup-rest
               containerPort: {{ .Values.clickhouse.backupServer.port }}
+            {{- with .Values.clickhouse.backupServer.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
           {{- end }}
           {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
@@ -134,6 +171,15 @@ spec:
           {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.clickhouse.extraVolumes (and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes) }}
+          volumes:
+            {{- with .Values.clickhouse.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes }}
+            {{- toYaml .Values.clickhouse.backupServer.extraVolumes | nindent 12 }}
+            {{- end }}
           {{- end }}
       {{- with .Values.clickhouse.extraPodTemplates }}
       {{- . | toYaml | nindent 6 }}

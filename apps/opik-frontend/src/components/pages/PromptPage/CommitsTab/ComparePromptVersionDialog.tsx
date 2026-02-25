@@ -16,6 +16,9 @@ import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
+import { SelectItem } from "@/components/ui/select";
+import { DropdownOption } from "@/types/shared";
+import VersionTags from "@/components/pages/PromptPage/PromptTab/VersionTags";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -83,6 +86,7 @@ const ComparePromptVersionDialog: React.FunctionComponent<
         label: v.commit,
         value: v.commit,
         description: formatDate(v.created_at),
+        tags: v.tags || [],
       }));
   }, [versions]);
 
@@ -96,6 +100,23 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       );
     }
   }, [open, versionOptions, versions]);
+
+  const renderTagsWithSeparator = (tags: string[] | undefined) => {
+    if (!tags || tags.length === 0) return null;
+
+    return (
+      <>
+        <span className="shrink-0 text-xs text-muted-slate/60 transition-opacity">
+          ·
+        </span>
+        <VersionTags
+          tags={tags}
+          containerClassName="max-w-[320px]"
+          maxVisibleTags={5}
+        />
+      </>
+    );
+  };
 
   const generateTitle = (
     version: PromptVersion | undefined,
@@ -119,9 +140,35 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             renderTrigger={(value) => {
               const option = versionOptions.find((o) => o.value === value);
               return (
-                <span>
-                  {option?.label} ({option?.description})
+                <span className="comet-body-s truncate">
+                  {option?.label}{" "}
+                  <span className="text-light-slate">
+                    {option?.description}
+                  </span>
                 </span>
+              );
+            }}
+            renderOption={(
+              option: DropdownOption<string> & { tags?: string[] },
+            ) => {
+              return (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.disabled}
+                >
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="comet-body-s-accented shrink-0">
+                        {option.label}
+                      </span>
+                      {renderTagsWithSeparator(option.tags)}
+                    </div>
+                    <span className="comet-body-s text-light-slate">
+                      {option.description}
+                    </span>
+                  </div>
+                </SelectItem>
               );
             }}
           ></SelectBox>
@@ -129,8 +176,13 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       );
     } else {
       return (
-        <div className="-mb-2 px-0.5">
-          <span className="comet-body-s-accented mr-2">{version.commit}</span>
+        <div className="-mb-2 flex flex-col gap-0.5 px-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="comet-body-s-accented shrink-0">
+              {version.commit}
+            </span>
+            {renderTagsWithSeparator(version.tags)}
+          </div>
           <span className="comet-body-s text-light-slate">
             {formatDate(version.created_at)}
           </span>
