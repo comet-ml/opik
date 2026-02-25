@@ -147,7 +147,7 @@ public class StatsMapper {
         return Optional.ofNullable(stats)
                 .map(map -> map.keySet()
                         .stream()
-                        .filter(k -> k.startsWith(USAGE))
+                        .filter(k -> k.startsWith(USAGE + "."))
                         .map(
                                 k -> Map.entry(k.substring("%s.".formatted(USAGE).length()), (Double) map.get(k)))
                         .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
