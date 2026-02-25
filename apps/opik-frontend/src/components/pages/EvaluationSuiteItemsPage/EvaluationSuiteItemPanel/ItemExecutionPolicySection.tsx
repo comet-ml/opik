@@ -24,9 +24,17 @@ function ItemExecutionPolicySection({
   const editItem = useEditItem();
   const lastOverrideRef = useRef<ExecutionPolicy | undefined>(undefined);
 
-  const itemPolicy = editedItem?.execution_policy ?? savedItemPolicy;
+  // The `in` operator detects when execution_policy was explicitly set to
+  // undefined in the draft (i.e. the user toggled OFF "Override global settings").
+  // A simple nullish check would miss this because `undefined` values are
+  // indistinguishable from absent keys without `in`.
+  const hasEditedPolicy =
+    editedItem != null && "execution_policy" in editedItem;
+  const itemPolicy = hasEditedPolicy
+    ? editedItem.execution_policy
+    : savedItemPolicy;
   const isOverridden = itemPolicy != null;
-  const currentPolicy = isOverridden ? itemPolicy : suitePolicy;
+  const currentPolicy = itemPolicy ?? suitePolicy;
 
   const handleToggle = useCallback(
     (checked: boolean) => {

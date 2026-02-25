@@ -89,27 +89,13 @@ function hasItemLevelChanges(state: EvaluationSuiteDraftState): boolean {
   );
 }
 
-function removeUndefinedValues<T extends Record<string, unknown>>(
-  entry: Partial<T>,
-): Partial<T> | null {
-  const entries = Object.entries(entry).filter(([, v]) => v !== undefined);
-  return entries.length > 0
-    ? (Object.fromEntries(entries) as Partial<T>)
-    : null;
-}
-
 function mergeEditedItem(
   editedItems: Map<string, Partial<DatasetItem>>,
   id: string,
   changes: Partial<DatasetItem>,
 ): void {
   const existing = editedItems.get(id) || {};
-  const cleaned = removeUndefinedValues({ ...existing, ...changes });
-  if (cleaned) {
-    editedItems.set(id, cleaned);
-  } else {
-    editedItems.delete(id);
-  }
+  editedItems.set(id, { ...existing, ...changes });
 }
 
 const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(

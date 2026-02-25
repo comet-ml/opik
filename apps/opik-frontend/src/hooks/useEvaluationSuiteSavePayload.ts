@@ -128,13 +128,18 @@ export function useEvaluationSuiteSavePayload(suiteId: string) {
         }
       }
 
-      // Serialize edited items, filtering out undefined values
+      // Serialize edited items, converting store representation to API format.
+      // The store preserves `execution_policy: undefined` to signal that the
+      // user explicitly cleared an item-level override. The API expects a
+      // `clear_execution_policy: true` flag instead of an undefined field.
       const editedItems = Array.from(editedItemsMap.entries()).map(
         ([id, changes]) => {
-          const entry: Partial<DatasetItem> & { id: string } = { id };
+          const entry: Record<string, unknown> = { id };
           for (const [key, value] of Object.entries(changes)) {
-            if (value !== undefined) {
-              (entry as Record<string, unknown>)[key] = value;
+            if (key === "execution_policy" && value === undefined) {
+              entry.clear_execution_policy = true;
+            } else if (value !== undefined) {
+              entry[key] = value;
             }
           }
           return entry;

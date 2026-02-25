@@ -12,7 +12,13 @@ function ExecutionPolicyCellInner({
   item,
 }: ExecutionPolicyCellInnerProps) {
   const editedItem = useEditedDatasetItemById(itemId);
-  const policy = editedItem?.execution_policy ?? item.execution_policy ?? null;
+  // Use `in` to detect explicit undefined (user cleared the override).
+  // See ItemExecutionPolicySection.tsx for a detailed explanation.
+  const hasEditedPolicy =
+    editedItem != null && "execution_policy" in editedItem;
+  const policy = hasEditedPolicy
+    ? (editedItem.execution_policy ?? null)
+    : (item.execution_policy ?? null);
 
   if (policy === null) {
     return <span className="text-muted-slate">&mdash;</span>;

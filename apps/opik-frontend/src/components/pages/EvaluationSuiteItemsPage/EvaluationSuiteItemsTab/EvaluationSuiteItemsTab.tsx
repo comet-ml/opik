@@ -52,7 +52,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Check, Loader2 } from "lucide-react";
-import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  injectColumnCallback,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
@@ -81,13 +85,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const SUITE_DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "description",
+  "last_updated_at",
   "data",
   "expected_behaviors",
   "execution_policy",
-  "tags",
-  "created_at",
 ];
 
 export const DATASET_DEFAULT_SELECTED_COLUMNS: string[] = [
@@ -97,6 +99,7 @@ export const DATASET_DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const SUITE_SELECTED_COLUMNS_KEY = "evaluation-suite-items-selected-columns";
+const SUITE_SELECTED_COLUMNS_KEY_V2 = `${SUITE_SELECTED_COLUMNS_KEY}-v2`;
 const DATASET_SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const SUITE_COLUMNS_WIDTH_KEY = "evaluation-suite-items-columns-width";
 const DATASET_COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
@@ -250,11 +253,15 @@ function EvaluationSuiteItemsTab({
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     isEvaluationSuite
-      ? SUITE_SELECTED_COLUMNS_KEY
+      ? SUITE_SELECTED_COLUMNS_KEY_V2
       : DATASET_SELECTED_COLUMNS_KEY,
     {
       defaultValue: isEvaluationSuite
-        ? SUITE_DEFAULT_SELECTED_COLUMNS
+        ? migrateSelectedColumns(
+            SUITE_SELECTED_COLUMNS_KEY,
+            SUITE_DEFAULT_SELECTED_COLUMNS,
+            ["last_updated_at"],
+          )
         : DATASET_DEFAULT_SELECTED_COLUMNS,
     },
   );
@@ -389,8 +396,19 @@ function EvaluationSuiteItemsTab({
     ];
 
     if (isEvaluationSuite) {
-      // Single "data" column for evaluation suites
       cols.push(
+        {
+          id: "description",
+          label: "Description",
+          type: COLUMN_TYPE.string,
+          accessorFn: (row) => row.description ?? "",
+        },
+        {
+          id: "last_updated_at",
+          label: "Last updated",
+          type: COLUMN_TYPE.time,
+          accessorFn: (row) => formatDate(row.last_updated_at),
+        },
         {
           id: "data",
           label: "Data",
@@ -398,12 +416,6 @@ function EvaluationSuiteItemsTab({
           accessorFn: (row) => row.data,
           cell: AutodetectCell as never,
           size: 400,
-        },
-        {
-          id: "description",
-          label: "Description",
-          type: COLUMN_TYPE.string,
-          accessorFn: (row) => row.description ?? "",
         },
         {
           id: "expected_behaviors",
@@ -450,18 +462,24 @@ function EvaluationSuiteItemsTab({
         type: COLUMN_TYPE.time,
         accessorFn: (row) => formatDate(row.created_at),
       },
-      {
+    );
+
+    // For datasets, last_updated_at goes in the trailing position.
+    // For eval suites, it is already included in the branch above.
+    if (!isEvaluationSuite) {
+      cols.push({
         id: "last_updated_at",
         label: "Last updated",
         type: COLUMN_TYPE.time,
         accessorFn: (row) => formatDate(row.last_updated_at),
-      },
-      {
-        id: "created_by",
-        label: "Created by",
-        type: COLUMN_TYPE.string,
-      },
-    );
+      });
+    }
+
+    cols.push({
+      id: "created_by",
+      label: "Created by",
+      type: COLUMN_TYPE.string,
+    });
 
     return cols;
   }, [isEvaluationSuite, dynamicDatasetColumns]);

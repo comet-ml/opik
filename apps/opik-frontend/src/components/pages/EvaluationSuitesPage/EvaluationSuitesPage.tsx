@@ -23,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { buildDocsUrl } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { COLUMN_NAME_ID, COLUMN_SELECT_ID } from "@/types/shared";
+import { COLUMN_SELECT_ID } from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -48,6 +48,7 @@ const getRowId = (d: Dataset) => d.id;
 
 const SELECTED_COLUMNS_KEY = "evaluation-suites-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+const SELECTED_COLUMNS_KEY_V3 = `${SELECTED_COLUMNS_KEY}-v3`;
 const COLUMNS_WIDTH_KEY = "evaluation-suites-columns-width";
 const COLUMNS_ORDER_KEY = "evaluation-suites-columns-order";
 const COLUMNS_SORT_KEY = "evaluation-suites-columns-sort";
@@ -115,12 +116,11 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
     : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY_V3,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
+        SELECTED_COLUMNS_KEY_V2,
         DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_NAME_ID],
       ),
     },
   );
