@@ -35,7 +35,6 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
-import { formatDate } from "@/lib/date";
 import useRulesList from "@/api/automations/useRulesList";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";

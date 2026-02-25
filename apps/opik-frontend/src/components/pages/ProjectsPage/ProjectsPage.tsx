@@ -135,7 +135,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -201,7 +201,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Total tokens (avg.)",
+        label: "Avg total tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -210,7 +210,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Input tokens (avg.)",
+        label: "Avg input tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -219,7 +219,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Output tokens (avg.)",
+        label: "Avg output tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)
@@ -228,7 +228,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores (avg.)",
+        label: "Avg feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
