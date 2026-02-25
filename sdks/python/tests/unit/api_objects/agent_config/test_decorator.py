@@ -53,9 +53,10 @@ class TestConfigDecoratorInit:
 
         MyConfig(temp=0.6, name="custom")
 
-        mock_backend.optimizer_configs.create_config.assert_called_once()
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        mock_backend.agent_configs.create_agent_config.assert_called_once()
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "MyConfig.temp" in keys
         assert "MyConfig.name" in keys
 
@@ -77,7 +78,7 @@ class TestConfigDecoratorInit:
 
         MyConfig()
 
-        mock_backend.optimizer_configs.create_config.assert_not_called()
+        mock_backend.agent_configs.create_agent_config.assert_not_called()
 
     def test_init__existing_blueprint_applies_backend_values(self, mock_backend):
         mock_backend.set_blueprint_values(
@@ -114,9 +115,10 @@ class TestConfigDecoratorInit:
 
         MyConfig()
 
-        mock_backend.optimizer_configs.create_config.assert_called_once()
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        mock_backend.agent_configs.create_agent_config.assert_called_once()
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "MyConfig.max_tokens" in keys
         assert "MyConfig.temp" not in keys
 
@@ -165,8 +167,9 @@ class TestConfigDecoratorFieldFiltering:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "MyConfig.temp" in keys
         assert "MyConfig.callback" not in keys
 
@@ -182,8 +185,9 @@ class TestConfigDecoratorFieldFiltering:
 
         ChildConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "ChildConfig.base_field" in keys
         assert "ChildConfig.child_field" in keys
 
@@ -207,7 +211,7 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        mock_backend.optimizer_configs.create_config.assert_called_once()
+        mock_backend.agent_configs.create_agent_config.assert_called_once()
 
     @pytest.mark.parametrize(
         "decorator_kwargs",
@@ -231,17 +235,19 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        mock_backend.optimizer_configs.create_config.assert_not_called()
+        mock_backend.agent_configs.create_agent_config.assert_not_called()
 
     @pytest.mark.parametrize(
-        "decorator_kwargs",
+        "decorator_kwargs,expected_method",
         [
-            {"mask_id": "mask-1"},
-            {"env": "prod"},
+            ({"mask_id": "mask-1"}, "get_latest_blueprint"),
+            ({"env": "prod"}, "get_blueprint_by_env"),
         ],
         ids=["mask_id", "env"],
     )
-    def test_mask_or_env__passed_to_get_blueprint(self, mock_backend, decorator_kwargs):
+    def test_mask_or_env__passed_to_get_blueprint(
+        self, mock_backend, decorator_kwargs, expected_method
+    ):
         @agent_config_decorator(**decorator_kwargs)
         @dataclasses.dataclass
         class MyConfig:
@@ -249,11 +255,12 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.get_blueprint.call_args[1]
+        method = getattr(mock_backend.agent_configs, expected_method)
+        call_kwargs = method.call_args[1]
         if "mask_id" in decorator_kwargs:
             assert call_kwargs.get("mask_id") == decorator_kwargs["mask_id"]
         if "env" in decorator_kwargs:
-            assert call_kwargs.get("env") == decorator_kwargs["env"]
+            assert call_kwargs.get("env_name") == decorator_kwargs["env"]
 
 
 class TestConfigDecoratorTraceMetadata:
@@ -373,11 +380,11 @@ class TestConfigDecoratorMultiClass:
         ModelConfig()
         PromptConfig()
 
-        all_calls = mock_backend.optimizer_configs.create_config.call_args_list
+        all_calls = mock_backend.agent_configs.create_agent_config.call_args_list
         all_keys = []
         for call in all_calls:
             call_kwargs = call[1]
-            all_keys.extend(v["key"] for v in call_kwargs["blueprint"]["values"])
+            all_keys.extend(v.key for v in call_kwargs["blueprint"].values)
 
         assert "ModelConfig.temp" in all_keys
         assert "PromptConfig.template" in all_keys
@@ -395,9 +402,10 @@ class TestConfigDecoratorMultiClass:
 
         ModelConfig()
 
-        assert mock_backend.optimizer_configs.create_config.call_count == 1
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        assert mock_backend.agent_configs.create_agent_config.call_count == 1
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert keys == ["ModelConfig.temp"]
 
     def test_second_class_adds_extra_keys(self, mock_backend):
@@ -417,12 +425,13 @@ class TestConfigDecoratorMultiClass:
             [mock.Mock(key="ModelConfig.temp", type="number", value=0.8)]
         )
 
-        mock_backend.optimizer_configs.create_config.reset_mock()
+        mock_backend.agent_configs.create_agent_config.reset_mock()
         PromptConfig()
 
-        mock_backend.optimizer_configs.create_config.assert_called_once()
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        mock_backend.agent_configs.create_agent_config.assert_called_once()
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "PromptConfig.template" in keys
         assert "ModelConfig.temp" not in keys
 
@@ -498,7 +507,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         _p = PromptConfig()
 
-        mock_backend.optimizer_configs.get_blueprint.reset_mock()
+        mock_backend.agent_configs.get_latest_blueprint.reset_mock()
 
         cache: SharedConfigCache = object.__getattribute__(m, "__opik_shared_cache__")
         cache._last_fetch = time.monotonic() - cache._ttl_seconds - 1
@@ -512,7 +521,7 @@ class TestConfigDecoratorMultiClass:
 
         _ = m.temp
 
-        assert mock_backend.optimizer_configs.get_blueprint.call_count == 1
+        assert mock_backend.agent_configs.get_latest_blueprint.call_count == 1
 
     def test_stale_refetch_via_classA__classB_sees_update(self, mock_backend):
         mock_backend.set_blueprint_values(
@@ -578,8 +587,9 @@ class TestConfigDecoratorMultiClass:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        keys = [v["key"] for v in call_kwargs["blueprint"]["values"]]
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        keys = [v.key for v in blueprint.values]
         assert "custom.temp" in keys
         assert "MyConfig.temp" not in keys
 
@@ -626,11 +636,13 @@ class TestConfigDecoratorPromptFields:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        values = call_kwargs["blueprint"]["values"]
-        prompt_param = next(v for v in values if v["key"] == "MyConfig.system_prompt")
-        assert prompt_param["type"] == "prompt"
-        assert prompt_param["value"] == "ver-abc"
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        prompt_param = next(
+            v for v in blueprint.values if v.key == "MyConfig.system_prompt"
+        )
+        assert prompt_param.type == "prompt"
+        assert prompt_param.value == "ver-abc"
 
     def test_chat_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
         fake_prompt = mock.Mock(spec=ChatPrompt)
@@ -645,10 +657,10 @@ class TestConfigDecoratorPromptFields:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        values = call_kwargs["blueprint"]["values"]
-        param = next(v for v in values if v["key"] == "MyConfig.messages")
-        assert param["value"] == "ver-chat-1"
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        param = next(v for v in blueprint.values if v.key == "MyConfig.messages")
+        assert param.value == "ver-chat-1"
 
     def test_existing_blueprint_prompt_field__resolves_and_applied_to_instance(
         self, mock_backend
@@ -769,11 +781,11 @@ class TestConfigDecoratorPromptFields:
 
         MyConfig()
 
-        call_kwargs = mock_backend.optimizer_configs.create_config.call_args[1]
-        values = call_kwargs["blueprint"]["values"]
-        param = next(v for v in values if v["key"] == "MyConfig.version")
-        assert param["type"] == "prompt_version"
-        assert param["value"] == "ver-pv-abc"
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        param = next(v for v in blueprint.values if v.key == "MyConfig.version")
+        assert param.type == "promptcommit"
+        assert param.value == "ver-pv-abc"
 
     def test_existing_blueprint_prompt_version_field__resolves_to_prompt_version_detail(
         self, mock_backend
@@ -782,7 +794,7 @@ class TestConfigDecoratorPromptFields:
             [
                 mock.Mock(
                     key="MyConfig.version",
-                    type="prompt_version",
+                    type="promptcommit",
                     value="ver-pv-backend",
                 )
             ]
@@ -811,7 +823,7 @@ class TestConfigDecoratorPromptFields:
             [
                 mock.Mock(
                     key="MyConfig.version",
-                    type="prompt_version",
+                    type="promptcommit",
                     value="ver-pv-bad",
                 )
             ]

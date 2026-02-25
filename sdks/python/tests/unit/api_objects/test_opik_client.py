@@ -401,8 +401,8 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-1"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ) as mock_get_blueprint,
         ):
@@ -420,8 +420,8 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-2"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ) as mock_get_blueprint,
         ):
@@ -439,13 +439,13 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-1"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "create_config",
-                return_value=Mock(id="cfg-1"),
+                opik_client_._rest_client.agent_configs,
+                "create_agent_config",
+                return_value=None,
             ) as mock_create,
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
         ):
@@ -463,13 +463,13 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-1"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "create_config",
-                return_value=Mock(id="cfg-1"),
+                opik_client_._rest_client.agent_configs,
+                "create_agent_config",
+                return_value=None,
             ) as mock_create,
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
         ):
@@ -489,13 +489,13 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-1"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "create_config",
-                return_value=Mock(id="cfg-1"),
+                opik_client_._rest_client.agent_configs,
+                "create_agent_config",
+                return_value=None,
             ) as mock_create,
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
         ):
@@ -513,13 +513,13 @@ class TestOpikClientConfigMethods:
                 return_value=Mock(id="proj-1"),
             ),
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "create_config",
-                return_value=Mock(id="cfg-1"),
+                opik_client_._rest_client.agent_configs,
+                "create_agent_config",
+                return_value=None,
             ) as mock_create,
             patch.object(
-                opik_client_._rest_client.optimizer_configs,
-                "get_blueprint",
+                opik_client_._rest_client.agent_configs,
+                "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
         ):

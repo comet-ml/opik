@@ -4,9 +4,9 @@ import logging
 
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
-from opik.rest_api.types.optimizer_config_detail import (
-    OptimizerConfigBlueprint,
-)
+from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
+from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
+from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
 from opik.api_objects import rest_helpers
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -53,7 +53,7 @@ class ConfigClient:
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         description: typing.Optional[str],
         config_type: str = "blueprint",
-    ) -> typing.Dict[str, typing.Any]:
+    ) -> AgentBlueprintWrite:
         backend_values = []
         for field_name, (py_type, value) in fields_with_values.items():
             if (
@@ -62,19 +62,17 @@ class ConfigClient:
             ) and value is None:
                 continue
             backend_values.append(
-                {
-                    "key": field_name,
-                    "type": type_helpers.python_type_to_backend_type(py_type),
-                    "value": type_helpers.python_value_to_backend_value(value, py_type),
-                }
+                AgentConfigValueWrite(
+                    key=field_name,
+                    type=type_helpers.python_type_to_backend_type(py_type),
+                    value=type_helpers.python_value_to_backend_value(value, py_type),
+                )
             )
-        payload: typing.Dict[str, typing.Any] = {
-            "type": config_type,
-            "values": backend_values,
-        }
-        if description is not None:
-            payload["description"] = description
-        return payload
+        return AgentBlueprintWrite(
+            type=config_type,
+            values=backend_values,
+            description=description,
+        )
 
     def create_blueprint(
         self,
@@ -86,8 +84,8 @@ class ConfigClient:
         """Post a new blueprint to the backend without fetching it back.
 
         Use this when you need to write a blueprint but will retrieve the
-        result separately (e.g. the decorator posts all classes' keys in
-        separate calls, then does a single fetch).
+        result separately (e.g. the decorator writes new keys first, then
+        fetches the merged blueprint once).
 
         Args:
             fields_with_values: Mapping of field name → ``(python_type, value)``
@@ -100,10 +98,10 @@ class ConfigClient:
         blueprint_payload = self._build_blueprint_payload(
             fields_with_values, description
         )
-        self._rest_client.optimizer_configs.create_config(
+        self._rest_client.agent_configs.create_agent_config(
+            blueprint=blueprint_payload,
             project_name=project_name,
             project_id=project_id,
-            blueprint=blueprint_payload,
         )
 
     def create_config(
@@ -119,8 +117,8 @@ class ConfigClient:
         :meth:`get_blueprint`.
 
         Use :meth:`create_blueprint` directly when you need to write without
-        an immediate fetch (e.g. the decorator writes each class's keys
-        separately, then fetches once).
+        an immediate fetch (e.g. the decorator writes new keys first, then
+        fetches the merged blueprint once).
 
         Args:
             fields_with_values: Mapping of field name → ``(python_type, value)``
@@ -154,10 +152,9 @@ class ConfigClient:
         """Create a mask config on the backend and return its data.
 
         Primarily for internal use. Works the same as :meth:`create_config` but
-        sends the values payload under the ``"blueprint"`` key with ``type="mask"``.
-        A mask typically covers only a subset of the
-        blueprint's keys and is used to produce override variants (e.g. A/B
-        experiment arms).
+        marks the payload as ``type="mask"``.  A mask typically covers only a
+        subset of the blueprint's keys and is used to produce override variants
+        (e.g. A/B experiment arms).
 
         Args:
             fields_with_values: Mapping of field name → ``(python_type, value)``
@@ -173,10 +170,10 @@ class ConfigClient:
         mask_payload = self._build_blueprint_payload(
             fields_with_values, description, config_type="mask"
         )
-        self._rest_client.optimizer_configs.create_config(
+        self._rest_client.agent_configs.create_agent_config(
+            blueprint=mask_payload,
             project_name=project_name,
             project_id=project_id,
-            blueprint=mask_payload,
         )
 
         return self.get_blueprint(
@@ -190,15 +187,21 @@ class ConfigClient:
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> typing.Optional[ConfigData]:
-        project_id = rest_helpers.resolve_project_id_by_name(
-            self._rest_client, project_name
-        )
         try:
-            blueprint = self._rest_client.optimizer_configs.get_blueprint(
-                project_id=project_id,
-                env=env,
-                mask_id=mask_id,
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
             )
+            if env is not None:
+                blueprint = self._rest_client.agent_configs.get_blueprint_by_env(
+                    env_name=env,
+                    project_id=project_id,
+                    mask_id=mask_id,
+                )
+            else:
+                blueprint = self._rest_client.agent_configs.get_latest_blueprint(
+                    project_id=project_id,
+                    mask_id=mask_id,
+                )
         except rest_api_core.ApiError as e:
             if e.status_code == 404:
                 return None
@@ -245,11 +248,11 @@ class ConfigClient:
 
     def _blueprint_to_config_data(
         self,
-        blueprint: OptimizerConfigBlueprint,
+        blueprint: AgentBlueprintPublic,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> ConfigData:
         values: typing.Dict[str, typing.Any] = {}
-        for param in blueprint.values or []:
+        for param in blueprint.values:
             if field_types and param.key in field_types:
                 py_type = field_types[param.key]
                 values[param.key] = type_helpers.backend_value_to_python_value(

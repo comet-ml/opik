@@ -154,8 +154,8 @@ class TestPythonTypeToBackendType:
             (int, "number"),
             (float, "number"),
             (bool, "string"),
-            (List[str], "json"),
-            (Dict[str, int], "json"),
+            (List[str], "string"),
+            (Dict[str, int], "string"),
         ],
         ids=["str", "int", "float", "bool", "List", "Dict"],
     )
@@ -178,10 +178,10 @@ class TestPythonTypeToBackendType:
     def test_prompt_types__return_prompt(self, py_type):
         assert type_helpers.python_type_to_backend_type(py_type) == "prompt"
 
-    def test_prompt_version_type__returns_prompt_version(self):
+    def test_prompt_version_type__returns_promptcommit(self):
         assert (
             type_helpers.python_type_to_backend_type(PromptVersionDetail)
-            == "prompt_version"
+            == "promptcommit"
         )
 
 

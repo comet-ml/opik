@@ -36,6 +36,8 @@ servers:
 tags:
 - name: System usage
   description: System usage related resource
+- name: Agent Configs
+  description: Agent configuration management
 - name: Alerts
   description: Alert resources
 - name: Annotation Queues
@@ -170,6 +172,267 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/agent-configs:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create optimizer config or add blueprint
+      description: "Creates a new optimizer config with initial blueprint, or adds\
+        \ a new blueprint to existing config"
+      operationId: createAgentConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigCreate_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprint/{blueprint_id}"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+  /v1/private/agent-configs/envs:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create or update environments
+      description: Creates or updates environment-to-blueprint mappings
+      operationId: createOrUpdateEnvs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigEnvUpdate"
+      responses:
+        "204":
+          description: Environments updated
+        "404":
+          description: Not Found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-configs/blueprint/env/{env_name}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve blueprint by environment
+      description: Retrieves the blueprint associated with a specific environment
+      operationId: getBlueprintByEnv
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprint/{blueprint_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve blueprint by ID
+      description: Retrieves a specific blueprint by its ID
+      operationId: getBlueprintById
+      parameters:
+      - name: blueprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/history:
+    get:
+      tags:
+      - Agent Configs
+      summary: Get blueprint history
+      description: Retrieves paginated blueprint history for a project
+      operationId: getBlueprintHistory
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: History retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueprintPage_History"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_History"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_History"
+  /v1/private/agent-configs/delta/{blueprint_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve delta by blueprint ID
+      description: Retrieves only the changes (delta) introduced in a specific blueprint
+      operationId: getDeltaById
+      parameters:
+      - name: blueprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Delta retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprint/retrieve:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve latest blueprint
+      description: Retrieves the latest blueprint for a project
+      operationId: getLatestBlueprint
+      parameters:
+      - name: project_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/alerts:
     get:
       tags:
@@ -6057,6 +6320,74 @@ components:
         trace_count:
           type: integer
           format: int32
+    ErrorMessage_Write:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+    AgentBlueprint_Write:
+      required:
+      - type
+      - values
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        values:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_Write"
+    AgentConfigCreate_Write:
+      required:
+      - blueprint
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        id:
+          type: string
+          format: uuid
+        blueprint:
+          $ref: "#/components/schemas/AgentBlueprint_Write"
+    AgentConfigValue_Write:
+      required:
+      - key
+      - type
+      - value
+      type: object
+      properties:
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          maxLength: 255
+          minLength: 0
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - number
+          - prompt
+          - promptcommit
     ErrorMessage:
       type: object
       properties:
@@ -6067,6 +6398,211 @@ components:
           type: string
         details:
           type: string
+    AgentConfigEnv:
+      required:
+      - blueprint_id
+      - env_name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        env_name:
+          maxLength: 50
+          minLength: 0
+          type: string
+        blueprint_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    AgentConfigEnvUpdate:
+      required:
+      - envs
+      - project_id
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        envs:
+          maxItems: 2147483647
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigEnv"
+    AgentBlueprint_Public:
+      required:
+      - type
+      - values
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        envs:
+          type: array
+          items:
+            type: string
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        values:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_Public"
+    AgentConfigValue_Public:
+      required:
+      - key
+      - type
+      - value
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          maxLength: 255
+          minLength: 0
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - number
+          - prompt
+          - promptcommit
+        valid_from_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+        valid_to_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+    ErrorMessage_Public:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AgentBlueprint_History:
+      required:
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        envs:
+          type: array
+          items:
+            type: string
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    BlueprintPage_History:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentBlueprint_History"
+    ErrorMessage_History:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
     Alert:
       required:
       - webhook
@@ -6502,16 +7038,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    ErrorMessage_Public:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
     WebhookExamples:
       type: object
       properties:
@@ -7045,6 +7571,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7054,10 +7584,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7577,6 +8103,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7586,10 +8116,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7927,6 +8453,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7936,10 +8466,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8373,6 +8899,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8382,10 +8912,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8467,6 +8993,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8476,10 +9006,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -14007,10 +14533,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14125,10 +14651,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14220,10 +14746,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
     Prompt_Detail:
       required:
       - name
@@ -14244,10 +14770,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14382,10 +14908,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array

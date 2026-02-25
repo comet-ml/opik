@@ -48,10 +48,10 @@ def python_type_to_backend_type(py_type: typing.Any) -> str:
     if is_prompt_type(py_type):
         return "prompt"
     if is_prompt_version_type(py_type):
-        return "prompt_version"
+        return "promptcommit"
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
-        return "json"
+        return "string"
     raise TypeError(f"Unsupported type: {py_type}")
 
 
