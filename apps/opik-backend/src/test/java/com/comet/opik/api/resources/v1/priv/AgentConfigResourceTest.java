@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
+import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -46,12 +47,21 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("Optimizer Config Resource Test")
+@DisplayName("Agent Config Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class AgentConfigResourceTest {
+
+    record TestSetupData(
+            UUID projectId,
+            UUID blueprint1Id,
+            UUID blueprint2Id,
+            UUID blueprint3Id,
+            UUID maskId) {
+    }
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -86,13 +96,13 @@ class AgentConfigResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private AgentConfigResourceClient optimizerConfigResourceClient;
+    private AgentConfigResourceClient agentConfigResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         String baseUrl = TestUtils.getBaseUrl(client);
-        this.optimizerConfigResourceClient = new AgentConfigResourceClient(client);
+        this.agentConfigResourceClient = new AgentConfigResourceClient(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
 
         ClientSupportUtils.config(client);
@@ -143,7 +153,7 @@ class AgentConfigResourceTest {
                     .blueprint(blueprint)
                     .build();
 
-            optimizerConfigResourceClient.createAgentConfig(request, API_KEY,
+            agentConfigResourceClient.createAgentConfig(request, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_CREATED);
         }
 
@@ -154,7 +164,7 @@ class AgentConfigResourceTest {
                 AgentConfigCreate request, int expectedStatusCode, Object expectedBody,
                 Class<?> expectedResponseClass) {
 
-            try (var actualResponse = optimizerConfigResourceClient.createAgentConfigWithResponse(request, API_KEY,
+            try (var actualResponse = agentConfigResourceClient.createAgentConfigWithResponse(request, API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatusCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -299,6 +309,326 @@ class AgentConfigResourceTest {
                             422,
                             new ErrorMessage(List.of("blueprint.description cannot exceed 255 characters")),
                             ErrorMessage.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Retrieve Agent Config:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RetrieveAgentConfig {
+
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
+        private TestSetupData setupBlueprintsAndMask() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Override model and add top_p")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING)
+                                    .build(),
+                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build()))
+                    .build();
+
+            var maskRequest = AgentConfigCreate.builder()
+                    .projectId(projectId)
+                    .blueprint(mask)
+                    .build();
+
+            var maskId = agentConfigResourceClient.createAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Initial configuration")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.NUMBER)
+                                    .build(),
+                            AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER)
+                                    .build(),
+                            AgentConfigValue.builder().key("system_prompt").value("prompt-content")
+                                    .type(ValueType.PROMPT).build(),
+                            AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                                    .type(ValueType.PROMPTVERSION).build()))
+                    .build();
+
+            var request1 = AgentConfigCreate.builder()
+                    .projectId(projectId)
+                    .blueprint(blueprint1)
+                    .build();
+
+            var blueprint1Id = agentConfigResourceClient.createAgentConfig(request1, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Update temperature")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER)
+                                    .build()))
+                    .build();
+
+            var request2 = AgentConfigCreate.builder()
+                    .projectId(projectId)
+                    .blueprint(blueprint2)
+                    .build();
+
+            var blueprint2Id = agentConfigResourceClient.createAgentConfig(request2, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var blueprint3 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Update max_tokens")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER)
+                                    .build()))
+                    .build();
+
+            var request3 = AgentConfigCreate.builder()
+                    .projectId(projectId)
+                    .blueprint(blueprint3)
+                    .build();
+
+            var blueprint3Id = agentConfigResourceClient.createAgentConfig(request3, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_CREATED);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            com.comet.opik.domain.AgentConfigEnv.builder()
+                                    .envName("dev")
+                                    .blueprintId(blueprint2Id)
+                                    .build()))
+                    .build();
+
+            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            return new TestSetupData(projectId, blueprint1Id, blueprint2Id, blueprint3Id, maskId);
+        }
+
+        @Test
+        @DisplayName("Success: retrieve latest blueprint with all inherited values")
+        void retrieveLatestBlueprint() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getLatestBlueprint(setup.projectId(), null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint3Id());
+            assertThat(blueprint.values()).hasSize(5);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPTVERSION).build());
+
+            assertThat(blueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
+        }
+
+        @Test
+        @DisplayName("Success: retrieve middle blueprint with partial inheritance")
+        void retrieveBlueprintById_middleBlueprint() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getBlueprintById(setup.blueprint2Id(), null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.values()).hasSize(5);
+            assertThat(blueprint.values())
+                    .extracting(AgentConfigValue::key, AgentConfigValue::value, AgentConfigValue::type)
+                    .containsExactlyInAnyOrder(
+                            tuple("model", "gpt-4", ValueType.STRING),
+                            tuple("temperature", "0.5", ValueType.NUMBER),
+                            tuple("max_tokens", "1024", ValueType.NUMBER),
+                            tuple("system_prompt", "prompt-content", ValueType.PROMPT),
+                            tuple("prompt_version", "v1.0.0", ValueType.PROMPTVERSION));
+        }
+
+        @Test
+        @DisplayName("Success: retrieve latest blueprint with mask applied")
+        void retrieveLatestBlueprintWithMask() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getLatestBlueprint(setup.projectId(), setup.maskId(), API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.values()).hasSize(6);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPTVERSION).build(),
+                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
+
+            assertThat(blueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
+        }
+
+        @Test
+        @DisplayName("Success: retrieve blueprint by environment")
+        void retrieveBlueprintByEnv() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getBlueprintByEnv("dev", setup.projectId(), null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.values()).hasSize(5);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPTVERSION).build());
+
+            assertThat(blueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
+        }
+
+        @Test
+        @DisplayName("Success: retrieve blueprint by environment with mask")
+        void retrieveBlueprintByEnvWithMask() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getBlueprintByEnv("dev", setup.projectId(), setup.maskId(),
+                    API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.values()).hasSize(6);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPTVERSION).build(),
+                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
+
+            assertThat(blueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
+        }
+
+        @Test
+        @DisplayName("Success: retrieve delta returns only changed values")
+        void retrieveDelta() {
+            var setup = setupBlueprintsAndMask();
+
+            var blueprint = agentConfigResourceClient.getDelta(setup.blueprint2Id(), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+
+            assertThat(blueprint).isNotNull();
+            assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
+            assertThat(blueprint.values()).hasSize(1);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build());
+
+            assertThat(blueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when retrieving latest blueprint fails, then return expected error")
+        void retrieveLatestBlueprint__whenError__thenReturnExpectedStatus(
+                UUID projectId, UUID maskId, int expectedStatus) {
+
+            agentConfigResourceClient.getLatestBlueprint(projectId, maskId, API_KEY, TEST_WORKSPACE,
+                    expectedStatus);
+        }
+
+        Stream<Arguments> retrieveLatestBlueprint__whenError__thenReturnExpectedStatus() {
+            return Stream.of(
+                    arguments(UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments(UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when retrieving blueprint by ID fails, then return expected error")
+        void retrieveBlueprintById__whenError__thenReturnExpectedStatus(
+                UUID blueprintId, UUID maskId, int expectedStatus) {
+
+            agentConfigResourceClient.getBlueprintById(blueprintId, maskId, API_KEY, TEST_WORKSPACE,
+                    expectedStatus);
+        }
+
+        Stream<Arguments> retrieveBlueprintById__whenError__thenReturnExpectedStatus() {
+            return Stream.of(
+                    arguments(UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments(UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when retrieving delta fails, then return expected error")
+        void retrieveDelta__whenError__thenReturnExpectedStatus(
+                UUID blueprintId, int expectedStatus) {
+
+            agentConfigResourceClient.getDelta(blueprintId, API_KEY, TEST_WORKSPACE, expectedStatus);
+        }
+
+        Stream<Arguments> retrieveDelta__whenError__thenReturnExpectedStatus() {
+            return Stream.of(
+                    arguments(UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when retrieving blueprint by environment fails, then return expected error")
+        void retrieveBlueprintByEnv__whenError__thenReturnExpectedStatus(
+                String envName, UUID projectId, UUID maskId, int expectedStatus) {
+
+            agentConfigResourceClient.getBlueprintByEnv(envName, projectId, maskId, API_KEY, TEST_WORKSPACE,
+                    expectedStatus);
+        }
+
+        Stream<Arguments> retrieveBlueprintByEnv__whenError__thenReturnExpectedStatus() {
+            return Stream.of(
+                    arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments("dev", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
+                    arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
         }
     }
 }

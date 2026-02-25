@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.domain.AgentBlueprint;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -65,5 +66,112 @@ public class AgentConfigResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.entity(body, ContentType.APPLICATION_JSON.toString()));
+    }
+
+    public AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/retrieve")
+                .queryParam("project_id", projectId);
+
+        if (maskId != null) {
+            target = target.queryParam("mask_id", maskId);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(AgentBlueprint.class);
+            }
+
+            return null;
+        }
+    }
+
+    public AgentBlueprint getBlueprintById(UUID blueprintId, UUID maskId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/" + blueprintId);
+
+        if (maskId != null) {
+            target = target.queryParam("mask_id", maskId);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(AgentBlueprint.class);
+            }
+
+            return null;
+        }
+    }
+
+    public AgentBlueprint getBlueprintByEnv(String envName, UUID projectId, UUID maskId, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/env/" + envName)
+                .queryParam("project_id", projectId);
+
+        if (maskId != null) {
+            target = target.queryParam("mask_id", maskId);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(AgentBlueprint.class);
+            }
+
+            return null;
+        }
+    }
+
+    public AgentBlueprint getDelta(UUID blueprintId, String apiKey, String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/delta/" + blueprintId)
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return actualResponse.readEntity(AgentBlueprint.class);
+            }
+
+            return null;
+        }
+    }
+
+    public void createOrUpdateEnvs(com.comet.opik.api.AgentConfigEnvUpdate request, String apiKey,
+            String workspaceName, int expectedStatus) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/envs")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        }
     }
 }

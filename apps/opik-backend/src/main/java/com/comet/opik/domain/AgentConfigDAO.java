@@ -114,7 +114,7 @@ interface AgentConfigDAO {
 
     @SqlQuery("SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint' " +
             "ORDER BY created_at DESC LIMIT 1")
     AgentBlueprint getLatestBlueprint(
             @Bind("workspace_id") String workspaceId,
@@ -140,16 +140,25 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("env_name") String envName);
 
-    @SqlQuery("SELECT `key`, value, type FROM agent_config_values " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
-            "AND valid_from_blueprint_id <= :blueprint_id " +
-            "AND (valid_to_blueprint_id IS NULL OR valid_to_blueprint_id > :blueprint_id)")
-    java.util.List<AgentConfigValue> getValuesByBlueprintId(
+    @SqlQuery("""
+            SELECT v.*
+            FROM agent_config_values v
+            JOIN agent_blueprint b
+                ON b.id = v.valid_from_blueprint_id
+                AND b.workspace_id = v.workspace_id
+                AND b.project_id = v.project_id
+            WHERE v.workspace_id = :workspace_id
+                AND v.project_id = :project_id
+                AND v.valid_from_blueprint_id <= :blueprint_id
+                AND (v.valid_to_blueprint_id IS NULL OR v.valid_to_blueprint_id > :blueprint_id)
+                AND b.type = 'blueprint'
+            """)
+    List<AgentConfigValue> getValuesByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT `key`, value, type FROM agent_config_values " +
+    @SqlQuery("SELECT * FROM agent_config_values " +
             "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
             "AND valid_from_blueprint_id = :blueprint_id")
     List<AgentConfigValue> getValuesDeltaByBlueprintId(
