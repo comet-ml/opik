@@ -46,7 +46,7 @@ import {
   COLUMN_COMMENTS_ID,
   COLUMN_NAME_ID,
 } from "@/types/shared";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   RESOURCE_TYPE,
   RESOURCE_MAP,
@@ -214,7 +214,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
+        cell: TimeCell as never,
       },
       {
         id: "created_by",

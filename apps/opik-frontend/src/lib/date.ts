@@ -1,21 +1,18 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import relativeTime from "dayjs/plugin/relativeTime";
 import duration from "dayjs/plugin/duration";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
-import { getDateFormatFromLocalStorage } from "@/hooks/useDateFormat";
 
 dayjs.extend(utc);
-dayjs.extend(relativeTime);
 dayjs.extend(duration);
 dayjs.extend(customParseFormat);
 
-const FORMATTED_DATE_STRING_REGEXP =
-  /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
+export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mm A";
+const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ss A";
 
 type FormatDateConfig = {
   utc?: boolean;
@@ -27,15 +24,8 @@ export const formatDate = (
   value: string,
   { utc = false, includeSeconds = false, format }: FormatDateConfig = {},
 ) => {
-  const storedFormat = getDateFormatFromLocalStorage();
-
-  let dateTimeFormat = format || storedFormat;
-
-  if (!format && includeSeconds) {
-    dateTimeFormat = includeSeconds
-      ? "MM/DD/YY hh:mm:ss A"
-      : "MM/DD/YY hh:mm A";
-  }
+  const dateTimeFormat =
+    format || (includeSeconds ? DATE_FORMAT_WITH_SECONDS : DEFAULT_DATE_FORMAT);
 
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {
@@ -47,15 +37,28 @@ export const formatDate = (
   return "";
 };
 
-export const isStringValidFormattedDate = (value: string) => {
-  return isString(value) && FORMATTED_DATE_STRING_REGEXP.test(value);
-};
+export const getTimeFromNow = (value: string): string => {
+  if (!isString(value)) return "";
 
-export const getTimeFromNow = (date: string) => {
-  if (isString(date) && dayjs(date).isValid()) {
-    return dayjs().to(dayjs(date));
-  }
-  return "";
+  const date = dayjs(value);
+  if (!date.isValid()) return "";
+
+  const now = dayjs();
+  const diffMinutes = now.diff(date, "minute");
+  const diffHours = now.diff(date, "hour");
+  const diffDays = now.diff(date, "day");
+
+  if (diffMinutes < 0) return date.format("D MMM YYYY");
+  if (diffMinutes < 1) return "< 1 min ago";
+  if (diffMinutes < 60) return `${diffMinutes} mins ago`;
+  if (diffHours < 24)
+    return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  if (diffDays <= 7)
+    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+
+  return date.year() === now.year()
+    ? date.format("D MMM")
+    : date.format("D MMM YYYY");
 };
 
 export const makeStartOfMinute = (value: string) => {

@@ -27,7 +27,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tag } from "@/components/ui/tag";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
   COLUMN_NAME_ID,
@@ -90,13 +90,13 @@ const DashboardsPage: React.FunctionComponent = () => {
         id: "last_updated_at",
         label: "Last updated",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.last_updated_at),
+        cell: TimeCell as never,
       },
       {
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
+        cell: TimeCell as never,
       },
       {
         id: "created_by",

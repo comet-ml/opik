@@ -34,7 +34,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { toString } from "@/lib/utils";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
   COLUMN_DATASET_ID,
@@ -99,7 +99,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
