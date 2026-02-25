@@ -828,7 +828,7 @@ clickhouse:
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.6.23
+    image: altinity/clickhouse-backup:2.6.39
     port: 7171
     monitoring:
       enabled: false
