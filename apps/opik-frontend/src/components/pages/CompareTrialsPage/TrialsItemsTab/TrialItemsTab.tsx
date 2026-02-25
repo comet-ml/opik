@@ -98,7 +98,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_ID_ID];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 
 const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
