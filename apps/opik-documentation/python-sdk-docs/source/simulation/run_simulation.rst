@@ -105,7 +105,7 @@ Basic Usage
    # Create a simulated user
    user_simulator = SimulatedUser(
        persona="You are a customer who wants help with a product",
-       model="openai/gpt-4o-mini"
+       model="openai/gpt-5-nano"
    )
 
    # Define your agent with conversation history management
