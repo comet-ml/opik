@@ -10,7 +10,7 @@ from opik.api_objects.agent_config.decorator import agent_config_decorator
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
-from opik.api_objects.span.span_data import SpanData
+from opik.api_objects.trace.trace_data import TraceData
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
@@ -256,13 +256,13 @@ class TestConfigDecoratorMaskAndEnv:
             assert call_kwargs.get("env") == decorator_kwargs["env"]
 
 
-class TestConfigDecoratorSpanMetadata:
-    def test_field_access_inside_span__injects_metadata(self, mock_backend):
+class TestConfigDecoratorTraceMetadata:
+    def test_field_access_inside_trace__injects_metadata(self, mock_backend):
         with mock.patch(
             "opik.api_objects.agent_config.decorator.context_storage"
         ) as mock_cs:
-            mock_span_data = mock.Mock()
-            mock_cs.top_span_data.return_value = mock_span_data
+            mock_trace_data = mock.Mock()
+            mock_cs.get_trace_data.return_value = mock_trace_data
 
             @agent_config_decorator
             @dataclasses.dataclass
@@ -272,8 +272,8 @@ class TestConfigDecoratorSpanMetadata:
             instance = MyConfig()
             _ = instance.temp
 
-            mock_span_data.update.assert_called()
-            call_kwargs = mock_span_data.update.call_args[1]
+            mock_trace_data.update.assert_called()
+            call_kwargs = mock_trace_data.update.call_args[1]
             assert "agent_configuration" in call_kwargs["metadata"]
             config = call_kwargs["metadata"]["agent_configuration"]
             assert "blueprint_id" in config
@@ -289,15 +289,14 @@ class TestConfigDecoratorSpanMetadata:
             ]
         )
 
-        span_data = SpanData(
-            trace_id="trace-1",
+        trace_data = TraceData(
             metadata={"provider": "openai", "model": "gpt-4o"},
         )
 
         with mock.patch(
             "opik.api_objects.agent_config.decorator.context_storage"
         ) as mock_cs:
-            mock_cs.top_span_data.return_value = span_data
+            mock_cs.get_trace_data.return_value = trace_data
 
             @agent_config_decorator
             @dataclasses.dataclass
@@ -307,30 +306,30 @@ class TestConfigDecoratorSpanMetadata:
 
             instance = MyConfig()
             _ = instance.temp
-            assert span_data.metadata["provider"] == "openai"
+            assert trace_data.metadata["provider"] == "openai"
             assert (
-                "MyConfig.temp" in span_data.metadata["agent_configuration"]["values"]
+                "MyConfig.temp" in trace_data.metadata["agent_configuration"]["values"]
             )
             assert (
                 "MyConfig.max_tokens"
-                not in span_data.metadata["agent_configuration"]["values"]
+                not in trace_data.metadata["agent_configuration"]["values"]
             )
 
             _ = instance.max_tokens
-            assert span_data.metadata["provider"] == "openai"
+            assert trace_data.metadata["provider"] == "openai"
             assert (
-                "MyConfig.temp" in span_data.metadata["agent_configuration"]["values"]
+                "MyConfig.temp" in trace_data.metadata["agent_configuration"]["values"]
             )
             assert (
                 "MyConfig.max_tokens"
-                in span_data.metadata["agent_configuration"]["values"]
+                in trace_data.metadata["agent_configuration"]["values"]
             )
 
-    def test_field_access_outside_span__no_injection(self, mock_backend):
+    def test_field_access_outside_trace__no_injection(self, mock_backend):
         with mock.patch(
             "opik.api_objects.agent_config.decorator.context_storage"
         ) as mock_cs:
-            mock_cs.top_span_data.return_value = None
+            mock_cs.get_trace_data.return_value = None
 
             @agent_config_decorator
             @dataclasses.dataclass

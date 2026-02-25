@@ -73,7 +73,7 @@ def agent_config_decorator(
 
             _maybe_refetch(self)
             _maybe_sync_from_cache(self, attr)
-            _maybe_inject_span_metadata(self, attr)
+            _maybe_inject_trace_metadata(self, attr)
 
             return original_getattribute(self, attr)
 
@@ -299,10 +299,10 @@ def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
         logger.debug("Failed to refetch config with mask", exc_info=True)
 
 
-def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
+def _maybe_inject_trace_metadata(instance: typing.Any, attr: str) -> None:
     try:
-        span_data = context_storage.top_span_data()
-        if span_data is None:
+        trace_data = context_storage.get_trace_data()
+        if trace_data is None:
             return
 
         shared_cache: SharedConfigCache = object.__getattribute__(
@@ -320,6 +320,6 @@ def _maybe_inject_span_metadata(instance: typing.Any, attr: str) -> None:
             }
         }
 
-        span_data.update(metadata=config_metadata)
+        trace_data.update(metadata=config_metadata)
     except Exception:
-        logger.debug("Failed to inject config metadata into span", exc_info=True)
+        logger.debug("Failed to inject config metadata into trace", exc_info=True)
