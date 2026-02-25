@@ -5,10 +5,13 @@ import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentBlueprint;
+import com.comet.opik.domain.AgentConfig;
 import com.comet.opik.domain.AgentConfigService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -18,6 +21,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -51,9 +55,10 @@ public class AgentConfigResource {
     @Path("/")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.Write.class)
+    @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "createAgentConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
-            @ApiResponse(responseCode = "201", description = "Blueprint created", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprint/{blueprint_id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
@@ -86,7 +91,7 @@ public class AgentConfigResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getLatestBlueprint(
-            @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving latest blueprint for project '{}'", projectId);
@@ -127,7 +132,7 @@ public class AgentConfigResource {
     })
     public Response getBlueprintByEnv(
             @PathParam("env_name") String envName,
-            @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving blueprint by environment '{}' for project '{}'", envName, projectId);
@@ -183,7 +188,7 @@ public class AgentConfigResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintHistory(
-            @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 

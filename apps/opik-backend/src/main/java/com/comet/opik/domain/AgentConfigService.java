@@ -3,13 +3,16 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -161,6 +164,18 @@ class AgentConfigServiceImpl implements AgentConfigService {
             return;
         }
 
+        long uniqueKeyCount = values.stream()
+                .map(AgentConfigValue::key)
+                .distinct()
+                .count();
+
+        if (uniqueKeyCount != values.size()) {
+            throw new BadRequestException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(List.of("Duplicate configuration keys are not allowed")))
+                            .build());
+        }
+
         values = values.stream()
                 .map(v -> v.toBuilder()
                         .id(idGenerator.generateId())
@@ -180,10 +195,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
-            if (config == null) {
-                throw new NotFoundException("No configuration found for project '" + projectId + "'");
-            }
+            requireConfig(dao, workspaceId, projectId);
 
             return getBlueprintWithDetails(dao, projectId, workspaceId, null, maskId);
         });
@@ -217,10 +229,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
-            if (config == null) {
-                throw new NotFoundException("No configuration found for project '" + projectId + "'");
-            }
+            requireConfig(dao, workspaceId, projectId);
 
             UUID blueprintId = dao.getBlueprintIdByEnvName(workspaceId, projectId, envName);
             if (blueprintId == null) {
@@ -285,6 +294,43 @@ class AgentConfigServiceImpl implements AgentConfigService {
         });
     }
 
+    private AgentConfig requireConfig(AgentConfigDAO dao, String workspaceId, UUID projectId) {
+        AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
+        if (config == null) {
+            throw new NotFoundException("No configuration found for project '" + projectId + "'");
+        }
+        return config;
+    }
+
+    private void validateBlueprintReferences(
+            AgentConfigDAO dao,
+            String workspaceId,
+            UUID projectId,
+            List<AgentConfigEnv> envs) {
+
+        List<UUID> blueprintIds = envs.stream()
+                .map(AgentConfigEnv::blueprintId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (blueprintIds.isEmpty()) {
+            return;
+        }
+
+        List<AgentConfigDAO.BlueprintProject> blueprints = dao.getBlueprintsByIds(workspaceId, projectId, blueprintIds);
+
+        if (blueprints.size() != blueprintIds.size()) {
+            Set<UUID> foundIds = blueprints.stream()
+                    .map(AgentConfigDAO.BlueprintProject::id)
+                    .collect(Collectors.toSet());
+            List<UUID> missingIds = blueprintIds.stream()
+                    .filter(id -> !foundIds.contains(id))
+                    .toList();
+            throw new NotFoundException("Blueprints not found: " + missingIds);
+        }
+    }
+
     @Override
     public void createOrUpdateEnvs(@NonNull AgentConfigEnvUpdate request) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -297,10 +343,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         transactionTemplate.inTransaction(WRITE, handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
-            if (config == null) {
-                throw new NotFoundException("No configuration found for project '" + projectId + "'");
-            }
+            AgentConfig config = requireConfig(dao, workspaceId, projectId);
 
             List<String> envNames = request.envs().stream()
                     .map(AgentConfigEnv::envName)
@@ -319,6 +362,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
             List<AgentConfigEnv> envsToUpdate = request.envs().stream()
                     .filter(env -> existingEnvNames.contains(env.envName()))
                     .toList();
+
+            validateBlueprintReferences(dao, workspaceId, projectId, request.envs());
 
             if (!newEnvs.isEmpty()) {
                 log.info("Inserting {} new environments", newEnvs.size());
@@ -343,10 +388,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return transactionTemplate.inTransaction(handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
-            AgentConfig config = dao.getConfigByProjectId(workspaceId, projectId);
-            if (config == null) {
-                throw new NotFoundException("No configuration found for project '" + projectId + "'");
-            }
+            requireConfig(dao, workspaceId, projectId);
 
             int offset = (page - 1) * size;
             List<AgentBlueprint> blueprints = dao.getBlueprintHistory(workspaceId, projectId, size, offset);
@@ -375,8 +417,17 @@ class AgentConfigServiceImpl implements AgentConfigService {
         Preconditions.checkArgument(mask.type() == AgentBlueprint.BlueprintType.MASK,
                 "Blueprint '%s' is not a mask", maskId);
 
+        if (!mask.projectId().equals(projectId)) {
+            throw new BadRequestException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(
+                                    List.of("Mask blueprint '" + maskId + "' does not belong to project '" + projectId
+                                            + "'")))
+                            .build());
+        }
+
         List<AgentConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(
-                workspaceId, projectId, maskId);
+                workspaceId, mask.projectId(), maskId);
 
         Map<String, AgentConfigValue> valueMap = blueprintValues.stream()
                 .collect(Collectors.toMap(

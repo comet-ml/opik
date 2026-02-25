@@ -29,6 +29,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(AgentBlueprint.class)
 @RegisterConstructorMapper(AgentConfigValue.class)
 @RegisterConstructorMapper(AgentConfigEnv.class)
+@RegisterConstructorMapper(AgentConfigDAO.BlueprintProject.class)
 @RegisterRowMapper(AgentConfigDAO.BlueprintWithTagsRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(ValueTypeArgumentFactory.class)
@@ -36,6 +37,9 @@ import java.util.UUID;
 @RegisterArgumentFactory(BlueprintTypeArgumentFactory.class)
 @RegisterColumnMapper(BlueprintTypeColumnMapper.class)
 interface AgentConfigDAO {
+
+    record BlueprintProject(UUID id, UUID projectId) {
+    }
 
     @SqlQuery("SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM agent_config " +
@@ -132,6 +136,13 @@ interface AgentConfigDAO {
     UUID getProjectIdByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("blueprint_id") UUID blueprintId);
+
+    @SqlQuery("SELECT id, project_id FROM agent_blueprint " +
+            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN (<blueprint_ids>)")
+    List<BlueprintProject> getBlueprintsByIds(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("project_id") UUID projectId,
+            @BindList("blueprint_ids") List<UUID> blueprintIds);
 
     @SqlQuery("SELECT blueprint_id FROM agent_config_envs " +
             "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")

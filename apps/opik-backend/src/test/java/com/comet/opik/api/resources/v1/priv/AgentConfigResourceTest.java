@@ -308,6 +308,28 @@ class AgentConfigResourceTest {
                                     .build(),
                             422,
                             new ErrorMessage(List.of("blueprint.description cannot exceed 255 characters")),
+                            ErrorMessage.class),
+
+                    // Duplicate key validation
+                    arguments(
+                            AgentConfigCreate.builder()
+                                    .projectId(projectId)
+                                    .blueprint(validBlueprint.toBuilder()
+                                            .values(List.of(
+                                                    AgentConfigValue.builder()
+                                                            .key("model")
+                                                            .value("gpt-4")
+                                                            .type(ValueType.STRING)
+                                                            .build(),
+                                                    AgentConfigValue.builder()
+                                                            .key("model")
+                                                            .value("claude")
+                                                            .type(ValueType.STRING)
+                                                            .build()))
+                                            .build())
+                                    .build(),
+                            400,
+                            new ErrorMessage(List.of("Duplicate configuration keys are not allowed")),
                             ErrorMessage.class));
         }
     }
@@ -587,6 +609,7 @@ class AgentConfigResourceTest {
 
         Stream<Arguments> retrieveLatestBlueprint__whenError__thenReturnExpectedStatus() {
             return Stream.of(
+                    arguments(null, null, HttpStatus.SC_BAD_REQUEST),
                     arguments(UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments(UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
         }
@@ -633,9 +656,121 @@ class AgentConfigResourceTest {
 
         Stream<Arguments> retrieveBlueprintByEnv__whenError__thenReturnExpectedStatus() {
             return Stream.of(
+                    arguments("dev", null, null, HttpStatus.SC_BAD_REQUEST),
                     arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("dev", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("when mask belongs to different project, then return 400")
+        void applyMask__whenMaskFromDifferentProject__thenReturn400() {
+            var projectName1 = UUID.randomUUID().toString();
+            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, TEST_WORKSPACE);
+
+            var projectName2 = UUID.randomUUID().toString();
+            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Project 1 blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId1).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Project 2 mask")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
+                    .build();
+
+            var maskId = agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId2).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigResourceClient.getLatestBlueprint(projectId1, maskId, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("when pinning environment to non-existing blueprint, then return 404")
+        void createEnv__whenBlueprintDoesNotExist__thenReturn404() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Test blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var nonExistingBlueprintId = UUID.randomUUID();
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(nonExistingBlueprintId)
+                                    .build()))
+                    .build();
+
+            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("when pinning environment to blueprint from different project, then return 404")
+        void createEnv__whenBlueprintFromDifferentProject__thenReturn404() {
+            var projectName1 = UUID.randomUUID().toString();
+            var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, TEST_WORKSPACE);
+
+            var projectName2 = UUID.randomUUID().toString();
+            var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Project 1 blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId1).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Project 2 blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint2Id = agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId2).blueprint(blueprint2).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId1)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint2Id)
+                                    .build()))
+                    .build();
+
+            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 
