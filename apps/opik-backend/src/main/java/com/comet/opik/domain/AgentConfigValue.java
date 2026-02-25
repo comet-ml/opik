@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -40,11 +41,12 @@ public record AgentConfigValue(
         STRING("string"),
         NUMBER("number"),
         PROMPT("prompt"),
-        PROMPTVERSION("promptversion");
+        PROMPT_COMMIT("promptcommit");
 
         @JsonValue
         private final String type;
 
+        @JsonCreator
         public static ValueType fromString(String type) {
             return Arrays.stream(values())
                     .filter(v -> v.type.equals(type))

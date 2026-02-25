@@ -47,7 +47,6 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -353,7 +352,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("system_prompt").value("prompt-content")
                                     .type(ValueType.PROMPT).build(),
                             AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
-                                    .type(ValueType.PROMPTVERSION).build()))
+                                    .type(ValueType.PROMPT_COMMIT).build()))
                     .build();
 
             var request1 = AgentConfigCreate.builder()
@@ -430,7 +429,7 @@ class AgentConfigResourceTest {
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
-                            .type(ValueType.PROMPTVERSION).build());
+                            .type(ValueType.PROMPT_COMMIT).build());
 
             assertThat(blueprint.values())
                     .usingRecursiveComparison()
@@ -450,14 +449,21 @@ class AgentConfigResourceTest {
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
             assertThat(blueprint.values()).hasSize(5);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
+                            .build(),
+                    AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
+                            .type(ValueType.PROMPT_COMMIT).build());
+
             assertThat(blueprint.values())
-                    .extracting(AgentConfigValue::key, AgentConfigValue::value, AgentConfigValue::type)
-                    .containsExactlyInAnyOrder(
-                            tuple("model", "gpt-4", ValueType.STRING),
-                            tuple("temperature", "0.5", ValueType.NUMBER),
-                            tuple("max_tokens", "1024", ValueType.NUMBER),
-                            tuple("system_prompt", "prompt-content", ValueType.PROMPT),
-                            tuple("prompt_version", "v1.0.0", ValueType.PROMPTVERSION));
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
         }
 
         @Test
@@ -478,7 +484,7 @@ class AgentConfigResourceTest {
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
-                            .type(ValueType.PROMPTVERSION).build(),
+                            .type(ValueType.PROMPT_COMMIT).build(),
                     AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
 
             assertThat(blueprint.values())
@@ -507,7 +513,7 @@ class AgentConfigResourceTest {
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
-                            .type(ValueType.PROMPTVERSION).build());
+                            .type(ValueType.PROMPT_COMMIT).build());
 
             assertThat(blueprint.values())
                     .usingRecursiveComparison()
@@ -536,7 +542,7 @@ class AgentConfigResourceTest {
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
-                            .type(ValueType.PROMPTVERSION).build(),
+                            .type(ValueType.PROMPT_COMMIT).build(),
                     AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
 
             assertThat(blueprint.values())
