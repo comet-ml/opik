@@ -15,8 +15,13 @@ import { Experiment } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const CompareTrialsPage: React.FunctionComponent = () => {
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const [tab = "prompt", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
@@ -77,9 +82,11 @@ const CompareTrialsPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="prompt">
               Prompt
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="items">
-              Trial items
-            </TabsTrigger>
+            {canViewDatasets && (
+              <TabsTrigger variant="underline" value="items">
+                Trial items
+              </TabsTrigger>
+            )}
             <TabsTrigger variant="underline" value="config">
               Configuration
             </TabsTrigger>
@@ -92,14 +99,16 @@ const CompareTrialsPage: React.FunctionComponent = () => {
             isPending={isPending}
           />
         </TabsContent>
-        <TabsContent value="items">
-          <TrialItemsTab
-            objectiveName={optimization?.objective_name}
-            datasetId={datasetId}
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-          />
-        </TabsContent>
+        {canViewDatasets && (
+          <TabsContent value="items">
+            <TrialItemsTab
+              objectiveName={optimization?.objective_name}
+              datasetId={datasetId}
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+            />
+          </TabsContent>
+        )}
         <TabsContent value="config">
           <ConfigurationTab
             experimentsIds={experimentsIds}
