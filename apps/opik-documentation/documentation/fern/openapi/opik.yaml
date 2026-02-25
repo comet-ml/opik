@@ -2549,9 +2549,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/experiments/groups:
     get:
       tags:
@@ -4567,9 +4565,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/spans/{spanId}/comments/{commentId}:
     get:
       tags:
@@ -5165,9 +5161,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/threads/feedback-scores/names:
     get:
       tags:
@@ -5187,9 +5181,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/stats:
     get:
       tags:
@@ -11898,6 +11890,20 @@ components:
         prompt_name:
           type: string
           readOnly: true
+    FeedbackScoreNames_Public:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreName_Public"
+    ScoreName_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
     ExperimentGroupResponse:
       type: object
       properties:

@@ -318,6 +318,7 @@ from .feedback_score_compare_source import FeedbackScoreCompareSource
 from .feedback_score_experiment_item_bulk_write_view import FeedbackScoreExperimentItemBulkWriteView
 from .feedback_score_experiment_item_bulk_write_view_source import FeedbackScoreExperimentItemBulkWriteViewSource
 from .feedback_score_names import FeedbackScoreNames
+from .feedback_score_names_public import FeedbackScoreNamesPublic
 from .feedback_score_public import FeedbackScorePublic
 from .feedback_score_public_source import FeedbackScorePublicSource
 from .feedback_score_source import FeedbackScoreSource
@@ -467,6 +468,7 @@ from .response_format_type import ResponseFormatType
 from .result import Result
 from .results_number_public import ResultsNumberPublic
 from .score_name import ScoreName
+from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
 from .span import Span
 from .span_batch import SpanBatch
@@ -857,6 +859,7 @@ __all__ = [
     "FeedbackScoreExperimentItemBulkWriteView",
     "FeedbackScoreExperimentItemBulkWriteViewSource",
     "FeedbackScoreNames",
+    "FeedbackScoreNamesPublic",
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
@@ -1005,6 +1008,7 @@ __all__ = [
     "Result",
     "ResultsNumberPublic",
     "ScoreName",
+    "ScoreNamePublic",
     "ServiceTogglesConfig",
     "Span",
     "SpanBatch",
