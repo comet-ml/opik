@@ -45,6 +45,7 @@ class ConfigClient:
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         description: typing.Optional[str],
+        config_type: str = "blueprint",
     ) -> typing.Dict[str, typing.Any]:
         backend_values = []
         for field_name, (py_type, value) in fields_with_values.items():
@@ -57,18 +58,35 @@ class ConfigClient:
                     "value": type_helpers.python_value_to_backend_value(value, py_type),
                 }
             )
-        payload: typing.Dict[str, typing.Any] = {"values": backend_values}
+        payload: typing.Dict[str, typing.Any] = {
+            "type": config_type,
+            "values": backend_values,
+        }
         if description is not None:
             payload["description"] = description
         return payload
 
-    def create_blueprint_only(
+    def create_blueprint(
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> None:
+        """Post a new blueprint to the backend without fetching it back.
+
+        Use this when you need to write a blueprint but will retrieve the
+        result separately (e.g. the decorator posts all classes' keys in
+        separate calls, then does a single fetch).
+
+        Args:
+            fields_with_values: Mapping of field name → ``(python_type, value)``
+                tuples to include in the blueprint.
+            project_name: Name of the project the blueprint belongs to.
+            project_id: Optional explicit project ID; forwarded to the backend.
+            description: Optional human-readable description stored with the
+                blueprint.
+        """
         blueprint_payload = self._build_blueprint_payload(
             fields_with_values, description
         )
@@ -85,7 +103,27 @@ class ConfigClient:
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> ConfigData:
-        self.create_blueprint_only(
+        """Create a new blueprint on the backend and return its resolved data.
+
+        Equivalent to calling :meth:`create_blueprint` followed by
+        :meth:`get_blueprint`.
+
+        Use :meth:`create_blueprint` directly when you need to write without
+        an immediate fetch (e.g. the decorator writes each class's keys
+        separately, then fetches once).
+
+        Args:
+            fields_with_values: Mapping of field name → ``(python_type, value)``
+                tuples to include in the blueprint.
+            project_name: Name of the project the blueprint belongs to.
+            project_id: Optional explicit project ID; forwarded to the backend.
+            description: Optional human-readable description stored with the
+                blueprint.
+
+        Returns:
+            :class:`ConfigData` for the newly created blueprint.
+        """
+        self.create_blueprint(
             fields_with_values=fields_with_values,
             project_name=project_name,
             project_id=project_id,
@@ -96,7 +134,46 @@ class ConfigClient:
             project_name=project_name,
         )
 
-    def try_get_blueprint(
+    def create_mask(
+        self,
+        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
+        project_name: str,
+        project_id: typing.Optional[str] = None,
+        description: typing.Optional[str] = None,
+    ) -> ConfigData:
+        """Create a mask config on the backend and return its data.
+
+        Primarily for internal use. Works the same as :meth:`create_config` but
+        sends the values payload under the ``"blueprint"`` key with ``type="mask"``.
+        A mask typically covers only a subset of the
+        blueprint's keys and is used to produce override variants (e.g. A/B
+        experiment arms).
+
+        Args:
+            fields_with_values: Mapping of field name → ``(python_type, value)``
+                tuples for the keys to include in the mask.
+            project_name: Name of the project the mask belongs to.
+            project_id: Optional explicit project ID; forwarded to the backend.
+            description: Optional human-readable description stored with the mask.
+
+        Returns:
+            :class:`ConfigData` representing the blueprint that is active after
+            the mask is applied.
+        """
+        mask_payload = self._build_blueprint_payload(
+            fields_with_values, description, config_type="mask"
+        )
+        self._rest_client.optimizer_configs.create_config(
+            project_name=project_name,
+            project_id=project_id,
+            blueprint=mask_payload,
+        )
+
+        return self.get_blueprint(
+            project_name=project_name,
+        )
+
+    def _try_get_blueprint(
         self,
         project_name: str,
         env: typing.Optional[str] = None,
@@ -129,7 +206,24 @@ class ConfigClient:
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> ConfigData:
-        result = self.try_get_blueprint(
+        """Retrieve an existing blueprint from the backend.
+
+        Args:
+            project_name: Name of the project whose blueprint to fetch.
+            env: Return the blueprint pinned to this environment label.
+            mask_id: Return the blueprint resolved through this mask ID.
+            field_types: Optional mapping of field name → Python type used to
+                deserialize backend values.  When provided, numeric strings are
+                cast to ``float``/``int``, boolean strings to ``bool``, and
+                prompt version IDs to the corresponding prompt object.
+
+        Returns:
+            :class:`ConfigData` populated with the blueprint's values.
+
+        Raises:
+            ValueError: If no blueprint exists for the given parameters.
+        """
+        result = self._try_get_blueprint(
             project_name=project_name,
             env=env,
             mask_id=mask_id,

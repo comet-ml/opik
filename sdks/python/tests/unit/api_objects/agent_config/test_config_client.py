@@ -68,6 +68,7 @@ class TestCreateConfig:
 
         mock_rest_client.optimizer_configs.create_config.assert_called_once()
         call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert call_kwargs["blueprint"]["type"] == "blueprint"
         assert call_kwargs["blueprint"]["values"] is not None
 
         mock_rest_client.optimizer_configs.get_blueprint.assert_called_once()
@@ -407,3 +408,102 @@ class TestGetBlueprint:
             env=None,
             mask_id=mask_id,
         )
+
+
+class TestCreateMask:
+    def test_create_mask__happy_path__calls_backend_with_mask_type(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+        )
+
+        call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert call_kwargs["blueprint"]["type"] == "mask"
+        assert call_kwargs["blueprint"]["values"] is not None
+
+    def test_create_mask__sends_under_blueprint_key(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+        )
+
+        call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert "blueprint" in call_kwargs
+        assert "mask" not in call_kwargs
+
+    def test_create_mask__returns_config_data(self, config_client, mock_rest_client):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = _make_blueprint(
+            blueprint_id="bp-mask"
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        result = config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+        )
+
+        assert isinstance(result, ConfigData)
+        assert result.blueprint_id == "bp-mask"
+
+    def test_create_mask__with_description__passes_description_in_mask_payload(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+            description="variant-A",
+        )
+
+        call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert call_kwargs["blueprint"]["description"] == "variant-A"
+
+    def test_create_mask__with_project_id__passes_project_id_to_backend(
+        self, config_client, mock_rest_client
+    ):
+        mock_rest_client.optimizer_configs.create_config.return_value = (
+            _make_create_response()
+        )
+        mock_rest_client.optimizer_configs.get_blueprint.return_value = (
+            _make_blueprint()
+        )
+        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
+
+        config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+            project_id="proj-99",
+        )
+
+        call_kwargs = mock_rest_client.optimizer_configs.create_config.call_args[1]
+        assert call_kwargs["project_id"] == "proj-99"

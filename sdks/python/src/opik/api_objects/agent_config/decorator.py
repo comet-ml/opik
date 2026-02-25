@@ -113,7 +113,7 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
         mask_id_val = object.__getattribute__(instance, "__opik_mask_id__")
         env_val = object.__getattribute__(instance, "__opik_env__")
 
-        existing = config_client.try_get_blueprint(
+        existing = config_client._try_get_blueprint(
             project_name=project_name,
             env=env_val,
             mask_id=mask_id_val,
@@ -162,7 +162,7 @@ def _handle_no_blueprint(
         value = object.__getattribute__(instance, local_name)
         fields_with_values[prefixed_name] = (f_type, value)
 
-    config_client.create_blueprint_only(
+    config_client.create_blueprint(
         fields_with_values=fields_with_values,
         project_name=project_name,
         description=description,
@@ -171,7 +171,7 @@ def _handle_no_blueprint(
     shared_cache: SharedConfigCache = object.__getattribute__(
         instance, "__opik_shared_cache__"
     )
-    created = config_client.try_get_blueprint(
+    created = config_client._try_get_blueprint(
         project_name=project_name,
         env=env_val,
         mask_id=mask_id_val,
@@ -203,7 +203,7 @@ def _handle_existing_blueprint(
             value = object.__getattribute__(instance, local_name)
             extra_fields[prefixed_name] = (f_type, value)
 
-        config_client.create_blueprint_only(
+        config_client.create_blueprint(
             fields_with_values=extra_fields,
             project_name=project_name,
             description=description,
