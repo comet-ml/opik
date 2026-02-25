@@ -1,42 +1,69 @@
-.PHONY: cursor claude clean-agents help hooks hooks-remove
+.PHONY: cursor codex claude clean-agents help hooks hooks-remove precommit-sdks precommit-sdks-all
 
 AI_DIR := .agents
 CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
 HOOKS_DEST := .git/hooks
+SDK_DIFF_BASE ?= origin/main
+
+define link_agent_config
+	@if [ ! -d "$(AI_DIR)" ]; then \
+		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
+		exit 1; \
+	fi
+	@if [ -e "$(1)" ] && [ ! -L "$(1)" ]; then \
+		echo "Error: $(1) exists and is not a symlink."; \
+		echo "Remove it manually if you want to use .agents/ as source."; \
+		exit 1; \
+	fi
+	@if [ -L "$(1)" ]; then \
+		echo "$(1) symlink already exists"; \
+	else \
+		echo "Creating symlink $(1) -> $(AI_DIR)..."; \
+		ln -s "$(AI_DIR)" "$(1)"; \
+	fi
+endef
+
+define clean_synced_files
+	@if [ -d "$(AI_DIR)/$(1)" ]; then \
+		find "$(AI_DIR)/$(1)" $(2) 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/$(1)/}; \
+			dest_rel=$$rel; \
+			$(3) \
+			dest="$(CLAUDE_DIR)/$(4)/$$dest_rel"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest" || true; \
+		done; \
+	fi
+endef
 
 help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
+	@echo "  make codex         - Ensure .codex symlink + generate Codex AGENTS.override.md from .agents/rules/*.mdc"
 	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
-	@echo "  make clean-agents  - Remove synced files from .claude/ (preserves local customizations)"
+	@echo "  make clean-agents  - Remove synced files from .claude/ and local Codex artifacts"
 	@echo ""
 	@echo "Git Hooks"
 	@echo ""
 	@echo "  make hooks         - Install pre-commit hooks"
 	@echo "  make hooks-remove  - Remove pre-commit hooks"
 	@echo ""
+	@echo "SDK Checks"
+	@echo "  make precommit-sdks       - Run staged/prepared file checks for all SDKs"
+	@echo "  make precommit-sdks-all   - Run all-file pre-commit checks for all SDKs"
+	@echo ""
 
 # Sync to Cursor (symlink .cursor -> .agents)
 cursor:
-	@if [ ! -d "$(AI_DIR)" ]; then \
-		echo "Error: $(AI_DIR)/ does not exist. Run the migration first."; \
-		exit 1; \
-	fi
-	@if [ -d "$(CURSOR_DIR)" ] && [ ! -L "$(CURSOR_DIR)" ]; then \
-		echo "Error: $(CURSOR_DIR)/ exists and is not a symlink."; \
-		echo "Remove it manually if you want to use .agents/ as source."; \
-		exit 1; \
-	fi
-	@if [ -L "$(CURSOR_DIR)" ]; then \
-		echo "$(CURSOR_DIR) symlink already exists"; \
-	else \
-		echo "Creating symlink $(CURSOR_DIR) -> $(AI_DIR)..."; \
-		ln -s $(AI_DIR) $(CURSOR_DIR); \
-	fi
+	$(call link_agent_config,$(CURSOR_DIR))
 	@echo "Cursor ready!"
+
+codex:
+	$(call link_agent_config,.codex)
+	@./scripts/sync-codex.sh "$(AI_DIR)" "AGENTS.md" "AGENTS.override.md"
+	@echo "Codex ready! Generated AGENTS.override.md and .agents/generated/codex/rules/*.md"
 
 # Sync to Claude (preserve nested structure, convert frontmatter)
 # Converts: .mdc -> .md, Cursor frontmatter -> Claude frontmatter
@@ -94,38 +121,14 @@ claude:
 clean-agents:
 	@echo "Removing generated files (preserving local customizations)..."
 	@[ -L "$(CURSOR_DIR)" ] && rm -f $(CURSOR_DIR) && echo "Removed $(CURSOR_DIR) symlink" || true
-	@# Clean rules: only delete .claude/rules/*.md that have .agents/rules/*.mdc source
-	@if [ -d "$(AI_DIR)/rules" ]; then \
-		find $(AI_DIR)/rules -name "*.mdc" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/rules/}; \
-			dest="$(CLAUDE_DIR)/rules/$${rel%.mdc}.md"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
-		done; \
-	fi
-	@# Clean commands: only delete files that exist in .agents/commands/
-	@if [ -d "$(AI_DIR)/commands" ]; then \
-		find $(AI_DIR)/commands -name "*.md" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/commands/}; \
-			dest="$(CLAUDE_DIR)/commands/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
-		done; \
-	fi
-	@# Clean skills: only delete directories/files that exist in .agents/skills/
-	@if [ -d "$(AI_DIR)/skills" ]; then \
-		find $(AI_DIR)/skills -type f 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/skills/}; \
-			dest="$(CLAUDE_DIR)/skills/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
-		done; \
-	fi
-	@# Clean agents: only delete files that exist in .agents/agents/
-	@if [ -d "$(AI_DIR)/agents" ]; then \
-		find $(AI_DIR)/agents -name "*.md" 2>/dev/null | while read src; do \
-			rel=$${src#$(AI_DIR)/agents/}; \
-			dest="$(CLAUDE_DIR)/agents/$$rel"; \
-			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
-		done; \
-	fi
+	@[ -L ".codex" ] && rm -f .codex && echo "Removed .codex symlink" || true
+	@[ -f "AGENTS.override.md" ] && rm -f AGENTS.override.md && echo "Removed AGENTS.override.md" || true
+	@[ -d "$(AI_DIR)/generated/codex" ] && rm -rf "$(AI_DIR)/generated/codex" && echo "Removed $(AI_DIR)/generated/codex" || true
+	@# Clean synced files from Claude surfaces using shared deletion helper.
+	$(call clean_synced_files,rules,-name "*.mdc",dest_rel=$${dest_rel%.mdc}.md;,rules)
+	$(call clean_synced_files,commands,-name "*.md",:;,commands)
+	$(call clean_synced_files,skills,-type f,:;,skills)
+	$(call clean_synced_files,agents,-name "*.md",:;,agents)
 	@# Clean up empty directories
 	@find $(CLAUDE_DIR) -type d -empty -delete 2>/dev/null || true
 	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
@@ -153,3 +156,31 @@ hooks-remove:
 	else \
 		echo "No pre-commit hook found."; \
 	fi
+
+# Run SDK pre-commit style checks (changed files only / explicit script checks)
+precommit-sdks:
+	@echo "Running SDK-level pre-commit checks on changed files..."
+	@./scripts/run-precommit-changed-files.sh \
+		--config sdks/python/.pre-commit-config.yaml \
+		--pathspec sdks/python/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
+		--label "Python SDK files"
+	$(MAKE) -C sdks/opik_optimizer precommit SDK_DIFF_BASE="$(SDK_DIFF_BASE)"
+	@ts_files=$$(./scripts/run-precommit-changed-files.sh \
+		--pathspec sdks/typescript/ \
+		--base-ref "$(SDK_DIFF_BASE)" \
+		--label "TypeScript SDK files" \
+		--print-files | grep -E '^sdks/typescript/.*\.(ts|tsx|js|jsx)$$' || true); \
+	if [ -n "$$ts_files" ]; then \
+		echo "TypeScript SDK source files changed. Running lint and typecheck..."; \
+		cd sdks/typescript && npm run lint && npm run typecheck; \
+	else \
+		echo "No TypeScript SDK source files changed. Skipping lint and typecheck."; \
+	fi
+
+# Run full all-file SDK checks
+precommit-sdks-all:
+	@echo "Running all-file SDK checks..."
+	@cd sdks/python && pre-commit run --all-files -c .pre-commit-config.yaml
+	@cd sdks/opik_optimizer && pre-commit run --all-files -c .pre-commit-config.yaml
+	@cd sdks/typescript && npm run lint && npm run typecheck
