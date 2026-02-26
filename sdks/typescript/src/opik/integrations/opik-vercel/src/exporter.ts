@@ -29,6 +29,7 @@ type OpikExporterOptions = {
 };
 
 const aiSDKClient = new Opik();
+const SEARCH_TOOL_NAME_PATTERN = /(search|retriev|query|find|exa|tavily)/i;
 
 export class OpikExporter implements SpanExporter {
   // <otelTraceId, opikTrace>
@@ -51,6 +52,33 @@ export class OpikExporter implements SpanExporter {
     this.metadata = { ...metadata };
     this.threadId = threadId;
   }
+
+  private isToolSpan = (otelSpan: ReadableSpan): boolean => {
+    const { attributes } = otelSpan;
+
+    return (
+      "ai.toolCall.name" in attributes ||
+      "ai.toolCall.args" in attributes ||
+      "ai.toolCall.result" in attributes
+    );
+  };
+
+  private getSpanOperation = (otelSpan: ReadableSpan): string => {
+    if (!this.isToolSpan(otelSpan)) {
+      return "generate";
+    }
+
+    const toolName = otelSpan.attributes["ai.toolCall.name"]?.toString();
+    if (toolName && SEARCH_TOOL_NAME_PATTERN.test(toolName)) {
+      return "search";
+    }
+
+    return "tool_call";
+  };
+
+  private getSpanType = (otelSpan: ReadableSpan): "llm" | "tool" => {
+    return this.isToolSpan(otelSpan) ? "tool" : "llm";
+  };
 
   private getSpanInput = (otelSpan: ReadableSpan): Record<string, unknown> => {
     let input: Record<string, unknown> = {};
@@ -116,6 +144,7 @@ export class OpikExporter implements SpanExporter {
     otelSpan: ReadableSpan
   ): Record<string, unknown> => {
     const { attributes } = otelSpan;
+    const operation = this.getSpanOperation(otelSpan);
     const metadata: Record<string, unknown> = {};
 
     if (attributes["gen_ai.response.model"]) {
@@ -125,6 +154,11 @@ export class OpikExporter implements SpanExporter {
     if (attributes["gen_ai.system"]) {
       metadata.system = attributes["gen_ai.system"];
     }
+
+    metadata.created_from = "vercel-ai-sdk";
+    metadata["opik.provider"] = "vercel-ai-sdk";
+    metadata["opik.operation"] = operation;
+    metadata["opik.kind"] = operation === "search" ? "retrieval" : this.getSpanType(otelSpan);
 
     return metadata;
   };
@@ -182,6 +216,8 @@ export class OpikExporter implements SpanExporter {
     parentSpan?: Span;
     trace: Trace;
   }): Span => {
+    const type = this.getSpanType(otelSpan);
+
     return trace.span({
       name: otelSpan.name,
       startTime: new Date(hrTimeToMilliseconds(otelSpan.startTime)),
@@ -191,7 +227,7 @@ export class OpikExporter implements SpanExporter {
       output: this.getSpanOutput(otelSpan),
       metadata: this.getSpanMetadata(otelSpan),
       usage: this.getSpanUsage(otelSpan),
-      type: "llm",
+      type,
     });
   };
 
