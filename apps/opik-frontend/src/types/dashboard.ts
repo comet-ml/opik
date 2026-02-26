@@ -6,6 +6,11 @@ import { CHART_TYPE } from "@/constants/chart";
 import { Sorting } from "@/types/sorting";
 import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
+export enum VIEW_TYPE {
+  DETAILS = "details",
+  DASHBOARDS = "dashboards",
+}
+
 export enum WIDGET_TYPE {
   PROJECT_METRICS = "project_metrics",
   PROJECT_STATS_CARD = "project_stats_card",

@@ -62,6 +62,7 @@ export enum ManagementPermissionsNames {
   PROJECT_VISIBILITY = "project_visibility",
   INVITE_USERS = "invite_users_to_workspace",
   EXPERIMENT_VIEW = "experiment_view",
+  DASHBOARD_VIEW = "dashboard_view",
 }
 
 export interface UserPermission {
