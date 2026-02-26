@@ -109,6 +109,7 @@ Opik provides seamless integrations with popular AI frameworks and tools. Check 
 
 - **Vercel AI** - [`opik-vercel`](https://www.npmjs.com/package/opik-vercel)
 - **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
+- **Exa Search** - [`opik-exa`](https://www.npmjs.com/package/opik-exa)
 - **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
 - **Google Gemini** - [`opik-gemini`](https://www.npmjs.com/package/opik-gemini)
 
