@@ -345,6 +345,9 @@ class RunnerServiceImpl implements RunnerService {
             jobFields.put("inputs", JsonUtils.writeValueAsString(request.inputs()));
         }
 
+        int timeout = resolveAgentTimeout(runnerId, request.agentName());
+        jobFields.put("timeout", String.valueOf(timeout));
+
         RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
         jobMap.putAll(jobFields);
 
@@ -558,6 +561,11 @@ class RunnerServiceImpl implements RunnerService {
             } catch (Exception e) {
                 log.error("Failed to reap runner {} in workspace {}", runnerId, workspaceId, e);
             }
+            try {
+                reapStuckJobs(runnerId);
+            } catch (Exception e) {
+                log.error("Failed to reap stuck jobs for runner {} in workspace {}", runnerId, workspaceId, e);
+            }
         }
 
         if (runnerIds.isEmpty()) {
@@ -615,6 +623,42 @@ class RunnerServiceImpl implements RunnerService {
         pendingJobs.delete();
 
         redisClient.getSet(RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
+    }
+
+    private void reapStuckJobs(String runnerId) {
+        RList<String> activeJobs = redisClient.getList(
+                ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+        List<String> activeJobIds = activeJobs.readAll();
+        Instant now = Instant.now();
+
+        for (String jobId : activeJobIds) {
+            RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+            if (!jobMap.isExists()) {
+                activeJobs.remove(jobId);
+                continue;
+            }
+
+            String startedAtStr = jobMap.get("started_at");
+            if (startedAtStr == null) {
+                continue;
+            }
+
+            Instant startedAt = Instant.parse(startedAtStr);
+            int timeoutSeconds = runnerConfig.getJobTimeoutSeconds();
+            String timeoutStr = jobMap.get("timeout");
+            if (timeoutStr != null) {
+                try {
+                    timeoutSeconds = Integer.parseInt(timeoutStr);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+
+            if (Duration.between(startedAt, now).getSeconds() > timeoutSeconds) {
+                log.info("Job {} on runner {} exceeded timeout of {}s", jobId, runnerId, timeoutSeconds);
+                failJob(jobId, "Job timed out after " + timeoutSeconds + "s");
+                activeJobs.remove(jobId);
+            }
+        }
     }
 
     private void failJob(String jobId, String error) {
@@ -814,6 +858,9 @@ class RunnerServiceImpl implements RunnerService {
                 String language = meta.has("language") ? meta.get("language").asText() : null;
                 String executable = meta.has("executable") ? meta.get("executable").asText() : null;
                 String sourceFile = meta.has("source_file") ? meta.get("source_file").asText() : null;
+                Integer timeout = meta.has("timeout") && meta.get("timeout").isNumber()
+                        ? meta.get("timeout").asInt()
+                        : null;
 
                 agents.add(Runner.Agent.builder()
                         .name(entry.getKey())
@@ -823,6 +870,7 @@ class RunnerServiceImpl implements RunnerService {
                         .executable(executable)
                         .sourceFile(sourceFile)
                         .params(params)
+                        .timeout(timeout)
                         .build());
             } catch (UncheckedIOException e) {
                 log.warn("Failed to parse agent metadata for {}", entry.getKey(), e);
@@ -845,6 +893,7 @@ class RunnerServiceImpl implements RunnerService {
                 .error(fields.get("error"))
                 .project(fields.get("project"))
                 .traceId(fields.get("trace_id"))
+                .timeout(parseInteger(fields.get("timeout")))
                 .createdAt(parseInstant(fields.get("created_at")))
                 .startedAt(parseInstant(fields.get("started_at")))
                 .completedAt(parseInstant(fields.get("completed_at")))
@@ -863,6 +912,34 @@ class RunnerServiceImpl implements RunnerService {
             return null;
         }
         return Instant.parse(value);
+    }
+
+    private Integer parseInteger(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int resolveAgentTimeout(String runnerId, String agentName) {
+        try {
+            RMap<String, String> agentsMap = redisClient.getMap(
+                    RUNNER_AGENTS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+            String agentJson = agentsMap.get(agentName);
+            if (agentJson != null) {
+                JsonNode meta = JsonUtils.getJsonNodeFromString(agentJson);
+                if (meta.has("timeout") && meta.get("timeout").isNumber()) {
+                    return meta.get("timeout").asInt();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not resolve agent timeout for agent '{}' on runner '{}'", agentName, runnerId, e);
+        }
+        return runnerConfig.getJobTimeoutSeconds();
     }
 
     private void validateRunnerWorkspace(String runnerId, String workspaceId) {

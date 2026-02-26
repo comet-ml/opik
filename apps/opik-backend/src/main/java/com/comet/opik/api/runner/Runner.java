@@ -28,7 +28,8 @@ public record Runner(
             String language,
             String executable,
             String sourceFile,
-            List<Param> params) {
+            List<Param> params,
+            Integer timeout) {
 
         @Builder(toBuilder = true)
         @JsonIgnoreProperties(ignoreUnknown = true)

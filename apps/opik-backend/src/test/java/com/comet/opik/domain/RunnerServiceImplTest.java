@@ -32,6 +32,7 @@ import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -479,6 +480,32 @@ class RunnerServiceImplTest {
         }
 
         @Test
+        void storesAndReturnsAgentTimeout() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("project", "proj1");
+            meta.put("timeout", 120);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+
+            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            assertThat(runner.agents()).hasSize(1);
+            assertThat(runner.agents().get(0).timeout()).isEqualTo(120);
+        }
+
+        @Test
+        void returnsNullTimeoutWhenNotSet() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("project", "proj1");
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+
+            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            assertThat(runner.agents().get(0).timeout()).isNull();
+        }
+
+        @Test
         void throwsNotFoundForWrongWorkspace() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
@@ -684,6 +711,51 @@ class RunnerServiceImplTest {
             RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
             assertThat(job.project()).isEqualTo("default");
+        }
+
+        @Test
+        void usesAgentTimeoutWhenSet() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("timeout", 300);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            stubNextId();
+            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+                    CreateJobRequest.builder().agentName(AGENT_NAME).build());
+
+            assertThat(job.timeout()).isEqualTo(300);
+
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            assertThat(jobMap.get("timeout")).isEqualTo("300");
+        }
+
+        @Test
+        void fallsBackToConfigTimeoutWhenAgentHasNone() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("project", "proj1");
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            stubNextId();
+            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+                    CreateJobRequest.builder().agentName(AGENT_NAME).build());
+
+            assertThat(job.timeout()).isEqualTo(runnerConfig.getJobTimeoutSeconds());
+        }
+
+        @Test
+        void fallsBackToConfigTimeoutWhenNoAgentsRegistered() {
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            stubNextId();
+            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+                    CreateJobRequest.builder().agentName(AGENT_NAME).build());
+
+            assertThat(job.timeout()).isEqualTo(runnerConfig.getJobTimeoutSeconds());
         }
     }
 
@@ -1273,6 +1345,143 @@ class RunnerServiceImplTest {
             } finally {
                 runnerConfig.setDeadRunnerPurgeHours(originalPurgeHours);
             }
+        }
+    }
+
+    // --- reapStuckJobs tests ---
+
+    @Nested
+    class ReapStuckJobs {
+
+        @Test
+        void failsJobExceedingPerJobTimeout() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("timeout", 60);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+            // Backdate started_at to exceed the 60s timeout
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            jobMap.put("started_at", Instant.now().minus(Duration.ofSeconds(120)).toString());
+
+            runnerService.reapDeadRunners();
+
+            assertThat(jobMap.get("status")).isEqualTo("failed");
+            assertThat(jobMap.get("error")).contains("timed out");
+            assertThat(jobMap.get("error")).contains("60s");
+        }
+
+        @Test
+        void skipsJobWithinTimeout() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+            // started_at is "now", default timeout is 1800s — should not be reaped
+            runnerService.reapDeadRunners();
+
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            assertThat(jobMap.get("status")).isEqualTo("running");
+        }
+
+        @Test
+        void usesConfigDefaultWhenJobHasNoTimeout() {
+            int originalTimeout = runnerConfig.getJobTimeoutSeconds();
+            runnerConfig.setJobTimeoutSeconds(10);
+            try {
+                String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+                RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+                runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+                // Remove the timeout field from the job hash to simulate no per-job timeout
+                RMap<String, String> jobMap = redisClient.getMap(
+                        "opik:job:" + job.id(), StringCodec.INSTANCE);
+                jobMap.remove("timeout");
+
+                // Backdate to exceed the 10s config default
+                jobMap.put("started_at", Instant.now().minus(Duration.ofSeconds(30)).toString());
+
+                runnerService.reapDeadRunners();
+
+                assertThat(jobMap.get("status")).isEqualTo("failed");
+                assertThat(jobMap.get("error")).contains("10s");
+            } finally {
+                runnerConfig.setJobTimeoutSeconds(originalTimeout);
+            }
+        }
+
+        @Test
+        void removesReapedJobFromActiveList() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("timeout", 5);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            jobMap.put("started_at", Instant.now().minus(Duration.ofSeconds(30)).toString());
+
+            runnerService.reapDeadRunners();
+
+            RList<String> activeJobs = redisClient.getList(
+                    "opik:jobs:" + runnerId + ":active", StringCodec.INSTANCE);
+            assertThat(activeJobs.readAll()).doesNotContain(job.id());
+        }
+
+        @Test
+        void reapsStuckJobsOnAliveRunners() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("timeout", 5);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            jobMap.put("started_at", Instant.now().minus(Duration.ofSeconds(30)).toString());
+
+            // Runner is alive (heartbeat not expired), but job is stuck
+            runnerService.reapDeadRunners();
+
+            assertThat(jobMap.get("status")).isEqualTo("failed");
+            assertThat(jobMap.get("error")).contains("timed out");
+        }
+
+        @Test
+        void doesNotReapAlreadyCompletedJob() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            meta.put("timeout", 5);
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+
+            // Report result before reaping
+            runnerService.reportResult(job.id(), WORKSPACE_ID,
+                    JobResultRequest.builder().status("completed").build());
+
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            jobMap.put("started_at", Instant.now().minus(Duration.ofSeconds(30)).toString());
+
+            runnerService.reapDeadRunners();
+
+            assertThat(jobMap.get("status")).isEqualTo("completed");
         }
     }
 

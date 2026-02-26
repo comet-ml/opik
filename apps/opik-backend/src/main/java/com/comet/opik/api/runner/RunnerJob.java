@@ -23,6 +23,7 @@ public record RunnerJob(
         String error,
         String project,
         String traceId,
+        Integer timeout,
         Instant createdAt,
         Instant startedAt,
         Instant completedAt) {
