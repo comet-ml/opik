@@ -44,7 +44,7 @@ import os
 import re
 from typing import Callable, Dict, List, Any, Optional
 
-from jsonpath_ng.ext import parse as jsonpath_parse
+import jsonpath
 from opik.evaluation.metrics import (
     Equals,
     GEval,
@@ -77,10 +77,9 @@ def _resolve_reference(dataset_item: dict, reference_key: str, default=""):
         return dataset_item.get(reference_key, default)
 
     try:
-        expr = jsonpath_parse(reference_key)
-        matches = expr.find(dataset_item)
+        matches = jsonpath.findall(reference_key, dataset_item)
         if matches:
-            return matches[0].value
+            return matches[0]
         return default
     except Exception as e:
         logger.warning(f"JSONPath parse error for '{reference_key}': {e}, falling back to dict lookup")
@@ -443,7 +442,7 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
     Score = max(0, 1 - |output - reference| / scale_range)
 
     The scale_range is inferred from the dataset via ``dataset_items_provider``
-    (max − min of parseable reference values).  When the provider is absent, the
+    (max - min of parseable reference values).  When the provider is absent, the
     dataset has fewer than 2 numeric references, or all references are identical,
     scale_range defaults to 1.0 (raw absolute-error mode).
 
