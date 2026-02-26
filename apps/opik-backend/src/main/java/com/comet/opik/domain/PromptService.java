@@ -7,6 +7,7 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
@@ -89,6 +90,8 @@ public interface PromptService {
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
 
     List<PromptVersionLink> getByCommits(List<String> commits);
+
+    PromptVersionWithPrompt getByCommit(String commit);
 }
 
 @Singleton
@@ -691,6 +694,42 @@ class PromptServiceImpl implements PromptService {
                     return promptVersionDAO.findPromptVersionInfoByVersionsIds(versionsIds, workspaceId).stream()
                             .collect(toMap(PromptVersionInfo::id, Function.identity()));
                 })).subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
+    public PromptVersionWithPrompt getByCommit(@NonNull String commit) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            PromptVersion promptVersion = promptVersionDAO.findByCommit(commit, workspaceId);
+
+            if (promptVersion == null) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+
+            Prompt prompt = promptDAO.findById(promptVersion.promptId(), workspaceId);
+
+            if (prompt == null) {
+                throw new NotFoundException(PROMPT_NOT_FOUND);
+            }
+
+            return PromptVersionWithPrompt.builder()
+                    .version(promptVersion.toBuilder()
+                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
+                            .build())
+                    .prompt(prompt.toBuilder()
+                            .latestVersion(
+                                    Optional.ofNullable(prompt.latestVersion())
+                                            .map(pv -> pv.toBuilder()
+                                                    .variables(getVariables(pv.template(), pv.type()))
+                                                    .build())
+                                            .orElse(null))
+                            .build())
+                    .build();
+        });
     }
 
     @Override

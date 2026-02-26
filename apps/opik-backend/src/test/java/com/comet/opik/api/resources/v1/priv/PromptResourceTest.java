@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.PromptVersionUpdate;
+import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ErrorMessage;
@@ -4286,6 +4287,88 @@ class PromptResourceTest {
                     .post(Entity.json(request))) {
 
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompt By Commit")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptByCommit {
+
+        @Test
+        @DisplayName("Success: should return prompt version and prompt for given commit")
+        void getPromptByCommit() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            PromptVersionWithPrompt result = promptResourceClient.getPromptByCommit(
+                    version.commit(), apiKey, workspaceName);
+
+            assertThat(result.version().id()).isEqualTo(version.id());
+            assertThat(result.version().commit()).isEqualTo(version.commit());
+            assertThat(result.prompt().id()).isEqualTo(promptId);
+            assertThat(result.prompt().name()).isEqualTo(prompt.name());
+        }
+
+        @Test
+        @DisplayName("when commit not found, then return 404")
+        void getPromptByCommitWhenCommitNotFound() {
+            var unknownCommit = UUID.randomUUID().toString();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("versions/by-commit")
+                    .path(unknownCommit)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when commit belongs to another workspace, then return 404")
+        void getPromptByCommitWhenCommitBelongsToAnotherWorkspace() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("versions/by-commit")
+                    .path(version.commit())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
     }

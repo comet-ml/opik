@@ -11,6 +11,7 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
@@ -219,6 +220,26 @@ public class PromptResource {
                 prompts.size(), workspaceId);
 
         return Response.ok(prompts).build();
+    }
+
+    @GET
+    @Path("/versions/by-commit/{commit}")
+    @Operation(operationId = "getPromptByCommit", summary = "Get prompt by commit", description = "Get prompt version and prompt by commit", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionWithPrompt.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView({Prompt.View.Detail.class})
+    public Response getPromptByCommit(@PathParam("commit") String commit) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
+
+        PromptVersionWithPrompt result = promptService.getByCommit(commit);
+
+        log.info("Got prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
+
+        return Response.ok(result).build();
     }
 
     @POST

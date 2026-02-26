@@ -144,6 +144,14 @@ interface PromptVersionDAO {
     PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
             @Bind("workspace_id") String workspaceId);
 
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.commit = :commit AND pv.workspace_id = :workspace_id
+            """)
+    PromptVersion findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
+
     /**
      * Batch update for multiple prompt versions in a single database operation.
      *

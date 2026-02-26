@@ -6,6 +6,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
+import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -87,6 +88,22 @@ public class PromptResourceClient {
                 .post(Entity.json(batchDelete))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public PromptVersionWithPrompt getPromptByCommit(String commit, String apiKey, String workspaceName) {
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path("versions/by-commit")
+                .path(commit)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(PromptVersionWithPrompt.class);
         }
     }
 
