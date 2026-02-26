@@ -5,7 +5,6 @@ import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.utils.WorkspaceUtils;
-import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -424,8 +423,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
         if (mask == null) {
             throw new NotFoundException("Mask blueprint '" + maskId + "' not found");
         }
-        Preconditions.checkArgument(mask.type() == AgentBlueprint.BlueprintType.MASK,
-                "Blueprint '%s' is not a mask", maskId);
+
+        if (mask.type() != AgentBlueprint.BlueprintType.MASK) {
+            throw new BadRequestException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(List.of("Blueprint '" + maskId + "' is not a mask")))
+                            .build());
+        }
 
         if (!mask.projectId().equals(projectId)) {
             throw new BadRequestException(
