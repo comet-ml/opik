@@ -284,11 +284,14 @@ interface AgentConfigDAO {
                     envs = Arrays.asList(envsString.split(","));
                 }
             } catch (SQLException e) {
-                // envs column doesn't exist in non-history queries
+                // envs column doesn't exist in non-history queries, which is expected
             }
 
             var typeMapper = ctx.findColumnMapperFor(BlueprintType.class);
-            BlueprintType type = typeMapper.isPresent() ? typeMapper.get().map(rs, "type", ctx) : null;
+            if (typeMapper.isEmpty()) {
+                throw new IllegalStateException("BlueprintType column mapper not found");
+            }
+            BlueprintType type = typeMapper.get().map(rs, "type", ctx);
 
             return AgentBlueprint.builder()
                     .id(UUID.fromString(rs.getString("id")))

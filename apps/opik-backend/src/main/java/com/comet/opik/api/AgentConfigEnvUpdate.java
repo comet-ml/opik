@@ -17,5 +17,5 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentConfigEnvUpdate(
         @NotNull UUID projectId,
-        @NotNull @Size(min = 1, message = "envs must not be empty") @Valid List<AgentConfigEnv> envs) {
+        @NotNull @Size(min = 1, max = 100, message = "envs must contain between 1 and 100 items") @Valid List<@NotNull AgentConfigEnv> envs) {
 }

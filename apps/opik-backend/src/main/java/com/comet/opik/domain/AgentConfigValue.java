@@ -43,7 +43,7 @@ public record AgentConfigValue(
         FLOAT("float"),
         BOOLEAN("boolean"),
         PROMPT("prompt"),
-        PROMPT_COMMIT("promptcommit");
+        PROMPT_COMMIT("prompt_commit");
 
         @JsonValue
         private final String type;
