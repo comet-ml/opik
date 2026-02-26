@@ -137,7 +137,7 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) => row.feedback_scores ?? [],
     cell: FeedbackScoreListCell as never,
@@ -183,22 +183,28 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "progress",
-  "last_updated_at",
-  "scope",
-  "items_count",
   COLUMN_PROJECT_ID,
+  "instructions",
+  "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
-  "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "last_updated_at",
-  "scope",
-  "items_count",
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
   COLUMN_PROJECT_ID,
+  "instructions",
+  "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
+  "created_at",
+  "created_by",
+  "reviewers",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";

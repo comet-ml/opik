@@ -7,7 +7,6 @@ const FEEDBACK_SCORE_PREFIX = "feedback_scores.";
 const getMetricTitleMap = (source: TRACE_DATA_TYPE): Record<string, string> => {
   const isSpans = source === TRACE_DATA_TYPE.spans;
   const sourceLabel = isSpans ? "span" : "trace";
-  const sourceLabelCap = isSpans ? "Span" : "Trace";
 
   return {
     trace_count: "Total trace count",
@@ -20,9 +19,9 @@ const getMetricTitleMap = (source: TRACE_DATA_TYPE): Record<string, string> => {
     "duration.p99": `P99 ${sourceLabel} duration`,
     total_estimated_cost: isSpans ? "Avg cost per span" : "Avg cost per trace",
     total_estimated_cost_sum: `Total ${sourceLabel} cost sum`,
-    "usage.completion_tokens": `${sourceLabelCap} output tokens (avg)`,
-    "usage.prompt_tokens": `${sourceLabelCap} input tokens (avg)`,
-    "usage.total_tokens": `${sourceLabelCap} total tokens (avg)`,
+    "usage.completion_tokens": `Avg ${sourceLabel} output tokens`,
+    "usage.prompt_tokens": `Avg ${sourceLabel} input tokens`,
+    "usage.total_tokens": `Avg ${sourceLabel} total tokens`,
     input: `Total ${sourceLabel} input count`,
     output: `Total ${sourceLabel} output count`,
     metadata: `Total ${sourceLabel} metadata count`,

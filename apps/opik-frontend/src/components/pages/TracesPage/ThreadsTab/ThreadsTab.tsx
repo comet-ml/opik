@@ -75,10 +75,6 @@ import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScores
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
@@ -114,19 +110,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
-  },
-  {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
-    cell: TimeCell as never,
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    cell: TimeCell as never,
-    sortable: true,
   },
   {
     id: "duration",
@@ -253,16 +236,31 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
-  "created_at",
-  "last_updated_at",
   "duration",
-  "status",
-  USER_FEEDBACK_COLUMN_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "start_time",
+  "end_time",
+  "first_message",
+  "last_message",
+  "number_of_messages",
+  "duration",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  `${COLUMN_USAGE_ID}.prompt_tokens`,
+  `${COLUMN_USAGE_ID}.completion_tokens`,
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -461,19 +459,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }, [feedbackScoresNames]);
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    return dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -515,7 +501,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_THREADS_COLUMNS_ORDER,
     },
   );
 

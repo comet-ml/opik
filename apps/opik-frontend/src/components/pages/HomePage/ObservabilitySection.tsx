@@ -54,7 +54,7 @@ export const SHARED_COLUMNS = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row: ProjectWithStatistic) => get(row, "feedback_scores", []),
     cell: FeedbackScoreListCell as never,

@@ -16,7 +16,9 @@ export const sortColumnsByOrder = <TColumnData>(
 
   return columns
     .slice()
-    .sort((c1, c2) => (orderMap[c1.id] ?? 0) - (orderMap[c2.id] ?? 0));
+    .sort(
+      (c1, c2) => (orderMap[c1.id] ?? Infinity) - (orderMap[c2.id] ?? Infinity),
+    );
 };
 
 export const hasAnyVisibleColumns = <TColumnData>(

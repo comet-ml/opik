@@ -83,8 +83,31 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
-  "created_at",
   "trace_count",
+  "duration.p50",
+  "total_estimated_cost_avg",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "prompt",
+  COLUMN_DATASET_ID,
+  "dataset_version",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_avg",
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+  COLUMN_COMMENTS_ID,
+  "tags",
+  COLUMN_METADATA_ID,
+  "created_by",
 ];
 
 interface ExperimentsTabProps {
@@ -223,7 +246,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -277,7 +300,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "total_estimated_cost_avg",
-        label: "Cost per trace (avg.)",
+        label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
         aggregatedCell: CostCell.Aggregation as never,
@@ -287,7 +310,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback Scores",
+        label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
         cell: FeedbackScoreListCell as never,
@@ -397,6 +420,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
+    defaultColumnsOrder: DEFAULT_COLUMNS_ORDER,
     groups,
     sortableBy,
     dynamicScoresColumns,

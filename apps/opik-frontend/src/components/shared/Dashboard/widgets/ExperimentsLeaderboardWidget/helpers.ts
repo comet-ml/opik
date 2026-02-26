@@ -92,7 +92,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "duration.p50",
-    label: "Duration (avg.)",
+    label: "Avg duration",
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p50,
     cell: DurationCell as never,
@@ -143,7 +143,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "total_estimated_cost_avg",
-    label: "Cost per trace (avg.)",
+    label: "Avg cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
   },

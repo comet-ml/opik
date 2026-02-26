@@ -83,7 +83,7 @@ const SHARED_METRICS: MetricDefinition[] = [
   },
   {
     value: "usage.completion_tokens",
-    label: "Output tokens (avg.)",
+    label: "Avg output tokens",
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.completion_tokens",
     formatter: formatNumericData,
@@ -91,7 +91,7 @@ const SHARED_METRICS: MetricDefinition[] = [
   },
   {
     value: "usage.prompt_tokens",
-    label: "Input tokens (avg.)",
+    label: "Avg input tokens",
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.prompt_tokens",
     formatter: formatNumericData,
@@ -99,7 +99,7 @@ const SHARED_METRICS: MetricDefinition[] = [
   },
   {
     value: "usage.total_tokens",
-    label: "Total tokens (avg.)",
+    label: "Avg total tokens",
     type: STATISTIC_AGGREGATION_TYPE.AVG,
     statName: "usage.total_tokens",
     formatter: formatNumericData,

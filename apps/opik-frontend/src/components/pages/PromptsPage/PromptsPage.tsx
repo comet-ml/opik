@@ -7,6 +7,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import TagCell from "@/components/shared/DataTableCells/TagCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -69,7 +71,8 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
   {
     id: "template_structure",
     label: "Type",
-    type: COLUMN_TYPE.string,
+    type: COLUMN_TYPE.category,
+    cell: TagCell as never,
     size: 80,
     accessorFn: (row) => {
       const structure =
@@ -78,6 +81,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
         ? PROMPT_TEMPLATE_STRUCTURE.CHAT
         : PROMPT_TEMPLATE_STRUCTURE.TEXT;
     },
+    customMeta: { colored: false },
   },
   {
     id: "description",
@@ -171,10 +175,21 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "template_structure",
-  "description",
   "version_count",
+  "template_structure",
   "last_updated_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "version_count",
+  "template_structure",
+  "last_updated_at",
+  "tags",
+  "description",
+  "created_at",
+  "created_by",
 ];
 
 const PromptsPage: React.FunctionComponent = () => {
@@ -246,7 +261,7 @@ const PromptsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

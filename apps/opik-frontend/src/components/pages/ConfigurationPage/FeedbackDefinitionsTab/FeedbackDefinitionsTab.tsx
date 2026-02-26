@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import {
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -54,7 +55,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     sortable: true,
   },
   {
-    id: "id",
+    id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
@@ -99,6 +100,16 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "type",
   "values",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "description",
+  "type",
+  "values",
+  "created_at",
+  "created_by",
 ];
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
@@ -153,7 +164,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
