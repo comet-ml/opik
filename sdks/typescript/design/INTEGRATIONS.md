@@ -26,6 +26,7 @@ The TypeScript SDK provides integrations with popular LLM frameworks through **s
 |---------|-----------|---------|
 | `opik-openai` | OpenAI SDK | Proxy wrapper |
 | `opik-langchain` | LangChain.js | Callback handler |
+| `opik-langgraph` | LangGraph.js | Callback handler |
 | `opik-vercel` | Vercel AI SDK | OpenTelemetry exporter |
 | `opik-gemini` | Google Gemini | Proxy wrapper |
 
@@ -142,7 +143,7 @@ await openai.flush();
 
 ### Pattern 2: Callback Handler
 
-**Used by**: `opik-langchain`
+**Used by**: `opik-langchain`, `opik-langgraph`
 
 Implements framework-specific callback interface.
 
@@ -345,6 +346,33 @@ for await (const chunk of stream) {
 const handler = new OpikCallbackHandler({
   threadId: "conversation-123",
 });
+```
+
+### LangGraph Integration (`opik-langgraph`)
+
+**Supported Operations**:
+- `invoke()`
+- `stream()`
+- `ainvoke()` / `astream()` via callback inheritance
+
+**How It Works**:
+- Injects an `OpikCallbackHandler` into `graph.config.callbacks`
+- Prevents duplicate Opik callback injection
+- Adds LangGraph structure metadata under `_opik_graph_definition`
+
+**Usage**:
+
+```typescript
+import { trackLangGraph } from "opik-langgraph";
+
+const app = graphBuilder.compile();
+const trackedApp = trackLangGraph(app, {
+  projectName: "langgraph-app",
+  tags: ["langgraph"],
+});
+
+const result = await trackedApp.invoke({ messages: [] });
+await trackedApp.flush();
 ```
 
 ### Vercel AI Integration (`opik-vercel`)
