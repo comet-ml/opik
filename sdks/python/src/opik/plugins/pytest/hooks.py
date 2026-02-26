@@ -48,8 +48,6 @@ def pytest_addoption(parser: "pytest.Parser") -> None:
 def pytest_collection_modifyitems(
     session: "pytest.Session", config: "pytest.Config", items: List["pytest.Item"]
 ) -> None:
-    del session
-
     if _is_plugin_enabled(config):
         return
 
