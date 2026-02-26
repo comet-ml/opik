@@ -147,7 +147,7 @@ jobs:
       - name: Update TypeScript SDK Integrations versions
         shell: bash
         run: |
-          for integration in opik-openai opik-gemini opik-langchain opik-vercel; do
+          for integration in opik-agentica opik-openai opik-gemini opik-langchain opik-vercel; do
             if [ -d "sdks/typescript/src/opik/integrations/$integration" ]; then
               echo "Updating version for $integration"
               cd "sdks/typescript/src/opik/integrations/$integration"
