@@ -76,6 +76,21 @@ interface PromptDAO {
 
     @SqlQuery("""
             SELECT
+                *,
+                (
+                    SELECT COUNT(pv.id)
+                    FROM prompt_versions pv
+                    WHERE pv.prompt_id = p.id
+                    AND pv.workspace_id = p.workspace_id
+                ) AS version_count
+            FROM prompts p
+            WHERE id = :id
+            AND workspace_id = :workspace_id
+            """)
+    Prompt findByIdWithoutLatestVersion(@Bind("id") UUID id, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT
                 *
             FROM (
                 SELECT

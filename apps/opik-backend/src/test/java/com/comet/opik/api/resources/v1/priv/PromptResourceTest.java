@@ -4318,10 +4318,47 @@ class PromptResourceTest {
             PromptVersionWithPrompt result = promptResourceClient.getPromptByCommit(
                     version.commit(), apiKey, workspaceName);
 
-            assertThat(result.version().id()).isEqualTo(version.id());
-            assertThat(result.version().commit()).isEqualTo(version.commit());
-            assertThat(result.prompt().id()).isEqualTo(promptId);
-            assertThat(result.prompt().name()).isEqualTo(prompt.name());
+            // promptId is not exposed by Prompt.View.Detail on PromptVersion
+            var expectedVersion = version.toBuilder().promptId(null).build();
+            // fetch the prompt via its own endpoint (same view: Prompt.View.Detail), then
+            // strip latestVersion since by-commit intentionally omits it
+            var expectedPrompt = promptResourceClient.getPrompt(promptId, apiKey, workspaceName)
+                    .toBuilder().latestVersion(null).build();
+
+            assertThat(result.version())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedVersion);
+
+            assertThat(result.prompt())
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompt);
+        }
+
+        @Test
+        @DisplayName("when commit is malformed, then return 400")
+        void getPromptByCommitWhenCommitMalformed() {
+            var malformedCommit = "not-valid!!";
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("versions/by-commit")
+                    .path(malformedCommit)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
         }
 
         @Test

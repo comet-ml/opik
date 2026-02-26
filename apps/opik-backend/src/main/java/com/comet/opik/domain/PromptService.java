@@ -710,7 +710,7 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
             }
 
-            Prompt prompt = promptDAO.findById(promptVersion.promptId(), workspaceId);
+            Prompt prompt = promptDAO.findByIdWithoutLatestVersion(promptVersion.promptId(), workspaceId);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
@@ -720,14 +720,7 @@ class PromptServiceImpl implements PromptService {
                     .version(promptVersion.toBuilder()
                             .variables(getVariables(promptVersion.template(), promptVersion.type()))
                             .build())
-                    .prompt(prompt.toBuilder()
-                            .latestVersion(
-                                    Optional.ofNullable(prompt.latestVersion())
-                                            .map(pv -> pv.toBuilder()
-                                                    .variables(getVariables(pv.template(), pv.type()))
-                                                    .build())
-                                            .orElse(null))
-                            .build())
+                    .prompt(prompt)
                     .build();
         });
     }

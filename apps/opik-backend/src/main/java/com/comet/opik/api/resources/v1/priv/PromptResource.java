@@ -22,6 +22,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,6 +38,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -226,10 +228,12 @@ public class PromptResource {
     @Path("/versions/by-commit/{commit}")
     @Operation(operationId = "getPromptByCommit", summary = "Get prompt by commit", description = "Get prompt version and prompt by commit", responses = {
             @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionWithPrompt.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
     })
     @JsonView({Prompt.View.Detail.class})
-    public Response getPromptByCommit(@PathParam("commit") String commit) {
+    public Response getPromptByCommit(
+            @PathParam("commit") @Pattern(regexp = ValidationUtils.COMMIT_PATTERN) String commit) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
