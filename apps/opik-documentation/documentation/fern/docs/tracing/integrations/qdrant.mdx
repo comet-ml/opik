@@ -1,0 +1,40 @@
+---
+title: Qdrant
+description: Track Qdrant retrieval operations in Opik.
+headline: Qdrant | Opik Documentation
+---
+
+Opik can instrument Qdrant retrieval calls and log them as tool spans.
+
+## Install
+
+```bash
+pip install opik qdrant-client
+```
+
+## Usage
+
+```python
+from qdrant_client import QdrantClient
+from opik.integrations.qdrant import track_qdrant
+
+client = QdrantClient(url="http://localhost:6333")
+client = track_qdrant(client, project_name="retrieval-demo")
+
+result = client.search(
+    collection_name="docs",
+    query_vector=[0.1, 0.2, 0.3],
+    limit=5,
+)
+```
+
+## What gets logged
+
+- span `type`: `tool`
+- span name format: `qdrant.<operation>`
+- metadata keys:
+- `opik.kind=retrieval`
+- `opik.provider=qdrant`
+- `opik.operation=<operation>`
+
+Tracked operations include `query`, `query_points`, `search`, `search_batch`, `recommend`, `discover`, and `scroll` when available.
