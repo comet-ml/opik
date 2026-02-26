@@ -1,0 +1,95 @@
+---
+title: RFC - Retrieval Span Type Expansion
+description: Optional RFC for introducing a first-class retrieval span type while maintaining compatibility with existing tool spans.
+headline: RFC - Retrieval Span Type Expansion | Opik Documentation
+---
+
+This RFC defines an optional path to introduce a first-class retrieval span type in Opik.
+
+## Status
+
+Draft proposal.
+
+## Why this exists
+
+Today, retrieval and search integrations can ship with `type=tool` and metadata-based semantics. This is enough for implementation velocity. A dedicated retrieval span type may still be useful for first-class filtering and analytics.
+
+## Current Baseline
+
+- span types are currently fixed to `general`, `tool`, `llm`, and `guardrail`
+- retrieval/search can already be represented as `tool` spans with metadata
+- backend, frontend, and SDKs currently assume this enum set
+
+## Proposal
+
+Add a new span type value: `retriever`.
+
+## Compatibility Requirements
+
+1. Existing `tool` retrieval spans must continue to work.
+2. Existing SDK payloads must not break.
+3. Existing dashboards and filters must still return historical retrieval data.
+
+## Rollout Strategy
+
+### Phase 0: No schema change (already available)
+
+- keep `type=tool`
+- add metadata `opik.kind=retrieval`/`search`
+
+### Phase 1: Introduce enum value
+
+- backend enum accepts `retriever`
+- SDK generated types include `retriever`
+- frontend `SPAN_TYPE` adds `retriever`
+
+### Phase 2: Dual-read and UI transition
+
+- UI retrieval filter defaults to:
+  - `type=retriever OR (type=tool AND metadata.opik.kind in [retrieval, search])`
+- this preserves continuity during migration
+
+### Phase 3: Optional migration policy
+
+- new integrations emit `retriever`
+- legacy integrations may remain `tool` indefinitely
+
+## Surface-Specific Change List
+
+### Backend
+
+- extend span type enum and validation
+- keep unknown-value fallback behavior unchanged
+- ensure query APIs and aggregations include `retriever`
+
+### Frontend
+
+- extend type enum and color/label constants
+- update type filter options
+- keep retrieval smart-filter behavior for dual-read period
+
+### Python SDK
+
+- extend literal/type definitions and generated API types
+- update framework integrations that emit retrieval spans
+
+### TypeScript SDK
+
+- extend enum/type definitions and generated API types
+- update retrieval wrappers and integration adapters
+
+## Risks
+
+- fragmentation between `tool` and `retriever` data if migration UX is weak
+- increased maintenance in type-specific UI logic
+- temporary query complexity during dual-read period
+
+## Exit Criteria
+
+1. Retrieval traces remain discoverable before and after rollout.
+2. No regression in old SDK clients emitting `tool` retrieval spans.
+3. Documentation clearly describes both compatibility and preferred path.
+
+## Recommendation
+
+Treat this as optional until integration coverage and metadata conventions are stable. The integration contract should be implemented first.
