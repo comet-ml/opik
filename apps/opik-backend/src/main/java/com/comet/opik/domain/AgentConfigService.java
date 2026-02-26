@@ -33,19 +33,19 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @ImplementedBy(AgentConfigServiceImpl.class)
 public interface AgentConfigService {
 
-    AgentBlueprint createOrUpdateConfig(@NonNull AgentConfigCreate request);
+    AgentBlueprint createOrUpdateConfig(AgentConfigCreate request);
 
-    AgentBlueprint getLatestBlueprint(@NonNull UUID projectId, UUID maskId);
+    AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId);
 
-    AgentBlueprint getBlueprintById(@NonNull UUID blueprintId, UUID maskId);
+    AgentBlueprint getBlueprintById(UUID blueprintId, UUID maskId);
 
-    AgentBlueprint getBlueprintByEnv(@NonNull UUID projectId, @NonNull String envName, UUID maskId);
+    AgentBlueprint getBlueprintByEnv(UUID projectId, String envName, UUID maskId);
 
-    AgentBlueprint getDeltaById(@NonNull UUID blueprintId);
+    AgentBlueprint getDeltaById(UUID blueprintId);
 
-    void createOrUpdateEnvs(@NonNull AgentConfigEnvUpdate request);
+    void createOrUpdateEnvs(AgentConfigEnvUpdate request);
 
-    AgentBlueprint.BlueprintPage getHistory(@NonNull UUID projectId, int page, int size);
+    AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size);
 }
 
 @Slf4j
