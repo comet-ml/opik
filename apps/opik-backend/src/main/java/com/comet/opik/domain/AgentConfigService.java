@@ -60,9 +60,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
     @Override
     public AgentBlueprint createOrUpdateConfig(@NonNull AgentConfigCreate request) {
-        Preconditions.checkArgument(request.projectId() != null || request.projectName() != null,
-                "Either projectId or projectName must be provided");
-
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 

@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.api.validation.ProjectIdentifierValidation;
 import com.comet.opik.domain.AgentBlueprint;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -18,6 +19,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+@ProjectIdentifierValidation
 public record AgentConfigCreate(
         @Nullable @Schema(description = "Project ID. Either project_id or project_name must be provided") UUID projectId,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Project name. Either project_id or project_name must be provided") String projectName,
