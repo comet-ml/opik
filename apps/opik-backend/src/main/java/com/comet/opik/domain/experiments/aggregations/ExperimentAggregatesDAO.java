@@ -647,10 +647,25 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                             0L);
                                 }
 
-                                // Get project_id for experiments with items
+                                // Get project_id for experiments with items; wrap in Optional so that
+                                // the Mono always emits and we can branch on presence in flatMap
+                                // (avoids switchIfEmpty on Mono<Void>, which always fires)
                                 return getProjectId(experimentId)
-                                        .flatMap(projectId -> {
+                                        .map(Optional::of)
+                                        .defaultIfEmpty(Optional.empty())
+                                        .flatMap(projectIdOpt -> {
+                                            if (projectIdOpt.isEmpty()) {
+                                                // Fallback: items exist but all referenced traces were deleted
+                                                return insertExperimentAggregate(
+                                                        experimentData,
+                                                        createEmptyTraceAggregations(experimentId),
+                                                        createEmptySpanAggregations(experimentId),
+                                                        createEmptyFeedbackScoreAggregations(experimentId),
+                                                        itemsCount);
+                                            }
+
                                             // Fetch aggregations using project_id for filtering
+                                            var projectId = projectIdOpt.get();
                                             return Mono.zip(
                                                     getTraceAggregations(experimentId, projectId),
                                                     getSpanAggregations(experimentId, projectId),
@@ -667,14 +682,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                                                 feedbackAgg,
                                                                 itemsCount);
                                                     });
-                                        })
-                                        // Fallback: items exist but all referenced traces were deleted
-                                        .switchIfEmpty(Mono.defer(() -> insertExperimentAggregate(
-                                                experimentData,
-                                                createEmptyTraceAggregations(experimentId),
-                                                createEmptySpanAggregations(experimentId),
-                                                createEmptyFeedbackScoreAggregations(experimentId),
-                                                itemsCount)));
+                                        });
                             });
                 });
     }
