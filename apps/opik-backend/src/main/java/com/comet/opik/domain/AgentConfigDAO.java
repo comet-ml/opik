@@ -31,7 +31,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(AgentConfigValue.class)
 @RegisterConstructorMapper(AgentConfigEnv.class)
 @RegisterConstructorMapper(AgentConfigDAO.BlueprintProject.class)
-@RegisterRowMapper(AgentConfigDAO.BlueprintWithTagsRowMapper.class)
+@RegisterRowMapper(AgentConfigDAO.BlueprintWithEnvsRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(ValueTypeArgumentFactory.class)
 @RegisterColumnMapper(ValueTypeColumnMapper.class)
@@ -294,7 +294,7 @@ interface AgentConfigDAO {
             @Bind("last_updated_by") String lastUpdatedBy,
             @BindMethods("bean") List<AgentConfigEnv> envs);
 
-    class BlueprintWithTagsRowMapper implements RowMapper<AgentBlueprint> {
+    class BlueprintWithEnvsRowMapper implements RowMapper<AgentBlueprint> {
 
         @Override
         public AgentBlueprint map(ResultSet rs, StatementContext ctx) throws SQLException {
