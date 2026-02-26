@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS agent_config_values (
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
     CONSTRAINT agent_config_values_pk PRIMARY KEY (id),
-    CONSTRAINT agent_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, `key`)
+    CONSTRAINT agent_config_values_workspace_blueprint_key_uk UNIQUE (workspace_id, project_id, valid_from_blueprint_id, valid_to_blueprint_id, `key`)
 );
 
 CREATE TABLE IF NOT EXISTS agent_config_envs (
