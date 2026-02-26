@@ -10,6 +10,18 @@ import { MockInstance } from "vitest";
 import { z } from "zod";
 import { mockAPIFunction } from "./mockUtils";
 
+const createReadableSpan = (
+  name: string,
+  attributes: Record<string, string | number>
+) =>
+  ({
+    name,
+    attributes,
+    startTime: [0, 0],
+    endTime: [0, 10_000_000],
+    parentSpanContext: undefined,
+  }) as never;
+
 describe("Opik - Vercel AI SDK integration", () => {
   let client: Opik;
   let sdk: NodeSDK;
@@ -411,5 +423,60 @@ describe("Opik - Vercel AI SDK integration", () => {
 
     createTracesSpyWithThreadId.mockRestore();
     createSpansSpyWithThreadId.mockRestore();
+  });
+
+  it("processSpan classifies tool spans and sets operation metadata", () => {
+    const exporter = new OpikExporter({ client });
+    const traceMock = {
+      span: vi.fn().mockReturnValue({ data: { id: "span-id" } }),
+    } as never;
+    const toolSpan = createReadableSpan("tool-call", {
+      "ai.toolCall.name": "calculator",
+      "ai.toolCall.args": "{\"a\":2,\"b\":4}",
+      "ai.toolCall.result": "6",
+    });
+
+    exporter.processSpan({
+      trace: traceMock,
+      otelSpan: toolSpan,
+    });
+
+    expect(traceMock.span).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "tool",
+        metadata: expect.objectContaining({
+          "opik.provider": "vercel-ai-sdk",
+          "opik.operation": "tool_call",
+          "opik.kind": "tool",
+          created_from: "vercel-ai-sdk",
+        }),
+      })
+    );
+  });
+
+  it("processSpan marks search-like tool calls as retrieval", () => {
+    const exporter = new OpikExporter({ client });
+    const traceMock = {
+      span: vi.fn().mockReturnValue({ data: { id: "span-id" } }),
+    } as never;
+    const searchSpan = createReadableSpan("tool-call", {
+      "ai.toolCall.name": "exa_search",
+      "ai.toolCall.args": "{\"query\":\"latest ai news\"}",
+    });
+
+    exporter.processSpan({
+      trace: traceMock,
+      otelSpan: searchSpan,
+    });
+
+    expect(traceMock.span).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "tool",
+        metadata: expect.objectContaining({
+          "opik.operation": "search",
+          "opik.kind": "retrieval",
+        }),
+      })
+    );
   });
 });
