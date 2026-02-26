@@ -97,20 +97,24 @@ public class RunnersResource {
 
     @PUT
     @Path("/{runnerId}/agents")
+    @RateLimited
     @Operation(operationId = "registerAgents", summary = "Register or update the runner's agent list")
     public Response registerAgents(@PathParam("runnerId") String runnerId,
             @NotNull Map<String, JsonNode> agents) {
         ensureEnabled();
-        runnerService.registerAgents(runnerId, agents);
+        String workspaceId = requestContext.get().getWorkspaceId();
+        runnerService.registerAgents(runnerId, workspaceId, agents);
         return Response.noContent().build();
     }
 
     @POST
     @Path("/{runnerId}/heartbeat")
+    @RateLimited
     @Operation(operationId = "heartbeat", summary = "Refresh runner heartbeat")
     public Response heartbeat(@PathParam("runnerId") String runnerId) {
         ensureEnabled();
-        HeartbeatResponse response = runnerService.heartbeat(runnerId);
+        String workspaceId = requestContext.get().getWorkspaceId();
+        HeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId);
         return Response.ok(response).build();
     }
 
@@ -144,7 +148,8 @@ public class RunnersResource {
     @Operation(operationId = "nextJob", summary = "Long-poll for the next pending job")
     public Response nextJob(@PathParam("runnerId") String runnerId) {
         ensureEnabled();
-        RunnerJob job = runnerService.nextJob(runnerId);
+        String workspaceId = requestContext.get().getWorkspaceId();
+        RunnerJob job = runnerService.nextJob(runnerId, workspaceId);
         if (job == null) {
             return Response.noContent().build();
         }

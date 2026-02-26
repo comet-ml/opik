@@ -71,6 +71,7 @@ class RunnerServiceImplTest {
         redisClient = Redisson.create(config);
 
         runnerConfig = new RunnerConfig();
+        runnerConfig.setEnabled(true);
         runnerConfig.setHeartbeatTtlSeconds(2);
         runnerConfig.setNextJobPollTimeoutSeconds(1);
         runnerConfig.setMaxPendingJobsPerRunner(3);
@@ -221,12 +222,10 @@ class RunnerServiceImplTest {
             assertThat(resp.runnerId()).isEqualTo(pair.runnerId());
             assertThat(resp.workspaceId()).isEqualTo(WORKSPACE_ID);
 
-            // Pair key deleted
             RBucket<String> pairBucket = redisClient.getBucket(
                     "opik:pair:" + pair.pairingCode(), StringCodec.INSTANCE);
             assertThat(pairBucket.isExists()).isFalse();
 
-            // Runner hash updated
             RMap<String, String> runnerMap = redisClient.getMap(
                     "opik:runner:" + resp.runnerId(), StringCodec.INSTANCE);
             assertThat(runnerMap.get("status")).isEqualTo("connected");
@@ -280,6 +279,21 @@ class RunnerServiceImplTest {
         }
 
         @Test
+        void withPairingCodeFromDifferentWorkspace_throwsBadRequest() {
+            stubNextId();
+            PairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+
+            ConnectRequest req = ConnectRequest.builder()
+                    .pairingCode(pair.pairingCode())
+                    .runnerName(RUNNER_NAME)
+                    .build();
+
+            assertThatThrownBy(() -> runnerService.connect(OTHER_WORKSPACE_ID, USER_NAME, req))
+                    .isInstanceOf(ClientErrorException.class)
+                    .satisfies(e -> assertThat(((ClientErrorException) e).getResponse().getStatus()).isEqualTo(400));
+        }
+
+        @Test
         void withoutPairingCode_createsNewRunner() {
             String runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
@@ -301,12 +315,10 @@ class RunnerServiceImplTest {
 
             assertThat(newRunnerId).isNotEqualTo(oldRunnerId);
 
-            // Old runner's heartbeat deleted
             RBucket<String> oldHb = redisClient.getBucket(
                     "opik:runner:" + oldRunnerId + ":heartbeat", StringCodec.INSTANCE);
             assertThat(oldHb.isExists()).isFalse();
 
-            // User-runner mapping updated
             RBucket<String> userRunner = redisClient.getBucket(
                     "opik:workspace:" + WORKSPACE_ID + ":user:" + USER_NAME + ":runner",
                     StringCodec.INSTANCE);
@@ -366,7 +378,7 @@ class RunnerServiceImplTest {
 
             ObjectNode meta = MAPPER.createObjectNode();
             meta.put("project", "my-project");
-            runnerService.registerAgents(runnerId, Map.of("agent1", meta));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
 
             Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.id()).isEqualTo(runnerId);
@@ -382,7 +394,7 @@ class RunnerServiceImplTest {
 
             ObjectNode meta = MAPPER.createObjectNode();
             meta.put("project", "my-project");
-            runnerService.registerAgents(runnerId, Map.of("agent1", meta));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
 
             waitForHeartbeatExpiry();
 
@@ -417,7 +429,7 @@ class RunnerServiceImplTest {
 
             ObjectNode meta = MAPPER.createObjectNode();
             meta.put("project", "proj1");
-            runnerService.registerAgents(runnerId, Map.of("agent1", meta));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
 
             RMap<String, String> agentsMap = redisClient.getMap(
                     "opik:runner:" + runnerId + ":agents", StringCodec.INSTANCE);
@@ -431,11 +443,11 @@ class RunnerServiceImplTest {
 
             ObjectNode meta1 = MAPPER.createObjectNode();
             meta1.put("project", "proj1");
-            runnerService.registerAgents(runnerId, Map.of("agent1", meta1));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta1));
 
             ObjectNode meta2 = MAPPER.createObjectNode();
             meta2.put("project", "proj2");
-            runnerService.registerAgents(runnerId, Map.of("agent2", meta2));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent2", meta2));
 
             RMap<String, String> agentsMap = redisClient.getMap(
                     "opik:runner:" + runnerId + ":agents", StringCodec.INSTANCE);
@@ -449,12 +461,21 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             ObjectNode meta = MAPPER.createObjectNode();
-            runnerService.registerAgents(runnerId, Map.of("agent1", meta));
-            runnerService.registerAgents(runnerId, Map.of());
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of());
 
             RMap<String, String> agentsMap = redisClient.getMap(
                     "opik:runner:" + runnerId + ":agents", StringCodec.INSTANCE);
             assertThat(agentsMap.isExists()).isFalse();
+        }
+
+        @Test
+        void throwsNotFoundForWrongWorkspace() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            ObjectNode meta = MAPPER.createObjectNode();
+            assertThatThrownBy(() -> runnerService.registerAgents(runnerId, OTHER_WORKSPACE_ID, Map.of("a", meta)))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -467,7 +488,7 @@ class RunnerServiceImplTest {
         void refreshesHeartbeatTTL() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            HeartbeatResponse resp = runnerService.heartbeat(runnerId);
+            HeartbeatResponse resp = runnerService.heartbeat(runnerId, WORKSPACE_ID);
             assertThat(resp).isNotNull();
 
             RBucket<String> hb = redisClient.getBucket(
@@ -481,13 +502,11 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            // Claim the job
             stubNextId();
-            RunnerJob claimed = runnerService.nextJob(runnerId);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
             assertThat(claimed).isNotNull();
 
-            // Heartbeat should update last_heartbeat
-            runnerService.heartbeat(runnerId);
+            runnerService.heartbeat(runnerId, WORKSPACE_ID);
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:job:" + claimed.id(), StringCodec.INSTANCE);
@@ -499,13 +518,14 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
+            // Claim the job so it's active, then cancel (cancellation set is only for active jobs now)
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
 
-            HeartbeatResponse resp = runnerService.heartbeat(runnerId);
+            HeartbeatResponse resp = runnerService.heartbeat(runnerId, WORKSPACE_ID);
             assertThat(resp.cancelledJobIds()).contains(job.id());
 
-            // Second heartbeat should have empty cancellations
-            HeartbeatResponse resp2 = runnerService.heartbeat(runnerId);
+            HeartbeatResponse resp2 = runnerService.heartbeat(runnerId, WORKSPACE_ID);
             assertThat(resp2.cancelledJobIds()).isEmpty();
         }
 
@@ -513,7 +533,7 @@ class RunnerServiceImplTest {
         void returnsEmptyWhenNoCancellations() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            HeartbeatResponse resp = runnerService.heartbeat(runnerId);
+            HeartbeatResponse resp = runnerService.heartbeat(runnerId, WORKSPACE_ID);
             assertThat(resp.cancelledJobIds()).isEmpty();
         }
 
@@ -522,16 +542,24 @@ class RunnerServiceImplTest {
             String oldRunnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, "old");
             connectViaApiKey(WORKSPACE_ID, USER_NAME, "new");
 
-            assertThatThrownBy(() -> runnerService.heartbeat(oldRunnerId))
+            assertThatThrownBy(() -> runnerService.heartbeat(oldRunnerId, WORKSPACE_ID))
                     .isInstanceOf(ClientErrorException.class)
                     .satisfies(e -> assertThat(((ClientErrorException) e).getResponse().getStatus()).isEqualTo(410));
         }
 
         @Test
         void throwsGoneForDeletedRunner() {
-            assertThatThrownBy(() -> runnerService.heartbeat("non-existent"))
+            assertThatThrownBy(() -> runnerService.heartbeat("non-existent", WORKSPACE_ID))
                     .isInstanceOf(ClientErrorException.class)
                     .satisfies(e -> assertThat(((ClientErrorException) e).getResponse().getStatus()).isEqualTo(410));
+        }
+
+        @Test
+        void throwsNotFoundForWrongWorkspace() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            assertThatThrownBy(() -> runnerService.heartbeat(runnerId, OTHER_WORKSPACE_ID))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -557,12 +585,10 @@ class RunnerServiceImplTest {
             assertThat(job.status()).isEqualTo("pending");
             assertThat(job.project()).isEqualTo("my-project");
 
-            // Verify in pending list
             RList<String> pending = redisClient.getList(
                     "opik:jobs:" + runnerId + ":pending", StringCodec.INSTANCE);
             assertThat(pending.readAll()).contains(job.id());
 
-            // Verify in runner's job set
             RSet<String> runnerJobs = redisClient.getSet(
                     "opik:runner:" + runnerId + ":jobs", StringCodec.INSTANCE);
             assertThat(runnerJobs.contains(job.id())).isTrue();
@@ -622,9 +648,8 @@ class RunnerServiceImplTest {
 
         @Test
         void throwsTooManyRequests() {
-            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            // Fill up to max (3 in test config)
             for (int i = 0; i < runnerConfig.getMaxPendingJobsPerRunner(); i++) {
                 stubNextId();
                 runnerService.createJob(WORKSPACE_ID, USER_NAME,
@@ -663,7 +688,7 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
             assertThat(claimed).isNotNull();
             assertThat(claimed.id()).isEqualTo(created.id());
             assertThat(claimed.status()).isEqualTo("running");
@@ -674,7 +699,7 @@ class RunnerServiceImplTest {
         void returnsNullWhenNoPendingJobs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
             assertThat(claimed).isNull();
         }
 
@@ -683,7 +708,7 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             RList<String> pending = redisClient.getList(
                     "opik:jobs:" + runnerId + ":pending", StringCodec.INSTANCE);
@@ -692,6 +717,14 @@ class RunnerServiceImplTest {
             RList<String> active = redisClient.getList(
                     "opik:jobs:" + runnerId + ":active", StringCodec.INSTANCE);
             assertThat(active.readAll()).contains(created.id());
+        }
+
+        @Test
+        void throwsNotFoundForWrongWorkspace() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+            assertThatThrownBy(() -> runnerService.nextJob(runnerId, OTHER_WORKSPACE_ID))
+                    .isInstanceOf(NotFoundException.class);
         }
     }
 
@@ -761,7 +794,6 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            // Manually insert a job with different workspace into runner's job set
             String fakeJobId = "fake-job";
             RMap<String, String> fakeJob = redisClient.getMap("opik:job:" + fakeJobId, StringCodec.INSTANCE);
             fakeJob.putAll(Map.of(
@@ -784,7 +816,6 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            // Delete the job hash to simulate expiry
             redisClient.getMap("opik:job:" + job.id(), StringCodec.INSTANCE).delete();
 
             RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
@@ -948,7 +979,7 @@ class RunnerServiceImplTest {
         void completedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             ObjectNode resultNode = MAPPER.createObjectNode();
             resultNode.put("output", "success");
@@ -962,7 +993,6 @@ class RunnerServiceImplTest {
             assertThat(jobMap.get("completed_at")).isNotBlank();
             assertThat(jobMap.get("result")).contains("success");
 
-            // Removed from active list
             RList<String> active = redisClient.getList(
                     "opik:jobs:" + runnerId + ":active", StringCodec.INSTANCE);
             assertThat(active.readAll()).doesNotContain(job.id());
@@ -972,7 +1002,7 @@ class RunnerServiceImplTest {
         void failedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
                     JobResultRequest.builder().status("failed").error("something broke").build());
@@ -988,7 +1018,7 @@ class RunnerServiceImplTest {
         void setsTraceId() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
                     JobResultRequest.builder().status("completed").traceId("trace-123").build());
@@ -1002,7 +1032,7 @@ class RunnerServiceImplTest {
         void setsTTLOnJobAndLogs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("log").build()));
@@ -1017,6 +1047,18 @@ class RunnerServiceImplTest {
             RList<String> logsList = redisClient.getList(
                     "opik:job:" + job.id() + ":logs", StringCodec.INSTANCE);
             assertThat(logsList.remainTimeToLive()).isPositive();
+        }
+
+        @Test
+        void throwsBadRequestForInvalidStatus() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
+
+            assertThatThrownBy(() -> runnerService.reportResult(job.id(), WORKSPACE_ID,
+                    JobResultRequest.builder().status("running").build()))
+                    .isInstanceOf(ClientErrorException.class)
+                    .satisfies(e -> assertThat(((ClientErrorException) e).getResponse().getStatus()).isEqualTo(400));
         }
 
         @Test
@@ -1043,19 +1085,45 @@ class RunnerServiceImplTest {
     class CancelJob {
 
         @Test
-        void setsStatusAndAddsToCancellationSet() {
+        void cancelActiveJob_addsToCancellationSet() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:job:" + job.id(), StringCodec.INSTANCE);
             assertThat(jobMap.get("status")).isEqualTo("cancelled");
+            assertThat(jobMap.get("completed_at")).isNotBlank();
 
             RSet<String> cancellations = redisClient.getSet(
                     "opik:runner:" + runnerId + ":cancellations", StringCodec.INSTANCE);
             assertThat(cancellations.contains(job.id())).isTrue();
+        }
+
+        @Test
+        void cancelPendingJob_removesFromPendingQueue() {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+
+            runnerService.cancelJob(job.id(), WORKSPACE_ID);
+
+            // Should be removed from pending
+            RList<String> pending = redisClient.getList(
+                    "opik:jobs:" + runnerId + ":pending", StringCodec.INSTANCE);
+            assertThat(pending.readAll()).doesNotContain(job.id());
+
+            // Should NOT be in cancellation set (pending jobs don't need runner notification)
+            RSet<String> cancellations = redisClient.getSet(
+                    "opik:runner:" + runnerId + ":cancellations", StringCodec.INSTANCE);
+            assertThat(cancellations.contains(job.id())).isFalse();
+
+            // Should have TTL set
+            RMap<String, String> jobMap = redisClient.getMap(
+                    "opik:job:" + job.id(), StringCodec.INSTANCE);
+            assertThat(jobMap.get("status")).isEqualTo("cancelled");
+            assertThat(jobMap.remainTimeToLive()).isPositive();
         }
 
         @Test
@@ -1083,7 +1151,7 @@ class RunnerServiceImplTest {
         void failsOrphanedActiveJobs() throws InterruptedException {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId);
+            runnerService.nextJob(runnerId, WORKSPACE_ID);
 
             waitForHeartbeatExpiry();
             runnerService.reapDeadRunners();
@@ -1096,7 +1164,7 @@ class RunnerServiceImplTest {
 
         @Test
         void failsOrphanedPendingJobs() throws InterruptedException {
-            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             waitForHeartbeatExpiry();
@@ -1110,7 +1178,6 @@ class RunnerServiceImplTest {
 
         @Test
         void purgesLongDeadRunners() throws InterruptedException {
-            // deadRunnerPurgeHours=0, so any dead runner is immediately purgeable
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             waitForHeartbeatExpiry();
@@ -1158,8 +1225,6 @@ class RunnerServiceImplTest {
             String runner2 = pairAndConnect(WORKSPACE_ID, "user2", "runner2");
 
             waitForHeartbeatExpiry();
-
-            // Both runners dead — reap should handle both without one blocking the other
             runnerService.reapDeadRunners();
 
             RMap<String, String> map1 = redisClient.getMap(
@@ -1169,18 +1234,47 @@ class RunnerServiceImplTest {
             assertThat(map1.isExists()).isFalse();
             assertThat(map2.isExists()).isFalse();
         }
+
+        @Test
+        void cleansRunnerJobsSetOnReap() throws InterruptedException {
+            String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+
+            waitForHeartbeatExpiry();
+            runnerService.reapDeadRunners();
+
+            RSet<String> runnerJobs = redisClient.getSet(
+                    "opik:runner:" + runnerId + ":jobs", StringCodec.INSTANCE);
+            assertThat(runnerJobs.isExists()).isFalse();
+        }
+
+        @Test
+        void recordsDisconnectedAtOnFirstReap() throws InterruptedException {
+            int originalPurgeHours = runnerConfig.getDeadRunnerPurgeHours();
+            runnerConfig.setDeadRunnerPurgeHours(999);
+            try {
+                String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+
+                waitForHeartbeatExpiry();
+                runnerService.reapDeadRunners();
+
+                RMap<String, String> runnerMap = redisClient.getMap(
+                        "opik:runner:" + runnerId, StringCodec.INSTANCE);
+                assertThat(runnerMap.get("disconnected_at")).isNotBlank();
+            } finally {
+                runnerConfig.setDeadRunnerPurgeHours(originalPurgeHours);
+            }
+        }
     }
 
     // --- Full flow test ---
 
     @Test
     void fullFlow_pairConnectCreateJobNextJobReportResult() {
-        // Pair
         stubNextId();
         PairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
         assertThat(pair.pairingCode()).hasSize(6);
 
-        // Connect
         ConnectRequest connectReq = ConnectRequest.builder()
                 .pairingCode(pair.pairingCode())
                 .runnerName(RUNNER_NAME)
@@ -1189,17 +1283,14 @@ class RunnerServiceImplTest {
         String runnerId = connectResp.runnerId();
         assertThat(runnerId).isEqualTo(pair.runnerId());
 
-        // Register agents
         ObjectNode agentMeta = MAPPER.createObjectNode();
         agentMeta.put("project", "my-project");
-        runnerService.registerAgents(runnerId, Map.of(AGENT_NAME, agentMeta));
+        runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agentMeta));
 
-        // Verify runner is listed
         List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
         assertThat(runners).hasSize(1);
         assertThat(runners.get(0).agents()).hasSize(1);
 
-        // Create job
         stubNextId();
         ObjectNode inputs = MAPPER.createObjectNode();
         inputs.put("prompt", "hello");
@@ -1211,21 +1302,17 @@ class RunnerServiceImplTest {
         RunnerJob created = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
         assertThat(created.status()).isEqualTo("pending");
 
-        // Next job (claim)
-        RunnerJob claimed = runnerService.nextJob(runnerId);
+        RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
         assertThat(claimed).isNotNull();
         assertThat(claimed.id()).isEqualTo(created.id());
         assertThat(claimed.status()).isEqualTo("running");
 
-        // Heartbeat
-        HeartbeatResponse hbResp = runnerService.heartbeat(runnerId);
+        HeartbeatResponse hbResp = runnerService.heartbeat(runnerId, WORKSPACE_ID);
         assertThat(hbResp.cancelledJobIds()).isEmpty();
 
-        // Append logs
         runnerService.appendLogs(claimed.id(), WORKSPACE_ID,
                 List.of(LogEntry.builder().stream("stdout").text("Processing...").build()));
 
-        // Report result
         ObjectNode resultNode = MAPPER.createObjectNode();
         resultNode.put("answer", "world");
         runnerService.reportResult(claimed.id(), WORKSPACE_ID,
@@ -1235,7 +1322,6 @@ class RunnerServiceImplTest {
                         .traceId("trace-abc")
                         .build());
 
-        // Verify final state
         RunnerJob finalJob = runnerService.getJob(claimed.id(), WORKSPACE_ID);
         assertThat(finalJob.status()).isEqualTo("completed");
         assertThat(finalJob.traceId()).isEqualTo("trace-abc");

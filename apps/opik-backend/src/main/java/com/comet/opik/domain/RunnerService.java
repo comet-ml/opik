@@ -53,14 +53,15 @@ public interface RunnerService {
 
     Runner getRunner(@NonNull String workspaceId, @NonNull String runnerId);
 
-    void registerAgents(@NonNull String runnerId, @NonNull Map<String, JsonNode> agents);
+    void registerAgents(@NonNull String runnerId, @NonNull String workspaceId,
+            @NonNull Map<String, JsonNode> agents);
 
-    HeartbeatResponse heartbeat(@NonNull String runnerId);
+    HeartbeatResponse heartbeat(@NonNull String runnerId, @NonNull String workspaceId);
 
     RunnerJob createJob(@NonNull String workspaceId, @NonNull String userName,
             @NonNull CreateJobRequest request);
 
-    RunnerJob nextJob(@NonNull String runnerId);
+    RunnerJob nextJob(@NonNull String runnerId, @NonNull String workspaceId);
 
     RunnerJob.RunnerJobPage listJobs(@NonNull String runnerId, String project,
             @NonNull String workspaceId, int page, int size);
@@ -113,6 +114,8 @@ class RunnerServiceImpl implements RunnerService {
     private static final String JOB_STATUS_COMPLETED = "completed";
     private static final String JOB_STATUS_FAILED = "failed";
     private static final String JOB_STATUS_CANCELLED = "cancelled";
+
+    private static final Set<String> TERMINAL_JOB_STATUSES = Set.of(JOB_STATUS_COMPLETED, JOB_STATUS_FAILED);
 
     private final @NonNull RedissonClient redisClient;
     private final @NonNull RunnerConfig runnerConfig;
@@ -228,7 +231,10 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public void registerAgents(@NonNull String runnerId, @NonNull Map<String, JsonNode> agents) {
+    public void registerAgents(@NonNull String runnerId, @NonNull String workspaceId,
+            @NonNull Map<String, JsonNode> agents) {
+        validateRunnerWorkspace(runnerId, workspaceId);
+
         String key = RUNNER_AGENTS_KEY.formatted(runnerId);
         RMap<String, String> agentsMap = redisClient.getMap(key, StringCodec.INSTANCE);
         agentsMap.delete();
@@ -241,8 +247,8 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public HeartbeatResponse heartbeat(@NonNull String runnerId) {
-        // Verify runner exists
+    public HeartbeatResponse heartbeat(@NonNull String runnerId, @NonNull String workspaceId) {
+        // Verify runner exists and belongs to workspace
         RMap<String, String> runnerMap = redisClient.getMap(
                 RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
         if (!runnerMap.isExists()) {
@@ -251,8 +257,9 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
+        validateRunnerWorkspace(runnerMap, workspaceId);
+
         // Check if this runner has been replaced
-        String workspaceId = runnerMap.get("workspace_id");
         String userName = runnerMap.get("user_name");
         if (workspaceId != null && userName != null) {
             RBucket<String> currentRunnerBucket = redisClient.getBucket(
@@ -360,7 +367,9 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public RunnerJob nextJob(@NonNull String runnerId) {
+    public RunnerJob nextJob(@NonNull String runnerId, @NonNull String workspaceId) {
+        validateRunnerWorkspace(runnerId, workspaceId);
+
         String pendingKey = PENDING_JOBS_KEY.formatted(runnerId);
         String activeKey = ACTIVE_JOBS_KEY.formatted(runnerId);
 
@@ -498,6 +507,13 @@ class RunnerServiceImpl implements RunnerService {
         }
         validateWorkspaceOwnership(fields, workspaceId);
 
+        if (!TERMINAL_JOB_STATUSES.contains(result.status())) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of(
+                            "Invalid result status. Must be one of: " + TERMINAL_JOB_STATUSES)))
+                    .build());
+        }
+
         String now = Instant.now().toString();
         jobMap.put("status", result.status());
         jobMap.put("completed_at", now);
@@ -536,12 +552,28 @@ class RunnerServiceImpl implements RunnerService {
         validateWorkspaceOwnership(fields, workspaceId);
 
         jobMap.put("status", JOB_STATUS_CANCELLED);
+        jobMap.put("completed_at", Instant.now().toString());
 
         String runnerId = fields.get("runner_id");
         if (runnerId != null) {
-            RSet<String> cancellations = redisClient.getSet(
-                    RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
-            cancellations.add(jobId);
+            // If the job is still pending, remove it from the pending queue directly
+            RList<String> pendingJobs = redisClient.getList(
+                    PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+            boolean wasInPending = pendingJobs.remove(jobId);
+
+            if (wasInPending) {
+                // Job was pending — set TTL since it will never go through reportResult
+                Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
+                jobMap.expire(ttl);
+                RList<String> logsList = redisClient.getList(
+                        JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
+                logsList.expire(ttl);
+            } else {
+                // Job is active (running) — notify runner via cancellation set
+                RSet<String> cancellations = redisClient.getSet(
+                        RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                cancellations.add(jobId);
+            }
         }
     }
 
@@ -593,15 +625,18 @@ class RunnerServiceImpl implements RunnerService {
         }
 
         Map<String, String> runnerFields = runnerMap.readAllMap();
-        String connectedAt = runnerFields.get("connected_at");
+
+        // Record when we first observed this runner as dead
+        String disconnectedAt = runnerFields.get("disconnected_at");
+        if (disconnectedAt == null) {
+            disconnectedAt = Instant.now().toString();
+            runnerMap.put("disconnected_at", disconnectedAt);
+        }
 
         // Check if runner has been dead long enough to purge
-        boolean shouldPurge = false;
-        if (connectedAt != null) {
-            Instant connected = Instant.parse(connectedAt);
-            shouldPurge = Duration.between(connected, Instant.now()).toHours() >= runnerConfig
-                    .getDeadRunnerPurgeHours();
-        }
+        Instant disconnected = Instant.parse(disconnectedAt);
+        boolean shouldPurge = Duration.between(disconnected, Instant.now()).toHours() >= runnerConfig
+                .getDeadRunnerPurgeHours();
 
         // Fail orphaned active jobs
         failOrphanedJobs(runnerId);
@@ -629,6 +664,9 @@ class RunnerServiceImpl implements RunnerService {
             failJob(jobId, "Runner disconnected");
         }
         pendingJobs.delete();
+
+        // Clean up the runner's job set to avoid stale references
+        redisClient.getSet(RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
     }
 
     private void failJob(String jobId, String error) {
@@ -706,6 +744,14 @@ class RunnerServiceImpl implements RunnerService {
         if (parts.length != 2) {
             throw new IllegalStateException("Malformed pairing key value: " + value);
         }
+
+        String storedWorkspaceId = parts[1];
+        if (!workspaceId.equals(storedWorkspaceId)) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of("Pairing code belongs to a different workspace")))
+                    .build());
+        }
+
         return parts[0]; // runnerId
     }
 
@@ -857,6 +903,19 @@ class RunnerServiceImpl implements RunnerService {
             return null;
         }
         return Instant.parse(value);
+    }
+
+    private void validateRunnerWorkspace(String runnerId, String workspaceId) {
+        RMap<String, String> runnerMap = redisClient.getMap(
+                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+        validateRunnerWorkspace(runnerMap, workspaceId);
+    }
+
+    private void validateRunnerWorkspace(RMap<String, String> runnerMap, String workspaceId) {
+        String storedWorkspaceId = runnerMap.get("workspace_id");
+        if (!workspaceId.equals(storedWorkspaceId)) {
+            throw new NotFoundException("Runner not found");
+        }
     }
 
     private void validateWorkspaceOwnership(Map<String, String> jobFields, String workspaceId) {

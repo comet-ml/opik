@@ -690,7 +690,7 @@ serviceToggles:
 
 # Local Runner configuration
 runner:
-  enabled: ${OPIK_RUNNER_ENABLED:-true}
+  enabled: ${OPIK_RUNNER_ENABLED:-false}
   jobTimeoutSeconds: ${OPIK_RUNNER_JOB_TIMEOUT:-1800}
   maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}
   heartbeatTtlSeconds: ${OPIK_RUNNER_HEARTBEAT_TTL:-15}
