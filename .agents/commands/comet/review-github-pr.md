@@ -266,11 +266,61 @@ Is this intentionally bypassing the service layer? The other endpoints go throug
 
 ---
 
-### 8. Summary
+### 8. Generate & Approve Summary Comment
 
-After posting, display:
-- Total comments posted (by severity)
-- Total comments skipped
+After inline comments are handled, generate a **general PR summary comment** that gives the author a high-level view of the review.
+
+#### What to include
+
+1. **Positive observations** (always lead with these): Call out things the PR does well — clean architecture, good test coverage, clear naming, smart abstractions, thorough error handling, well-structured migrations, etc. Be specific and genuine; don't fabricate praise.
+2. **Solution assessment**: A brief, honest take on the PR as a whole — does the approach make sense? Is the scope appropriate? Are there any structural concerns not captured by inline comments?
+3. **Findings recap**: One-line summary of what was flagged inline (e.g., "Left 2 suggestions and 1 nit — nothing blocking").
+4. **Tone**: Supportive and constructive. The goal is to make the author feel their work is seen and valued, while still being honest about improvements.
+
+#### Format
+
+````
+👋 **Review summary**
+
+**What looks good**
+- <specific positive observation>
+- <another positive observation>
+
+**Overall**
+<1–3 sentences on the PR as a solution>
+
+**Inline comments**: <count by severity, e.g., "2 suggestions, 1 nit"> (or "None — looks clean!" if no findings were posted)
+
+🤖 *Review posted via /review-github-pr*
+````
+
+#### User approval
+
+- **Show the summary comment** to the user before posting
+- **Offer options**:
+  - **Post**: Post this summary as-is
+  - **Edit**: Modify the summary text before posting
+  - **Skip**: Don't post a summary comment
+
+#### Deduplication
+
+Before generating, check if a summary comment from a previous run already exists (look for comments containing both `👋 **Review summary**` and the AI marker). If found, inform the user: "A summary comment was already posted in a previous run." and skip this step.
+
+#### Posting (if approved)
+
+```bash
+gh api repos/comet-ml/opik/issues/{pr_number}/comments \
+  -f body="<summary comment>"
+```
+
+---
+
+### 9. Local Summary
+
+After all posting is complete, display to the user (not on GitHub):
+- Total inline comments posted (by severity)
+- Total inline comments skipped
+- Whether the summary comment was posted, edited, or skipped
 - Link to the PR
 - Reminder: "This review does not constitute an approval. A human reviewer should still approve the PR."
 
@@ -313,8 +363,9 @@ The command is successful when:
 4. ✅ Changes are analyzed with domain-specific knowledge
 5. ✅ Findings are presented to user with severity and categories
 6. ✅ User approves which findings to post
-7. ✅ Approved comments are posted with AI marker
-8. ✅ Summary is displayed with posted/skipped counts
+7. ✅ Approved inline comments are posted with AI marker
+8. ✅ Summary comment is presented for approval and posted (if approved)
+9. ✅ Local summary is displayed with posted/skipped counts
 
 ---
 
