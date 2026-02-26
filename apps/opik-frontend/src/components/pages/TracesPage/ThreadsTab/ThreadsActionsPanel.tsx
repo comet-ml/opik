@@ -16,6 +16,7 @@ import AddTagDialog, {
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -39,6 +40,9 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteThreadsHandler = useCallback(() => {
@@ -91,7 +95,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
-        disabled={disabled}
+        disabled={disabled || !canInteractWithApp}
         dataType="threads"
       />
       <TooltipWrapper content="Manage tags">
@@ -102,7 +106,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Tag />
         </Button>
@@ -115,7 +119,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
             setOpen(4);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Brain />
         </Button>
@@ -138,7 +142,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

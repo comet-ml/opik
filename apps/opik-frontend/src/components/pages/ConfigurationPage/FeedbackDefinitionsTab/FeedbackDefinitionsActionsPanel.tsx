@@ -6,6 +6,7 @@ import { FeedbackDefinition } from "@/types/feedback-definitions";
 import useFeedbackDefinitionBatchDeleteMutation from "@/api/feedback-definitions/useFeedbackDefinitionBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type FeedbackDefinitionsActionsPanelsProps = {
   feedbackDefinitions: FeedbackDefinition[];
@@ -17,6 +18,9 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !feedbackDefinitions?.length;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useFeedbackDefinitionBatchDeleteMutation();
 
@@ -46,7 +50,7 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash className="size-4" />
         </Button>

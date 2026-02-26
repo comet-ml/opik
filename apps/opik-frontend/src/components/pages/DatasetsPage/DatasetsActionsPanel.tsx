@@ -6,6 +6,7 @@ import { Dataset } from "@/types/datasets";
 import useDatasetBatchDeleteMutation from "@/api/datasets/useDatasetBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type DatasetsActionsPanelsProps = {
   datasets: Dataset[];
@@ -17,6 +18,9 @@ const DatasetsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !datasets?.length;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useDatasetBatchDeleteMutation();
 
@@ -46,7 +50,7 @@ const DatasetsActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

@@ -14,6 +14,7 @@ import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EDIT_KEY = 1;
 const DELETE_KEY = 2;
@@ -21,6 +22,9 @@ const DELETE_KEY = 2;
 export const PromptRowActionsCell: React.FunctionComponent<
   CellContext<Prompt, unknown>
 > = (context) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const prompt = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
@@ -60,7 +64,12 @@ export const PromptRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

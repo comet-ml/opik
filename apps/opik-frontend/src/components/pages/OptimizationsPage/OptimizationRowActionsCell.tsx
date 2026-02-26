@@ -12,10 +12,14 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useOptimizationBatchDeleteMutation from "@/api/optimizations/useOptimizationBatchDeleteMutation";
 import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const OptimizationRowActionsCell: React.FunctionComponent<
   CellContext<GroupedOptimization, unknown>
 > = (context) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const organisation = context.row.original;
   const [open, setOpen] = useState<boolean>(false);
@@ -47,7 +51,12 @@ const OptimizationRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

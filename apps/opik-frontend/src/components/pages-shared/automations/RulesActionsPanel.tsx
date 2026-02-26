@@ -6,6 +6,7 @@ import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMu
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { EvaluatorsRule } from "@/types/automations";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type RulesActionsPanelsProps = {
   rules: EvaluatorsRule[];
@@ -16,6 +17,9 @@ const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const disabled = !rules?.length;
 
   const { mutate } = useRulesBatchDeleteMutation();
@@ -48,7 +52,7 @@ Tip: To pause scoring without deleting, disable the rules.`}
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

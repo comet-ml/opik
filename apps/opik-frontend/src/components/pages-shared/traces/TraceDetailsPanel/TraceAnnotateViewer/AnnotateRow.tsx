@@ -43,6 +43,7 @@ type AnnotateRowProps = {
   feedbackScore?: TraceFeedbackScore;
   onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
   onDeleteFeedbackScore: (name: string) => void;
+  disabled?: boolean;
 };
 
 const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
@@ -51,6 +52,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   feedbackScore,
   onUpdateFeedbackScore,
   onDeleteFeedbackScore,
+  disabled,
 }) => {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const { toast } = useToast();
@@ -353,6 +355,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
             variant="minimal"
             size="icon-xs"
             onClick={deleteFeedbackScore}
+            disabled={disabled}
           >
             <X />
           </Button>
@@ -364,7 +367,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           placeholder="Add a reason..."
           value={reasonValue}
           onChange={onReasonChange}
-          disabled={value === ""}
+          disabled={value === "" || disabled}
           className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
           ref={(e) => {
             textAreaRef.current = e;

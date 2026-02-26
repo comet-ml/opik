@@ -7,6 +7,7 @@ import useAnnotationQueueDeleteItemsMutation from "@/api/annotation-queues/useAn
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type QueueItemActionsPanelProps = {
   items: (Trace | Thread)[];
@@ -19,6 +20,9 @@ const QueueItemActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !items?.length || !annotationQueueId;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useAnnotationQueueDeleteItemsMutation();
 
@@ -51,7 +55,7 @@ const QueueItemActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

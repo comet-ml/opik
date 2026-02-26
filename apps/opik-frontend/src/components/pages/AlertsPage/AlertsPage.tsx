@@ -43,6 +43,7 @@ import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/AlertsPage/AlertsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (a: Alert) => a.id!;
 
@@ -177,6 +178,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 const AlertsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("alerts_search", StringParam, {
     updateType: "replaceIn",
@@ -356,7 +360,12 @@ const AlertsPage: React.FunctionComponent = () => {
               order={columnsOrder}
               onOrderChange={setColumnsOrder}
             ></ColumnsButton>
-            <Button variant="default" size="sm" onClick={handleNewAlertClick}>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleNewAlertClick}
+              disabled={!canInteractWithApp}
+            >
               Create new alert
             </Button>
           </div>
@@ -375,7 +384,11 @@ const AlertsPage: React.FunctionComponent = () => {
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
-                <Button variant="link" onClick={handleNewAlertClick}>
+                <Button
+                  variant="link"
+                  onClick={handleNewAlertClick}
+                  disabled={!canInteractWithApp}
+                >
                   Create new alert
                 </Button>
               )}

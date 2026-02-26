@@ -15,10 +15,14 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import { ProviderObject } from "@/types/providers";
 import useProviderKeysDeleteMutation from "@/api/provider-keys/useProviderKeysDeleteMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const AIProvidersRowActionsCell: React.FunctionComponent<
   CellContext<ProviderObject, unknown>
 > = (context) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -75,7 +79,12 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

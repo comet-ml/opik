@@ -88,6 +88,7 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -129,6 +130,9 @@ export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 const ExperimentsPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
   const isDatasetVersioningEnabled = useIsFeatureEnabled(
@@ -725,6 +729,7 @@ const ExperimentsPage: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={handleNewExperimentClick}
+            disabled={!canInteractWithApp}
           >
             <Info className="mr-1.5 size-3.5" />
             Create new experiment
@@ -752,7 +757,11 @@ const ExperimentsPage: React.FC = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
+              <Button
+                variant="link"
+                onClick={handleNewExperimentClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new experiment
               </Button>
             )}

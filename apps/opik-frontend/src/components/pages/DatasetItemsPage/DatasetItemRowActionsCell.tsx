@@ -10,11 +10,15 @@ import React, { useCallback } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { DatasetItem } from "@/types/datasets";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useDeleteItem } from "@/store/DatasetDraftStore";
 
 export const DatasetItemRowActionsCell: React.FunctionComponent<
   CellContext<DatasetItem, unknown>
 > = (context) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const datasetItem = context.row.original;
 
   // Draft store actions
@@ -33,7 +37,12 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
     >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5">
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

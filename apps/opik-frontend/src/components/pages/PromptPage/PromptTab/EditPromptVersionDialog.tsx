@@ -47,6 +47,7 @@ import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/L
 import { LLMMessage } from "@/types/llm";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 import { PROMPT_TEMPLATE_STRUCTURE, PROMPT_TYPE } from "@/types/prompts";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -75,6 +76,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   type: promptType,
   onSetActiveVersionId,
 }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
   const [previewMode, setPreviewMode] = useState<PROMPT_PREVIEW_MODE>(
@@ -522,7 +526,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
           </DialogClose>
           <Button
             type="submit"
-            disabled={!isValid}
+            disabled={!isValid || !canInteractWithApp}
             onClick={handleClickEditPrompt}
           >
             Create new commit

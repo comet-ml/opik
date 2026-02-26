@@ -14,10 +14,14 @@ import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProject
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   context,
 ) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const project = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -55,7 +59,12 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5 ">
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5 "
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

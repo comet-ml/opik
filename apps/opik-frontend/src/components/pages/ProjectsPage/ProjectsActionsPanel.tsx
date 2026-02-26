@@ -6,6 +6,7 @@ import { Project } from "@/types/projects";
 import useProjectBatchDeleteMutation from "@/api/projects/useProjectBatchDeleteMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ProjectsActionsPanelsProps = {
   projects: Project[];
@@ -17,6 +18,9 @@ const ProjectsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !projects?.length;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useProjectBatchDeleteMutation();
 
@@ -46,7 +50,7 @@ const ProjectsActionsPanel: React.FunctionComponent<
             setOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

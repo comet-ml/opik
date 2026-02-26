@@ -55,6 +55,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -113,6 +114,9 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -445,7 +449,12 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewProjectClick}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewProjectClick}
+            disabled={!canInteractWithApp}
+          >
             Create new project
           </Button>
         </div>
@@ -469,7 +478,11 @@ const ProjectsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewProjectClick}>
+              <Button
+                variant="link"
+                onClick={handleNewProjectClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new project
               </Button>
             )}

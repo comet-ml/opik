@@ -3,6 +3,7 @@ import { Book, Plus } from "lucide-react";
 import noDataRulesImageUrl from "/images/no-data-rules.png";
 import { Button } from "@/components/ui/button";
 import { buildDocsUrl } from "@/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type NoDataWrapperProps = {
   title: string;
@@ -26,6 +27,10 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
   height,
   className,
 }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
+
   return (
     <Wrapper
       title="Automate your scores"
@@ -46,7 +51,7 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
             </a>
           </Button>
           {openModal && (
-            <Button onClick={openModal}>
+            <Button onClick={openModal} disabled={!canInteractWithApp}>
               <Plus className="mr-2 size-4" />
               Create your first rule
             </Button>

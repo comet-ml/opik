@@ -3,6 +3,7 @@ import useSpanUpdateMutation from "@/api/traces/useSpanUpdateMutation";
 import useAppStore from "@/store/AppStore";
 import { Span, Trace } from "@/types/traces";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TagListProps = {
   tags: string[];
@@ -21,6 +22,9 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   spanId,
   className,
 }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();
@@ -68,6 +72,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       onDeleteTag={handleDeleteTag}
       size="sm"
       className={className}
+      disabled={!canInteractWithApp}
     />
   );
 };

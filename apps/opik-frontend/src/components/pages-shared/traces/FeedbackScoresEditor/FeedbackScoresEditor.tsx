@@ -25,6 +25,7 @@ type FeedbackScoresEditorProps = {
   header?: React.ReactNode;
   footer?: React.ReactNode;
   feedbackDefinitionNames?: string[];
+  disabled?: boolean;
 };
 
 type FeedbackScoreRow = {
@@ -116,6 +117,7 @@ const FeedbackScoresEditor = ({
   header,
   footer,
   feedbackDefinitionNames,
+  disabled,
 }: FeedbackScoresEditorProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -173,6 +175,7 @@ const FeedbackScoresEditor = ({
             feedbackScore={row.feedbackScore}
             onUpdateFeedbackScore={onUpdateFeedbackScore}
             onDeleteFeedbackScore={onDeleteFeedbackScore}
+            disabled={disabled}
           />
         ))}
       </div>
