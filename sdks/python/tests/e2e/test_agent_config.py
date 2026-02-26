@@ -161,19 +161,18 @@ def test_agent_config__mask_creation_and_application__happyflow(
         parameters={"temperature": 0.7, "max_tokens": 256, "model": "gpt-4"},
     )
 
-    mask_bp = agent_config.create_mask(
+    mask_id = agent_config.create_mask(
         parameters={"temperature": 0.2},
         description="low-temperature variant",
     )
 
-    assert mask_bp.id is not None
-    assert mask_bp.id != base_bp.id
-    assert mask_bp["temperature"] == "0.2"
+    assert isinstance(mask_id, str)
+    assert mask_id != base_bp.id
 
     assert base_bp["temperature"] == "0.7"
     assert base_bp["max_tokens"] == "256"
 
-    masked = agent_config.get_blueprint(mask_id=mask_bp.id)
+    masked = agent_config.get_blueprint(mask_id=mask_id)
     assert masked["temperature"] == "0.2"
 
 
@@ -228,8 +227,7 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
     agent_config.create_blueprint(
         parameters={"BaseConfig.temperature": 0.5},
     )
-    mask_bp = agent_config.create_mask(parameters={"BaseConfig.temperature": 0.1})
-    mask_id = mask_bp.id
+    mask_id = agent_config.create_mask(parameters={"BaseConfig.temperature": 0.1})
     assert mask_id is not None
 
     pre_read_latest = agent_config.get_blueprint()
@@ -294,23 +292,20 @@ def test_agent_config__multiple_mask_updates__each_produce_distinct_mask_id__hap
         parameters={"temperature": 0.7, "model": "gpt-4"},
     )
 
-    mask_a = agent_config.create_mask(
+    mask_id_a = agent_config.create_mask(
         parameters={"temperature": 0.1}, description="low-temp"
     )
-    mask_b = agent_config.create_mask(
+    mask_id_b = agent_config.create_mask(
         parameters={"temperature": 0.9}, description="high-temp"
     )
 
-    assert mask_a.id is not None
-    assert mask_b.id is not None
-    assert mask_a.id != mask_b.id
-    assert mask_a["temperature"] == "0.1"
-    assert mask_b["temperature"] == "0.9"
+    assert mask_id_a is not None
+    assert mask_id_b is not None
+    assert mask_id_a != mask_id_b
 
-    fetched_a = agent_config.get_blueprint(mask_id=mask_a.id)
-    fetched_b = agent_config.get_blueprint(mask_id=mask_b.id)
-    assert fetched_a.id == mask_a.id
-    assert fetched_b.id == mask_b.id
-    assert fetched_a.id != fetched_b.id
+    fetched_a = agent_config.get_blueprint(mask_id=mask_id_a)
+    fetched_b = agent_config.get_blueprint(mask_id=mask_id_b)
+    # Blueprint ids are the same, but masks are applied on top
+    assert fetched_a.id == fetched_b.id
     assert fetched_a["temperature"] == "0.1"
     assert fetched_b["temperature"] == "0.9"

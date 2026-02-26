@@ -86,8 +86,8 @@ class ConfigClient:
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
-    ) -> AgentBlueprintPublic:
-        """Create a mask config and fetch it back by ID."""
+    ) -> str:
+        """Create a mask config, return the client-generated mask ID."""
         mask_id = id_helpers.generate_id()
         mask_payload = self._build_blueprint_payload(
             fields_with_values, description, id=mask_id, config_type="mask"
@@ -97,7 +97,7 @@ class ConfigClient:
             project_name=project_name,
             project_id=project_id,
         )
-        return self.get_blueprint_by_id(mask_id)
+        return mask_id
 
     def get_blueprint_by_id(
         self,

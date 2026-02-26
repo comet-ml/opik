@@ -248,10 +248,6 @@ class TestCreateMask:
     def test_create_mask__happy_path__calls_backend_with_mask_type(
         self, config_client, mock_rest_client
     ):
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            _make_blueprint()
-        )
-
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
             project_name="my-project",
@@ -262,13 +258,18 @@ class TestCreateMask:
         assert blueprint.type == "mask"
         assert blueprint.values is not None
 
+    def test_create_mask__returns_mask_id(self, config_client, mock_rest_client):
+        result = config_client.create_mask(
+            fields_with_values={"temperature": (float, 0.3)},
+            project_name="my-project",
+        )
+
+        assert isinstance(result, str)
+        mock_rest_client.agent_configs.get_blueprint_by_id.assert_not_called()
+
     def test_create_mask__sends_under_blueprint_key(
         self, config_client, mock_rest_client
     ):
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            _make_blueprint()
-        )
-
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
             project_name="my-project",
@@ -278,25 +279,9 @@ class TestCreateMask:
         assert "blueprint" in call_kwargs
         assert call_kwargs["blueprint"].id is not None
 
-    def test_create_mask__returns_raw_blueprint(self, config_client, mock_rest_client):
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            _make_blueprint()
-        )
-
-        result = config_client.create_mask(
-            fields_with_values={"temperature": (float, 0.3)},
-            project_name="my-project",
-        )
-
-        assert isinstance(result, AgentBlueprintPublic)
-
     def test_create_mask__with_description__passes_description_in_mask_payload(
         self, config_client, mock_rest_client
     ):
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            _make_blueprint()
-        )
-
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
             project_name="my-project",
@@ -309,10 +294,6 @@ class TestCreateMask:
     def test_create_mask__with_project_id__passes_project_id_to_backend(
         self, config_client, mock_rest_client
     ):
-        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            _make_blueprint()
-        )
-
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
             project_name="my-project",

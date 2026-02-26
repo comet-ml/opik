@@ -173,22 +173,19 @@ class TestAgentConfigCreateBlueprint:
 
 
 class TestAgentConfigCreateMask:
-    def test_create_mask__with_parameters__returns_blueprint(
+    def test_create_mask__with_parameters__returns_mask_id(
         self, agent_config, mock_config_client
     ):
-        mock_config_client.create_mask.return_value = _make_raw_blueprint(
-            blueprint_id="mask-1"
-        )
+        mock_config_client.create_mask.return_value = "mask-1"
 
         result = agent_config.create_mask(parameters={"temp": 0.3})
 
-        assert isinstance(result, Blueprint)
-        assert result.id == "mask-1"
+        assert result == "mask-1"
 
     def test_create_mask__with_description__passes_description(
         self, agent_config, mock_config_client
     ):
-        mock_config_client.create_mask.return_value = _make_raw_blueprint()
+        mock_config_client.create_mask.return_value = "mask-2"
 
         agent_config.create_mask(parameters={"temp": 0.3}, description="variant-A")
 

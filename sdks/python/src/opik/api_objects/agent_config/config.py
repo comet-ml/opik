@@ -101,19 +101,14 @@ class AgentConfig:
             typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]
         ] = None,
         description: typing.Optional[str] = None,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> Blueprint:
+    ) -> str:
+        """Create a mask and return its ID. Apply via get_blueprint(mask_id=...)."""
         if fields_with_values is None:
             fields_with_values = {
                 k: (type(v), v) for k, v in (parameters or {}).items()
             }
-        raw = self._config_client.create_mask(
+        return self._config_client.create_mask(
             fields_with_values=fields_with_values,
             project_name=self._project_name,
             description=description,
-        )
-        return Blueprint(
-            raw_blueprint=raw,
-            field_types=field_types,
-            rest_client_=self._rest_client,
         )
