@@ -655,6 +655,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: Chroma
+                path: docs/tracing/integrations/chroma.mdx
+                slug: chroma
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
