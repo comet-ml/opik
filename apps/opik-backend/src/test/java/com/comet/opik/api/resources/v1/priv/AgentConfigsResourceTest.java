@@ -333,8 +333,8 @@ class AgentConfigsResourceTest {
                                                             .build()))
                                             .build())
                                     .build(),
-                            400,
-                            new ErrorMessage(List.of("Duplicate configuration keys are not allowed")),
+                            422,
+                            new ErrorMessage(List.of("blueprint.values Duplicate configuration keys are not allowed")),
                             ErrorMessage.class));
         }
     }

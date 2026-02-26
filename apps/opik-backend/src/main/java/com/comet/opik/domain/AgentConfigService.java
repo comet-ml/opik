@@ -77,6 +77,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
     private UUID resolveProjectId(AgentConfigCreate request, String workspaceId, String userName) {
         if (request.projectId() != null) {
+            projectService.get(request.projectId(), workspaceId);
             return request.projectId();
         }
 
@@ -158,18 +159,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         if (values == null || values.isEmpty()) {
             return;
-        }
-
-        long uniqueKeyCount = values.stream()
-                .map(AgentConfigValue::key)
-                .distinct()
-                .count();
-
-        if (uniqueKeyCount != values.size()) {
-            throw new BadRequestException(
-                    Response.status(Response.Status.BAD_REQUEST)
-                            .entity(new ErrorMessage(List.of("Duplicate configuration keys are not allowed")))
-                            .build());
         }
 
         values = values.stream()
