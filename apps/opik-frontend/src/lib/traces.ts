@@ -14,8 +14,17 @@ import isEmpty from "lodash/isEmpty";
 import { Filter } from "@/types/filters";
 import { createFilter } from "./filters";
 import { SPAN_TYPE_FILTER_COLUMN } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import { COLUMN_METADATA_ID, COLUMN_TYPE } from "@/types/shared";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
+export const DEFAULT_INTEGRATION_METADATA_FILTER_KEYS = [
+  "opik.kind",
+  "opik.provider",
+  "opik.operation",
+];
+
+const RETRIEVAL_KIND_FILTER_KEY = "opik.kind";
+const RETRIEVAL_KIND_FILTER_VALUE = "retrieval";
 
 export const generateTagVariant = (label: string) => {
   const hash = md5(label);
@@ -623,6 +632,43 @@ export const manageToolFilter = (
 
   if (!shouldFilter && hasToolFilter) {
     return filters.filter((filter) => !isToolFilter(filter));
+  }
+
+  return filters;
+};
+
+const isRetrievalFilter = (filter: Filter): boolean => {
+  return (
+    filter.field === COLUMN_METADATA_ID &&
+    filter.type === COLUMN_TYPE.dictionary &&
+    filter.key === RETRIEVAL_KIND_FILTER_KEY &&
+    filter.operator === "=" &&
+    filter.value === RETRIEVAL_KIND_FILTER_VALUE
+  );
+};
+
+export const manageRetrievalFilter = (
+  currentFilters: Filter[] | null | undefined,
+  shouldFilter: boolean,
+): Filter[] => {
+  const filters = currentFilters || [];
+  const hasRetrievalFilter = filters.some(isRetrievalFilter);
+
+  if (shouldFilter && !hasRetrievalFilter) {
+    return [
+      ...filters,
+      createFilter({
+        field: COLUMN_METADATA_ID,
+        type: COLUMN_TYPE.dictionary,
+        key: RETRIEVAL_KIND_FILTER_KEY,
+        operator: "=",
+        value: RETRIEVAL_KIND_FILTER_VALUE,
+      }),
+    ];
+  }
+
+  if (!shouldFilter && hasRetrievalFilter) {
+    return filters.filter((filter) => !isRetrievalFilter(filter));
   }
 
   return filters;
