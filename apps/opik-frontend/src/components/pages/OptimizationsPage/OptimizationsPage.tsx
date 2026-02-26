@@ -162,11 +162,20 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "num_trials",
-  "optimizer",
-  "objective_name",
   "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+  "optimizer",
+  "created_by",
 ];
 
 const OptimizationsPage: React.FunctionComponent = () => {
@@ -260,7 +269,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

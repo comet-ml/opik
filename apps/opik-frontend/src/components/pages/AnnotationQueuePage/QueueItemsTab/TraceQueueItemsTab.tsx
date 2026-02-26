@@ -250,11 +250,31 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "name",
+  "input",
+  "output",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "name",
   "input",
   "output",
-  "comments",
+  COLUMN_COMMENTS_ID,
+  "start_time",
+  "end_time",
+  "error_info",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  "llm_span_count",
+  "thread_id",
+  COLUMN_METADATA_ID,
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
@@ -334,7 +354,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

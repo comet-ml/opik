@@ -106,7 +106,7 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
   },
@@ -145,7 +145,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
   },
 ];
@@ -158,10 +158,21 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "alert_type",
-  "webhook_url",
   "triggers",
-  "created_by",
   "status",
+  "last_updated_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "alert_type",
+  "triggers",
+  "status",
+  "last_updated_at",
+  "webhook_url",
+  "created_at",
+  "created_by",
 ];
 
 const AlertsPage: React.FunctionComponent = () => {
@@ -250,7 +261,7 @@ const AlertsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
