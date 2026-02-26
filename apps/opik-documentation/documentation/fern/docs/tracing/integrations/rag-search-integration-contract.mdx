@@ -1,0 +1,145 @@
+---
+title: RAG and Search Integration Contract
+description: Standard tracing contract for RAG retrievers and web search tools in Opik.
+headline: RAG and Search Integration Contract | Opik Documentation
+---
+
+This document defines the implementation contract for integrating retrieval and search providers into Opik without changing span type enums.
+
+## Scope
+
+This contract applies to:
+
+- vector databases and retrievers: Weaviate, Qdrant, Pinecone
+- search APIs and tools: Exa, Tavily
+- framework adapters: LangChain, LlamaIndex, and similar callback-based runtimes
+
+## Non-goals
+
+- introducing a new span type like `retriever`
+- backend enum and API migrations
+- frontend type taxonomy changes
+
+## Canonical Span Contract (Phase 1)
+
+Use existing `tool` span type and add retrieval semantics in metadata.
+
+```json
+{
+  "type": "tool",
+  "name": "qdrant.search",
+  "metadata": {
+    "opik.kind": "retrieval",
+    "opik.provider": "qdrant",
+    "opik.operation": "search",
+    "opik.query": "user query text",
+    "opik.top_k": 5,
+    "opik.collection": "docs",
+    "opik.filters": {"lang": "en"},
+    "opik.result_count": 5,
+    "opik.latency_ms": 23,
+    "opik.error": false
+  }
+}
+```
+
+## Required Metadata Keys
+
+- `opik.kind`: `retrieval` or `search`
+- `opik.provider`: canonical provider id
+- `opik.operation`: provider operation name
+- `opik.result_count`: integer
+- `opik.latency_ms`: integer
+- `opik.error`: boolean
+
+## Optional Metadata Keys
+
+- `opik.query`
+- `opik.top_k`
+- `opik.collection`
+- `opik.filters`
+- `opik.error_type`
+
+## Parent Child Requirements
+
+Search and retriever spans must be nested under an existing parent span when available:
+
+1. agent step span
+2. framework tool/retriever span
+3. root trace span as fallback
+
+This keeps execution flow visible as `llm -> tool(retrieval/search) -> llm`.
+
+## Per Integration Requirements
+
+### Weaviate
+
+- instrument `query`, `nearText`, and `hybrid` retrieval calls
+- include collection and filter metadata
+- set `name` as `weaviate.<operation>`
+
+### Qdrant
+
+- instrument `search`, `query_points`, and equivalent high-level methods
+- include collection and top-k metadata
+- set `name` as `qdrant.<operation>`
+
+### Pinecone
+
+- instrument `query` operations
+- include index/namespace metadata
+- set `name` as `pinecone.query`
+
+### Exa
+
+- instrument primary search endpoint calls
+- capture query and result count
+- set `name` as `exa.search`
+
+### Tavily
+
+- instrument search calls
+- capture query and depth/options fields when present
+- set `name` as `tavily.search`
+
+## SDK Implementation Plan
+
+### Python SDK
+
+- add a reusable retrieval helper/decorator API for wrappers
+- normalize metadata keys before sending spans
+- ensure exceptions map to `opik.error=true` and include `opik.error_type`
+
+### TypeScript SDK
+
+- add `withRetrievalSpan` style helper for client wrappers
+- normalize metadata keys with same contract as Python
+- preserve parent context in async calls
+
+## Backend and Frontend Expectations
+
+### Backend
+
+- no enum/schema change required
+- ensure filtering by metadata keys is available where existing span metadata filters apply
+- keep `type=tool` compatibility behavior unchanged
+
+### Frontend
+
+- no new span type required
+- support retrieval-focused filtering via metadata keys (`opik.kind`, `opik.provider`)
+- optional UI badges from provider metadata
+
+## Definition of Done per Integration
+
+1. Span appears as `type=tool` with required metadata keys.
+2. Span is parented correctly in traces.
+3. Error path is traced with `opik.error=true`.
+4. One integration test validates metadata contract.
+5. One docs example shows emitted span payload.
+
+## Rollout
+
+1. ship provider wrappers with this contract
+2. validate dashboard/query ergonomics
+3. only then evaluate dedicated span-type expansion
