@@ -655,6 +655,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: RAG/Search Integration API Spec
+                path: docs/tracing/integrations/rag-search-api-spec.mdx
+                slug: rag-search-api-spec
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
