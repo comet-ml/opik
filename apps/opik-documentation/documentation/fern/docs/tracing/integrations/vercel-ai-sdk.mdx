@@ -106,6 +106,17 @@ main().catch(console.error);
 
 Done! All traces that contain AI SDK spans are automatically captured in Opik.
 
+## Span classification for tools and retrieval
+
+`OpikExporter` classifies AI SDK tool-call spans as `tool` spans and enriches metadata with:
+
+- `created_from: "vercel-ai-sdk"`
+- `opik.provider: "vercel-ai-sdk"`
+- `opik.operation: "tool_call"` (or `"search"` for search-like tools such as Exa/Tavily tools)
+- `opik.kind: "tool"` (or `"retrieval"` when operation is `"search"`)
+
+This makes it easier to filter retrieval spans separately from model generation spans in the UI and queries.
+
 ## Configuration
 
 ### Custom Tags and Metadata
