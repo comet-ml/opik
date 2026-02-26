@@ -26,6 +26,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 import { ChatResult, LLMResult } from "@langchain/core/outputs";
 import { BaseMessage } from "@langchain/core/messages";
 import { AgentAction, AgentFinish } from "@langchain/core/agents";
+import { buildRetrieverMetadata } from "./retrievalContract";
 
 type JsonNode = Record<string, unknown>;
 export interface OpikCallbackHandlerOptions {
@@ -489,6 +490,11 @@ export class OpikCallbackHandler
     logger.debug(
       `handleRetrieverStart runId - ${runId}, parentRunId ${parentRunId}`
     );
+    const mergedMetadata = buildRetrieverMetadata(retriever, {
+      ...metadata,
+      ...extractCallArgs(retriever, {}, metadata),
+    });
+
     this.startTracing({
       runId,
       parentRunId,
@@ -496,10 +502,7 @@ export class OpikCallbackHandler
       type: OpikSpanType.Tool,
       input: { query },
       tags,
-      metadata: {
-        ...metadata,
-        ...extractCallArgs(retriever, {}, metadata),
-      },
+      metadata: mergedMetadata,
     });
   }
 
