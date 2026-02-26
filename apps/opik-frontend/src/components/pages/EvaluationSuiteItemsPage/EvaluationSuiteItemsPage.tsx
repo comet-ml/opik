@@ -263,13 +263,11 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
                 </Button>
               </>
             )}
-            {isEvaluationSuite && (
-              <UseEvaluationSuiteDropdown
-                datasetName={suite?.name}
-                datasetId={suiteId}
-                datasetVersionId={latestVersion?.id}
-              />
-            )}
+            <UseEvaluationSuiteDropdown
+              datasetName={suite?.name}
+              datasetId={suiteId}
+              datasetVersionId={latestVersion?.id}
+            />
           </div>
         </div>
         {suite?.description && (
@@ -333,6 +331,7 @@ function EvaluationSuiteItemsPage(): React.ReactElement {
             datasetStatus={suite?.status}
             datasetType={datasetType}
             suitePolicy={versionExecutionPolicy}
+            suiteEvaluators={versionEvaluators}
           />
         </TabsContent>
         {isEvaluationSuite && (

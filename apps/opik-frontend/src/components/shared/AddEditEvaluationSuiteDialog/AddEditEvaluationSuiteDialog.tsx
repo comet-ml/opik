@@ -449,7 +449,7 @@ const AddEditEvaluationSuiteDialog = ({
                 )}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
-                    href={buildDocsUrl("/evaluation/manage_evaluation_suites")}
+                    href={buildDocsUrl("/evaluation/manage_datasets")}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

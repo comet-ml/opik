@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
+import { useHasDraft, useClearDraft } from "@/store/EvaluationSuiteDraftStore";
 import EditVersionDialog from "./EditVersionDialog";
 
 type CustomMeta = {
@@ -33,14 +34,16 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   const { datasetId } = (custom ?? {}) as CustomMeta;
 
   const restoreMutation = useRestoreDatasetVersionMutation();
+  const hasDraft = useHasDraft();
+  const clearDraft = useClearDraft();
 
   const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
 
   const handleRestore = () => {
-    restoreMutation.mutate({
-      datasetId,
-      versionRef: version.version_hash,
-    });
+    restoreMutation.mutate(
+      { datasetId, versionRef: version.version_hash },
+      { onSuccess: () => clearDraft() },
+    );
     setOpen(false);
   };
 
@@ -65,9 +68,14 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
         setOpen={setOpen}
         onConfirm={handleRestore}
         title="Restore version"
-        description={`Restoring this version will create a new version based on version ${version.version_name}. All previous versions will stay in your history.`}
-        confirmText="Restore version"
-        confirmButtonVariant="default"
+        description={
+          `Restoring this version will create a new version based on version ${version.version_name}. All previous versions will stay in your history.` +
+          (hasDraft
+            ? "\n\nYou have unsaved draft changes that will be discarded. This action can't be undone."
+            : "")
+        }
+        confirmText={hasDraft ? "Discard & Restore" : "Restore version"}
+        confirmButtonVariant={hasDraft ? "destructive" : "default"}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

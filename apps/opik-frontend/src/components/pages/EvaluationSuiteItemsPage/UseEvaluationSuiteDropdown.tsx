@@ -26,6 +26,7 @@ function UseEvaluationSuiteDropdown({
   disabled = false,
 }: UseEvaluationSuiteDropdownProps) {
   const resetKeyRef = useRef(0);
+  const resetDialogKeyRef = useRef(0);
   const [openExperimentDialog, setOpenExperimentDialog] = useState(false);
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
@@ -51,6 +52,7 @@ function UseEvaluationSuiteDropdown({
   return (
     <>
       <AddExperimentDialog
+        key={resetDialogKeyRef.current}
         open={openExperimentDialog}
         setOpen={setOpenExperimentDialog}
         datasetName={datasetName}
@@ -86,7 +88,10 @@ function UseEvaluationSuiteDropdown({
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => setOpenExperimentDialog(true)}
+            onClick={() => {
+              resetDialogKeyRef.current += 1;
+              setOpenExperimentDialog(true);
+            }}
             disabled={disabled}
           >
             <Code2 className="mr-2 mt-0.5 size-4 shrink-0 self-start" />

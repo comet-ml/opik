@@ -4,7 +4,7 @@ import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
-import { DatasetItem } from "@/types/datasets";
+import { DatasetItem, DATASET_TYPE, Evaluator } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -23,6 +23,7 @@ import {
 } from "@/store/EvaluationSuiteDraftStore";
 import { useToast } from "@/components/ui/use-toast";
 import { DATASET_ITEM_SOURCE } from "@/types/datasets";
+import { buildLLMJudgeBEConfig } from "@/lib/evaluator-converters";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -35,6 +36,8 @@ type DatasetItemsActionsPanelProps = {
   search?: string;
   totalCount?: number;
   isDraftMode?: boolean;
+  datasetType?: DATASET_TYPE;
+  suiteEvaluators?: Evaluator[];
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -50,6 +53,8 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   search = "",
   totalCount = 0,
   isDraftMode = false,
+  datasetType,
+  suiteEvaluators,
 }) => {
   const resetKeyRef = useRef(0);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -101,21 +106,48 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const handleAddGeneratedItems = useCallback(
     (items: DatasetItem[]) => {
       const now = new Date().toISOString();
-      const itemsToAdd = items.map((item) => ({
-        data: item.data,
-        source: DATASET_ITEM_SOURCE.manual,
-        tags: item.tags || [],
-        created_at: now,
-        last_updated_at: now,
-      }));
+      const itemsToAdd = items.map((item) => {
+        const rawData = item.data as Record<string, unknown>;
+        const { _opik_description, _opik_evaluator_assertions, ...cleanData } =
+          rawData;
+
+        const assertions = Array.isArray(_opik_evaluator_assertions)
+          ? _opik_evaluator_assertions.filter(
+              (a): a is string => typeof a === "string" && a.trim().length > 0,
+            )
+          : [];
+
+        const evaluators: Evaluator[] | undefined =
+          assertions.length > 0
+            ? [
+                {
+                  name: "LLM Judge",
+                  type: "llm_judge",
+                  config: buildLLMJudgeBEConfig({ assertions }),
+                },
+              ]
+            : undefined;
+
+        return {
+          data: cleanData,
+          description:
+            typeof _opik_description === "string"
+              ? _opik_description
+              : undefined,
+          evaluators,
+          source: DATASET_ITEM_SOURCE.manual,
+          tags: item.tags || [],
+          created_at: now,
+          last_updated_at: now,
+        };
+      });
 
       bulkAddItems(itemsToAdd);
 
+      const plural = items.length !== 1 ? "s" : "";
       toast({
         title: "Samples added to draft",
-        description: `${items.length} sample${
-          items.length !== 1 ? "s" : ""
-        } added to your draft changes`,
+        description: `${items.length} sample${plural} added to your draft changes`,
       });
     },
     [bulkAddItems, toast],
@@ -125,18 +157,33 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     const datasetItems = await getDataForExport();
     return datasetItems.map((item) => {
       return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // Check if this column is a dynamic dataset column
+        let key = column;
+        let value: unknown;
+
         if (dynamicColumns.includes(column)) {
-          // Dynamic columns are stored in the item.data object
           const columnName = stripColumnPrefix(
             column,
             DATASET_ITEM_DATA_PREFIX,
           );
-          acc[columnName] = get(item.data, columnName, "");
+          key = columnName;
+          value = get(item.data, columnName, "");
+        } else if (column === "expected_behaviors") {
+          key = "evaluators";
+          value = item.evaluators;
         } else {
-          // Handle direct properties like id, created_at, etc.
-          acc[column] = get(item, column, "");
+          value = get(item, column, "");
         }
+
+        // Normalize values for export
+        if (value === null || value === undefined) {
+          value = "";
+        } else if (Array.isArray(value) && value.length === 0) {
+          value = "";
+        } else if (typeof value === "object") {
+          value = JSON.stringify(value);
+        }
+
+        acc[key] = value;
         return acc;
       }, {});
     });
@@ -159,6 +206,8 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={expansionDialogOpen}
         setOpen={setExpansionDialogOpen}
         onSamplesGenerated={handleSamplesGenerated}
+        datasetType={datasetType}
+        suiteEvaluators={suiteEvaluators}
       />
 
       <GeneratedSamplesDialog

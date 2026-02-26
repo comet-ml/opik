@@ -139,14 +139,14 @@ function EvaluationSuiteItemPanelLayout({
       ) : (
         <div className="relative size-full overflow-y-auto">
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
-            <TooltipWrapper content={datasetItemId}>
-              <div className="comet-body-accented">
-                Evaluation suite item{" "}
+            <div className="comet-body-accented">
+              Evaluation suite item{" "}
+              <TooltipWrapper content={datasetItemId}>
                 <span className="comet-body-s text-muted-slate">
                   {truncateId(datasetItemId)}
                 </span>
-              </div>
-            </TooltipWrapper>
+              </TooltipWrapper>
+            </div>
           </div>
 
           <div className="flex flex-col gap-6 p-6 pt-4">

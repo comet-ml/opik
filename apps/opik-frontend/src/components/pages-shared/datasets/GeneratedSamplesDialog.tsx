@@ -1,5 +1,11 @@
 import React, { useCallback, useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, BarChart3, Eye } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +22,79 @@ import { Tag } from "@/components/ui/tag";
 import { DatasetItem } from "@/types/datasets";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+
+type SampleData = Record<string, unknown>;
+
+function DiversityTag({ score }: { score: number }): React.ReactElement {
+  if (score > 80) {
+    return (
+      <Tag variant="green" size="sm">
+        High
+      </Tag>
+    );
+  }
+  if (score > 50) {
+    return (
+      <Tag variant="yellow" size="sm">
+        Medium
+      </Tag>
+    );
+  }
+  return (
+    <Tag variant="gray" size="sm">
+      Low
+    </Tag>
+  );
+}
+
+function ExpandedSampleContent({
+  sample,
+}: {
+  sample: DatasetItem;
+}): React.ReactElement {
+  const data = sample.data as SampleData;
+  const description = data._opik_description;
+  const assertions = data._opik_evaluator_assertions;
+
+  const validAssertions = Array.isArray(assertions)
+    ? assertions.filter(
+        (a): a is string => typeof a === "string" && a.trim().length > 0,
+      )
+    : [];
+
+  return (
+    <div className="border-t bg-muted/10 p-3">
+      <SyntaxHighlighter data={sample.data} />
+      {typeof description === "string" && (
+        <div className="mt-3 rounded-md border bg-background p-2">
+          <div className="text-xs font-medium text-muted-foreground">
+            Description
+          </div>
+          <div className="mt-1 text-sm">{description}</div>
+        </div>
+      )}
+      {validAssertions.length > 0 && (
+        <div className="mt-2 rounded-md border bg-background p-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Assertions
+            </span>
+            <Tag variant="blue" size="sm">
+              {validAssertions.length}
+            </Tag>
+          </div>
+          <ul className="mt-1 space-y-1">
+            {validAssertions.map((assertion, i) => (
+              <li key={i} className="text-sm text-muted-foreground">
+                - {assertion}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type GeneratedSamplesDialogProps = {
   samples: DatasetItem[];
@@ -241,22 +319,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                       <span className="font-medium">
                         {sampleStats.overallDiversity}%
                       </span>
-                      <Tag
-                        variant={
-                          sampleStats.overallDiversity > 80
-                            ? "green"
-                            : sampleStats.overallDiversity > 50
-                              ? "yellow"
-                              : "gray"
-                        }
-                        size="sm"
-                      >
-                        {sampleStats.overallDiversity > 80
-                          ? "High"
-                          : sampleStats.overallDiversity > 50
-                            ? "Medium"
-                            : "Low"}
-                      </Tag>
+                      <DiversityTag score={sampleStats.overallDiversity} />
                     </div>
                   </div>
                 </div>
@@ -342,11 +405,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
                     </div>
 
                     {/* Expanded Content */}
-                    {isExpanded && (
-                      <div className="border-t bg-muted/10 p-3">
-                        <SyntaxHighlighter data={sample.data} />
-                      </div>
-                    )}
+                    {isExpanded && <ExpandedSampleContent sample={sample} />}
                   </div>
                 );
               })}

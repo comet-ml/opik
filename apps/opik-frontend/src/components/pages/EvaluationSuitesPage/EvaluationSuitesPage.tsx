@@ -227,7 +227,7 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
         the corresponding behaviors that define how to evaluate your
         agent&apos;s performance.{" "}
         <a
-          href={buildDocsUrl("/evaluation/manage_evaluation_suites")}
+          href={buildDocsUrl("/evaluation/manage_datasets")}
           target="_blank"
           rel="noreferrer"
           className="text-primary"

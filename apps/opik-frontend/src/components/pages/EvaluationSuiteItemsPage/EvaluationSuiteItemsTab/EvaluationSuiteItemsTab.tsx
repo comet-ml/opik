@@ -26,6 +26,7 @@ import {
   DATASET_ITEM_DRAFT_STATUS,
   DATASET_STATUS,
   DATASET_TYPE,
+  Evaluator,
 } from "@/types/datasets";
 import { ExecutionPolicy } from "@/types/evaluation-suites";
 import { Filters } from "@/types/filters";
@@ -124,6 +125,7 @@ interface EvaluationSuiteItemsTabProps {
   datasetStatus?: DATASET_STATUS;
   datasetType?: DATASET_TYPE;
   suitePolicy?: ExecutionPolicy;
+  suiteEvaluators?: Evaluator[];
 }
 
 function EvaluationSuiteItemsTab({
@@ -132,6 +134,7 @@ function EvaluationSuiteItemsTab({
   datasetStatus,
   datasetType,
   suitePolicy,
+  suiteEvaluators,
 }: EvaluationSuiteItemsTabProps): React.ReactElement | null {
   const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
   const { isProcessing, showSuccessMessage } = useDatasetLoadingStatus({
@@ -647,6 +650,8 @@ function EvaluationSuiteItemsTab({
             search={search ?? ""}
             totalCount={totalCount}
             isDraftMode={isDraftMode}
+            datasetType={datasetType}
+            suiteEvaluators={suiteEvaluators}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -727,7 +732,7 @@ function EvaluationSuiteItemsTab({
             <Button variant="link">
               <a
                 href={buildDocsUrl(
-                  "/evaluation/manage_evaluation_suites",
+                  "/evaluation/manage_datasets",
                   "#insert-items",
                 )}
                 target="_blank"

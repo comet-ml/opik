@@ -34,7 +34,13 @@ import useAppStore from "@/store/AppStore";
 import useModelSelection from "@/hooks/useModelSelection";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 
-import { DatasetExpansionRequest, DatasetItem } from "@/types/datasets";
+import {
+  DatasetExpansionRequest,
+  DatasetItem,
+  DATASET_TYPE,
+  Evaluator,
+} from "@/types/datasets";
+import { parseLLMJudgeBEConfig } from "@/lib/evaluator-converters";
 
 const DATASET_EXPANSION_PROGRESS_MESSAGES = [
   "Initializing AI generation...",
@@ -56,11 +62,20 @@ type DatasetExpansionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onSamplesGenerated?: (samples: DatasetItem[]) => void;
+  datasetType?: DATASET_TYPE;
+  suiteEvaluators?: Evaluator[];
 };
 
 const DatasetExpansionDialog: React.FunctionComponent<
   DatasetExpansionDialogProps
-> = ({ datasetId: initialDatasetId, open, setOpen, onSamplesGenerated }) => {
+> = ({
+  datasetId: initialDatasetId,
+  open,
+  setOpen,
+  onSamplesGenerated,
+  datasetType,
+  suiteEvaluators,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   // Model selection with persistence using the reusable hook
@@ -146,6 +161,8 @@ const DatasetExpansionDialog: React.FunctionComponent<
     };
   }, [sampleData?.content]);
 
+  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
+
   const defaultPrompt = useMemo(() => {
     if (!sampleData?.content?.length) return "";
 
@@ -171,9 +188,31 @@ const DatasetExpansionDialog: React.FunctionComponent<
       prompt += `- Additional instructions: ${variationInstructions}\n`;
     }
 
+    if (isEvaluationSuite) {
+      prompt += `\nEVALUATION SUITE METADATA:\nFor each generated sample, include these two additional fields in the JSON object:\n- "_opik_description": A brief (1-2 sentence) description of what this specific test case evaluates\n- "_opik_evaluator_assertions": An array of 1-3 natural language assertion strings that an LLM judge should verify for this specific item's expected output\n`;
+
+      const suiteAssertions = (suiteEvaluators ?? [])
+        .filter((e) => e.type === "llm_judge")
+        .flatMap((e) => parseLLMJudgeBEConfig(e.config).assertions ?? []);
+
+      if (suiteAssertions.length > 0) {
+        prompt += `\nThe following assertions already apply to ALL items at the suite level. Do NOT duplicate them. Generate complementary, item-specific assertions:\n`;
+        suiteAssertions.forEach((assertion) => {
+          prompt += `- ${assertion}\n`;
+        });
+      }
+    }
+
     prompt += "\nGenerate the samples now:";
     return prompt;
-  }, [sampleData?.content, sampleCount, preserveFields, variationInstructions]);
+  }, [
+    sampleData?.content,
+    sampleCount,
+    preserveFields,
+    variationInstructions,
+    isEvaluationSuite,
+    suiteEvaluators,
+  ]);
 
   useEffect(() => {
     if (defaultPrompt) {
@@ -245,7 +284,8 @@ const DatasetExpansionDialog: React.FunctionComponent<
       sample_count: sampleCountNumber,
       preserve_fields: preserveFields.length > 0 ? preserveFields : undefined,
       variation_instructions: variationInstructions?.trim() || undefined,
-      custom_prompt: hasUserEditedPrompt ? customPrompt : undefined,
+      custom_prompt:
+        hasUserEditedPrompt || isEvaluationSuite ? customPrompt : undefined,
     };
 
     mutate(
@@ -274,6 +314,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     onSamplesGenerated,
     setOpen,
     hasUserEditedPrompt,
+    isEvaluationSuite,
     complete,
   ]);
 
