@@ -33,6 +33,7 @@ This test ensures proper synchronization of experiment items between UI and back
 
     await test.step('Verify item count in UI', async () => {
       const experimentItemsPage = new ExperimentItemsPage(page);
+      await experimentItemsPage.initialize();
       const itemsOnPage = await experimentItemsPage.getTotalNumberOfItemsInExperiment();
 
       expect(itemsOnPage).toBe(datasetSize);
@@ -48,6 +49,7 @@ This test ensures proper synchronization of experiment items between UI and back
 
     await test.step('Verify item IDs match between UI and backend', async () => {
       const experimentItemsPage = new ExperimentItemsPage(page);
+      await experimentItemsPage.initialize();
       const idsOnFrontend = await experimentItemsPage.getAllItemIdsInExperiment();
 
       const itemsOnBackend = await helperClient.getExperimentItems(experiment.name);
@@ -104,6 +106,7 @@ This test ensures proper synchronization of experiment item deletions between UI
       await page.reload();
 
       const experimentItemsPage = new ExperimentItemsPage(page);
+      await experimentItemsPage.initialize();
       const itemsOnPage = await experimentItemsPage.getTotalNumberOfItemsInExperiment();
 
       expect(itemsOnPage).toBe(datasetSize - 1);
@@ -116,6 +119,7 @@ This test ensures proper synchronization of experiment item deletions between UI
 
     await test.step('Verify remaining item IDs match between UI and backend', async () => {
       const experimentItemsPage = new ExperimentItemsPage(page);
+      await experimentItemsPage.initialize();
       const idsOnFrontend = await experimentItemsPage.getAllItemIdsInExperiment();
 
       const itemsOnBackend = await helperClient.getExperimentItems(experiment.name);
