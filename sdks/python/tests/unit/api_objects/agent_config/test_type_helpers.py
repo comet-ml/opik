@@ -151,9 +151,9 @@ class TestPythonTypeToBackendType:
         "py_type, expected_backend_type",
         [
             (str, "string"),
-            (int, "number"),
-            (float, "number"),
-            (bool, "string"),
+            (int, "integer"),
+            (float, "float"),
+            (bool, "boolean"),
             (List[str], "string"),
             (Dict[str, int], "string"),
         ],
@@ -248,14 +248,14 @@ class TestBackendValueToPythonValue:
         "value, backend_type, py_type, expected",
         [
             ("hello", "string", str, "hello"),
-            ("42", "number", int, 42),
-            ("42.0", "number", int, 42),
-            (42, "number", int, 42),
-            ("0.6", "number", float, 0.6),
-            (0.6, "number", float, 0.6),
-            ("true", "string", bool, True),
-            ("false", "string", bool, False),
-            (True, "string", bool, True),
+            ("42", "integer", int, 42),
+            ("42.0", "integer", int, 42),
+            (42, "integer", int, 42),
+            ("0.6", "float", float, 0.6),
+            (0.6, "float", float, 0.6),
+            ("true", "boolean", bool, True),
+            ("false", "boolean", bool, False),
+            (True, "boolean", bool, True),
         ],
         ids=[
             "str",
@@ -289,7 +289,7 @@ class TestBackendValueToPythonValue:
     )
     def test_collections__deserialized_correctly(self, value, py_type, expected):
         assert (
-            type_helpers.backend_value_to_python_value(value, "json", py_type)
+            type_helpers.backend_value_to_python_value(value, "string", py_type)
             == expected
         )
 

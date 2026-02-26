@@ -12,7 +12,7 @@ from opik.rest_api.types.agent_config_value_public import AgentConfigValuePublic
 def _make_raw_blueprint(blueprint_id="bp-1", values=None, description=None):
     if values is None:
         values = [
-            AgentConfigValuePublic(key="temp", type="number", value="0.6"),
+            AgentConfigValuePublic(key="temp", type="float", value="0.6"),
             AgentConfigValuePublic(key="name", type="string", value="agent"),
         ]
     return AgentBlueprintPublic(

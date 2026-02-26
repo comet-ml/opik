@@ -9,9 +9,9 @@ SUPPORTED_PRIMITIVE_TYPES = (str, int, float, bool)
 
 _PYTHON_TO_BACKEND_TYPE: typing.Dict[type, str] = {
     str: "string",
-    int: "number",
-    float: "number",
-    bool: "string",
+    int: "integer",
+    float: "float",
+    bool: "boolean",
 }
 
 

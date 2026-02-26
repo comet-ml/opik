@@ -14,7 +14,7 @@ def _make_blueprint(
 ):
     if values is None:
         values = [
-            AgentConfigValuePublic(key="temperature", type="number", value="0.6"),
+            AgentConfigValuePublic(key="temperature", type="float", value="0.6"),
             AgentConfigValuePublic(key="name", type="string", value="agent"),
         ]
     return AgentBlueprintPublic(
@@ -84,7 +84,7 @@ class TestCreateConfig:
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
         flag_param = [v for v in blueprint.values if v.key == "flag"][0]
-        assert flag_param.type == "string"
+        assert flag_param.type == "boolean"
         assert flag_param.value == "false"
 
     def test_create__with_project_name__passes_project_to_backend(
