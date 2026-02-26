@@ -63,7 +63,15 @@ This workflow will:
 
 ---
 
-### 3. Fetch PR Diff and Changed Files
+### 3. Fetch PR Diff, Changed Files, and Existing Reviews
+
+- **Fetch existing review comments**: Before analyzing, collect any comments already posted by this command on this PR
+  ```bash
+  gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+  ```
+  - Filter for comments containing the `🤖 *Review posted via /review-github-pr*` marker
+  - Index them by `path` + `line` for deduplication in step 6
+  - This prevents posting duplicate comments when the command is run multiple times on the same PR
 
 - **Get changed files**: List all files changed in the PR
   ```bash
@@ -140,8 +148,8 @@ For each finding, prepare:
 
 ### 6. Present Findings and Get Approval
 
-- **Display summary**: Show total count by severity (e.g., "Found 2 blockers, 3 suggestions, 1 nit, 1 question")
-- **List all findings**: Grouped by severity (blockers first), showing file, line, category, and description
+- **Deduplicate**: Compare findings against existing review comments fetched in step 3. If a finding targets the same file+line as an existing `/review-github-pr` comment, mark it as "already posted" and exclude it from the list. If all findings are duplicates, print: "All findings were already posted in a previous run." and stop.
+- **Display summary**: Show total count by severity (e.g., "Found 2 blockers, 3 suggestions, 1 nit, 1 question — 1 already posted, skipped")
 - **For each finding, show**:
   - The relevant code snippet from the diff
   - The review comment that would be posted
@@ -319,7 +327,7 @@ The command is successful when:
 - **AI marker required**: Every posted comment must include the `🤖 *Review posted via /review-github-pr*` footer — never omit it
 - **Domain-aware**: Uses Opik-specific rules from `.agents/skills/` and `.agents/rules/` to provide relevant, project-specific feedback rather than generic code review
 - **User control**: Every finding is presented for approval before posting. Nothing is posted without explicit user consent.
-- **Stateless**: Re-runs full analysis on every invocation
+- **Idempotent**: Re-runs full analysis on every invocation but deduplicates against existing `/review-github-pr` comments on the PR (matched by file+line). Safe to run multiple times — only new findings are posted.
 - **Severity-driven**: Findings are organized by severity to help users prioritize what matters
 - **Code suggestions**: Uses GitHub's suggestion syntax so PR authors can apply fixes with one click
 - **No approval by design**: The command is intentionally restricted from submitting formal approvals. Code review approval must remain a human-in-the-loop action.
