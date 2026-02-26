@@ -39,6 +39,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
 @ImplementedBy(RunnerServiceImpl.class)
@@ -61,7 +62,7 @@ public interface RunnerService {
     RunnerJob createJob(@NonNull String workspaceId, @NonNull String userName,
             @NonNull CreateJobRequest request);
 
-    RunnerJob nextJob(@NonNull String runnerId, @NonNull String workspaceId);
+    CompletionStage<RunnerJob> nextJob(@NonNull String runnerId, @NonNull String workspaceId);
 
     RunnerJob.RunnerJobPage listJobs(@NonNull String runnerId, String project,
             @NonNull String workspaceId, int page, int size);
@@ -248,20 +249,23 @@ class RunnerServiceImpl implements RunnerService {
 
     @Override
     public HeartbeatResponse heartbeat(@NonNull String runnerId, @NonNull String workspaceId) {
-        // Verify runner exists and belongs to workspace
         RMap<String, String> runnerMap = redisClient.getMap(
                 RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
-        if (!runnerMap.isExists()) {
+        Map<String, String> fields = runnerMap.readAllMap();
+
+        if (fields.isEmpty()) {
             throw new ClientErrorException(Response.status(Response.Status.GONE)
                     .entity(new ErrorMessage(List.of("Runner not found or evicted")))
                     .build());
         }
 
-        validateRunnerWorkspace(runnerMap, workspaceId);
+        if (!workspaceId.equals(fields.get("workspace_id"))) {
+            throw new NotFoundException("Runner not found");
+        }
 
         // Check if this runner has been replaced
-        String userName = runnerMap.get("user_name");
-        if (workspaceId != null && userName != null) {
+        String userName = fields.get("user_name");
+        if (userName != null) {
             RBucket<String> currentRunnerBucket = redisClient.getBucket(
                     USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
             String currentRunnerId = currentRunnerBucket.get();
@@ -367,37 +371,34 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public RunnerJob nextJob(@NonNull String runnerId, @NonNull String workspaceId) {
+    public CompletionStage<RunnerJob> nextJob(@NonNull String runnerId, @NonNull String workspaceId) {
         validateRunnerWorkspace(runnerId, workspaceId);
 
         String pendingKey = PENDING_JOBS_KEY.formatted(runnerId);
         String activeKey = ACTIVE_JOBS_KEY.formatted(runnerId);
 
         RBlockingDeque<String> blockingDeque = redisClient.getBlockingDeque(pendingKey, StringCodec.INSTANCE);
-        String jobId;
-        try {
-            jobId = blockingDeque.poll(runnerConfig.getNextJobPollTimeoutSeconds(), TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
 
-        if (jobId == null) {
-            return null;
-        }
+        return blockingDeque.pollFirstAsync(runnerConfig.getNextJobPollTimeoutSeconds(), TimeUnit.SECONDS)
+                .thenApplyAsync(jobId -> {
+                    if (jobId == null) {
+                        return null;
+                    }
 
-        // Add to active list
-        RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
-        activeList.add(jobId);
+                    // Add to active list
+                    RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
+                    activeList.add(jobId);
 
-        // Update job status
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        String now = Instant.now().toString();
-        jobMap.put("status", JOB_STATUS_RUNNING);
-        jobMap.put("started_at", now);
-        jobMap.put("last_heartbeat", now);
+                    // Update job status
+                    RMap<String, String> jobMap = redisClient.getMap(
+                            JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+                    String now = Instant.now().toString();
+                    jobMap.put("status", JOB_STATUS_RUNNING);
+                    jobMap.put("started_at", now);
+                    jobMap.put("last_heartbeat", now);
 
-        return buildRunnerJob(jobMap.readAllMap());
+                    return buildRunnerJob(jobMap.readAllMap());
+                });
     }
 
     @Override

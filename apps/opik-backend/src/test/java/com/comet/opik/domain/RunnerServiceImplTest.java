@@ -503,7 +503,7 @@ class RunnerServiceImplTest {
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             stubNextId();
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNotNull();
 
             runnerService.heartbeat(runnerId, WORKSPACE_ID);
@@ -519,7 +519,7 @@ class RunnerServiceImplTest {
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             // Claim the job so it's active, then cancel (cancellation set is only for active jobs now)
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
 
             HeartbeatResponse resp = runnerService.heartbeat(runnerId, WORKSPACE_ID);
@@ -688,7 +688,7 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNotNull();
             assertThat(claimed.id()).isEqualTo(created.id());
             assertThat(claimed.status()).isEqualTo("running");
@@ -699,7 +699,7 @@ class RunnerServiceImplTest {
         void returnsNullWhenNoPendingJobs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
+            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNull();
         }
 
@@ -708,7 +708,7 @@ class RunnerServiceImplTest {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             RList<String> pending = redisClient.getList(
                     "opik:jobs:" + runnerId + ":pending", StringCodec.INSTANCE);
@@ -979,7 +979,7 @@ class RunnerServiceImplTest {
         void completedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             ObjectNode resultNode = MAPPER.createObjectNode();
             resultNode.put("output", "success");
@@ -1002,7 +1002,7 @@ class RunnerServiceImplTest {
         void failedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
                     JobResultRequest.builder().status("failed").error("something broke").build());
@@ -1018,7 +1018,7 @@ class RunnerServiceImplTest {
         void setsTraceId() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
                     JobResultRequest.builder().status("completed").traceId("trace-123").build());
@@ -1032,7 +1032,7 @@ class RunnerServiceImplTest {
         void setsTTLOnJobAndLogs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("log").build()));
@@ -1053,7 +1053,7 @@ class RunnerServiceImplTest {
         void throwsBadRequestForInvalidStatus() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             assertThatThrownBy(() -> runnerService.reportResult(job.id(), WORKSPACE_ID,
                     JobResultRequest.builder().status("running").build()))
@@ -1088,7 +1088,7 @@ class RunnerServiceImplTest {
         void cancelActiveJob_addsToCancellationSet() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
 
@@ -1151,7 +1151,7 @@ class RunnerServiceImplTest {
         void failsOrphanedActiveJobs() throws InterruptedException {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID);
+            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             waitForHeartbeatExpiry();
             runnerService.reapDeadRunners();
@@ -1302,7 +1302,7 @@ class RunnerServiceImplTest {
         RunnerJob created = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
         assertThat(created.status()).isEqualTo("pending");
 
-        RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID);
+        RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
         assertThat(claimed).isNotNull();
         assertThat(claimed.id()).isEqualTo(created.id());
         assertThat(claimed.status()).isEqualTo("running");

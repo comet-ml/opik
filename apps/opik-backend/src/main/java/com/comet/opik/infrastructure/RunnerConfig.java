@@ -8,7 +8,7 @@ import lombok.Data;
 public class RunnerConfig {
 
     @Valid @JsonProperty
-    private boolean enabled = false;
+    private boolean enabled;
 
     @Valid @JsonProperty
     private int jobTimeoutSeconds = 1800;

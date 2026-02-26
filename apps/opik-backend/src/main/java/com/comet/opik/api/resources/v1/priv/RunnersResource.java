@@ -32,6 +32,8 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.container.AsyncResponse;
+import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -146,14 +148,22 @@ public class RunnersResource {
     @GET
     @Path("/{runnerId}/jobs/next")
     @Operation(operationId = "nextJob", summary = "Long-poll for the next pending job")
-    public Response nextJob(@PathParam("runnerId") String runnerId) {
+    public void nextJob(@PathParam("runnerId") String runnerId,
+            @Suspended AsyncResponse asyncResponse) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        RunnerJob job = runnerService.nextJob(runnerId, workspaceId);
-        if (job == null) {
-            return Response.noContent().build();
-        }
-        return Response.ok(job).build();
+        runnerService.nextJob(runnerId, workspaceId)
+                .thenAccept(job -> {
+                    if (job == null) {
+                        asyncResponse.resume(Response.noContent().build());
+                    } else {
+                        asyncResponse.resume(Response.ok(job).build());
+                    }
+                })
+                .exceptionally(e -> {
+                    asyncResponse.resume(e);
+                    return null;
+                });
     }
 
     @GET
