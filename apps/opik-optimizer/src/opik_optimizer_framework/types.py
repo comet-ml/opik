@@ -9,6 +9,7 @@ class CandidateConfig:
     prompt_messages: list[dict[str, str]]
     model: str
     model_parameters: dict[str, Any] = field(default_factory=dict)
+    mask_id: str | None = None
 
 
 @dataclass(frozen=True)

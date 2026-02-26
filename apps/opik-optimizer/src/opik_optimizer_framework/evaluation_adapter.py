@@ -6,7 +6,7 @@ from typing import Any
 from opik_optimizer_framework.candidate_materializer import materialize_candidate
 from opik_optimizer_framework.candidate_validator import validate_candidate
 from opik_optimizer_framework.event_emitter import EventEmitter
-from opik_optimizer_framework.experiment_execution import run_experiment
+from opik_optimizer_framework.experiment_executor import run_experiment
 from opik_optimizer_framework.result_aggregator import record_trial
 from opik_optimizer_framework.types import (
     CandidateConfig,

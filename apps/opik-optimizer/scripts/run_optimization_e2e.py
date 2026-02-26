@@ -36,7 +36,7 @@ OPIK_API_KEY = os.environ.get("OPIK_API_KEY")
 
 SUITE_NAME = f"customer-support-regression-tests-{int(time.time())}"
 OPTIMIZATION_NAME = "e2e-framework-test"
-OBJECTIVE_NAME = "llm_judge"
+OBJECTIVE_NAME = "pass_rate"
 
 # The model litellm will call for the optimization task.
 MODEL = os.environ.get("OPIK_TEST_MODEL", "gpt-4o-mini")
@@ -160,6 +160,7 @@ def main():
         dataset_name=SUITE_NAME,
         objective_name=OBJECTIVE_NAME,
         name=OPTIMIZATION_NAME,
+        metadata={"optimizer": "SimpleOptimizer"},
     )
     optimization_id = optimization.id
     logger.info("Optimization created: %s", optimization_id)
@@ -173,11 +174,11 @@ def main():
         model_parameters={"temperature": 0.7, "max_tokens": 256},
         metric_type=OBJECTIVE_NAME,
         metric_parameters={},
-        optimizer_type="stupid",
-        optimizer_parameters={},
+        optimizer_type="SimpleOptimizer",
+        optimizer_parameters={"num_steps": 3, "candidates_per_step": [1, 1, 1]},
     )
 
-    logger.info("Starting optimization (optimizer_type=stupid, model=%s)", MODEL)
+    logger.info("Starting optimization (optimizer_type=SimpleOptimizer, model=%s)", MODEL)
     try:
         result = run_optimization(
             context=context,

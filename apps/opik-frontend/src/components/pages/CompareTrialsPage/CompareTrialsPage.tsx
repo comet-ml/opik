@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
@@ -10,13 +10,17 @@ import CompareTrialsDetails from "@/components/pages/CompareTrialsPage/CompareTr
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
+import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useDeepMemo from "@/hooks/useDeepMemo";
-import { Experiment } from "@/types/datasets";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
+import useAppStore from "@/store/AppStore";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 const CompareTrialsPage: React.FunctionComponent = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const [tab = "prompt", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
@@ -44,6 +48,19 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     },
   );
 
+  const { data: optimizationExperimentsData } = useExperimentsList(
+    {
+      workspaceName,
+      optimizationId,
+      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      page: 1,
+      size: 100,
+    },
+    {
+      enabled: !!optimizationId,
+    },
+  );
+
   const isPending = response.reduce<boolean>(
     (acc, r) => acc || r.isPending,
     false,
@@ -57,6 +74,14 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     return experiments ?? [];
   }, [experiments]);
 
+  const isEvaluationSuite = useMemo(() => {
+    const allExperiments = [
+      ...memorizedExperiments,
+      ...(optimizationExperimentsData?.content ?? []),
+    ];
+    return allExperiments.some((e) => (e.experiment_scores?.length ?? 0) > 0);
+  }, [memorizedExperiments, optimizationExperimentsData?.content]);
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -64,6 +89,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
           optimization={optimization}
           experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
+          isEvaluationSuite={isEvaluationSuite}
         />
       </PageBodyStickyContainer>
       <Tabs
@@ -98,6 +124,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
             datasetId={datasetId}
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
+            isEvaluationSuite={isEvaluationSuite}
           />
         </TabsContent>
         <TabsContent value="config">

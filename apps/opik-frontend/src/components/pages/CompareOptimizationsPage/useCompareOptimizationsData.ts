@@ -7,6 +7,7 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
 
 import {
+  AggregatedFeedbackScore,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
@@ -49,6 +50,15 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 ];
 
 const DEFAULT_SORTING: ColumnSort[] = [{ id: COLUMN_ID_ID, desc: false }];
+
+const mergeExperimentScores = (
+  feedbackScores: AggregatedFeedbackScore[] | undefined,
+  experimentScores: AggregatedFeedbackScore[] | undefined,
+): AggregatedFeedbackScore[] => {
+  if (!experimentScores?.length) return [];
+  const existingNames = new Set(feedbackScores?.map((s) => s.name));
+  return experimentScores.filter((s) => !existingNames.has(s.name));
+};
 
 export const useCompareOptimizationsData = () => {
   const navigate = useNavigate();
@@ -151,7 +161,38 @@ export const useCompareOptimizationsData = () => {
   const title = optimization?.name || optimizationId;
   const noData = !search;
   const noDataText = noData ? "There are no trials yet" : "No search results";
-  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
+
+  const isEvaluationSuite = useMemo(
+    () =>
+      (data?.content ?? []).some((e) => (e.experiment_scores?.length ?? 0) > 0),
+    [data?.content],
+  );
+
+  const experiments = useMemo(() => {
+    const content = data?.content ?? [];
+    const objectiveName = optimization?.objective_name;
+
+    return content.map((experiment) => {
+      const additional = mergeExperimentScores(
+        experiment.feedback_scores,
+        experiment.experiment_scores,
+      );
+
+      let feedbackScores = additional.length
+        ? [...(experiment.feedback_scores ?? []), ...additional]
+        : experiment.feedback_scores;
+
+      if (isEvaluationSuite && objectiveName && feedbackScores) {
+        feedbackScores = feedbackScores.filter((s) => s.name === objectiveName);
+      }
+
+      if (!additional.length && !isEvaluationSuite) return experiment;
+      return {
+        ...experiment,
+        feedback_scores: feedbackScores,
+      };
+    });
+  }, [data?.content, isEvaluationSuite, optimization?.objective_name]);
 
   useEffect(() => {
     title &&
@@ -209,6 +250,7 @@ export const useCompareOptimizationsData = () => {
     optimizationId,
     optimization,
     experiments,
+    isEvaluationSuite,
     rows,
     title,
     noDataText,

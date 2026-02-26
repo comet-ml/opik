@@ -1,47 +1,16 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
-from typing import Any, Callable
+from typing import Any
 
-import litellm
 import opik
 from opik.evaluation import evaluate_optimization_suite_trial
 
+from opik_optimizer_framework.tasks import create_task
 from opik_optimizer_framework.types import Candidate, TrialResult
 
 logger = logging.getLogger(__name__)
-
-
-def _build_litellm_task(
-    prompt_messages: list[dict[str, str]],
-    model: str,
-    model_parameters: dict[str, Any],
-) -> Callable:
-    """Build a temporary litellm.completion() wrapper as the task function.
-
-    Returns {"input": <dataset_item>, "output": <llm_response>} so that
-    suite evaluators (LLMJudge) receive both input context and output.
-    """
-
-    def task(dataset_item: dict[str, Any]) -> dict[str, Any]:
-        formatted_messages = []
-        for msg in prompt_messages:
-            content = msg["content"]
-            for key, value in dataset_item.items():
-                content = content.replace(f"{{{key}}}", str(value))
-            formatted_messages.append({"role": msg["role"], "content": content})
-
-        response = litellm.completion(
-            model=model,
-            messages=formatted_messages,
-            **model_parameters,
-        )
-        return {
-            "input": dataset_item,
-            "output": response.choices[0].message.content,
-        }
-
-    return task
 
 
 def run_experiment(
@@ -59,26 +28,22 @@ def run_experiment(
     """
     assert isinstance(client, opik.Opik)
 
-    task_fn = _build_litellm_task(
-        candidate.config.prompt_messages,
-        candidate.config.model,
-        candidate.config.model_parameters,
-    )
+    task = create_task(config=candidate.config)
 
     dataset = client.get_dataset(dataset_name)
 
     experiment_config = {
-        "configuration": {
-            "prompt": {
-                "messages": candidate.config.prompt_messages,
-            },
-        },
+        "metric": metric_type,
+        "dataset": dataset_name,
+        "candidate_id": candidate.candidate_id,
+        "step_index": candidate.step_index,
+        "configuration": dataclasses.asdict(candidate.config),
     }
 
     result = evaluate_optimization_suite_trial(
         optimization_id=optimization_id,
         dataset=dataset,
-        task=task_fn,
+        task=task,
         client=client,
         dataset_item_ids=dataset_item_ids,
         experiment_config=experiment_config,
@@ -87,9 +52,7 @@ def run_experiment(
 
     score = _extract_score(result)
 
-    # Log experiment-level score matching the objective name so the
-    # optimization progress chart can find it.
-    _log_experiment_score(client, result.experiment_id, metric_type, score)
+    _log_experiment_score(client, result.experiment_id, "pass_rate", score)
 
     return TrialResult(
         candidate_id=candidate.candidate_id,
@@ -127,17 +90,21 @@ def _log_experiment_score(
 
 
 def _extract_score(result: Any) -> float:
-    """Extract the aggregate score from an evaluation result.
+    """Extract pass_rate from an evaluation suite result.
 
-    For suite evaluations, averages all score_results across all test_results.
-    Each test_result contains score_results from LLMJudge assertions.
+    Uses the SDK's build_suite_result to compute pass_rate with the
+    canonical pass/fail algorithm (grouping by item, binary per run).
     """
-    if hasattr(result, "test_results") and result.test_results:
-        all_scores = []
-        for tr in result.test_results:
-            for sr in tr.score_results:
-                if hasattr(sr, "value") and not getattr(sr, "scoring_failed", False):
-                    all_scores.append(sr.value)
-        if all_scores:
-            return sum(all_scores) / len(all_scores)
-    return 0.0
+    if not hasattr(result, "test_results") or not result.test_results:
+        return 0.0
+
+    from opik.api_objects.dataset.evaluation_suite.suite_result_constructor import (
+        build_suite_result,
+    )
+
+    try:
+        suite_result = build_suite_result(result)
+        return suite_result.pass_rate
+    except Exception:
+        logger.warning("Failed to compute pass_rate via build_suite_result", exc_info=True)
+        return 0.0

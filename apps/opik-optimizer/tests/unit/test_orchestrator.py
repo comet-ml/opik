@@ -35,11 +35,17 @@ class TestOrchestrator:
             resp.choices[0].message.content = messages
             return resp
 
+        mock_test_case = MagicMock()
+        mock_test_case.dataset_item_id = "item-1"
+        mock_test_case.dataset_item = None
+
         mock_score_result = MagicMock()
-        mock_score_result.value = 0.8
-        mock_score_result.scoring_failed = False
+        mock_score_result.value = 1.0
+
         mock_test_result = MagicMock()
+        mock_test_result.test_case = mock_test_case
         mock_test_result.score_results = [mock_score_result]
+        mock_test_result.trial_id = "trial-1"
 
         mock_experiment_result = MagicMock()
         mock_experiment_result.test_results = [mock_test_result]
@@ -47,10 +53,10 @@ class TestOrchestrator:
         mock_experiment_result.experiment_name = "trial-1"
 
         with (
-            patch("opik_optimizer_framework.optimizer.stupid_optimizer.litellm") as mock_litellm,
-            patch("opik_optimizer_framework.experiment_execution.litellm"),
-            patch("opik_optimizer_framework.experiment_execution.opik") as mock_opik,
-            patch("opik_optimizer_framework.experiment_execution.evaluate_optimization_suite_trial") as mock_eval_suite,
+            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.tasks.litellm"),
+            patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
+            patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,
         ):
             mock_litellm.completion.side_effect = make_llm_response
             mock_opik.Opik = type(client)
@@ -67,7 +73,8 @@ class TestOrchestrator:
         assert result is not None
         assert result.best_trial is not None
         assert result.score > 0
-        assert len(result.all_trials) == 5
+        assert result.initial_score is not None
+        assert len(result.all_trials) == 6  # 1 baseline + 3 step1 + 2 step2
 
     def test_unknown_optimizer_raises(self):
         context = OptimizationContext(
@@ -92,19 +99,41 @@ class TestOrchestrator:
         item_ids = [f"item-{i}" for i in range(10)]
         client = MagicMock()
 
+        mock_test_case = MagicMock()
+        mock_test_case.dataset_item_id = "item-1"
+        mock_test_case.dataset_item = None
+
+        mock_score_result = MagicMock()
+        mock_score_result.value = 1.0
+
+        mock_test_result = MagicMock()
+        mock_test_result.test_case = mock_test_case
+        mock_test_result.score_results = [mock_score_result]
+        mock_test_result.trial_id = "trial-baseline"
+
+        mock_experiment_result = MagicMock()
+        mock_experiment_result.test_results = [mock_test_result]
+        mock_experiment_result.experiment_id = "exp-baseline"
+        mock_experiment_result.experiment_name = "baseline"
+
         with (
-            patch("opik_optimizer_framework.optimizer.stupid_optimizer.litellm") as mock_litellm,
-            patch("opik_optimizer_framework.experiment_execution.litellm"),
-            patch("opik_optimizer_framework.experiment_execution.opik") as mock_opik,
-            patch("opik_optimizer_framework.experiment_execution.evaluate_optimization_suite_trial"),
+            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.tasks.litellm"),
+            patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
+            patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,
         ):
             mock_litellm.completion.side_effect = RuntimeError("LLM is down")
             mock_opik.Opik = type(client)
+            mock_eval_suite.return_value = mock_experiment_result
+            client.get_dataset.return_value = MagicMock()
 
-            # Should not raise - the stupid optimizer handles LLM failures gracefully
+            # Should not raise - the simple optimizer handles LLM failures gracefully
             result = run_optimization(
                 context=sample_optimization_context,
                 client=client,
                 dataset_item_ids=item_ids,
             )
-            assert result.score == 0.0
+            # Only the baseline trial succeeds; optimizer produces nothing
+            assert result.initial_score == 1.0
+            assert result.score == 1.0
+            assert len(result.all_trials) == 1

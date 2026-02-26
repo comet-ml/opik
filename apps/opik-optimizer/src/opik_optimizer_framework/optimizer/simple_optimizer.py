@@ -8,19 +8,36 @@ import litellm
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import EventEmitter
-from opik_optimizer_framework.optimizer.prompts import IMPROVE_PROMPT_TEMPLATE
 from opik_optimizer_framework.types import (
     CandidateConfig,
     OptimizationContext,
-    OptimizationResult,
     OptimizationState,
-    TrialResult,
 )
 
 logger = logging.getLogger(__name__)
 
+_IMPROVE_PROMPT_TEMPLATE = """\
+You are an expert prompt engineer. Your task is to improve an LLM prompt.
 
-class StupidOptimizer:
+Here is the current prompt (as a list of messages):
+{current_prompt}
+
+The prompt is used with the model: {model}
+
+Generate an improved version of the prompt that is more likely to produce high-quality outputs.
+Focus on:
+- Clarity and specificity of instructions
+- Better structure and organization
+- More effective use of the system message
+- Appropriate level of detail
+
+Return ONLY the improved prompt as a JSON array of message objects.
+Each message must have "role" and "content" fields.
+Do not include any explanation or commentary outside the JSON array.
+"""
+
+
+class SimpleOptimizer:
     """A simple 2-step optimizer for testing the framework pipeline.
 
     Step 1: Generate 3 candidate prompts from the original.
@@ -35,58 +52,46 @@ class StupidOptimizer:
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
-    ) -> OptimizationResult:
-        state.total_steps = 2
-
-        # Step 1: Generate 3 candidates from original prompt
-        event_emitter.on_step_started(0, 2)
-        state.step_index = 0
-        step1_trials = self._run_step(
-            context=context,
-            base_messages=context.prompt_messages,
-            count=3,
-            step_index=0,
-            parent_ids=[],
-            training_set=training_set,
-            validation_set=validation_set,
-            evaluation_adapter=evaluation_adapter,
-            state=state,
-            event_emitter=event_emitter,
+    ) -> None:
+        num_steps = context.optimizer_parameters.get("num_steps", 2)
+        candidates_per_step = context.optimizer_parameters.get(
+            "candidates_per_step", [3, 2]
         )
+        if len(candidates_per_step) < num_steps:
+            candidates_per_step = candidates_per_step + [
+                candidates_per_step[-1]
+            ] * (num_steps - len(candidates_per_step))
 
-        # Step 2: Generate 2 candidates from the best of step 1
-        event_emitter.on_step_started(1, 2)
-        state.step_index = 1
-        best_step1 = state.best_trial
-        if best_step1 is not None:
-            base_messages = best_step1.prompt_messages
-            parent_ids = [best_step1.candidate_id]
-        else:
-            base_messages = context.prompt_messages
-            parent_ids = []
+        state.total_steps = num_steps
 
-        step2_trials = self._run_step(
-            context=context,
-            base_messages=base_messages,
-            count=2,
-            step_index=1,
-            parent_ids=parent_ids,
-            training_set=training_set,
-            validation_set=validation_set,
-            evaluation_adapter=evaluation_adapter,
-            state=state,
-            event_emitter=event_emitter,
-        )
+        for step_index in range(num_steps):
+            event_emitter.on_step_started(step_index, num_steps)
+            state.step_index = step_index
 
-        all_trials = step1_trials + step2_trials
-        best = state.best_trial
-        score = best.score if best else 0.0
+            if step_index == 0:
+                base_messages = context.prompt_messages
+                parent_ids: list[str] = []
+            else:
+                best = state.best_trial
+                if best is not None:
+                    base_messages = best.prompt_messages
+                    parent_ids = [best.candidate_id]
+                else:
+                    base_messages = context.prompt_messages
+                    parent_ids = []
 
-        return OptimizationResult(
-            best_trial=best,
-            all_trials=all_trials,
-            score=score,
-        )
+            self._run_step(
+                context=context,
+                base_messages=base_messages,
+                count=candidates_per_step[step_index],
+                step_index=step_index,
+                parent_ids=parent_ids,
+                training_set=training_set,
+                validation_set=validation_set,
+                evaluation_adapter=evaluation_adapter,
+                state=state,
+                event_emitter=event_emitter,
+            )
 
     def _run_step(
         self,
@@ -100,12 +105,12 @@ class StupidOptimizer:
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
-    ) -> list[TrialResult]:
-        trials: list[TrialResult] = []
+    ) -> None:
+        completed = 0
         max_attempts = count * 3
 
         for attempt in range(max_attempts):
-            if len(trials) >= count:
+            if completed >= count:
                 break
 
             candidate_messages = self._generate_candidate(
@@ -130,10 +135,8 @@ class StupidOptimizer:
             )
 
             if trial is not None:
-                trials.append(trial)
-                event_emitter.on_progress(step_index, len(trials), count)
-
-        return trials
+                completed += 1
+                event_emitter.on_progress(step_index, completed, count)
 
     def _generate_candidate(
         self,
@@ -143,7 +146,7 @@ class StupidOptimizer:
     ) -> list[dict[str, str]] | None:
         """Use LLM to generate an improved prompt variant."""
         prompt_text = json.dumps(base_messages, indent=2)
-        improve_prompt = IMPROVE_PROMPT_TEMPLATE.format(
+        improve_prompt = _IMPROVE_PROMPT_TEMPLATE.format(
             current_prompt=prompt_text,
             model=model,
         )

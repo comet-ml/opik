@@ -120,7 +120,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
             ), experiments_final AS (
                 SELECT
                     id,
-                    optimization_id
+                    optimization_id,
+                    experiment_scores
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND optimization_id IN (SELECT id FROM optimization_final)
@@ -222,15 +223,37 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     HAVING length(fs.name) > 0
                 ) as fs_avg
                 GROUP BY experiment_id
+            ), experiment_scores_parsed AS (
+                SELECT
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                FROM experiments_final AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ), experiment_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS feedback_scores
+                FROM experiment_scores_parsed
+                GROUP BY experiment_id
+            ), combined_scores_agg AS (
+                SELECT experiment_id, feedback_scores FROM feedback_scores_agg
+                UNION ALL
+                SELECT experiment_id, feedback_scores FROM experiment_scores_agg
             )
             SELECT
                 o.*,
                 o.id as id,
                 COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
-                maxMap(fs.feedback_scores) AS feedback_scores
+                maxMap(cs.feedback_scores) AS feedback_scores
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
-            LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            LEFT JOIN combined_scores_agg AS cs ON e.id = cs.experiment_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>

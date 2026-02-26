@@ -34,7 +34,7 @@ def sample_optimization_context(sample_prompt_messages):
         model_parameters={"temperature": 0.7},
         metric_type="equals",
         metric_parameters={},
-        optimizer_type="stupid",
+        optimizer_type="SimpleOptimizer",
         optimizer_parameters={},
     )
 
