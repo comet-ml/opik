@@ -1,0 +1,40 @@
+---
+title: Chroma
+description: Track Chroma retrieval operations in Opik.
+headline: Chroma | Opik Documentation
+---
+
+Opik can instrument Chroma collection retrieval calls and log them as tool spans.
+
+## Install
+
+```bash
+pip install opik chromadb
+```
+
+## Usage
+
+```python
+from chromadb import PersistentClient
+from opik.integrations.chroma import track_chroma
+
+client = PersistentClient(path="./chroma-db")
+collection = client.get_or_create_collection("docs")
+collection = track_chroma(collection, project_name="retrieval-demo")
+
+result = collection.query(
+    query_texts=["What is Opik?"],
+    n_results=3,
+)
+```
+
+## What gets logged
+
+- span `type`: `tool`
+- span name format: `chroma.<operation>`
+- metadata keys:
+- `opik.kind=retrieval`
+- `opik.provider=chroma`
+- `opik.operation=<operation>`
+
+Tracked operations include `query` and `get` when those methods are available.
