@@ -511,6 +511,11 @@ class RunnerServiceImpl implements RunnerService {
         RMap<String, String> jobMap = job.map();
         Map<String, String> fields = job.fields();
 
+        String currentStatus = fields.get("status");
+        if (TERMINAL_JOB_STATUSES.contains(currentStatus) || JOB_STATUS_CANCELLED.equals(currentStatus)) {
+            return;
+        }
+
         jobMap.put("status", JOB_STATUS_CANCELLED);
         jobMap.put("completed_at", Instant.now().toString());
 
@@ -873,7 +878,7 @@ class RunnerServiceImpl implements RunnerService {
                         .timeout(timeout)
                         .build());
             } catch (UncheckedIOException e) {
-                log.warn("Failed to parse agent metadata for {}", entry.getKey(), e);
+                log.warn("Failed to parse agent metadata for agent '{}' on runner '{}'", entry.getKey(), runnerId, e);
             }
         }
         return agents;

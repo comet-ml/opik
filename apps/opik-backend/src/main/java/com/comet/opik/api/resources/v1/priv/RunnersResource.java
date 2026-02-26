@@ -192,7 +192,7 @@ public class RunnersResource {
     @RateLimited
     @Operation(operationId = "appendJobLogs", summary = "Append log entries for a running job")
     public Response appendLogs(@PathParam("jobId") String jobId,
-            @NotNull List<LogEntry> entries) {
+            @NotNull @Valid List<LogEntry> entries) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.appendLogs(jobId, workspaceId, entries);
