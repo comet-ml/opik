@@ -633,6 +633,8 @@ def _apply_entrypoint(
     source_file = os.path.abspath(inspect.getfile(original_func))
     params = _extract_params(original_func)
 
+    docstring = inspect.getdoc(original_func) or ""
+
     _REGISTRY[agent_name] = {
         "func": wrapped_func,
         "name": agent_name,
@@ -640,9 +642,10 @@ def _apply_entrypoint(
         "python": sys.executable,
         "file": source_file,
         "params": params,
+        "docstring": docstring,
     }
 
-    _self_register(agent_name, agent_project, source_file, params)
+    _self_register(agent_name, agent_project, source_file, params, docstring)
 
     target_agent = os.environ.get("OPIK_AGENT")
     if target_agent == agent_name:

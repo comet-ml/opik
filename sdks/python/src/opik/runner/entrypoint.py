@@ -59,6 +59,8 @@ def entrypoint(
 
         params = _extract_params(fn)
 
+        docstring = inspect.getdoc(fn) or ""
+
         _REGISTRY[agent_name] = {
             "func": tracked_fn,
             "name": agent_name,
@@ -66,9 +68,10 @@ def entrypoint(
             "python": sys.executable,
             "file": source_file,
             "params": params,
+            "docstring": docstring,
         }
 
-        _self_register(agent_name, agent_project, source_file, params)
+        _self_register(agent_name, agent_project, source_file, params, docstring)
 
         # Auto-dispatch: if runner is calling us to execute this specific agent
         target_agent = os.environ.get("OPIK_AGENT")
@@ -102,7 +105,7 @@ def _extract_params(fn: Callable) -> List[Dict[str, str]]:
     return params
 
 
-def _self_register(agent_name: str, project: str, source_file: str, params: List[Dict[str, str]]) -> None:
+def _self_register(agent_name: str, project: str, source_file: str, params: List[Dict[str, str]], docstring: str) -> None:
     """Write this agent's info to ~/.opik/agents.json."""
     from .config import register_agent
 
@@ -113,6 +116,7 @@ def _self_register(agent_name: str, project: str, source_file: str, params: List
             file=source_file,
             project=project,
             params=params,
+            docstring=docstring,
         )
     except Exception:
         LOGGER.debug("Failed to self-register agent '%s'", agent_name, exc_info=True)

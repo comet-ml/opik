@@ -19,6 +19,7 @@ import useMyRunner, { getStoredRunnerId } from "@/api/runners/useMyRunner";
 import useRunnerJobsList from "@/api/runners/useRunnerJobsList";
 import useCreateRunnerJobMutation from "@/api/runners/useCreateRunnerJobMutation";
 import useJobLogs from "@/api/runners/useJobLogs";
+import useProjectByName from "@/api/projects/useProjectByName";
 import { AgentInfo, RunnerJob } from "@/types/runners";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -27,7 +28,7 @@ type ExecutionTabProps = {
   projectName: string;
 };
 
-const STATUS_CONFIG: Record<
+export const STATUS_CONFIG: Record<
   string,
   { icon: React.ReactNode; label: string; className: string }
 > = {
@@ -53,18 +54,24 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const COLUMN_COUNT = 7;
+export const COLUMN_COUNT = 7;
 
-const JobRow: React.FunctionComponent<{
+export const JobRow: React.FunctionComponent<{
   job: RunnerJob;
   workspaceName: string;
-  projectId: string;
+  projectId?: string;
 }> = ({ job, workspaceName, projectId }) => {
   const isRunning = job.status === "running";
   const isRetryable = job.status === "completed" || job.status === "failed";
   const [expanded, setExpanded] = useState(isRunning);
   const statusConfig = STATUS_CONFIG[job.status] || STATUS_CONFIG.pending;
   const logContainerRef = useRef<HTMLDivElement>(null);
+
+  const { data: resolvedProject } = useProjectByName(
+    { projectName: job.project },
+    { enabled: !projectId && !!job.project },
+  );
+  const effectiveProjectId = projectId || resolvedProject?.id;
 
   useEffect(() => {
     if (isRunning) {
@@ -137,7 +144,21 @@ const JobRow: React.FunctionComponent<{
             <span>{statusConfig.label}</span>
           </div>
         </td>
-        <td className="px-3 py-2 font-mono text-xs">{job.agent_name}</td>
+        <td className="px-3 py-2 font-mono text-xs">
+          {effectiveProjectId ? (
+            <Link
+              to="/$workspaceName/projects/$projectId/traces"
+              params={{ workspaceName, projectId: effectiveProjectId }}
+              search={{ tab: "invocation" }}
+              className="text-blue-600 hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {job.agent_name}
+            </Link>
+          ) : (
+            job.agent_name
+          )}
+        </td>
         <td className="max-w-40 truncate px-3 py-2 font-mono text-xs">
           {typeof job.inputs === "string"
             ? job.inputs
@@ -157,10 +178,10 @@ const JobRow: React.FunctionComponent<{
           )}
         </td>
         <td className="px-3 py-2 text-xs">
-          {job.trace_id ? (
+          {job.trace_id && effectiveProjectId ? (
             <Link
               to="/$workspaceName/projects/$projectId/traces"
-              params={{ workspaceName, projectId }}
+              params={{ workspaceName, projectId: effectiveProjectId }}
               search={{
                 tab: "logs",
                 logsType: "traces",
@@ -257,7 +278,7 @@ const JobRow: React.FunctionComponent<{
 
 const FORM_FILLABLE_TYPES = new Set(["str", "int", "float", "bool"]);
 
-const RunAgentForm: React.FunctionComponent<{
+export const RunAgentForm: React.FunctionComponent<{
   agents: AgentInfo[];
   runnerId: string;
   projectName: string;

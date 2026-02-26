@@ -18,8 +18,6 @@ import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
 
-import { useNavigate } from "@tanstack/react-router";
-
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
@@ -38,7 +36,6 @@ import {
 } from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -130,7 +127,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   const { data: runner } = useMyRunner({ refetchInterval: 5000 });
   const isRunnerConnected = runner?.status === "connected";
@@ -640,24 +636,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                             toast({
                               title: "Job created",
                               description: `Replay sent to "${agent.name}"`,
-                              actions: [
-                                <ToastAction
-                                  key="view"
-                                  altText="View in Execution tab"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    navigate({
-                                      search: (prev: Record<string, unknown>) => ({
-                                        ...prev,
-                                        tab: "execution",
-                                      }),
-                                    })
-                                  }
-                                >
-                                  View
-                                </ToastAction>,
-                              ],
                             });
                           },
                         },

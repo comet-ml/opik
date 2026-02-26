@@ -24,7 +24,10 @@ public record Runner(
     public record AgentInfo(
             String name,
             String project,
-            List<ParamInfo> params) {
+            List<ParamInfo> params,
+            String python,
+            String file,
+            String docstring) {
     }
 
     @Builder(toBuilder = true)

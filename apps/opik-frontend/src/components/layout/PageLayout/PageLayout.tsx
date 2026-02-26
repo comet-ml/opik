@@ -10,7 +10,9 @@ import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus"
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import RunnerStatusBar from "@/components/layout/RunnerStatusBar/RunnerStatusBar";
+import RunnerStatusBar, {
+  COLLAPSED_HEIGHT,
+} from "@/components/layout/RunnerStatusBar/RunnerStatusBar";
 
 const MOBILE_BREAKPOINT = 1024; // lg breakpoint in Tailwind
 
@@ -19,6 +21,8 @@ const PageLayout = () => {
     useLocalStorageState<boolean>("sidebar-expanded");
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
+  const [runnerPanelExpanded, setRunnerPanelExpanded] = useState(false);
+  const [runnerPanelHeight, setRunnerPanelHeight] = useState(300);
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -75,13 +79,25 @@ const PageLayout = () => {
       ) : null}
 
       <SideBar expanded={expanded} setExpanded={setStoredExpanded} />
-      <main className="comet-content-inset absolute bottom-7 right-0 top-[var(--banner-height)] flex transition-all">
+      <main
+        className="comet-content-inset absolute right-0 top-[var(--banner-height)] flex transition-all"
+        style={{
+          bottom: runnerPanelExpanded
+            ? `${runnerPanelHeight}px`
+            : `${COLLAPSED_HEIGHT}px`,
+        }}
+      >
         <TopBar />
         <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
           <Outlet />
         </section>
       </main>
-      <RunnerStatusBar />
+      <RunnerStatusBar
+        expanded={runnerPanelExpanded}
+        onExpandedChange={setRunnerPanelExpanded}
+        panelHeight={runnerPanelHeight}
+        onPanelHeightChange={setRunnerPanelHeight}
+      />
 
       {/* Welcome Wizard Dialog */}
       <WelcomeWizardDialog

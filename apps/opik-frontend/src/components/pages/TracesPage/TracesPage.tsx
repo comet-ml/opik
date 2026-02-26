@@ -8,7 +8,7 @@ import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
-import ExecutionTab from "@/components/pages/TracesPage/ExecutionTab/ExecutionTab";
+import InvocationTab from "@/components/pages/TracesPage/InvocationTab/InvocationTab";
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
@@ -91,9 +91,9 @@ const TracesPage = () => {
               </TabsTrigger>
               <TabsTrigger
                 variant="underline"
-                value={PROJECT_TAB.execution}
+                value={PROJECT_TAB.invocation}
               >
-                Execution
+                Invocation
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
@@ -114,8 +114,8 @@ const TracesPage = () => {
           <TabsContent value={PROJECT_TAB.annotationQueues}>
             <AnnotationQueuesTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value={PROJECT_TAB.execution}>
-            <ExecutionTab projectId={projectId} projectName={projectName} />
+          <TabsContent value={PROJECT_TAB.invocation}>
+            <InvocationTab projectId={projectId} projectName={projectName} />
           </TabsContent>
         </Tabs>
       );

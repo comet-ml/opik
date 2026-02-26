@@ -83,6 +83,9 @@ class Runner:
             agent_blob = json.dumps({
                 "project": project,
                 "params": info.get("params", []),
+                "python": info.get("python", ""),
+                "file": info.get("file", ""),
+                "docstring": info.get("docstring", ""),
             })
             client.hset(agents_key, agent_name, agent_blob)
             client.sadd(f"opik:project:{project}:runners", self._runner_id)

@@ -7,6 +7,9 @@ export interface AgentInfo {
   name: string;
   project: string;
   params?: ParamInfo[];
+  python?: string;
+  file?: string;
+  docstring?: string;
 }
 
 export interface Runner {

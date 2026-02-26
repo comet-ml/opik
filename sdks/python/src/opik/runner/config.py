@@ -60,7 +60,7 @@ def save_agents(agents: Dict[str, Dict[str, str]]) -> None:
     AGENTS_FILE.write_text(json.dumps(agents, indent=2))
 
 
-def register_agent(name: str, python: str, file: str, project: str, params: Optional[List[Dict[str, str]]] = None) -> None:
+def register_agent(name: str, python: str, file: str, project: str, params: Optional[List[Dict[str, str]]] = None, docstring: str = "") -> None:
     """Register or update an agent entry."""
     agents = load_agents()
     agents[name] = {
@@ -68,6 +68,7 @@ def register_agent(name: str, python: str, file: str, project: str, params: Opti
         "file": file,
         "project": project,
         "params": params or [],
+        "docstring": docstring,
     }
     save_agents(agents)
     LOGGER.debug("Registered agent '%s' (python=%s, file=%s, project=%s)", name, python, file, project)

@@ -292,6 +292,9 @@ class RunnerServiceImpl implements RunnerService {
                 String value = entry.getValue();
                 String project;
                 List<Runner.ParamInfo> params = Collections.emptyList();
+                String python = null;
+                String file = null;
+                String docstring = null;
 
                 try {
                     var node = JsonUtils.getJsonNodeFromString(value);
@@ -307,6 +310,15 @@ class RunnerServiceImpl implements RunnerService {
                                         .build());
                             }
                         }
+                        if (node.has("python")) {
+                            python = node.get("python").asText();
+                        }
+                        if (node.has("file")) {
+                            file = node.get("file").asText();
+                        }
+                        if (node.has("docstring")) {
+                            docstring = node.get("docstring").asText();
+                        }
                     } else {
                         project = value;
                     }
@@ -318,6 +330,9 @@ class RunnerServiceImpl implements RunnerService {
                         .name(agentName)
                         .project(project)
                         .params(params)
+                        .python(python)
+                        .file(file)
+                        .docstring(docstring)
                         .build());
             }
         }
