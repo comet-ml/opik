@@ -371,7 +371,7 @@ const PromptsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewPromptClick}>
+              <Button variant="link" onClick={handleNewPromptClick} disabled={!canInteractWithApp}>
                 Create new prompt
               </Button>
             )}

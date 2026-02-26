@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TryInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -25,6 +26,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   activeVersion,
   ButtonComponent = Button,
 }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 
@@ -47,7 +49,7 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
       <ButtonComponent
         variant="outline"
         size="sm"
-        disabled={!prompt || isPendingProviderKeys}
+        disabled={!prompt || isPendingProviderKeys || !canInteractWithApp}
         onClick={() => {
           if (isPlaygroundEmpty) {
             handleLoadPlayground();

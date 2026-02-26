@@ -11,6 +11,7 @@ import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScore
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "./types";
 import { extractSpanMetadataFromValueByAuthor } from "../TraceDataViewer/FeedbackScoreTable/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
@@ -23,6 +24,7 @@ type TraceAnnotateViewerProps = {
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
 > = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const hasFeedbackScores = Boolean(data.feedback_scores?.length);
   const isTrace = !spanId;
   const title = isTrace ? "Trace feedback scores" : "Span feedback scores";
@@ -102,6 +104,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4"
+          disabled={!canInteractWithApp}
           header={<FeedbackScoresEditor.Header isTrace={isTrace} />}
           footer={
             <FeedbackScoresEditor.Footer

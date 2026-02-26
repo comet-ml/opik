@@ -17,6 +17,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { convertMessages } from "@/components/pages-shared/shared/useSaveToPromptLibrary";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CompareOptimizationsHeaderProps = {
   title: string;
@@ -36,6 +37,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   bestExperiment,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const navigate = useNavigate();
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
@@ -131,7 +133,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={handleDeployClick}
-                  disabled={isPendingProviderKeys}
+                  disabled={isPendingProviderKeys || !canInteractWithApp}
                 >
                   <Play className="mr-2 size-4" />
                   Run in Playground
@@ -139,7 +141,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
               </TooltipWrapper>
             )}
             {canRerun && (
-              <Button variant="outline" size="sm" onClick={handleRerun}>
+              <Button variant="outline" size="sm" onClick={handleRerun} disabled={!canInteractWithApp}>
                 <RotateCw className="mr-2 size-4" />
                 Rerun
               </Button>
@@ -149,7 +151,7 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
                 variant="destructive"
                 size="sm"
                 onClick={handleStop}
-                disabled={isStoppingOptimization}
+                disabled={isStoppingOptimization || !canInteractWithApp}
               >
                 <X className="mr-2 size-4" />
                 Stop Execution

@@ -300,7 +300,7 @@ const DashboardsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewDashboardClick}>
+              <Button variant="link" onClick={handleNewDashboardClick} disabled={!canInteractWithApp}>
                 Create new dashboard
               </Button>
             )}

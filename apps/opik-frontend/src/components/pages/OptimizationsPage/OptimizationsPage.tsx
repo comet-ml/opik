@@ -78,6 +78,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -171,6 +172,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const isOptimizationStudioEnabled = useIsFeatureEnabled(
@@ -459,7 +461,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
-                <Button variant="link" onClick={handleNewOptimizationClick}>
+                <Button variant="link" onClick={handleNewOptimizationClick} disabled={!canInteractWithApp}>
                   Create new optimization
                 </Button>
               )}

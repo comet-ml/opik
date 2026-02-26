@@ -24,6 +24,7 @@ export type TagListRendererProps = {
   placeholderText?: string;
   addButtonText?: string;
   tagType?: string; // For error messages (e.g., "tag", "version tag")
+  disabled?: boolean;
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -38,6 +39,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   placeholderText = "New tag",
   addButtonText = "Add tag",
   tagType = "tag",
+  disabled = false,
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -84,7 +86,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
           label={tag}
           key={tag}
           size="md"
-          onDelete={() => onDeleteTag(tag)}
+          onDelete={disabled ? undefined : () => onDeleteTag(tag)}
         />
       ))}
       <Popover onOpenChange={setOpen} open={open}>
@@ -93,6 +95,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
             data-testid="add-tag-button"
             variant="outline"
             size="icon-2xs"
+            disabled={disabled}
           >
             <Plus />
           </Button>

@@ -15,6 +15,7 @@ import {
   DetailsActionSectionValue,
   DetailsActionSectionLayout,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export type CommentsViewerProps = {
   data: Trace | Span;
@@ -43,6 +44,7 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
   const updateTraceMutation = useUpdateTraceCommentMutation();
 
   const userName = useLoggedInUserName();
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const onSubmit = (text: string) => {
     if (!spanId) {
@@ -105,12 +107,12 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
         actions={
           <>
             <TooltipWrapper content={"Submit"} hotkeys={["⌘", "⏎"]}>
-              <UserCommentForm.SubmitButton />
+              <UserCommentForm.SubmitButton disabled={!canInteractWithApp} />
             </TooltipWrapper>
           </>
         }
       >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." />
+        <UserCommentForm.TextareaField placeholder="Add a comment..." disabled={!canInteractWithApp} />
       </UserCommentForm>
       <div className="mt-3 h-full overflow-auto pb-3">
         {data.comments?.length ? (
@@ -120,10 +122,12 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
               comment={comment}
               avatar={<UserComment.Avatar />}
               actions={
-                <UserComment.Menu>
-                  <UserComment.MenuEditItem />
-                  <UserComment.MenuDeleteItem onDelete={onDelete} />
-                </UserComment.Menu>
+                canInteractWithApp ? (
+                  <UserComment.Menu>
+                    <UserComment.MenuEditItem />
+                    <UserComment.MenuDeleteItem onDelete={onDelete} />
+                  </UserComment.Menu>
+                ) : undefined
               }
               userName={userName}
               header={
@@ -135,7 +139,7 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
               className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
-              <UserComment.Form onSubmit={onEditSubmit} />
+              {canInteractWithApp && <UserComment.Form onSubmit={onEditSubmit} />}
             </UserComment>
           ))
         ) : (

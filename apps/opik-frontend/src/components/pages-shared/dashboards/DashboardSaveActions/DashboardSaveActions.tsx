@@ -17,6 +17,7 @@ import {
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
 import { Dashboard } from "@/types/dashboard";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface DashboardSaveActionsProps {
   onSave: () => Promise<void>;
@@ -41,6 +42,7 @@ const DashboardSaveActions: React.FunctionComponent<
   defaultProjectId,
   defaultExperimentIds,
 }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const resetKeyRef = useRef(0);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
@@ -108,13 +110,13 @@ const DashboardSaveActions: React.FunctionComponent<
         variant="destructive"
         size="sm"
         onClick={handleDiscardClick}
-        disabled={isSaving}
+        disabled={isSaving || !canInteractWithApp}
       >
         Discard changes
       </Button>
 
       {isTemplate ? (
-        <Button size="sm" onClick={handleSaveAsClick} disabled={isSaving}>
+        <Button size="sm" onClick={handleSaveAsClick} disabled={isSaving || !canInteractWithApp}>
           Save as new dashboard
         </Button>
       ) : (
@@ -123,7 +125,7 @@ const DashboardSaveActions: React.FunctionComponent<
             variant="default"
             size="sm"
             onPrimaryClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !canInteractWithApp}
           >
             Save changes
           </ButtonWithDropdownTrigger>

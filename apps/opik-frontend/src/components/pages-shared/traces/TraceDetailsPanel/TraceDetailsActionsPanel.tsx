@@ -64,6 +64,7 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -106,6 +107,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   treeData,
   setActiveSection,
 }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -563,6 +565,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             <DropdownMenuItem
               onClick={() => setPopupOpen(true)}
               variant="destructive"
+              disabled={!canInteractWithApp}
             >
               <Trash className="mr-2 size-4" />
               Delete trace

@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import { parsePromptVersionContent } from "@/lib/llm";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ImproveInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
@@ -17,6 +18,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   prompt,
   activeVersion,
 }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 
@@ -41,7 +43,7 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
         <Button
           variant="secondary"
           size="sm"
-          disabled={!prompt || isPendingProviderKeys}
+          disabled={!prompt || isPendingProviderKeys || !canInteractWithApp}
           onClick={() => {
             if (isPlaygroundEmpty) {
               handleLoadPlayground();

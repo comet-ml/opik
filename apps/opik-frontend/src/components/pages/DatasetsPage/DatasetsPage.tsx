@@ -360,7 +360,7 @@ const DatasetsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewDatasetClick}>
+              <Button variant="link" onClick={handleNewDatasetClick} disabled={!canInteractWithApp}>
                 Create new dataset
               </Button>
             )}

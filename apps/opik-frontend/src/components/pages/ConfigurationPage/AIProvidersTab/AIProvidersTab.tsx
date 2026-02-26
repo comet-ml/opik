@@ -147,7 +147,7 @@ const AIProvidersTab = () => {
         noData={
           <DataTableNoData title={noDataLabel}>
             {search === "" && (
-              <Button variant="link" onClick={handleAddConfigurationClick}>
+              <Button variant="link" onClick={handleAddConfigurationClick} disabled={!canInteractWithApp}>
                 Add configuration
               </Button>
             )}

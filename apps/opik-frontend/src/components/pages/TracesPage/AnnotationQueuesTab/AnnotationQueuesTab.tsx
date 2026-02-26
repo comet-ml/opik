@@ -65,6 +65,7 @@ import {
   ANNOTATION_QUEUE_SCOPE,
 } from "@/types/annotation-queues";
 import { capitalizeFirstLetter } from "@/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
   {
@@ -210,6 +211,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -407,7 +409,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button size="sm" onClick={handleNewQueue}>
+          <Button size="sm" onClick={handleNewQueue} disabled={!canInteractWithApp}>
             Create new queue
           </Button>
         </div>

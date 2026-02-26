@@ -366,7 +366,7 @@ const AlertsPage: React.FunctionComponent = () => {
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
-                <Button variant="link" onClick={handleNewAlertClick}>
+                <Button variant="link" onClick={handleNewAlertClick} disabled={!canInteractWithApp}>
                   Create new alert
                 </Button>
               )}

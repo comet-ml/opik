@@ -48,6 +48,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -70,6 +71,7 @@ const PlaygroundPrompt = ({
   modelResolver,
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const checkedIfModelIsValidRef = useRef(false);
   const queryClient = useQueryClient();
 
@@ -357,6 +359,7 @@ const PlaygroundPrompt = ({
               variant="outline"
               size="icon-sm"
               onClick={() => deletePrompt(promptId)}
+              disabled={!canInteractWithApp}
             >
               <Trash />
             </Button>

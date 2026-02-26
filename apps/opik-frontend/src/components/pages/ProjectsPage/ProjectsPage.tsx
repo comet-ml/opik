@@ -446,7 +446,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewProjectClick}>
+              <Button variant="link" onClick={handleNewProjectClick} disabled={!canInteractWithApp}>
                 Create new project
               </Button>
             )}

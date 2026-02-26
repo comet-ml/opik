@@ -252,7 +252,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
+              <Button variant="link" onClick={handleNewFeedbackDefinitionClick} disabled={!canInteractWithApp}>
                 Create new feedback definition
               </Button>
             )}

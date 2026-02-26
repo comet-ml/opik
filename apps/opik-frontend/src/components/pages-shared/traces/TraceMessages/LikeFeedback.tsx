@@ -8,6 +8,7 @@ import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type LikeFeedbackProps = {
   state?: USER_FEEDBACK_SCORE;
@@ -15,6 +16,7 @@ type LikeFeedbackProps = {
 };
 
 const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const { mutate: updateMutation } = useTraceFeedbackScoreSetMutation();
   const { mutate: deleteMutation } = useTraceFeedbackScoreDeleteMutation();
 
@@ -41,6 +43,7 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
       <Button
         variant="ghost"
         size="icon-2xs"
+        disabled={!canInteractWithApp}
         onClick={() => {
           state === USER_FEEDBACK_SCORE.like
             ? deleteFeedbackScore()
@@ -56,6 +59,7 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
       <Button
         variant="ghost"
         size="icon-2xs"
+        disabled={!canInteractWithApp}
         onClick={() => {
           state === USER_FEEDBACK_SCORE.dislike
             ? deleteFeedbackScore()

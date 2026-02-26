@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { getIsParentFeedbackScoreRow } from "../utils";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 import { useLoggedInUserName } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CustomMeta = {
   onDelete: (row: ExpandingFeedbackScoreRow) => void;
@@ -17,6 +18,7 @@ const ActionsCell: React.FunctionComponent<
   const { custom } = context.column.columnDef.meta ?? {};
   const { onDelete } = (custom ?? {}) as CustomMeta;
   const currentUserName = useLoggedInUserName();
+  const { permissions: { canInteractWithApp } } = usePermissions();
 
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(
     context.row.original,
@@ -42,6 +44,7 @@ const ActionsCell: React.FunctionComponent<
         variant="ghost"
         className="-mr-2.5"
         onClick={() => onDelete(context.row.original)}
+        disabled={!canInteractWithApp}
       >
         <X className="size-4 text-light-slate" />
       </Button>

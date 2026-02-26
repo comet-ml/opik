@@ -33,6 +33,7 @@ import {
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ConfirmType = "load" | "reset" | "save";
 
@@ -69,6 +70,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   improvePromptConfig,
   disabled = false,
 }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
@@ -318,7 +320,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled}
+                disabled={disabled || isPromptButtonDisabled || !canInteractWithApp}
               >
                 <Wand2 className="mr-2 size-4" />
                 Generate prompt
@@ -334,7 +336,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled}
+                disabled={disabled || isPromptButtonDisabled || !canInteractWithApp}
               >
                 <Wand2 className="mr-2 size-4" />
                 Improve prompt
@@ -359,14 +361,14 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             onOpenChange={onPromptSelectBoxOpenChange}
             filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
             refetchOnMount
-            disabled={disabled}
+            disabled={disabled || !canInteractWithApp}
           />
         </div>
         <TooltipWrapper content="Discard changes">
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={disabled || resetDisabled}
+            disabled={disabled || resetDisabled || !canInteractWithApp}
             onClick={() => {
               resetKeyRef.current = resetKeyRef.current + 1;
               setOpen("reset");
@@ -380,7 +382,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={disabled || saveDisabled}
+            disabled={disabled || saveDisabled || !canInteractWithApp}
             badge={saveWarning}
             onClick={() => {
               resetKeyRef.current = resetKeyRef.current + 1;
@@ -395,7 +397,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={disabled || saveDisabled}
+            disabled={disabled || saveDisabled || !canInteractWithApp}
             onClick={handleCopyJson}
             type="button"
           >

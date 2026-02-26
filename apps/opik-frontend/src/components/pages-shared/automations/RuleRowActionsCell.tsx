@@ -13,6 +13,7 @@ import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useRulesBatchDeleteMutation from "@/api/automations/useRulesBatchDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface RuleRowActionsCellProps {
   openEditDialog: (ruleId: string) => void;
@@ -22,6 +23,7 @@ interface RuleRowActionsCellProps {
 const RuleRowActionsCell: React.FC<
   RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
 > = ({ openEditDialog, openCloneDialog, row, column, table }) => {
+  const { permissions: { canInteractWithApp } } = usePermissions();
   const resetKeyRef = useRef(0);
   const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -54,7 +56,7 @@ Tip: To pause scoring without deleting, disable the rule.`}
         confirmButtonVariant="destructive"
       />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={!canInteractWithApp}>
           <Button variant="minimal" size="icon" className="-mr-2.5 ">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
