@@ -229,6 +229,7 @@ def llm_episode(
                 )
                 return result
 
+        setattr(wrapper, "_opik_llm_unit", True)
         return wrapper
 
     return decorator
