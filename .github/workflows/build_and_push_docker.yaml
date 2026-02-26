@@ -147,6 +147,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: apps/${{ inputs.image }}/
+          build-contexts: ${{ inputs.image == 'opik-python-backend' && 'opik-optimizer=apps/opik-optimizer/' || '' }}
           platforms: linux/${{ matrix.platform }}
           cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main
           provenance: false

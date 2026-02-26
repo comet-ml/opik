@@ -481,6 +481,8 @@ def _evaluate_suite_task(
     verbose: int,
     task_threads: int,
     evaluator_model: Optional[str],
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -489,9 +491,9 @@ def _evaluate_suite_task(
         execution_policy = dataset.get_execution_policy()
         items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
             nb_samples=None,
-            dataset_item_ids=None,
+            dataset_item_ids=dataset_item_ids,
             batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=None,
+            filter_string=dataset_filter_string,
         )
         total = dataset.dataset_items_count
 
@@ -1120,6 +1122,101 @@ def evaluate_optimization_trial(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
+        dataset_filter_string=dataset_filter_string,
+    )
+
+
+def evaluate_optimization_suite_trial(
+    optimization_id: str,
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    *,
+    client: Optional[opik_client.Opik] = None,
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 1,
+    task_threads: int = 16,
+    evaluator_model: Optional[str] = None,
+) -> evaluation_result.EvaluationResult:
+    """
+    Run an optimization trial on a dataset configured as an evaluation suite.
+
+    Combines optimization trial linkage (optimization_id, type="trial") with
+    evaluation suite behavior (evaluators and execution policy from the dataset).
+
+    Args:
+        optimization_id: The ID of the optimization associated with the experiment.
+
+        dataset: A Dataset instance configured as an evaluation suite.
+
+        task: A callable that takes a dict (the item's data) and returns
+            a dict with "input" and "output" keys for the evaluators.
+
+        client: Optional Opik client instance. If not provided, uses the
+            cached client from environment configuration.
+
+        dataset_item_ids: Optional list of dataset item IDs to evaluate.
+            If not provided, all items in the suite are evaluated.
+
+        dataset_filter_string: Optional OQL filter string to filter dataset items.
+
+        experiment_name_prefix: Optional prefix for auto-generated experiment name.
+
+        experiment_name: Optional explicit name for the experiment.
+
+        project_name: Optional project name for tracking.
+
+        experiment_config: Optional configuration dict for the experiment.
+
+        prompts: Optional list of Prompt objects to associate with the experiment.
+
+        experiment_tags: Optional list of tags to associate with the experiment.
+
+        verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
+
+        task_threads: Number of threads for parallel task execution.
+
+        evaluator_model: Optional model name to use for LLMJudge evaluators.
+            If not provided, uses the default model.
+
+    Returns:
+        EvaluationResult containing test results for the optimization trial.
+    """
+    if client is None:
+        client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
+
+    experiment_ = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset.name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        type="trial",
+        optimization_id=optimization_id,
+        tags=experiment_tags,
+        dataset_version_id=None,
+    )
+
+    return _evaluate_suite_task(
+        client=client,
+        experiment=experiment_,
+        dataset=dataset,
+        task=task,
+        project_name=project_name,
+        verbose=verbose,
+        task_threads=task_threads,
+        evaluator_model=evaluator_model,
+        dataset_item_ids=dataset_item_ids,
         dataset_filter_string=dataset_filter_string,
     )
 
