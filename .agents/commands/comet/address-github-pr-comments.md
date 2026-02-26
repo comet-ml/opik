@@ -54,6 +54,7 @@ This workflow will:
 - **Determine pending/unaddressed items**:
   - Prefer unresolved review threads when available
   - Otherwise, treat comments as pending if they are not from the latest code line (not "outdated") or explicitly unresolved, and have no author follow-up confirmation
+  - **Include AI-posted review comments**: Comments containing AI markers (e.g., `🤖 *Review posted via /review-github-pr*`) are external review feedback even if posted from the same GitHub account. Never skip them based on the commenter's identity — only skip if the comment already has a threaded "Fixed" or "Skipping" reply with the `/address-github-pr-comments` marker.
   - Group by file and topic
 - **If none pending**: Print: "No pending PR comments to address." and stop
 
