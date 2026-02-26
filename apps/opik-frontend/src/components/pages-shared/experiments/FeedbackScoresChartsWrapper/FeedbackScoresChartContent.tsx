@@ -29,6 +29,7 @@ export type DataRecord = {
   entityName: string;
   createdDate: string;
   scores: Record<string, number>;
+  changeDescription?: string;
 };
 
 export type ChartData = {
@@ -78,7 +79,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
+      const { entityName, createdDate, changeDescription } = payload[0].payload;
 
       return (
         <>
@@ -88,6 +89,11 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
           <div className="comet-body-xs mb-1 text-light-slate">
             {createdDate}
           </div>
+          {changeDescription && (
+            <div className="comet-body-xs mb-1 truncate text-light-slate">
+              {changeDescription}
+            </div>
+          )}
         </>
       );
     },

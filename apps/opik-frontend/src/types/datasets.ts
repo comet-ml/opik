@@ -99,6 +99,7 @@ export interface ExperimentPromptVersion {
   commit: string;
   prompt_id: string;
   prompt_name: string;
+  change_description?: string;
 }
 
 export enum EXPERIMENT_TYPE {

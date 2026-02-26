@@ -58,6 +58,10 @@ const OptimizationProgressChartContainer: React.FC<
           objectiveName,
         );
 
+        const changeDescription =
+          experiment.prompt_versions?.[0]?.change_description ??
+          experiment.prompt_version?.change_description;
+
         retVal.data.push({
           entityId: experiment.id,
           entityName: experiment.name,
@@ -67,6 +71,7 @@ const OptimizationProgressChartContainer: React.FC<
             experiment.feedback_scores
               ?.map((score) => ({ name: score.name, value: score.value }))
               ?.filter((score) => score.name !== objectiveName) || [],
+          changeDescription,
         });
       });
 

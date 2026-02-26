@@ -592,11 +592,16 @@ const ExperimentsPage: React.FC = () => {
           scores[s.name] = s.value;
         });
 
+        const changeDescription =
+          experiment.prompt_versions?.[0]?.change_description ??
+          experiment.prompt_version?.change_description;
+
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
           scores,
+          changeDescription,
         });
 
         groupsMap[groupKey].lines = uniq([

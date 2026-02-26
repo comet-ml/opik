@@ -246,7 +246,8 @@ public class ExperimentService {
                 version.id(),
                 info != null ? info.commit() : null,
                 version.promptId(),
-                info != null ? info.promptName() : null);
+                info != null ? info.promptName() : null,
+                info != null ? info.changeDescription() : null);
     }
 
     private Set<UUID> getPromptVersionIds(List<Experiment> experiments) {

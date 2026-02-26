@@ -45,6 +45,7 @@ type DataRecord = {
   entityName: string;
   createdDate: string;
   scores: Record<string, number>;
+  changeDescription?: string;
 };
 
 type ChartData = {
@@ -198,6 +199,9 @@ function transformUngroupedExperimentsToChartData(
       entityName: experiment.name,
       createdDate: formatDate(experiment.created_at),
       scores,
+      changeDescription:
+        experiment.prompt_versions?.[0]?.change_description ??
+        experiment.prompt_version?.change_description,
     };
   });
 
@@ -439,13 +443,14 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       entityId: record.entityId,
       entityName: record.entityName,
       createdDate: record.createdDate,
+      changeDescription: record.changeDescription ?? null,
       ...record.scores,
     }));
   }, [chartData, isRadarOrBar, entityLabels]);
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
+      const { entityName, createdDate, changeDescription } = payload[0].payload;
 
       return (
         <>
@@ -455,6 +460,11 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           {createdDate && (
             <div className="comet-body-xs mb-1 text-light-slate">
               {createdDate}
+            </div>
+          )}
+          {changeDescription && (
+            <div className="comet-body-xs mb-1 truncate text-light-slate">
+              {changeDescription}
             </div>
           )}
         </>

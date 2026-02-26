@@ -29,6 +29,7 @@ export type DataRecord = {
   createdDate: string;
   value: number | null;
   allFeedbackScores?: { name: string; value: number }[];
+  changeDescription?: string;
 };
 
 export type ChartData = {
@@ -99,7 +100,7 @@ const OptimizationProgressChartContent: React.FC<
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
+      const { entityName, createdDate, changeDescription } = payload[0].payload;
 
       return (
         <>
@@ -109,6 +110,11 @@ const OptimizationProgressChartContent: React.FC<
           <div className="comet-body-xs mb-1 text-light-slate">
             {createdDate}
           </div>
+          {changeDescription && (
+            <div className="comet-body-xs mb-1 truncate text-light-slate">
+              {changeDescription}
+            </div>
+          )}
         </>
       );
     },
