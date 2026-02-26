@@ -266,6 +266,13 @@ public class StatsUtils {
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
 
+        Map<String, Double> usageSum = calculateUsageSum(usages);
+        usageSum.keySet()
+                .stream()
+                .sorted()
+                .forEach(key -> stats
+                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE_SUM, key), usageSum.get(key))));
+
         feedback.keySet()
                 .stream()
                 .sorted()
@@ -289,6 +296,21 @@ public class StatsUtils {
         stats.add(new CountValueStat(StatsMapper.ERROR_COUNT, errorCount));
 
         return stats;
+    }
+
+    public static Map<String, Double> calculateUsageSum(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .map(e -> Map.entry(e.getKey(),
+                        e.getValue().stream().mapToDouble(Long::doubleValue).sum()))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
