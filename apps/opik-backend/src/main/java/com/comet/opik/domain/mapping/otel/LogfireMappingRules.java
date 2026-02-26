@@ -40,7 +40,10 @@ public final class LogfireMappingRules {
                     .rule("tool_responses").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("usage").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.USAGE)
-                    .spanType(SpanType.llm).build());
+                    .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("final_result").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build());
+
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;
