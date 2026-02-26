@@ -123,7 +123,7 @@ interface AgentConfigDAO {
             SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
             FROM agent_blueprint
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = :type
-            ORDER BY created_at DESC LIMIT 1
+            ORDER BY id DESC LIMIT 1
             """)
     AgentBlueprint getLatestBlueprint(
             @Bind("workspace_id") String workspaceId,
@@ -222,7 +222,7 @@ interface AgentConfigDAO {
                 AND b.project_id = :project_id
                 AND b.type = 'blueprint'
             GROUP BY b.id, b.project_id, b.type, b.description, b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
-            ORDER BY b.created_at DESC
+            ORDER BY b.id DESC
             LIMIT :limit OFFSET :offset
             """)
     List<AgentBlueprint> getBlueprintHistory(
