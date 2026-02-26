@@ -50,6 +50,7 @@ jobs:
     strategy:
       matrix:
         integration:
+          - opik-agentica
           - opik-openai
           - opik-gemini
           - opik-langchain
