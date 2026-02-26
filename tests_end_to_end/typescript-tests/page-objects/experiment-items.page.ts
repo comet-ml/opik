@@ -1,6 +1,8 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, expect } from '@playwright/test';
 
 export class ExperimentItemsPage {
+  private idColumnIndex = -1;
+
   constructor(private page: Page) {}
 
   private get nextPageButton(): Locator {
@@ -15,30 +17,56 @@ export class ExperimentItemsPage {
     return this.page.getByRole('button', { name: 'Showing' });
   }
 
+  // Ensure the "Dataset item ID" column is visible and resolve its index.
+  async initialize(): Promise<void> {
+    await this.page.getByTestId('columns-button').click({ timeout: 5000 });
+    try {
+      await expect(
+        this.page.getByRole('button', { name: 'Dataset item ID' }).getByRole('checkbox')
+      ).toBeChecked({ timeout: 2000 });
+    } catch {
+      await this.page.getByRole('button', { name: 'Dataset item ID' }).click();
+    }
+    await this.page.keyboard.press('Escape');
+    this.idColumnIndex = -1; // reset so resolveIdColumnIndex re-detects
+  }
+
+  private async resolveIdColumnIndex(): Promise<number> {
+    if (this.idColumnIndex >= 0) return this.idColumnIndex;
+    // The table has two header rows: a group row and the actual column row.
+    // We look at the last thead row for the column names.
+    const headerRows = this.page.locator('table thead tr');
+    const rowCount = await headerRows.count();
+    const headers = headerRows.nth(rowCount - 1).locator('th, td');
+    const count = await headers.count();
+    for (let i = 0; i < count; i++) {
+      const text = await headers.nth(i).innerText();
+      if (text.match(/^Dataset item ID/)) {
+        this.idColumnIndex = i;
+        return this.idColumnIndex;
+      }
+    }
+    throw new Error('Dataset item ID column not found. Was initialize() called?');
+  }
+
   async getTotalNumberOfItemsInExperiment(): Promise<number> {
     const paginationText = await this.paginationButton.innerText();
     const match = paginationText.match(/of (\d+)/);
     return match ? parseInt(match[1], 10) : 0;
   }
 
-  async getIdOfNthExperimentItem(n: number): Promise<string> {
-    const row = this.page.locator('tr').nth(n + 1);
-    const cell = row.locator('td').nth(1);
-    const content = (await cell.textContent()) || '';
-    return content.trim();
-  }
-
   async getAllItemIdsOnCurrentPage(): Promise<string[]> {
+    const colIdx = await this.resolveIdColumnIndex();
     const ids: string[] = [];
-    const rows = await this.page.locator('tr').all();
-
-    for (let rowIndex = 2; rowIndex < rows.length; rowIndex++) {
-      const row = rows[rowIndex];
-      const cell = row.locator('td').nth(1);
+    // Skip the first tbody row which is the column-headers row (second thead row renders inside tbody in some layouts)
+    const rows = this.page.locator('table tbody tr');
+    const rowCount = await rows.count();
+    for (let i = 0; i < rowCount; i++) {
+      const cell = rows.nth(i).locator('td').nth(colIdx);
       const id = (await cell.textContent()) || '';
-      ids.push(id.trim());
+      const trimmed = id.trim();
+      if (trimmed) ids.push(trimmed);
     }
-
     return ids;
   }
 
