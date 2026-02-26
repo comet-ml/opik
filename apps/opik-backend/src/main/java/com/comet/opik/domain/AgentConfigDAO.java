@@ -31,6 +31,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(AgentConfigValue.class)
 @RegisterConstructorMapper(AgentConfigEnv.class)
 @RegisterConstructorMapper(AgentConfigDAO.BlueprintProject.class)
+@RegisterConstructorMapper(AgentConfigDAO.BlueprintValueReference.class)
 @RegisterRowMapper(AgentConfigDAO.BlueprintWithEnvsRowMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(ValueTypeArgumentFactory.class)
@@ -40,6 +41,9 @@ import java.util.UUID;
 interface AgentConfigDAO {
 
     record BlueprintProject(UUID id, UUID projectId) {
+    }
+
+    record BlueprintValueReference(UUID blueprintId, UUID projectId, UUID configId, String configKey, String oldValue) {
     }
 
     @SqlQuery("""
@@ -217,6 +221,36 @@ interface AgentConfigDAO {
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
+
+    @SqlQuery("""
+            WITH prompt_commits AS (
+                SELECT pv.commit
+                FROM prompt_versions pv
+                WHERE pv.workspace_id = :workspace_id
+                    AND pv.prompt_id = :prompt_id
+                    AND pv.commit != :new_commit
+            )
+            SELECT DISTINCT
+                ab.id as blueprint_id,
+                ab.project_id,
+                ab.config_id,
+                acv.key as config_key,
+                acv.value as old_value
+            FROM agent_blueprints ab
+            JOIN agent_config_values acv
+                ON acv.valid_from_blueprint_id = ab.id
+                AND acv.workspace_id = ab.workspace_id
+                AND acv.project_id = ab.project_id
+            WHERE ab.workspace_id = :workspace_id
+                AND ab.type = 'blueprint'
+                AND acv.type = 'prompt'
+                AND acv.valid_to_blueprint_id IS NULL
+                AND acv.value IN (SELECT commit FROM prompt_commits)
+            """)
+    List<BlueprintValueReference> findProjectsWithOutdatedPromptReferences(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("prompt_id") UUID promptId,
+            @Bind("new_commit") String newCommit);
 
     @SqlQuery("""
             SELECT

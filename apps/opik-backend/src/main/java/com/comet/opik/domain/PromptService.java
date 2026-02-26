@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.PromptVersionCreatedEvent;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
@@ -726,6 +727,13 @@ class PromptServiceImpl implements PromptService {
                 .workspaceName(workspaceName)
                 .userName(userName)
                 .payload(promptVersion)
+                .build());
+
+        eventBus.post(PromptVersionCreatedEvent.builder()
+                .workspaceId(workspaceId)
+                .promptId(promptVersion.promptId())
+                .commit(promptVersion.commit())
+                .userName(userName)
                 .build());
     }
 
