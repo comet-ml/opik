@@ -18,6 +18,7 @@ from ..types.json_node_write import JsonNodeWrite
 from ..types.prompt_detail import PromptDetail
 from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
+from ..types.prompt_version_link_public import PromptVersionLinkPublic
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from ..types.prompt_version_update import PromptVersionUpdate
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
@@ -677,6 +678,51 @@ class RawPromptsClient:
                     PromptVersionPagePublic,
                     parse_obj_as(
                         type_=PromptVersionPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_prompts_by_commits(
+        self, *, commits: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[typing.List[PromptVersionLinkPublic]]:
+        """
+        Get prompts by prompt version commits
+
+        Parameters
+        ----------
+        commits : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[typing.List[PromptVersionLinkPublic]]
+            OK
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/retrieve-by-commits",
+            method="POST",
+            json={
+                "commits": commits,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[PromptVersionLinkPublic],
+                    parse_obj_as(
+                        type_=typing.List[PromptVersionLinkPublic],  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1481,6 +1527,51 @@ class AsyncRawPromptsClient:
                     PromptVersionPagePublic,
                     parse_obj_as(
                         type_=PromptVersionPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_prompts_by_commits(
+        self, *, commits: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[typing.List[PromptVersionLinkPublic]]:
+        """
+        Get prompts by prompt version commits
+
+        Parameters
+        ----------
+        commits : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[typing.List[PromptVersionLinkPublic]]
+            OK
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/retrieve-by-commits",
+            method="POST",
+            json={
+                "commits": commits,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[PromptVersionLinkPublic],
+                    parse_obj_as(
+                        type_=typing.List[PromptVersionLinkPublic],  # type: ignore
                         object_=_response.json(),
                     ),
                 )
