@@ -53,6 +53,7 @@ jobs:
           - opik-openai
           - opik-gemini
           - opik-langchain
+          - opik-langgraph
           - opik-vercel
     env:
       IS_RELEASE: ${{ inputs.is_release }}
