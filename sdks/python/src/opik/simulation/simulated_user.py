@@ -1,7 +1,10 @@
 """SimulatedUser class for multi-turn conversation simulation."""
 
 from typing import Any, List, Dict, Optional
-from opik.evaluation.models.models_factory import get as get_model
+from opik.evaluation.models.models_factory import (
+    get as get_model,
+    get_default_model_name,
+)
 
 
 class SimulatedUser:
