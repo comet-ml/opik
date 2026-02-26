@@ -16,21 +16,21 @@ import java.util.UUID;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class AgentConfigResourceClient {
+public class AgentConfigsResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
 
     private final ClientSupport client;
     private final String baseURI;
 
-    public AgentConfigResourceClient(ClientSupport client) {
+    public AgentConfigsResourceClient(ClientSupport client) {
         this.client = client;
         this.baseURI = TestUtils.getBaseUrl(client);
     }
 
     public UUID createAgentConfig(AgentConfigCreate request, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -51,7 +51,7 @@ public class AgentConfigResourceClient {
 
     public Response createAgentConfigWithResponse(AgentConfigCreate request, String apiKey,
             String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -60,7 +60,7 @@ public class AgentConfigResourceClient {
     }
 
     public Response createAgentConfigWithResponse(String body, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -70,8 +70,8 @@ public class AgentConfigResourceClient {
 
     public AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/retrieve")
-                .queryParam("project_id", projectId);
+        var target = client.target(
+                RESOURCE_PATH.formatted(baseURI) + "/blueprints/latest/projects/" + projectId.toString());
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -96,7 +96,7 @@ public class AgentConfigResourceClient {
 
     public AgentBlueprint getBlueprintById(UUID blueprintId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/" + blueprintId);
+        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/" + blueprintId);
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -121,8 +121,8 @@ public class AgentConfigResourceClient {
 
     public AgentBlueprint getBlueprintByEnv(String envName, UUID projectId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprint/env/" + envName)
-                .queryParam("project_id", projectId);
+        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/environments/" + envName
+                + "/projects/" + projectId);
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -146,7 +146,8 @@ public class AgentConfigResourceClient {
     }
 
     public AgentBlueprint getDelta(UUID blueprintId, String apiKey, String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/delta/" + blueprintId)
+        try (var actualResponse = client
+                .target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/" + blueprintId + "/deltas")
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -165,7 +166,7 @@ public class AgentConfigResourceClient {
 
     public void createOrUpdateEnvs(com.comet.opik.api.AgentConfigEnvUpdate request, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/envs")
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/environments")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -177,8 +178,8 @@ public class AgentConfigResourceClient {
 
     public AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size,
             String apiKey, String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/history")
-                .queryParam("project_id", projectId)
+        try (var actualResponse = client
+                .target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/history/projects/" + projectId)
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .request()

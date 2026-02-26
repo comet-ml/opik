@@ -12,7 +12,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
-import com.comet.opik.api.resources.utils.resources.AgentConfigResourceClient;
+import com.comet.opik.api.resources.utils.resources.AgentConfigsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentBlueprint.BlueprintType;
@@ -53,7 +53,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Agent Config Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AgentConfigResourceTest {
+class AgentConfigsResourceTest {
 
     record TestSetupData(
             UUID projectId,
@@ -96,13 +96,13 @@ class AgentConfigResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private AgentConfigResourceClient agentConfigResourceClient;
+    private AgentConfigsResourceClient agentConfigsResourceClient;
     private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         String baseUrl = TestUtils.getBaseUrl(client);
-        this.agentConfigResourceClient = new AgentConfigResourceClient(client);
+        this.agentConfigsResourceClient = new AgentConfigsResourceClient(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
 
         ClientSupportUtils.config(client);
@@ -158,7 +158,7 @@ class AgentConfigResourceTest {
                     .blueprint(blueprint)
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(request, API_KEY,
+            agentConfigsResourceClient.createAgentConfig(request, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_CREATED);
         }
 
@@ -169,7 +169,7 @@ class AgentConfigResourceTest {
                 AgentConfigCreate request, int expectedStatusCode, Object expectedBody,
                 Class<?> expectedResponseClass) {
 
-            try (var actualResponse = agentConfigResourceClient.createAgentConfigWithResponse(request, API_KEY,
+            try (var actualResponse = agentConfigsResourceClient.createAgentConfigWithResponse(request, API_KEY,
                     TEST_WORKSPACE)) {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatusCode);
                 assertThat(actualResponse.hasEntity()).isTrue();
@@ -365,7 +365,7 @@ class AgentConfigResourceTest {
                     .blueprint(mask)
                     .build();
 
-            var maskId = agentConfigResourceClient.createAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
+            var maskId = agentConfigsResourceClient.createAgentConfig(maskRequest, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_CREATED);
 
             var blueprint1 = AgentBlueprint.builder()
@@ -389,7 +389,7 @@ class AgentConfigResourceTest {
                     .blueprint(blueprint1)
                     .build();
 
-            var blueprint1Id = agentConfigResourceClient.createAgentConfig(request1, API_KEY, TEST_WORKSPACE,
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(request1, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_CREATED);
 
             var blueprint2 = AgentBlueprint.builder()
@@ -405,7 +405,7 @@ class AgentConfigResourceTest {
                     .blueprint(blueprint2)
                     .build();
 
-            var blueprint2Id = agentConfigResourceClient.createAgentConfig(request2, API_KEY, TEST_WORKSPACE,
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(request2, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_CREATED);
 
             var blueprint3 = AgentBlueprint.builder()
@@ -421,7 +421,7 @@ class AgentConfigResourceTest {
                     .blueprint(blueprint3)
                     .build();
 
-            var blueprint3Id = agentConfigResourceClient.createAgentConfig(request3, API_KEY, TEST_WORKSPACE,
+            var blueprint3Id = agentConfigsResourceClient.createAgentConfig(request3, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_CREATED);
 
             var envUpdate = AgentConfigEnvUpdate.builder()
@@ -433,7 +433,7 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
             return new TestSetupData(projectId, blueprint1Id, blueprint2Id, blueprint3Id, maskId);
@@ -444,7 +444,7 @@ class AgentConfigResourceTest {
         void retrieveLatestBlueprint() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getLatestBlueprint(setup.projectId(), null, API_KEY,
+            var blueprint = agentConfigsResourceClient.getLatestBlueprint(setup.projectId(), null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
@@ -473,7 +473,7 @@ class AgentConfigResourceTest {
         void retrieveBlueprintById_middleBlueprint() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getBlueprintById(setup.blueprint2Id(), null, API_KEY,
+            var blueprint = agentConfigsResourceClient.getBlueprintById(setup.blueprint2Id(), null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
@@ -502,7 +502,7 @@ class AgentConfigResourceTest {
         void retrieveLatestBlueprintWithMask() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getLatestBlueprint(setup.projectId(), setup.maskId(), API_KEY,
+            var blueprint = agentConfigsResourceClient.getLatestBlueprint(setup.projectId(), setup.maskId(), API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
@@ -531,7 +531,7 @@ class AgentConfigResourceTest {
         void retrieveBlueprintByEnv() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getBlueprintByEnv("dev", setup.projectId(), null, API_KEY,
+            var blueprint = agentConfigsResourceClient.getBlueprintByEnv("dev", setup.projectId(), null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
@@ -560,7 +560,7 @@ class AgentConfigResourceTest {
         void retrieveBlueprintByEnvWithMask() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getBlueprintByEnv("dev", setup.projectId(), setup.maskId(),
+            var blueprint = agentConfigsResourceClient.getBlueprintByEnv("dev", setup.projectId(), setup.maskId(),
                     API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
@@ -591,7 +591,7 @@ class AgentConfigResourceTest {
         void retrieveDelta() {
             var setup = setupBlueprintsAndMask();
 
-            var blueprint = agentConfigResourceClient.getDelta(setup.blueprint2Id(), API_KEY, TEST_WORKSPACE,
+            var blueprint = agentConfigsResourceClient.getDelta(setup.blueprint2Id(), API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
@@ -614,13 +614,12 @@ class AgentConfigResourceTest {
         void retrieveLatestBlueprint__whenError__thenReturnExpectedStatus(
                 UUID projectId, UUID maskId, int expectedStatus) {
 
-            agentConfigResourceClient.getLatestBlueprint(projectId, maskId, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getLatestBlueprint(projectId, maskId, API_KEY, TEST_WORKSPACE,
                     expectedStatus);
         }
 
         Stream<Arguments> retrieveLatestBlueprint__whenError__thenReturnExpectedStatus() {
             return Stream.of(
-                    arguments(null, null, HttpStatus.SC_BAD_REQUEST),
                     arguments(UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments(UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
         }
@@ -631,7 +630,7 @@ class AgentConfigResourceTest {
         void retrieveBlueprintById__whenError__thenReturnExpectedStatus(
                 UUID blueprintId, UUID maskId, int expectedStatus) {
 
-            agentConfigResourceClient.getBlueprintById(blueprintId, maskId, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getBlueprintById(blueprintId, maskId, API_KEY, TEST_WORKSPACE,
                     expectedStatus);
         }
 
@@ -647,7 +646,7 @@ class AgentConfigResourceTest {
         void retrieveDelta__whenError__thenReturnExpectedStatus(
                 UUID blueprintId, int expectedStatus) {
 
-            agentConfigResourceClient.getDelta(blueprintId, API_KEY, TEST_WORKSPACE, expectedStatus);
+            agentConfigsResourceClient.getDelta(blueprintId, API_KEY, TEST_WORKSPACE, expectedStatus);
         }
 
         Stream<Arguments> retrieveDelta__whenError__thenReturnExpectedStatus() {
@@ -661,13 +660,12 @@ class AgentConfigResourceTest {
         void retrieveBlueprintByEnv__whenError__thenReturnExpectedStatus(
                 String envName, UUID projectId, UUID maskId, int expectedStatus) {
 
-            agentConfigResourceClient.getBlueprintByEnv(envName, projectId, maskId, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getBlueprintByEnv(envName, projectId, maskId, API_KEY, TEST_WORKSPACE,
                     expectedStatus);
         }
 
         Stream<Arguments> retrieveBlueprintByEnv__whenError__thenReturnExpectedStatus() {
             return Stream.of(
-                    arguments("dev", null, null, HttpStatus.SC_BAD_REQUEST),
                     arguments("nonexistent", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("dev", UUID.randomUUID(), null, HttpStatus.SC_NOT_FOUND),
                     arguments("nonexistent", UUID.randomUUID(), UUID.randomUUID(), HttpStatus.SC_NOT_FOUND));
@@ -689,7 +687,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId1).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -700,11 +698,11 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
                     .build();
 
-            var maskId = agentConfigResourceClient.createAgentConfig(
+            var maskId = agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId2).blueprint(mask).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            agentConfigResourceClient.getLatestBlueprint(projectId1, maskId, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getLatestBlueprint(projectId1, maskId, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_BAD_REQUEST);
         }
 
@@ -721,7 +719,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -736,7 +734,7 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
 
@@ -756,7 +754,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId1).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -767,7 +765,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
                     .build();
 
-            var blueprint2Id = agentConfigResourceClient.createAgentConfig(
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId2).blueprint(blueprint2).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -780,7 +778,7 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
 
@@ -797,7 +795,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -808,11 +806,11 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("temperature").value("0.8").type(ValueType.STRING).build()))
                     .build();
 
-            var maskId = agentConfigResourceClient.createAgentConfig(
+            var maskId = agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            agentConfigResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_BAD_REQUEST);
         }
 
@@ -829,7 +827,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -840,7 +838,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("temperature").value("0.8").type(ValueType.STRING).build()))
                     .build();
 
-            var maskId = agentConfigResourceClient.createAgentConfig(
+            var maskId = agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -853,10 +851,10 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
-            agentConfigResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_BAD_REQUEST);
         }
     }
@@ -882,7 +880,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -894,7 +892,7 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            var blueprint2Id = agentConfigResourceClient.createAgentConfig(
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -905,7 +903,7 @@ class AgentConfigResourceTest {
                             AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
                     .build();
 
-            agentConfigResourceClient.createAgentConfig(
+            agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -918,10 +916,10 @@ class AgentConfigResourceTest {
                                     .build()))
                     .build();
 
-            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NO_CONTENT);
 
-            var historyPage = agentConfigResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
+            var historyPage = agentConfigsResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
 
             assertThat(historyPage).isNotNull();
@@ -951,7 +949,7 @@ class AgentConfigResourceTest {
         @Test
         @DisplayName("when config does not exist, then return 404")
         void getHistory__whenConfigNotFound__thenReturn404() {
-            agentConfigResourceClient.getHistory(UUID.randomUUID(), 1, 10, API_KEY, TEST_WORKSPACE,
+            agentConfigsResourceClient.getHistory(UUID.randomUUID(), 1, 10, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
     }

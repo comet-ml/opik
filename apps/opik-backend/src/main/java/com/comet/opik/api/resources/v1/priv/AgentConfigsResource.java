@@ -42,28 +42,28 @@ import java.net.URI;
 import java.util.UUID;
 
 @Path("/v1/private/agent-configs")
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Agent Configs", description = "Agent configuration management")
-public class AgentConfigResource {
+public class AgentConfigsResource {
 
     private final @NonNull AgentConfigService agentConfigService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
-    @Path("/")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/blueprints")
     @JsonView(AgentConfig.View.Write.class)
     @Operation(operationId = "createAgentConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprint/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response createAgentConfig(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigCreate.class))) @Valid AgentConfigCreate request,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigCreate.class))) @NotNull @Valid AgentConfigCreate request,
             @Context UriInfo uriInfo) {
 
         log.info("Creating blueprint for project '{}'", request.projectName());
@@ -72,9 +72,9 @@ public class AgentConfigResource {
 
         log.info("Created blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
-        URI location = uriInfo.getBaseUriBuilder()
-                .path("v1/private/agent-configs/blueprint/{blueprint_id}")
-                .build(createdBlueprint.id());
+        URI location = uriInfo.getAbsolutePathBuilder()
+                .path(createdBlueprint.id().toString())
+                .build();
 
         return Response.created(location)
                 .entity(createdBlueprint)
@@ -82,16 +82,15 @@ public class AgentConfigResource {
     }
 
     @GET
-    @Path("/blueprint/retrieve")
-    @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
+    @Path("/blueprints/latest/projects/{project_id}")
+    @JsonView(AgentConfig.View.Public.class)
     @Operation(operationId = "getLatestBlueprint", summary = "Retrieve latest blueprint", description = "Retrieves the latest blueprint for a project", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getLatestBlueprint(
-            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @PathParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving latest blueprint for project '{}'", projectId);
@@ -102,9 +101,8 @@ public class AgentConfigResource {
     }
 
     @GET
-    @Path("/blueprint/{blueprint_id}")
-    @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
+    @Path("/blueprints/{blueprint_id}")
+    @JsonView(AgentConfig.View.Public.class)
     @Operation(operationId = "getBlueprintById", summary = "Retrieve blueprint by ID", description = "Retrieves a specific blueprint by its ID", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -122,9 +120,8 @@ public class AgentConfigResource {
     }
 
     @GET
-    @Path("/blueprint/env/{env_name}")
-    @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
+    @Path("/blueprints/environments/{env_name}/projects/{project_id}")
+    @JsonView(AgentConfig.View.Public.class)
     @Operation(operationId = "getBlueprintByEnv", summary = "Retrieve blueprint by environment", description = "Retrieves the blueprint associated with a specific environment", responses = {
             @ApiResponse(responseCode = "200", description = "Blueprint retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -132,7 +129,7 @@ public class AgentConfigResource {
     })
     public Response getBlueprintByEnv(
             @PathParam("env_name") String envName,
-            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @PathParam("project_id") UUID projectId,
             @QueryParam("mask_id") UUID maskId) {
 
         log.info("Retrieving blueprint by environment '{}' for project '{}'", envName, projectId);
@@ -143,9 +140,8 @@ public class AgentConfigResource {
     }
 
     @GET
-    @Path("/delta/{blueprint_id}")
-    @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.Public.class)
+    @Path("/blueprints/{blueprint_id}/deltas")
+    @JsonView(AgentConfig.View.Public.class)
     @Operation(operationId = "getDeltaById", summary = "Retrieve delta by blueprint ID", description = "Retrieves only the changes (delta) introduced in a specific blueprint", responses = {
             @ApiResponse(responseCode = "200", description = "Delta retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -161,15 +157,14 @@ public class AgentConfigResource {
     }
 
     @POST
-    @Path("/envs")
-    @Consumes(MediaType.APPLICATION_JSON)
+    @Path("/environments")
     @Operation(operationId = "createOrUpdateEnvs", summary = "Create or update environments", description = "Creates or updates environment-to-blueprint mappings", responses = {
             @ApiResponse(responseCode = "204", description = "Environments updated"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response createOrUpdateEnvs(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigEnvUpdate.class))) @Valid AgentConfigEnvUpdate request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigEnvUpdate.class))) @NotNull @Valid AgentConfigEnvUpdate request) {
 
         log.info("Creating or updating environments for project '{}'", request.projectId());
 
@@ -179,16 +174,15 @@ public class AgentConfigResource {
     }
 
     @GET
-    @Path("/history")
-    @Produces(MediaType.APPLICATION_JSON)
-    @JsonView(com.comet.opik.domain.AgentConfig.View.History.class)
+    @Path("/blueprints/history/projects/{project_id}")
+    @JsonView(AgentConfig.View.History.class)
     @Operation(operationId = "getBlueprintHistory", summary = "Get blueprint history", description = "Retrieves paginated blueprint history for a project", responses = {
             @ApiResponse(responseCode = "200", description = "History retrieved", content = @Content(schema = @Schema(implementation = AgentBlueprint.BlueprintPage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response getBlueprintHistory(
-            @Parameter(required = true) @NotNull @QueryParam("project_id") UUID projectId,
+            @Parameter(required = true) @PathParam("project_id") UUID projectId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
