@@ -169,11 +169,43 @@ For each finding, prepare:
 
 ### 7. Post Review Comments
 
-Post approved comments using `gh api`. Two types of comments:
+Post approved comments as a **single batched review** to minimize notifications to the PR author. All inline comments are grouped into one review submission.
 
-#### Inline Comments (file-specific)
+#### Batched Review (primary approach)
 
-For comments tied to specific lines in the diff, post as single-comment PR reviews:
+Collect all approved inline comments into a JSON payload and submit as one review:
+
+```bash
+gh api repos/comet-ml/opik/pulls/{pr_number}/reviews \
+  --input - <<'EOF'
+{
+  "commit_id": "<head_sha>",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "<file_path>",
+      "line": <line_number>,
+      "side": "RIGHT",
+      "body": "<comment text with AI marker>"
+    },
+    {
+      "path": "<file_path>",
+      "start_line": <start_line>,
+      "line": <end_line>,
+      "start_side": "RIGHT",
+      "side": "RIGHT",
+      "body": "<multi-line comment text with AI marker>"
+    }
+  ]
+}
+EOF
+```
+
+This sends **one notification** to the PR author regardless of how many comments are included.
+
+#### Fallback: Individual Comments
+
+If the batched review fails (e.g., a comment references a line not in the diff), fall back to posting comments individually. Identify which comments caused the failure and post the valid ones one by one:
 
 ```bash
 gh api repos/comet-ml/opik/pulls/{pr_number}/comments \
@@ -184,18 +216,7 @@ gh api repos/comet-ml/opik/pulls/{pr_number}/comments \
   -f side="RIGHT"
 ```
 
-For multi-line comments:
-
-```bash
-gh api repos/comet-ml/opik/pulls/{pr_number}/comments \
-  -f body="<comment text>" \
-  -f path="<file_path>" \
-  -f commit_id="<head_sha>" \
-  -F start_line=<start_line> \
-  -F line=<end_line> \
-  -f start_side="RIGHT" \
-  -f side="RIGHT"
-```
+Log any comments that still fail individually (e.g., line not in diff) and fall back to posting them as general PR comments instead.
 
 #### Code Suggestions
 
@@ -211,7 +232,7 @@ When suggesting specific code changes, use GitHub suggestion syntax in the comme
 
 #### General Comments (PR-level)
 
-For comments not tied to a specific line (overall architecture, missing tests, etc.), post as issue comments:
+For comments not tied to a specific line (overall architecture, missing tests, etc.), post as issue comments. These cannot be included in the batched review and are posted separately:
 
 ```bash
 gh api repos/comet-ml/opik/issues/{pr_number}/comments \
@@ -378,7 +399,7 @@ The command is successful when:
 
 - **Repository**: Always targets `comet-ml/opik`
 - **`gh` CLI is the only hard requirement**: GitHub MCP is optional and used for richer reading when available. All operations can be performed with `gh` CLI alone.
-- **No formal review submission**: This command NEVER submits a GitHub review with "approve" or "request changes". It only posts individual review comments. Human reviewers must still formally approve.
+- **No formal review submission**: This command submits reviews with event `COMMENT` only — NEVER with "approve" or "request changes". Human reviewers must still formally approve.
 - **Complementary to `/address-github-pr-comments`**: That command responds to existing review feedback. This command generates review feedback. Both post comments via `gh api` with AI markers.
 - **AI marker required**: Every posted comment must include the `🤖 *Review posted via /review-github-pr*` footer — never omit it
 - **Domain-aware**: Uses Opik-specific rules from `.agents/skills/` and `.agents/rules/` to provide relevant, project-specific feedback rather than generic code review
