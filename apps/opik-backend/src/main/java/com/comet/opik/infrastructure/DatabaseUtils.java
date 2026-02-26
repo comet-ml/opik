@@ -100,6 +100,16 @@ public class DatabaseUtils {
         }
     }
 
+    static final String TRACE_SEARCH_CLAUSE = """
+            (ilike(toString(id), :search_text)
+            OR ilike(name, :search_text)
+            OR ilike(input, :search_text)
+            OR ilike(output, :search_text)
+            OR ilike(metadata, :search_text)
+            OR ilike(error_info, :search_text)
+            OR arrayExists(element -> ilike(element, :search_text), tags)
+            OR ilike(thread_id, :search_text))""";
+
     public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
         var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
@@ -141,7 +151,7 @@ public class DatabaseUtils {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
 
         Optional.ofNullable(traceSearchCriteria.searchText())
-                .ifPresent(searchText -> template.add("search_text", true));
+                .ifPresent(searchText -> template.add("search_text", TRACE_SEARCH_CLAUSE));
         return template;
     }
 
@@ -167,7 +177,7 @@ public class DatabaseUtils {
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
 
         Optional.ofNullable(traceSearchCriteria.searchText())
-                .ifPresent(searchText -> statement.bind("search_text", searchText));
+                .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
     }
 
     public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {

@@ -662,7 +662,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             placeholder="Search threads..."
             className="w-[320px]"
             dimension="sm"
-          ></SearchInput>
+            active={!isPlaceholderData && !!trimmedSearch}
+          />
           <FiltersButton
             columns={FILTER_COLUMNS}
             filters={filters}
