@@ -71,6 +71,34 @@ export class OpikCallbackHandler
   private tracerMap: Map<string, Trace | Span> = new Map();
   private rootTraces: Map<string, Trace> = new Map();
 
+  private getProvider(metadata?: Record<string, unknown>): string {
+    const providerFromMetadata = metadata?.ls_provider;
+    if (typeof providerFromMetadata === "string" && providerFromMetadata) {
+      return providerFromMetadata;
+    }
+
+    return "langchainjs";
+  }
+
+  private getOperationMetadata({
+    metadata,
+    operation,
+    kind,
+  }: {
+    metadata?: Record<string, unknown>;
+    operation: string;
+    kind: "tool" | "retrieval";
+  }): Record<string, unknown> {
+    const provider = this.getProvider(metadata);
+
+    return {
+      created_from: provider,
+      "opik.kind": kind,
+      "opik.provider": provider,
+      "opik.operation": operation,
+    };
+  }
+
   constructor(options?: Partial<OpikCallbackHandlerOptions>) {
     super();
 
@@ -410,6 +438,11 @@ export class OpikCallbackHandler
       type: OpikSpanType.Tool,
       metadata: {
         ...metadata,
+        ...this.getOperationMetadata({
+          metadata,
+          operation: "tool_call",
+          kind: "tool",
+        }),
         ...extractCallArgs(tool, {}, metadata),
       },
     });
@@ -498,6 +531,11 @@ export class OpikCallbackHandler
       tags,
       metadata: {
         ...metadata,
+        ...this.getOperationMetadata({
+          metadata,
+          operation: "search",
+          kind: "retrieval",
+        }),
         ...extractCallArgs(retriever, {}, metadata),
       },
     });
