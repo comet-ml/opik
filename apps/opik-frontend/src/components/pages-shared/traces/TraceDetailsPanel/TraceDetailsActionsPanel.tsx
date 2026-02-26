@@ -72,6 +72,7 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { DEFAULT_INTEGRATION_METADATA_FILTER_KEYS } from "@/lib/traces";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -347,8 +348,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             } & SelectBoxProps<string>,
           ) => <SelectBox {...props} onChange={props.onValueChange} />,
           keyComponentProps: {
-            options: uniq(
-              treeData.reduce<string[]>((acc, d) => {
+            options: uniq([
+              ...DEFAULT_INTEGRATION_METADATA_FILTER_KEYS,
+              ...treeData.reduce<string[]>((acc, d) => {
                 return acc.concat(
                   isObject(d.metadata) || isArray(d.metadata)
                     ? getJSONPaths(d.metadata, "metadata").map((path) =>
@@ -357,7 +359,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                     : [],
                 );
               }, []),
-            )
+            ])
               .sort()
               .map((key) => ({ value: key, label: key })),
             placeholder: "key",
