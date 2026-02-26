@@ -139,7 +139,12 @@ class AgentConfigResourceTest {
                     AgentConfigValue.builder()
                             .key("temperature")
                             .value("0.7")
-                            .type(ValueType.NUMBER)
+                            .type(ValueType.FLOAT)
+                            .build(),
+                    AgentConfigValue.builder()
+                            .key("stream")
+                            .value("true")
+                            .type(ValueType.BOOLEAN)
                             .build());
 
             var blueprint = AgentBlueprint.builder()
@@ -352,7 +357,7 @@ class AgentConfigResourceTest {
                     .values(List.of(
                             AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING)
                                     .build(),
-                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build()))
+                            AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build()))
                     .build();
 
             var maskRequest = AgentConfigCreate.builder()
@@ -368,10 +373,11 @@ class AgentConfigResourceTest {
                     .description("Initial configuration")
                     .values(List.of(
                             AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
-                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.NUMBER)
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT)
                                     .build(),
-                            AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER)
+                            AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER)
                                     .build(),
+                            AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                             AgentConfigValue.builder().key("system_prompt").value("prompt-content")
                                     .type(ValueType.PROMPT).build(),
                             AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
@@ -390,7 +396,7 @@ class AgentConfigResourceTest {
                     .type(BlueprintType.BLUEPRINT)
                     .description("Update temperature")
                     .values(List.of(
-                            AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER)
+                            AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT)
                                     .build()))
                     .build();
 
@@ -406,7 +412,7 @@ class AgentConfigResourceTest {
                     .type(BlueprintType.BLUEPRINT)
                     .description("Update max_tokens")
                     .values(List.of(
-                            AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER)
+                            AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.INTEGER)
                                     .build()))
                     .build();
 
@@ -443,12 +449,13 @@ class AgentConfigResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint3Id());
-            assertThat(blueprint.values()).hasSize(5);
+            assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
                     AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
-                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
@@ -471,12 +478,13 @@ class AgentConfigResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
-            assertThat(blueprint.values()).hasSize(5);
+            assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
                     AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
-                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
@@ -498,17 +506,18 @@ class AgentConfigResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
 
             assertThat(blueprint).isNotNull();
-            assertThat(blueprint.values()).hasSize(6);
+            assertThat(blueprint.values()).hasSize(7);
 
             var expectedValues = List.of(
                     AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
-                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
                             .type(ValueType.PROMPT_COMMIT).build(),
-                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
+                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build());
 
             assertThat(blueprint.values())
                     .usingRecursiveComparison()
@@ -527,12 +536,13 @@ class AgentConfigResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
-            assertThat(blueprint.values()).hasSize(5);
+            assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
                     AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
-                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
@@ -556,17 +566,18 @@ class AgentConfigResourceTest {
 
             assertThat(blueprint).isNotNull();
             assertThat(blueprint.id()).isEqualTo(setup.blueprint2Id());
-            assertThat(blueprint.values()).hasSize(6);
+            assertThat(blueprint.values()).hasSize(7);
 
             var expectedValues = List.of(
                     AgentConfigValue.builder().key("model").value("claude-3").type(ValueType.STRING).build(),
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build(),
-                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.NUMBER).build(),
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
+                    AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
                     AgentConfigValue.builder().key("system_prompt").value("prompt-content").type(ValueType.PROMPT)
                             .build(),
                     AgentConfigValue.builder().key("prompt_version").value("v1.0.0")
                             .type(ValueType.PROMPT_COMMIT).build(),
-                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.NUMBER).build());
+                    AgentConfigValue.builder().key("top_p").value("0.95").type(ValueType.FLOAT).build());
 
             assertThat(blueprint.values())
                     .usingRecursiveComparison()
@@ -588,7 +599,7 @@ class AgentConfigResourceTest {
             assertThat(blueprint.values()).hasSize(1);
 
             var expectedValues = List.of(
-                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.NUMBER).build());
+                    AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build());
 
             assertThat(blueprint.values())
                     .usingRecursiveComparison()
@@ -803,7 +814,7 @@ class AgentConfigResourceTest {
                     .type(BlueprintType.BLUEPRINT)
                     .description("Update temp")
                     .values(List.of(
-                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.NUMBER)
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT)
                                     .build()))
                     .build();
 

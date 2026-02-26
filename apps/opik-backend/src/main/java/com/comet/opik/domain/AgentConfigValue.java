@@ -39,7 +39,9 @@ public record AgentConfigValue(
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     public enum ValueType {
         STRING("string"),
-        NUMBER("number"),
+        INTEGER("integer"),
+        FLOAT("float"),
+        BOOLEAN("boolean"),
         PROMPT("prompt"),
         PROMPT_COMMIT("promptcommit");
 

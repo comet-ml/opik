@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS agent_config_values (
     config_id CHAR(36) NOT NULL,
     `key` VARCHAR(255) NOT NULL,
     `value` VARCHAR(255) NOT NULL,
-    type ENUM('string', 'number', 'prompt', 'promptcommit') NOT NULL DEFAULT 'string',
+    type ENUM('string', 'integer', 'float', 'boolean', 'prompt', 'promptcommit') NOT NULL DEFAULT 'string',
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
     CONSTRAINT agent_config_values_pk PRIMARY KEY (id),
