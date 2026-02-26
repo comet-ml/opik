@@ -166,7 +166,7 @@ public class AgentConfigsResourceClient {
 
     public void createOrUpdateEnvs(com.comet.opik.api.AgentConfigEnvUpdate request, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/environments")
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/environments")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)

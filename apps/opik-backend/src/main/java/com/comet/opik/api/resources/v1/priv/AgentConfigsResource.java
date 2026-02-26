@@ -157,7 +157,7 @@ public class AgentConfigsResource {
     }
 
     @POST
-    @Path("/environments")
+    @Path("/blueprints/environments")
     @Operation(operationId = "createOrUpdateEnvs", summary = "Create or update environments", description = "Creates or updates environment-to-blueprint mappings", responses = {
             @ApiResponse(responseCode = "204", description = "Environments updated"),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
