@@ -6,6 +6,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
+import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -112,7 +113,11 @@ public class OpenTelemetryMapper {
                         break;
 
                     case USAGE :
-                        extractUsageField(usage, rule, key, value);
+                        try {
+                            extractUsageField(usage, rule, key, value);
+                        } catch (BadRequestException ex) {
+                            log.warn("Skipping malformed usage field {}: {}", key, ex.getMessage());
+                        }
                         break;
 
                     case INPUT :
