@@ -1,0 +1,41 @@
+---
+title: Observability for Exa (Python) with Opik
+description: Trace Exa search operations with Opik using the Python SDK.
+headline: Exa | Opik Documentation
+---
+
+This guide explains how to integrate Opik with the Exa Python SDK.
+
+## Python
+
+Install:
+
+```bash
+pip install opik exa-py
+```
+
+Usage:
+
+```python
+from exa_py import Exa
+from opik.integrations.exa import track_exa
+
+exa = Exa()
+tracked_exa = track_exa(exa, project_name="exa-search")
+
+result = tracked_exa.search("latest ai eval benchmarks")
+```
+
+Supported wrapped methods (when present on the client):
+
+- `search`
+- `search_and_contents`
+- `find_similar`
+- `get_contents`
+- `answer`
+
+All wrapped operations are logged as `tool` spans with:
+
+- `opik.kind=search`
+- `opik.provider=exa`
+- `opik.operation=<method_name>`
