@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, Literal, Optional, cast
 
 from opik import _logging
+from . import retrieval_contract
 
 LOGGER = logging.getLogger(__name__)
 
@@ -11,10 +12,10 @@ SpanType = Literal["llm", "tool", "general"]
 
 
 def get_span_type(run: Dict[str, Any]) -> SpanType:
-    if run.get("run_type") in ["llm", "tool"]:
-        return cast(SpanType, run.get("run_type"))
+    if run.get("run_type") == "llm":
+        return cast(SpanType, "llm")
 
-    if run.get("run_type") in ["prompt"]:
+    if run.get("run_type") in ["tool", "retriever", "prompt"]:
         return cast(SpanType, "tool")
 
     return cast(SpanType, "general")
@@ -61,13 +62,16 @@ def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     extra = run_dict.get("extra") or {}
     if not isinstance(extra, dict):
         extra = {}
-    metadata = extra.get("metadata", {}).copy()
+    extra_metadata = extra.get("metadata", {})
+    metadata = extra_metadata.copy() if isinstance(extra_metadata, dict) else {}
 
     # Extract tool description for tool runs and add to metadata
     if run_dict.get("run_type") == "tool":
         tool_description = extract_tool_description(run_dict)
         if tool_description:
             metadata["tool_description"] = tool_description
+    elif run_dict.get("run_type") == "retriever":
+        metadata = retrieval_contract.build_retrieval_metadata(run_dict, metadata)
 
     return metadata
 
