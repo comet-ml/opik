@@ -31,6 +31,7 @@ import org.redisson.api.RSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 
+import java.io.UncheckedIOException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -310,6 +311,8 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
+        validateRunnerWorkspace(runnerId, workspaceId);
+
         if (!isRunnerAlive(runnerId)) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                     .entity(new ErrorMessage(List.of(
@@ -427,25 +430,13 @@ class RunnerServiceImpl implements RunnerService {
 
     @Override
     public RunnerJob getJob(@NonNull String jobId, @NonNull String workspaceId) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        Map<String, String> fields = jobMap.readAllMap();
-
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
-        }
-        validateWorkspaceOwnership(fields, workspaceId);
-
-        return buildRunnerJob(fields);
+        var job = loadValidatedJob(jobId, workspaceId);
+        return buildRunnerJob(job.fields());
     }
 
     @Override
     public List<LogEntry> getJobLogs(@NonNull String jobId, int offset, @NonNull String workspaceId) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        Map<String, String> fields = jobMap.readAllMap();
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
-        }
-        validateWorkspaceOwnership(fields, workspaceId);
+        loadValidatedJob(jobId, workspaceId);
 
         RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
         int logSize = logsList.size();
@@ -462,12 +453,7 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public void appendLogs(@NonNull String jobId, @NonNull String workspaceId,
             @NonNull List<LogEntry> entries) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        Map<String, String> fields = jobMap.readAllMap();
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
-        }
-        validateWorkspaceOwnership(fields, workspaceId);
+        loadValidatedJob(jobId, workspaceId);
 
         RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
         List<String> serialized = entries.stream()
@@ -479,12 +465,9 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public void reportResult(@NonNull String jobId, @NonNull String workspaceId,
             @NonNull JobResultRequest result) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        Map<String, String> fields = jobMap.readAllMap();
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
-        }
-        validateWorkspaceOwnership(fields, workspaceId);
+        var job = loadValidatedJob(jobId, workspaceId);
+        RMap<String, String> jobMap = job.map();
+        Map<String, String> fields = job.fields();
 
         if (!TERMINAL_JOB_STATUSES.contains(result.status())) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
@@ -521,12 +504,9 @@ class RunnerServiceImpl implements RunnerService {
 
     @Override
     public void cancelJob(@NonNull String jobId, @NonNull String workspaceId) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
-        Map<String, String> fields = jobMap.readAllMap();
-        if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
-        }
-        validateWorkspaceOwnership(fields, workspaceId);
+        var job = loadValidatedJob(jobId, workspaceId);
+        RMap<String, String> jobMap = job.map();
+        Map<String, String> fields = job.fields();
 
         jobMap.put("status", JOB_STATUS_CANCELLED);
         jobMap.put("completed_at", Instant.now().toString());
@@ -699,7 +679,7 @@ class RunnerServiceImpl implements RunnerService {
 
     private String claimPairingCode(String code, String workspaceId) {
         RBucket<String> pairBucket = redisClient.getBucket(PAIR_KEY.formatted(code), StringCodec.INSTANCE);
-        String value = pairBucket.getAndDelete();
+        String value = pairBucket.get();
         if (value == null) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of("Invalid or expired pairing code")))
@@ -718,7 +698,8 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
-        return parts[0]; // runnerId
+        pairBucket.delete();
+        return parts[0];
     }
 
     private void evictExistingRunner(String workspaceId, String userName, String newRunnerId) {
@@ -782,7 +763,13 @@ class RunnerServiceImpl implements RunnerService {
             return null;
         }
 
-        String status = isRunnerAlive(runnerId) ? STATUS_CONNECTED : STATUS_DISCONNECTED;
+        String storedStatus = fields.get("status");
+        String status;
+        if (STATUS_PAIRING.equals(storedStatus)) {
+            status = STATUS_PAIRING;
+        } else {
+            status = isRunnerAlive(runnerId) ? STATUS_CONNECTED : STATUS_DISCONNECTED;
+        }
 
         List<Runner.Agent> agents = List.of();
         if (STATUS_CONNECTED.equals(status)) {
@@ -837,8 +824,8 @@ class RunnerServiceImpl implements RunnerService {
                         .sourceFile(sourceFile)
                         .params(params)
                         .build());
-            } catch (Exception e) {
-                log.warn("Failed to parse agent metadata for {}: {}", entry.getKey(), e.getMessage());
+            } catch (UncheckedIOException e) {
+                log.warn("Failed to parse agent metadata for {}", entry.getKey(), e);
             }
         }
         return agents;
@@ -891,10 +878,18 @@ class RunnerServiceImpl implements RunnerService {
         }
     }
 
-    private void validateWorkspaceOwnership(Map<String, String> jobFields, String workspaceId) {
-        String jobWorkspaceId = jobFields.get("workspace_id");
-        if (!workspaceId.equals(jobWorkspaceId)) {
+    private record ValidatedJob(RMap<String, String> map, Map<String, String> fields) {
+    }
+
+    private ValidatedJob loadValidatedJob(String jobId, String workspaceId) {
+        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+        Map<String, String> fields = jobMap.readAllMap();
+        if (fields.isEmpty()) {
             throw new NotFoundException("Job not found");
         }
+        if (!workspaceId.equals(fields.get("workspace_id"))) {
+            throw new NotFoundException("Job not found");
+        }
+        return new ValidatedJob(jobMap, fields);
     }
 }
