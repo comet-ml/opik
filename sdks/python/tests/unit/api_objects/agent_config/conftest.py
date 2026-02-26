@@ -32,6 +32,11 @@ def mock_backend():
         )
         mock_client.rest_client.agent_configs.get_blueprint_by_env.return_value = None
 
+        # Called after create_blueprint to fetch the exact object just created.
+        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            mock.Mock(id="bp-test", values=[], description=None)
+        )
+
         mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
             id="proj-test"
         )
@@ -57,6 +62,9 @@ def mock_backend():
                 )
                 mock_client.rest_client.agent_configs.get_blueprint_by_env.side_effect = None
                 mock_client.rest_client.agent_configs.get_blueprint_by_env.return_value = mock.Mock(
+                    id="bp-test", values=values, description=None
+                )
+                mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = mock.Mock(
                     id="bp-test", values=values, description=None
                 )
 

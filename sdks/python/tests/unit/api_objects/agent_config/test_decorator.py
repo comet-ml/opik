@@ -201,7 +201,7 @@ class TestConfigDecoratorMaskAndEnv:
         ],
         ids=["mask_id", "env"],
     )
-    def test_mask_or_env__no_existing_blueprint__creates_config(
+    def test_mask_or_env__no_existing_blueprint__does_not_create(
         self, mock_backend, decorator_kwargs
     ):
         @agent_config_decorator(**decorator_kwargs)
@@ -211,7 +211,7 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        mock_backend.agent_configs.create_agent_config.assert_called_once()
+        mock_backend.agent_configs.create_agent_config.assert_not_called()
 
     @pytest.mark.parametrize(
         "decorator_kwargs",

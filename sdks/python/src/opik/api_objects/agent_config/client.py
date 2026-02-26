@@ -11,6 +11,7 @@ from opik.api_objects import rest_helpers
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
+from opik import id_helpers
 from . import type_helpers
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class ConfigClient:
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         description: typing.Optional[str],
+        blueprint_id: typing.Optional[str] = None,
         config_type: str = "blueprint",
     ) -> AgentBlueprintWrite:
         backend_values = []
@@ -69,6 +71,7 @@ class ConfigClient:
                 )
             )
         return AgentBlueprintWrite(
+            id=blueprint_id,
             type=config_type,
             values=backend_values,
             description=description,
@@ -80,7 +83,7 @@ class ConfigClient:
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
-    ) -> None:
+    ) -> str:
         """Post a new blueprint to the backend without fetching it back.
 
         Use this when you need to write a blueprint but will retrieve the
@@ -95,14 +98,16 @@ class ConfigClient:
             description: Optional human-readable description stored with the
                 blueprint.
         """
+        blueprint_id = id_helpers.generate_id()
         blueprint_payload = self._build_blueprint_payload(
-            fields_with_values, description
+            fields_with_values, description, blueprint_id=blueprint_id
         )
         self._rest_client.agent_configs.create_agent_config(
             blueprint=blueprint_payload,
             project_name=project_name,
             project_id=project_id,
         )
+        return blueprint_id
 
     def create_config(
         self,
@@ -110,6 +115,7 @@ class ConfigClient:
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> ConfigData:
         """Create a new blueprint on the backend and return its resolved data.
 
@@ -127,20 +133,18 @@ class ConfigClient:
             project_id: Optional explicit project ID; forwarded to the backend.
             description: Optional human-readable description stored with the
                 blueprint.
+            field_types: Optional mapping used to deserialize backend values.
 
         Returns:
             :class:`ConfigData` for the newly created blueprint.
         """
-        self.create_blueprint(
+        blueprint_id = self.create_blueprint(
             fields_with_values=fields_with_values,
             project_name=project_name,
             project_id=project_id,
             description=description,
         )
-
-        return self.get_blueprint(
-            project_name=project_name,
-        )
+        return self._get_blueprint_by_id(blueprint_id, field_types=field_types)
 
     def create_mask(
         self,
@@ -167,17 +171,29 @@ class ConfigClient:
             :class:`ConfigData` representing the blueprint that is active after
             the mask is applied.
         """
+        mask_id = id_helpers.generate_id()
         mask_payload = self._build_blueprint_payload(
-            fields_with_values, description, config_type="mask"
+            fields_with_values, description, blueprint_id=mask_id, config_type="mask"
         )
         self._rest_client.agent_configs.create_agent_config(
             blueprint=mask_payload,
             project_name=project_name,
             project_id=project_id,
         )
+        result = self._try_get_blueprint(project_name=project_name, mask_id=mask_id)
+        if result is None:
+            raise ValueError(f"Mask blueprint '{mask_id}' not found after creation")
+        result.blueprint_id = mask_id
+        return result
 
-        return self.get_blueprint(
-            project_name=project_name,
+    def _get_blueprint_by_id(
+        self,
+        blueprint_id: str,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    ) -> ConfigData:
+        blueprint = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
+        return self._blueprint_to_config_data(
+            blueprint=blueprint, field_types=field_types
         )
 
     def _try_get_blueprint(
@@ -244,6 +260,8 @@ class ConfigClient:
         )
         if result is None:
             raise ValueError("Config not found")
+        if mask_id is not None:
+            result.blueprint_id = mask_id
         return result
 
     def _blueprint_to_config_data(

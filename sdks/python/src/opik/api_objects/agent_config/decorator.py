@@ -120,14 +120,17 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
             field_types=all_field_types,
         )
 
-        if existing is None:
+        pinned = mask_id_val is not None or env_val is not None
+
+        if pinned:
+            if existing is not None:
+                _apply_backend_values(instance, existing)
+        elif existing is None:
             _handle_no_blueprint(
                 instance,
                 config_client,
                 project_name,
                 description,
-                env_val,
-                mask_id_val,
             )
         else:
             _handle_existing_blueprint(
@@ -147,8 +150,6 @@ def _handle_no_blueprint(
     config_client: ConfigClient,
     project_name: str,
     description: typing.Optional[str],
-    env_val: typing.Optional[str],
-    mask_id_val: typing.Optional[str],
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
         instance, "__opik_field_types__"
@@ -162,23 +163,19 @@ def _handle_no_blueprint(
         value = object.__getattribute__(instance, local_name)
         fields_with_values[prefixed_name] = (f_type, value)
 
-    config_client.create_blueprint(
+    shared_cache: SharedConfigCache = object.__getattribute__(
+        instance, "__opik_shared_cache__"
+    )
+    blueprint_id = config_client.create_blueprint(
         fields_with_values=fields_with_values,
         project_name=project_name,
         description=description,
     )
-
-    shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, "__opik_shared_cache__"
-    )
-    created = config_client._try_get_blueprint(
-        project_name=project_name,
-        env=env_val,
-        mask_id=mask_id_val,
+    created = config_client._get_blueprint_by_id(
+        blueprint_id,
         field_types=shared_cache.all_field_types,
     )
-    if created is not None:
-        _apply_backend_values(instance, created)
+    _apply_backend_values(instance, created)
 
 
 def _handle_existing_blueprint(
@@ -203,23 +200,21 @@ def _handle_existing_blueprint(
             value = object.__getattribute__(instance, local_name)
             extra_fields[prefixed_name] = (f_type, value)
 
-        config_client.create_blueprint(
+        shared_cache: SharedConfigCache = object.__getattribute__(
+            instance, "__opik_shared_cache__"
+        )
+        blueprint_id = config_client.create_blueprint(
             fields_with_values=extra_fields,
             project_name=project_name,
             description=description,
         )
-
-    merged_values = dict(existing.values)
-    for prefixed_name in extra_keys:
-        local_name = prefixed_name[len(prefix) :]
-        merged_values[prefixed_name] = object.__getattribute__(instance, local_name)
-
-    merged_data = ConfigData(
-        blueprint_id=existing.blueprint_id,
-        values=merged_values,
-        description=existing.description,
-    )
-    _apply_backend_values(instance, merged_data)
+        fetched = config_client._get_blueprint_by_id(
+            blueprint_id,
+            field_types=shared_cache.all_field_types,
+        )
+        _apply_backend_values(instance, fetched)
+    else:
+        _apply_backend_values(instance, existing)
 
 
 def _apply_backend_values(instance: typing.Any, config_data: ConfigData) -> None:

@@ -448,6 +448,11 @@ class TestOpikClientConfigMethods:
                 "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
+            patch.object(
+                opik_client_._rest_client.agent_configs,
+                "get_blueprint_by_id",
+                return_value=_make_blueprint(),
+            ),
         ):
             opik_client_.create_agent_config(parameters={"temp": 0.7})
 
@@ -470,6 +475,11 @@ class TestOpikClientConfigMethods:
             patch.object(
                 opik_client_._rest_client.agent_configs,
                 "get_latest_blueprint",
+                return_value=_make_blueprint(),
+            ),
+            patch.object(
+                opik_client_._rest_client.agent_configs,
+                "get_blueprint_by_id",
                 return_value=_make_blueprint(),
             ),
         ):
@@ -498,6 +508,11 @@ class TestOpikClientConfigMethods:
                 "get_latest_blueprint",
                 return_value=_make_blueprint(),
             ),
+            patch.object(
+                opik_client_._rest_client.agent_configs,
+                "get_blueprint_by_id",
+                return_value=_make_blueprint(),
+            ),
         ):
             opik_client_.update_agent_config(parameters={"temp": 0.9})
 
@@ -520,6 +535,11 @@ class TestOpikClientConfigMethods:
             patch.object(
                 opik_client_._rest_client.agent_configs,
                 "get_latest_blueprint",
+                return_value=_make_blueprint(),
+            ),
+            patch.object(
+                opik_client_._rest_client.agent_configs,
+                "get_blueprint_by_id",
                 return_value=_make_blueprint(),
             ),
         ):

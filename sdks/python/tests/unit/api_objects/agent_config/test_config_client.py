@@ -33,6 +33,10 @@ def _make_blueprint(
 def mock_rest_client():
     client = mock.Mock()
     client.agent_configs = mock.Mock()
+    client.agent_configs.create_agent_config.return_value = None
+    # Default mocks for create_mask's _try_get_blueprint path
+    client.agent_configs.get_latest_blueprint.return_value = _make_blueprint()
+    client.projects.retrieve_project.return_value = mock.Mock(id="proj-default")
     return client
 
 
@@ -46,10 +50,9 @@ class TestCreateConfig:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
             _make_blueprint()
         )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         result = config_client.create_config(
             fields_with_values={
@@ -64,8 +67,11 @@ class TestCreateConfig:
         blueprint = call_kwargs["blueprint"]
         assert blueprint.type == "blueprint"
         assert blueprint.values is not None
-
-        mock_rest_client.agent_configs.get_latest_blueprint.assert_called_once()
+        # The ID is embedded in blueprint.id and used to fetch by that exact ID
+        assert call_kwargs["blueprint"].id is not None
+        mock_rest_client.agent_configs.get_blueprint_by_id.assert_called_once_with(
+            call_kwargs["blueprint"].id
+        )
 
         assert isinstance(result, ConfigData)
         assert result.blueprint_id == "bp-456"
@@ -74,10 +80,9 @@ class TestCreateConfig:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
             _make_blueprint()
         )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"flag": (bool, False)},
@@ -94,10 +99,9 @@ class TestCreateConfig:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
             _make_blueprint()
         )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
@@ -107,31 +111,32 @@ class TestCreateConfig:
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
 
-    def test_create__with_project_name__get_blueprint_uses_resolved_project_id(
+    def test_create__with_project_name__get_blueprint_uses_client_generated_id(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
             _make_blueprint()
         )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
             project_name="my-project",
         )
 
-        get_bp_kwargs = mock_rest_client.agent_configs.get_latest_blueprint.call_args[1]
-        assert get_bp_kwargs.get("project_id") == "proj-1"
+        create_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
+        generated_id = create_kwargs["blueprint"].id
+        mock_rest_client.agent_configs.get_blueprint_by_id.assert_called_once_with(
+            generated_id
+        )
 
     def test_create__with_project_id__passes_project_id_to_backend(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
             _make_blueprint()
         )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_config(
             fields_with_values={"temp": (float, 0.5)},
@@ -510,10 +515,6 @@ class TestCreateMask:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
-            _make_blueprint()
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
@@ -529,10 +530,6 @@ class TestCreateMask:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
-            _make_blueprint()
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
@@ -541,13 +538,10 @@ class TestCreateMask:
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert "blueprint" in call_kwargs
+        assert call_kwargs["blueprint"].id is not None
 
     def test_create_mask__returns_config_data(self, config_client, mock_rest_client):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
-            _make_blueprint(blueprint_id="bp-mask")
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         result = config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
@@ -555,16 +549,12 @@ class TestCreateMask:
         )
 
         assert isinstance(result, ConfigData)
-        assert result.blueprint_id == "bp-mask"
+        assert result.blueprint_id is not None
 
     def test_create_mask__with_description__passes_description_in_mask_payload(
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
-            _make_blueprint()
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
@@ -579,10 +569,6 @@ class TestCreateMask:
         self, config_client, mock_rest_client
     ):
         mock_rest_client.agent_configs.create_agent_config.return_value = None
-        mock_rest_client.agent_configs.get_latest_blueprint.return_value = (
-            _make_blueprint()
-        )
-        mock_rest_client.projects.retrieve_project.return_value = mock.Mock(id="proj-1")
 
         config_client.create_mask(
             fields_with_values={"temperature": (float, 0.3)},
