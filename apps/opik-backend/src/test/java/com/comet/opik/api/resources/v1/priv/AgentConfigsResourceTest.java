@@ -224,7 +224,7 @@ class AgentConfigsResourceTest {
                                     .blueprint(validBlueprint.toBuilder().values(null).build())
                                     .build(),
                             422,
-                            new ErrorMessage(List.of("blueprint.values must not be empty")),
+                            new ErrorMessage(List.of("blueprint.values must not be null")),
                             ErrorMessage.class),
 
                     arguments(
@@ -233,7 +233,7 @@ class AgentConfigsResourceTest {
                                     .blueprint(validBlueprint.toBuilder().values(List.of()).build())
                                     .build(),
                             422,
-                            new ErrorMessage(List.of("blueprint.values must not be empty")),
+                            new ErrorMessage(List.of("blueprint.values blueprint must have between 1 and 250 values")),
                             ErrorMessage.class),
 
                     // Value key validation

@@ -43,7 +43,7 @@ public record AgentBlueprint(
         @JsonView({AgentConfig.View.Public.class,
                 AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({AgentConfig.View.Public.class,
-                AgentConfig.View.Write.class}) @Valid @Size(min = 1, max = 250, message = "blueprint must have between 1 and 250 values") List<@NotNull AgentConfigValue> values){
+                AgentConfig.View.Write.class}) @Valid @NotNull @Size(min = 1, max = 250, message = "blueprint must have between 1 and 250 values") List<@NotNull AgentConfigValue> values){
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -43,11 +43,6 @@ interface AgentConfigDAO {
 
     @SqlQuery("SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at " +
             "FROM agent_config " +
-            "WHERE workspace_id = :workspace_id")
-    AgentConfig getConfigByWorkspaceId(@Bind("workspace_id") String workspaceId);
-
-    @SqlQuery("SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at " +
-            "FROM agent_config " +
             "WHERE workspace_id = :workspace_id AND project_id = :project_id")
     AgentConfig getConfigByProjectId(
             @Bind("workspace_id") String workspaceId,
@@ -303,7 +298,6 @@ interface AgentConfigDAO {
                     .createdAt(rs.getTimestamp("created_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))
                     .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
-                    .values(List.of())
                     .build();
         }
     }
