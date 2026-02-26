@@ -43,6 +43,7 @@ import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroup
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { COLUMN_DATASET_ID, COLUMN_PROJECT_ID } from "@/types/shared";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export type GroupedExperiment = Record<string, string> & Experiment;
 
@@ -341,6 +342,10 @@ export default function useGroupedExperimentsList(
     [groups],
   );
 
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   // Extract project_id from filters and pass it as a separate parameter
   // because project_id filtering requires a special SQL query (join with traces)
   const { projectId, projectDeleted, filtersWithoutProjectId } = useMemo(() => {
@@ -417,7 +422,7 @@ export default function useGroupedExperimentsList(
     },
     {
       placeholderData: keepPreviousData,
-      enabled: hasGroups && isGroupingByDataset,
+      enabled: hasGroups && isGroupingByDataset && canViewDatasets,
       refetchInterval,
     },
   );

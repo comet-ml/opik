@@ -321,6 +321,7 @@ eval_results = evaluate(
     },
     {
       placeholderData: keepPreviousData,
+      enabled: canViewDatasets,
     },
   );
 

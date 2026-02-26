@@ -60,10 +60,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useExperimentsTableConfig } from "@/components/pages-shared/experiments/useExperimentsTableConfig";
-import {
-  FILTER_AND_GROUP_COLUMNS,
-  useExperimentsGroupsAndFilters,
-} from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
+import { useExperimentsGroupsAndFilters } from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/components/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
@@ -351,12 +348,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
 
-  const { groups, setGroups, filtersAndGroupsConfig } =
+  const { groups, setGroups, filterAndGroupColumns, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix: STORAGE_KEY_PREFIX,
       sortedColumns,
       filters,
       promptId,
+      setFilters,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -478,14 +476,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={FILTER_AND_GROUP_COLUMNS}
+            columns={filterAndGroupColumns}
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
             layout="icon"
           />
           <GroupsButton
-            columns={FILTER_AND_GROUP_COLUMNS}
+            columns={filterAndGroupColumns}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
