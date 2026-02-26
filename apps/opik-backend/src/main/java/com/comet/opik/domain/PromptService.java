@@ -9,6 +9,7 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.TemplateStructure;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
@@ -704,11 +705,18 @@ class PromptServiceImpl implements PromptService {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            PromptVersion promptVersion = promptVersionDAO.findByCommit(commit, workspaceId);
+            List<PromptVersion> matches = promptVersionDAO.findAllByCommit(commit, workspaceId);
 
-            if (promptVersion == null) {
+            if (matches.isEmpty()) {
                 throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
             }
+
+            if (matches.size() > 1) {
+                throw new ConflictException(
+                        "Ambiguous commit: multiple prompt versions found for commit '%s'".formatted(commit));
+            }
+
+            PromptVersion promptVersion = matches.getFirst();
 
             Prompt prompt = promptDAO.findByIdWithoutLatestVersion(promptVersion.promptId(), workspaceId);
 

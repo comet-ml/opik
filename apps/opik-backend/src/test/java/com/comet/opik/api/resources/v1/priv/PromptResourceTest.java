@@ -4408,5 +4408,49 @@ class PromptResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
             }
         }
+
+        @Test
+        @DisplayName("when same commit exists across multiple prompts in workspace, then return 409")
+        void getPromptByCommitWhenCommitIsDuplicatedAcrossPrompts() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var sharedCommit = "a1b2c3d4";
+
+            var prompt1 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId1 = createPrompt(prompt1, apiKey, workspaceName);
+
+            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId2 = createPrompt(prompt2, apiKey, workspaceName);
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt1.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId1).commit(sharedCommit).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt2.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId2).commit(sharedCommit).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("versions/by-commit")
+                    .path(sharedCommit)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+        }
     }
 }

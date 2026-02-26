@@ -149,8 +149,9 @@ interface PromptVersionDAO {
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.commit = :commit AND pv.workspace_id = :workspace_id
+            LIMIT 2
             """)
-    PromptVersion findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
+    List<PromptVersion> findAllByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
 
     /**
      * Batch update for multiple prompt versions in a single database operation.
