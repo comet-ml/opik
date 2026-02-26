@@ -123,10 +123,10 @@ Review the diff using Opik domain knowledge from `.agents/skills/` and `.agents/
 Organize findings into categories with severity levels:
 
 #### Severity Levels
-- **blocker**: Must fix before merge — bugs, security issues, data loss risks
-- **suggestion**: Recommended improvement — better patterns, performance, readability
-- **nit**: Minor style/preference — naming, formatting, minor simplifications
-- **question**: Needs clarification — unclear intent, missing context, design decisions
+- 🚫 **blocker**: Must fix before merge — bugs, security issues, data loss risks
+- 💡 **suggestion**: Recommended improvement — better patterns, performance, readability
+- 🧹 **nit**: Minor style/preference — naming, formatting, minor simplifications
+- ❓ **question**: Needs clarification — unclear intent, missing context, design decisions
 
 #### Finding Format
 For each finding, prepare:
@@ -217,10 +217,10 @@ All posted comments **must** include a footer marker to distinguish them from hu
 🤖 *Review posted via /review-github-pr*
 ```
 
-#### Example Posted Comment
+#### Example Posted Comments
 
 ````
-**suggestion** | Security
+🚫 **blocker** | Security
 
 This query concatenates user input directly. Use parameterized queries instead.
 
@@ -228,6 +228,30 @@ This query concatenates user input directly. Use parameterized queries instead.
 String query = "SELECT * FROM traces WHERE id = ?";
 jdbi.withHandle(h -> h.createQuery(query).bind(0, traceId).mapTo(Trace.class).one());
 ```
+
+🤖 *Review posted via /review-github-pr*
+````
+
+````
+💡 **suggestion** | Performance
+
+Consider using batch insert here to avoid N+1 queries.
+
+🤖 *Review posted via /review-github-pr*
+````
+
+````
+🧹 **nit** | Style
+
+This variable name could be more descriptive.
+
+🤖 *Review posted via /review-github-pr*
+````
+
+````
+❓ **question** | Architecture
+
+Is this intentionally bypassing the service layer? The other endpoints go through SpanService first.
 
 🤖 *Review posted via /review-github-pr*
 ````
