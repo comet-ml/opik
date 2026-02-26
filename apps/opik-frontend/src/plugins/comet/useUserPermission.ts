@@ -79,6 +79,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canViewDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_VIEW),
+    [checkNullablePermission],
+  );
+
   const canViewDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_VIEW),
     [checkNullablePermission],
@@ -88,6 +93,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
+    canViewDashboards,
     canViewDatasets,
     isPending: isEnabled && isPending,
   };

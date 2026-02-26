@@ -15,8 +15,7 @@ import TimePicker from "@/components/shared/TimePicker/TimePicker";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE } from "@/types/shared";
-import { formatDate } from "@/lib/date";
-import { useDateFormat, DATE_FORMAT_LABELS } from "@/hooks/useDateFormat";
+import { formatDate, DEFAULT_DATE_FORMAT } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
 type TimeRowProps = {
@@ -28,7 +27,6 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   filter,
   onChange,
 }) => {
-  const [dateFormat] = useDateFormat();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
   const [date, setDate] = useState<Date | undefined>(
@@ -38,11 +36,6 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const [dateString, setDateString] = useState<string>(
     dayjs(filter.value).isValid() ? formatDate(filter.value as string) : "",
   );
-
-  const placeholder = DATE_FORMAT_LABELS[dateFormat];
-  const is12HourFormat =
-    dateFormat.includes("hh") || dateFormat.includes("h A");
-  const includeSeconds = dateFormat.includes(":ss");
 
   const onSelectDate = (value: Date | undefined) => {
     setDate(value);
@@ -55,7 +48,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const onValueChange = (value: string) => {
     setDateString(value);
 
-    const parsedDate = dayjs(value, dateFormat, true);
+    const parsedDate = dayjs(value, DEFAULT_DATE_FORMAT, true);
     const isValid = parsedDate.isValid();
 
     if (isValid) {
@@ -95,7 +88,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
                 "border-destructive focus-visible:border-destructive": error,
               })}
               onValueChange={(value) => onValueChange(value as string)}
-              placeholder={placeholder}
+              placeholder={dayjs().format(DEFAULT_DATE_FORMAT)}
               value={dateString}
               delay={500}
             />
@@ -121,8 +114,8 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               <TimePicker
                 date={date}
                 setDate={onSelectDate}
-                is12HourFormat={is12HourFormat}
-                includeSeconds={includeSeconds}
+                is12HourFormat={true}
+                includeSeconds={false}
               />
             </div>
           </PopoverContent>

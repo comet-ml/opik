@@ -24,7 +24,6 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import FeedbackScoreTagCell from "@/components/shared/DataTableCells/FeedbackScoreTagCell";
 import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
@@ -37,6 +36,7 @@ import {
   generateGroupedRowCellDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -52,7 +52,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",

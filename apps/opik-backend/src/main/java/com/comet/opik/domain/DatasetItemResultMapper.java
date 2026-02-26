@@ -185,7 +185,7 @@ class DatasetItemResultMapper {
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
     };
 
-    private static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
+    static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("evaluators")) {
             return null;
         }
@@ -195,7 +195,7 @@ class DatasetItemResultMapper {
                 .orElse(null);
     }
 
-    private static String getDescription(Row row, RowMetadata rowMetadata) {
+    static String getDescription(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("description")) {
             return null;
         }
@@ -204,7 +204,7 @@ class DatasetItemResultMapper {
                 .orElse(null);
     }
 
-    private static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
+    static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
         if (!rowMetadata.contains("execution_policy")) {
             return null;
         }

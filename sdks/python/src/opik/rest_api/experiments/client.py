@@ -18,6 +18,7 @@ from ..types.experiment_score_write import ExperimentScoreWrite
 from ..types.experiment_update import ExperimentUpdate
 from ..types.experiment_update_status import ExperimentUpdateStatus
 from ..types.experiment_update_type import ExperimentUpdateType
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
@@ -378,7 +379,7 @@ class ExperimentsClient:
 
     def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -391,7 +392,7 @@ class ExperimentsClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples
@@ -1102,7 +1103,7 @@ class AsyncExperimentsClient:
 
     async def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -1115,7 +1116,7 @@ class AsyncExperimentsClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples

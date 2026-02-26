@@ -14,7 +14,7 @@ setup(
     package_data={
         "opik_optimizer": ["data/*.json", "data/*.jsonl"],
     },
-    python_requires=">=3.10,<3.14",
+    python_requires=">=3.10,<3.15",
     install_requires=[
         "datasets",
         "deap>=1.4.3",
@@ -46,5 +46,6 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
 )

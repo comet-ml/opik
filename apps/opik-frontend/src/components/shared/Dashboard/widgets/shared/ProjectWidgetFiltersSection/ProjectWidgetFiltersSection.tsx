@@ -20,6 +20,9 @@ import {
   COLUMN_METADATA_ID,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -52,6 +55,10 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
 
   const filters = (controllerField.value as Filter[]) || [];
   const isSpanMetric = filterType === "span";
+
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const filterColumns = useMemo(() => {
     if (filterType === "thread") return THREAD_FILTER_COLUMNS;
@@ -119,9 +126,10 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             placeholder: "Select score",
           },
         },
+        ...(isSpanMetric ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [projectId, dataType],
+    [projectId, dataType, isGuardrailsEnabled, isSpanMetric],
   );
 
   useEffect(() => {

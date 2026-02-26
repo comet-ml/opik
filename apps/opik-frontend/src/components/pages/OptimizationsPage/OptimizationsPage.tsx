@@ -20,7 +20,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
-import { COLUMN_DATASET_ID, COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_DATASET_ID, COLUMN_ID_ID, COLUMN_TYPE } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -69,11 +69,20 @@ export const FILTER_COLUMNS = [
 ];
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "num_trials",
-  "optimizer",
-  "objective_name",
   "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+  "optimizer",
+  "created_by",
 ];
 
 const OptimizationsPage: React.FunctionComponent = () => {
@@ -145,7 +154,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
