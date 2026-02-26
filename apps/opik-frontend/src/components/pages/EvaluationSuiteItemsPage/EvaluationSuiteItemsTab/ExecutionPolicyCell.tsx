@@ -17,8 +17,8 @@ function ExecutionPolicyCellInner({
   const hasEditedPolicy =
     editedItem != null && "execution_policy" in editedItem;
   const policy = hasEditedPolicy
-    ? (editedItem.execution_policy ?? null)
-    : (item.execution_policy ?? null);
+    ? editedItem.execution_policy ?? null
+    : item.execution_policy ?? null;
 
   if (policy === null) {
     return <span className="text-muted-slate">&mdash;</span>;
