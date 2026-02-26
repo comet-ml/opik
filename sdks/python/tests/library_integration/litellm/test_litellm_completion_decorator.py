@@ -41,7 +41,9 @@ def test_litellm_completion_decorator_accepts_object_output(
     _install_litellm_stub(monkeypatch)
 
     monkeypatch.delitem(
-        sys.modules, "opik.integrations.litellm.litellm_completion_decorator", raising=False
+        sys.modules,
+        "opik.integrations.litellm.litellm_completion_decorator",
+        raising=False,
     )
     lcd = importlib.import_module(
         "opik.integrations.litellm.litellm_completion_decorator"
