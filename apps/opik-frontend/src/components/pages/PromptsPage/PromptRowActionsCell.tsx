@@ -22,7 +22,9 @@ const DELETE_KEY = 2;
 export const PromptRowActionsCell: React.FunctionComponent<
   CellContext<Prompt, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const prompt = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
@@ -62,7 +64,12 @@ export const PromptRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

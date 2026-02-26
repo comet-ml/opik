@@ -28,7 +28,9 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   onConfirm,
   isSubmitting,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const handleSubmit = (data: VersionFormData) => {
     onConfirm?.(data.tags, data.versionNote);

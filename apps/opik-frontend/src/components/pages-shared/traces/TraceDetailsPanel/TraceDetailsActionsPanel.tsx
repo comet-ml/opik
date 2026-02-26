@@ -107,7 +107,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   treeData,
   setActiveSection,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(

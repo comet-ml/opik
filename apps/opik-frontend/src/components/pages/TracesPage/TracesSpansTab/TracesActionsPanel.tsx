@@ -39,7 +39,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const { mutate } = useTracesBatchDeleteMutation();
   const disabled = !selectedRows?.length;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteTracesHandler = useCallback(() => {

@@ -22,7 +22,9 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   spanId,
   className,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceUpdateMutation = useTraceUpdateMutation();
   const spanUpdateMutation = useSpanUpdateMutation();

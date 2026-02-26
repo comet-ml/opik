@@ -114,7 +114,9 @@ export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
 const ProjectsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -447,7 +449,12 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewProjectClick} disabled={!canInteractWithApp}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewProjectClick}
+            disabled={!canInteractWithApp}
+          >
             Create new project
           </Button>
         </div>
@@ -471,7 +478,11 @@ const ProjectsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewProjectClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleNewProjectClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new project
               </Button>
             )}

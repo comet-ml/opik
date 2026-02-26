@@ -20,7 +20,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 const AIProvidersRowActionsCell: React.FunctionComponent<
   CellContext<ProviderObject, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -77,7 +79,12 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

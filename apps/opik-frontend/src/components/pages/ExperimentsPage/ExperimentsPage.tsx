@@ -130,7 +130,9 @@ export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 const ExperimentsPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
   const isDatasetVersioningEnabled = useIsFeatureEnabled(
@@ -755,7 +757,11 @@ const ExperimentsPage: React.FC = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleNewExperimentClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new experiment
               </Button>
             )}

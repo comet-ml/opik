@@ -18,7 +18,9 @@ const AlertsActionsPanel: React.FunctionComponent<AlertsActionsPanelsProps> = ({
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !alerts?.length;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useAlertsBatchDeleteMutation();
 

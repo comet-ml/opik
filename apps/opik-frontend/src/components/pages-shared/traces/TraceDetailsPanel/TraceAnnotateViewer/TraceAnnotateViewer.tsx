@@ -24,7 +24,9 @@ type TraceAnnotateViewerProps = {
 const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
 > = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const hasFeedbackScores = Boolean(data.feedback_scores?.length);
   const isTrace = !spanId;
   const title = isTrace ? "Trace feedback scores" : "Span feedback scores";

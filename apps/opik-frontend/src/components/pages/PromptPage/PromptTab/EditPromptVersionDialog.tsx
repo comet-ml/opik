@@ -76,7 +76,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   type: promptType,
   onSetActiveVersionId,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
   const [previewMode, setPreviewMode] = useState<PROMPT_PREVIEW_MODE>(

@@ -27,7 +27,9 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
   height,
   className,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   return (
     <Wrapper

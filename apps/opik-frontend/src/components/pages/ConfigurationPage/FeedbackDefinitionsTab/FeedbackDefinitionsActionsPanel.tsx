@@ -18,7 +18,9 @@ const FeedbackDefinitionsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !feedbackDefinitions?.length;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useFeedbackDefinitionBatchDeleteMutation();
 

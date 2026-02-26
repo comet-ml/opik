@@ -17,7 +17,9 @@ const AnnotationQueuesActionsPanel: React.FunctionComponent<
 > = ({ queues }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const disabled = !queues?.length;
 
   const { mutate } = useAnnotationQueueBatchDeleteMutation();

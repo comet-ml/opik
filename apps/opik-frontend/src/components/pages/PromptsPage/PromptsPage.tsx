@@ -196,7 +196,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 const PromptsPage: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -366,7 +368,12 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button variant="default" size="sm" onClick={handleNewPromptClick} disabled={!canInteractWithApp}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewPromptClick}
+            disabled={!canInteractWithApp}
+          >
             Create new prompt
           </Button>
         </div>
@@ -386,7 +393,11 @@ const PromptsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewPromptClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleNewPromptClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new prompt
               </Button>
             )}

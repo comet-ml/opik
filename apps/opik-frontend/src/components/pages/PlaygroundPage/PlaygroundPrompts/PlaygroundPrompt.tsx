@@ -71,7 +71,9 @@ const PlaygroundPrompt = ({
   modelResolver,
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const checkedIfModelIsValidRef = useRef(false);
   const queryClient = useQueryClient();
 

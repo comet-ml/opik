@@ -20,7 +20,9 @@ const CommitsActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number | boolean>(false);
   const disabled = versions?.length === 0;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const compareDisabled = versions?.length < 2;
 
   return (

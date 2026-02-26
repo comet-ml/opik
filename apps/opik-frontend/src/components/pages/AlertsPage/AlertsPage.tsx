@@ -178,7 +178,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 const AlertsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("alerts_search", StringParam, {
     updateType: "replaceIn",
@@ -358,7 +360,12 @@ const AlertsPage: React.FunctionComponent = () => {
               order={columnsOrder}
               onOrderChange={setColumnsOrder}
             ></ColumnsButton>
-            <Button variant="default" size="sm" onClick={handleNewAlertClick} disabled={!canInteractWithApp}>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleNewAlertClick}
+              disabled={!canInteractWithApp}
+            >
               Create new alert
             </Button>
           </div>
@@ -377,7 +384,11 @@ const AlertsPage: React.FunctionComponent = () => {
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
-                <Button variant="link" onClick={handleNewAlertClick} disabled={!canInteractWithApp}>
+                <Button
+                  variant="link"
+                  onClick={handleNewAlertClick}
+                  disabled={!canInteractWithApp}
+                >
                   Create new alert
                 </Button>
               )}

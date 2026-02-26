@@ -19,7 +19,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const dashboard = context.row.original;
 

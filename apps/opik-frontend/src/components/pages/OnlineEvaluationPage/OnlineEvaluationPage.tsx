@@ -152,7 +152,9 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
@@ -420,7 +422,12 @@ export const OnlineEvaluationPage: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewRuleClick} disabled={!canInteractWithApp}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewRuleClick}
+            disabled={!canInteractWithApp}
+          >
             Create new rule
           </Button>
         </div>

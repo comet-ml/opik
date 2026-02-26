@@ -20,7 +20,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
   CellContext<FeedbackDefinition, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const feedbackDefinition = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -61,7 +63,12 @@ const FeedbackDefinitionsRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

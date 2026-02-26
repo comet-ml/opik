@@ -18,7 +18,9 @@ const ActionsCell: React.FunctionComponent<
   const { custom } = context.column.columnDef.meta ?? {};
   const { onDelete } = (custom ?? {}) as CustomMeta;
   const currentUserName = useLoggedInUserName();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(
     context.row.original,

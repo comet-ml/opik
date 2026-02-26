@@ -27,7 +27,9 @@ const NoAnnotationQueuesPage: React.FC<NoAnnotationQueuesPageProps> = ({
   height,
   className,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   return (
     <Wrapper

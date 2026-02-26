@@ -35,7 +35,9 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
   const updateThreadCommentMutation = useUpdateThreadCommentMutation();
 
   const userName = useLoggedInUserName();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const onSubmit = (text: string) => {
     createThreadCommentMutation.mutate({
@@ -77,7 +79,10 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
           </TooltipWrapper>
         }
       >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." disabled={!canInteractWithApp} />
+        <UserCommentForm.TextareaField
+          placeholder="Add a comment..."
+          disabled={!canInteractWithApp}
+        />
       </UserCommentForm>
       <div className="mt-3 h-full overflow-auto pb-3">
         {comments?.length ? (
@@ -104,7 +109,9 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
               className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
-              {canInteractWithApp && <UserComment.Form onSubmit={onEditSubmit} />}
+              {canInteractWithApp && (
+                <UserComment.Form onSubmit={onEditSubmit} />
+              )}
             </UserComment>
           ))
         ) : (

@@ -20,7 +20,9 @@ const QueueItemActionsPanel: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !items?.length || !annotationQueueId;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useAnnotationQueueDeleteItemsMutation();
 

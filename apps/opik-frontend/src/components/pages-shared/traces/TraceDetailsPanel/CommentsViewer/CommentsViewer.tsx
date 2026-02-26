@@ -44,7 +44,9 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
   const updateTraceMutation = useUpdateTraceCommentMutation();
 
   const userName = useLoggedInUserName();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const onSubmit = (text: string) => {
     if (!spanId) {
@@ -112,7 +114,10 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
           </>
         }
       >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." disabled={!canInteractWithApp} />
+        <UserCommentForm.TextareaField
+          placeholder="Add a comment..."
+          disabled={!canInteractWithApp}
+        />
       </UserCommentForm>
       <div className="mt-3 h-full overflow-auto pb-3">
         {data.comments?.length ? (
@@ -139,7 +144,9 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
               className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
-              {canInteractWithApp && <UserComment.Form onSubmit={onEditSubmit} />}
+              {canInteractWithApp && (
+                <UserComment.Form onSubmit={onEditSubmit} />
+              )}
             </UserComment>
           ))
         ) : (

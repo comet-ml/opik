@@ -42,7 +42,9 @@ const DashboardSaveActions: React.FunctionComponent<
   defaultProjectId,
   defaultExperimentIds,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const resetKeyRef = useRef(0);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
@@ -116,7 +118,11 @@ const DashboardSaveActions: React.FunctionComponent<
       </Button>
 
       {isTemplate ? (
-        <Button size="sm" onClick={handleSaveAsClick} disabled={isSaving || !canInteractWithApp}>
+        <Button
+          size="sm"
+          onClick={handleSaveAsClick}
+          disabled={isSaving || !canInteractWithApp}
+        >
           Save as new dashboard
         </Button>
       ) : (

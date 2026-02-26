@@ -16,7 +16,9 @@ type LikeFeedbackProps = {
 };
 
 const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const { mutate: updateMutation } = useTraceFeedbackScoreSetMutation();
   const { mutate: deleteMutation } = useTraceFeedbackScoreDeleteMutation();
 

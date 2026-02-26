@@ -17,7 +17,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
   const [hasCheckedInitialProviders, setHasCheckedInitialProviders] =
     useState(false);
@@ -58,7 +60,12 @@ const PlaygroundPage = () => {
         setSetupDialogOpen(true);
       }
     }
-  }, [isPendingProviderKeys, hasCheckedInitialProviders, providerKeys.length, canInteractWithApp]);
+  }, [
+    isPendingProviderKeys,
+    hasCheckedInitialProviders,
+    providerKeys.length,
+    canInteractWithApp,
+  ]);
 
   // Handle provider addition - trigger validation for all prompts
   const handleProviderAdded = useCallback(() => {

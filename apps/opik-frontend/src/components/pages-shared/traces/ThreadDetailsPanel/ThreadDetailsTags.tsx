@@ -14,7 +14,9 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
   threadId,
   projectId,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const threadUpdateMutation = useThreadUpdateMutation();
 
   const mutateTags = (tags: string[]) => {

@@ -21,7 +21,9 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 const AlertsRowActionsCell: React.FunctionComponent<
   CellContext<Alert, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const alert = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -65,7 +67,12 @@ const AlertsRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

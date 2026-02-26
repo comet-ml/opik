@@ -70,7 +70,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   improvePromptConfig,
   disabled = false,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
   const selectedPromptIdRef = useRef<string | undefined>();
@@ -320,7 +322,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled || !canInteractWithApp}
+                disabled={
+                  disabled || isPromptButtonDisabled || !canInteractWithApp
+                }
               >
                 <Wand2 className="mr-2 size-4" />
                 Generate prompt
@@ -336,7 +340,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled || !canInteractWithApp}
+                disabled={
+                  disabled || isPromptButtonDisabled || !canInteractWithApp
+                }
               >
                 <Wand2 className="mr-2 size-4" />
                 Improve prompt

@@ -169,7 +169,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -340,7 +342,12 @@ const DatasetsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDatasetClick} disabled={!canInteractWithApp}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewDatasetClick}
+            disabled={!canInteractWithApp}
+          >
             Create new dataset
           </Button>
         </div>
@@ -360,7 +367,11 @@ const DatasetsPage: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewDatasetClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleNewDatasetClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new dataset
               </Button>
             )}

@@ -37,7 +37,9 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   bestExperiment,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const navigate = useNavigate();
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
@@ -141,7 +143,12 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
               </TooltipWrapper>
             )}
             {canRerun && (
-              <Button variant="outline" size="sm" onClick={handleRerun} disabled={!canInteractWithApp}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRerun}
+                disabled={!canInteractWithApp}
+              >
                 <RotateCw className="mr-2 size-4" />
                 Rerun
               </Button>

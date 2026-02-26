@@ -40,7 +40,9 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteThreadsHandler = useCallback(() => {

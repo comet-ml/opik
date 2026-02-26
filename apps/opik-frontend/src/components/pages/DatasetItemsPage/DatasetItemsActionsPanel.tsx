@@ -60,7 +60,9 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const [generatedSamples, setGeneratedSamples] = useState<DatasetItem[]>([]);
   const [addTagDialogOpen, setAddTagDialogOpen] = useState<boolean>(false);
   const disabled = !selectedDatasetItems?.length;
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);

@@ -241,7 +241,9 @@ const FILTERS_CONFIG = {
 export const AnnotationQueuesPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
 
@@ -463,7 +465,11 @@ export const AnnotationQueuesPage: React.FC = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button size="sm" onClick={handleNewQueue} disabled={!canInteractWithApp}>
+          <Button
+            size="sm"
+            onClick={handleNewQueue}
+            disabled={!canInteractWithApp}
+          >
             Create new queue
           </Button>
         </div>

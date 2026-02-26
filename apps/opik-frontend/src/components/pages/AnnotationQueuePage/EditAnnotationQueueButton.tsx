@@ -13,7 +13,9 @@ interface EditAnnotationQueueButtonProps {
 const EditAnnotationQueueButton: React.FunctionComponent<
   EditAnnotationQueueButtonProps
 > = ({ annotationQueue }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
@@ -33,7 +35,12 @@ const EditAnnotationQueueButton: React.FunctionComponent<
         scope={annotationQueue.scope}
       />
       <TooltipWrapper content="Edit annotation queue">
-        <Button size="sm" variant="outline" onClick={handleOpenEditDialog} disabled={!canInteractWithApp}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleOpenEditDialog}
+          disabled={!canInteractWithApp}
+        >
           <Pencil className="mr-1.5 size-3.5" />
           Edit
         </Button>

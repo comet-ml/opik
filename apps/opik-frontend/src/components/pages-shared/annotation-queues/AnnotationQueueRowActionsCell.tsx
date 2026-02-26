@@ -26,7 +26,9 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
   CellContext<AnnotationQueue, unknown>
 > = (context) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const queue = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);

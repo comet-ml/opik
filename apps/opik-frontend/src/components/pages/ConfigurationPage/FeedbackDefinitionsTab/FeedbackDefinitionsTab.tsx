@@ -115,7 +115,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const newFeedbackDefinitionDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -263,7 +265,11 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewFeedbackDefinitionClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleNewFeedbackDefinitionClick}
+                disabled={!canInteractWithApp}
+              >
                 Create new feedback definition
               </Button>
             )}

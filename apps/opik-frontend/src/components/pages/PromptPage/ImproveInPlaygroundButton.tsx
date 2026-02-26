@@ -18,7 +18,9 @@ const ImproveInPlaygroundButton: React.FC<ImproveInPlaygroundButtonProps> = ({
   prompt,
   activeVersion,
 }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
 

@@ -17,7 +17,9 @@ const RulesActionsPanel: React.FunctionComponent<RulesActionsPanelsProps> = ({
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const disabled = !rules?.length;
 
   const { mutate } = useRulesBatchDeleteMutation();

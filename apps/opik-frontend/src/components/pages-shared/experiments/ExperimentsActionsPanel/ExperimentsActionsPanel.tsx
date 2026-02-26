@@ -27,7 +27,9 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const disabled = !experiments?.length;
 
   const handleCompareClick = () => {

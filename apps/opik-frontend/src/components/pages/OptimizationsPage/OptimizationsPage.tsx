@@ -181,7 +181,9 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const isOptimizationStudioEnabled = useIsFeatureEnabled(
@@ -470,7 +472,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
-                <Button variant="link" onClick={handleNewOptimizationClick} disabled={!canInteractWithApp}>
+                <Button
+                  variant="link"
+                  onClick={handleNewOptimizationClick}
+                  disabled={!canInteractWithApp}
+                >
                   Create new optimization
                 </Button>
               )}

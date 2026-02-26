@@ -23,7 +23,9 @@ interface RuleRowActionsCellProps {
 const RuleRowActionsCell: React.FC<
   RuleRowActionsCellProps & CellContext<EvaluatorsRule, unknown>
 > = ({ openEditDialog, openCloneDialog, row, column, table }) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const rule = row.original;
   const [open, setOpen] = useState<boolean | number>(false);

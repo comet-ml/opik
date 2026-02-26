@@ -27,7 +27,9 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
 > = (context) => {
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const dataset = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
@@ -99,7 +101,12 @@ export const DatasetRowActionsCell: React.FunctionComponent<
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon" className="-mr-2.5" disabled={!canInteractWithApp}>
+          <Button
+            variant="minimal"
+            size="icon"
+            className="-mr-2.5"
+            disabled={!canInteractWithApp}
+          >
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>

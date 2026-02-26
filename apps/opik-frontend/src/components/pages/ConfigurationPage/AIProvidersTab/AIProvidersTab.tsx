@@ -58,7 +58,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const AIProvidersTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { permissions: { canInteractWithApp } } = usePermissions();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const [search, setSearch] = useState("");
   const resetDialogKeyRef = useRef(0);
@@ -135,7 +137,11 @@ const AIProvidersTab = () => {
           placeholder="Search by name"
           dimension="sm"
         />
-        <Button onClick={handleAddConfigurationClick} size="sm" disabled={!canInteractWithApp}>
+        <Button
+          onClick={handleAddConfigurationClick}
+          size="sm"
+          disabled={!canInteractWithApp}
+        >
           Add configuration
         </Button>
       </div>
@@ -147,7 +153,11 @@ const AIProvidersTab = () => {
         noData={
           <DataTableNoData title={noDataLabel}>
             {search === "" && (
-              <Button variant="link" onClick={handleAddConfigurationClick} disabled={!canInteractWithApp}>
+              <Button
+                variant="link"
+                onClick={handleAddConfigurationClick}
+                disabled={!canInteractWithApp}
+              >
                 Add configuration
               </Button>
             )}
