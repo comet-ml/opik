@@ -149,10 +149,11 @@ const LevenshteinMetricConfigSchema = BaseOptimizationConfigSchema.extend({
   metricParams: LevenshteinMetricParamsSchema,
 });
 
-const NumericalSimilarityMetricConfigSchema = BaseOptimizationConfigSchema.extend({
-  metricType: z.literal(METRIC_TYPE.NUMERICAL_SIMILARITY),
-  metricParams: NumericalSimilarityMetricParamsSchema,
-});
+const NumericalSimilarityMetricConfigSchema =
+  BaseOptimizationConfigSchema.extend({
+    metricType: z.literal(METRIC_TYPE.NUMERICAL_SIMILARITY),
+    metricParams: NumericalSimilarityMetricParamsSchema,
+  });
 
 const CodeMetricConfigSchema = BaseOptimizationConfigSchema.extend({
   metricType: z.literal(METRIC_TYPE.CODE),

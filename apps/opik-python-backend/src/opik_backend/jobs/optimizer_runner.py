@@ -178,7 +178,7 @@ def main():
                 config.metric_type,
                 config.metric_params,
                 config.model,
-                dataset_items=list(dataset.get_items()),
+                dataset_items_provider=lambda: list(dataset.get_items()),
             )
 
             # Build optimizer

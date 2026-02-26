@@ -178,15 +178,17 @@ class MetricFactory:
     
     @classmethod
     def build(cls, metric_type: str, metric_params: Dict[str, Any], model: str,
-              dataset_items: List[Dict[str, Any]] = None) -> Callable:
+              dataset_items_provider: Callable[[], List[Dict[str, Any]]] = None) -> Callable:
         """Build a metric function from config.
         
         Args:
             metric_type: The type of metric to build
             metric_params: Parameters for the metric
             model: LLM model identifier (required for LLM-based metrics)
-            dataset_items: Optional dataset items for metrics that need
-                to infer parameters from the data (e.g., value range)
+            dataset_items_provider: Optional zero-arg callable that returns
+                dataset items. Only invoked by metrics that need to inspect
+                the data at build time (e.g., numerical_similarity for
+                scale inference), avoiding eager materialization.
             
         Returns:
             A callable metric function(dataset_item, llm_output) -> ScoreResult
@@ -202,7 +204,9 @@ class MetricFactory:
             )
         
         logger.debug(f"Building metric: {metric_type} with params: {metric_params}")
-        metric_fn = cls._BUILDERS[metric_type](metric_params, model, dataset_items=dataset_items)
+        metric_fn = cls._BUILDERS[metric_type](
+            metric_params, model, dataset_items_provider=dataset_items_provider,
+        )
         logger.debug(f"Created metric function: {metric_fn.__name__}")
         return metric_fn
 
@@ -442,10 +446,10 @@ def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwa
     # normalized relative to the scale (e.g., 0-5).  Falls back to 1.0
     # when the range can't be determined.
     scale_range = 1.0
-    dataset_items = kwargs.get("dataset_items")
-    if dataset_items:
+    dataset_items_provider = kwargs.get("dataset_items_provider")
+    if dataset_items_provider:
         ref_values = []
-        for item in dataset_items:
+        for item in dataset_items_provider():
             raw = _resolve_reference(item, reference_key, None)
             if raw is not None:
                 try:

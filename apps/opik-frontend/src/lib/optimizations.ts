@@ -126,7 +126,8 @@ export const getDefaultMetricConfig = (
       };
     case METRIC_TYPE.NUMERICAL_SIMILARITY:
       return {
-        reference_key: DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS.REFERENCE_KEY,
+        reference_key:
+          DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS.REFERENCE_KEY,
       };
     case METRIC_TYPE.CODE:
       return {

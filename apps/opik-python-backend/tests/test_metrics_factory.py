@@ -559,7 +559,7 @@ class TestNumericalSimilarityMetric:
         dataset_items = [{"score": 0}, {"score": 1}, {"score": 2}, {"score": 3}, {"score": 4}, {"score": 5}]
         metric_fn = MetricFactory.build(
             "numerical_similarity", {"reference_key": "score"}, "model",
-            dataset_items=dataset_items,
+            dataset_items_provider=lambda: dataset_items,
         )
         # scale_range = 5 - 0 = 5
         # ref=4.5, output=4 -> normalized_error = 0.5/5 = 0.1 -> max(0, 1 - 0.1) = 0.9
@@ -570,7 +570,7 @@ class TestNumericalSimilarityMetric:
         dataset_items = [{"score": 0}, {"score": 5}]
         metric_fn = MetricFactory.build(
             "numerical_similarity", {"reference_key": "score"}, "model",
-            dataset_items=dataset_items,
+            dataset_items_provider=lambda: dataset_items,
         )
         # scale_range=5, diff=5 -> normalized_error=1.0 -> max(0, 1-1) = 0.0
         result = metric_fn({"score": 0}, "5")
@@ -578,7 +578,7 @@ class TestNumericalSimilarityMetric:
 
     def test_scale_range_fallback_without_dataset(self):
         metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
-        # No dataset_items -> scale_range=1.0 -> max(0, 1 - 0.5) = 0.5
+        # No provider -> scale_range=1.0 -> max(0, 1 - 0.5) = 0.5
         result = metric_fn({"score": 4.5}, "4")
         assert abs(result.value - 0.5) < 1e-6
 
@@ -586,7 +586,7 @@ class TestNumericalSimilarityMetric:
         dataset_items = [{"score": 3}, {"score": 3}, {"score": 3}]
         metric_fn = MetricFactory.build(
             "numerical_similarity", {"reference_key": "score"}, "model",
-            dataset_items=dataset_items,
+            dataset_items_provider=lambda: dataset_items,
         )
         # All same value -> range=0 -> falls back to scale_range=1.0
         # diff=1 -> max(0, 1 - 1.0) = 0.0
