@@ -667,6 +667,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: RAG and Search Integration Contract
+                path: docs/tracing/integrations/rag-search-integration-contract.mdx
+                slug: rag-search-integration-contract
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
