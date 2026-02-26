@@ -655,6 +655,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: Pinecone
+                path: docs/tracing/integrations/pinecone.mdx
+                slug: pinecone
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
