@@ -1,0 +1,114 @@
+---
+title: RAG/Search Integration API Spec
+description: Implementation contract for retrieval and search integrations in Opik.
+headline: RAG/Search Integration API Spec | Opik Documentation
+---
+
+This spec is the implementation contract for new retriever and search integrations.
+
+## Goal
+
+Ship integrations immediately using existing span types while preserving clean filtering semantics.
+
+## Span Type Rule
+
+Use `type="tool"` for retrieval/search operations.
+
+Do not block integrations on a new span enum value.
+
+## Required Metadata Contract
+
+- `opik.kind`: `retrieval` or `search`
+- `opik.provider`: provider id (`qdrant`, `weaviate`, `exa`, `tavily`, etc.)
+- `opik.operation`: operation id (`retrieve`, `search`, `hybrid_search`, etc.)
+
+## Optional Metadata Contract
+
+- `opik.top_k`
+- `opik.collection`
+- `opik.filters`
+- `opik.result_count`
+- `opik.latency_ms`
+- `opik.error_type`
+
+## Naming Rule
+
+Use `name="<provider>.<operation>"`.
+
+Examples:
+
+- `qdrant.search`
+- `weaviate.hybrid_search`
+- `exa.search`
+- `tavily.search`
+
+## Parenting Rule
+
+Attach retrieval/search tool spans to the current run/span context.
+
+Expected shape:
+
+`llm -> tool(retrieval/search) -> llm`
+
+## Python API
+
+LangChain retriever runs are normalized to `type="tool"` and have retrieval metadata attached in:
+
+- `sdks/python/src/opik/integrations/langchain/run_parse_helpers.py`
+- `sdks/python/src/opik/integrations/langchain/retrieval_contract.py`
+
+Integration authors should set provider-specific fields while preserving required keys above.
+
+### Python integration entrypoints
+
+Use the provider wrappers:
+
+- `from opik.integrations.qdrant import track_qdrant`
+- `from opik.integrations.weaviate import track_weaviate`
+- `from opik.integrations.pinecone import track_pinecone`
+- `from opik.integrations.chroma import track_chroma`
+
+Example:
+
+```python
+from opik.integrations.qdrant import track_qdrant
+
+client = track_qdrant(client, project_name="rag-search")
+```
+
+## TypeScript API
+
+LangChain retriever callbacks are normalized through:
+
+- `sdks/typescript/src/opik/integrations/opik-langchain/src/retrievalContract.ts`
+- `sdks/typescript/src/opik/integrations/opik-langchain/src/OpikCallbackHandler.ts`
+
+Use `buildRetrieverMetadata(...)` when instrumenting retriever wrappers.
+
+## Verification Baseline
+
+The integration approach was reviewed against established retrieval tracing patterns and kept minimal in Opik:
+
+- native `type="tool"` span type
+- native Opik metadata keys only (`opik.kind`, `opik.provider`, `opik.operation`)
+
+## Frontend Filtering Contract
+
+The trace filter UI supports metadata-key filtering. Reserved keys are preseeded:
+
+- `opik.kind`
+- `opik.provider`
+- `opik.operation`
+
+Relevant files:
+
+- `apps/opik-frontend/src/lib/traces.ts`
+- `apps/opik-frontend/src/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsActionsPanel.tsx`
+
+## Acceptance Checklist Per Integration
+
+1. Span type is `tool`.
+2. Required metadata keys are present.
+3. Name follows `<provider>.<operation>`.
+4. Parent/child hierarchy is preserved.
+5. Error path sets `opik.error_type` when available.
