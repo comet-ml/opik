@@ -109,6 +109,14 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "change_description",
   "tags",
   "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  "template",
+  "metadata",
+  "change_description",
+  "tags",
+  "created_at",
   "created_by",
 ];
 
@@ -175,7 +183,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

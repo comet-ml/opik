@@ -33,6 +33,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
+import TagCell from "@/components/shared/DataTableCells/TagCell";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import useRulesList from "@/api/automations/useRulesList";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
@@ -89,8 +90,10 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
   {
     id: "scope",
     label: "Scope",
-    type: COLUMN_TYPE.string,
+    type: COLUMN_TYPE.category,
+    cell: TagCell as never,
     accessorFn: (row) => capitalizeFirstLetter(getUIRuleScope(row.type)),
+    customMeta: { colored: false },
   },
   {
     id: "enabled",
@@ -107,12 +110,21 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "last_updated_at",
-  "created_by",
-  "created_at",
+  "enabled",
   "sampling_rate",
   "scope",
+  "last_updated_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
   "enabled",
+  "sampling_rate",
+  "scope",
+  "last_updated_at",
+  "created_at",
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
@@ -202,7 +214,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

@@ -96,12 +96,32 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  COLUMN_PROJECT_ID,
-  "created_at",
-  "duration.p50",
   "trace_count",
+  "duration.p50",
+  "total_estimated_cost_avg",
   COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  COLUMN_DATASET_ID,
+  "dataset_version",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_avg",
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+  COLUMN_PROJECT_ID,
+  "prompt",
   COLUMN_COMMENTS_ID,
+  "tags",
+  COLUMN_METADATA_ID,
+  "created_by",
 ];
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
@@ -223,7 +243,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -293,7 +313,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "total_estimated_cost_avg",
-        label: "Cost per trace (avg.)",
+        label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
         aggregatedCell: CostCell.Aggregation as never,
@@ -303,7 +323,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback Scores",
+        label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
         cell: FeedbackScoreListCell as never,
@@ -419,6 +439,7 @@ const ExperimentsPage: React.FC = () => {
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
+    defaultColumnsOrder: DEFAULT_COLUMNS_ORDER,
     groups,
     sortableBy,
     dynamicScoresColumns,

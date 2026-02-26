@@ -69,7 +69,6 @@ import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
   isColumnSortable,
-  mapColumnDataFields,
 } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import { Separator } from "@/components/ui/separator";
@@ -94,10 +93,6 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -120,11 +115,6 @@ const ROW_HEIGHT_KEY = "compare-experiments-row-height";
 const SORTING_KEY = "compare-experiments-sorting";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID (Dataset item)",
-    type: COLUMN_TYPE.string,
-  },
   {
     id: COLUMN_DURATION_ID,
     label: "Duration",
@@ -153,9 +143,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
-  COLUMN_COMMENTS_ID,
-  USER_FEEDBACK_COLUMN_ID,
+  COLUMN_DURATION_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
 ];
 
 export type ExperimentItemsTabProps = {
@@ -403,7 +393,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicDatasetColumns.map((c) => c.id),
       ...dynamicOutputColumns.map((c) => c.id),
       ...dynamicScoresColumns.map((c) => c.id),
-      COLUMN_COMMENTS_ID,
       COLUMN_DURATION_ID,
       `${COLUMN_USAGE_ID}.total_tokens`,
       "total_estimated_cost",
@@ -419,6 +408,16 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const datasetColumnsData = useMemo(() => {
     return [
+      {
+        id: COLUMN_ID_ID,
+        label: "Dataset item ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        verticalAlignment: calculateVerticalAlignment(experimentsCount),
+        size: 180,
+        sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
+      } as ColumnData<ExperimentsCompare>,
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
           ({
@@ -434,7 +433,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           }) as ColumnData<ExperimentsCompare>,
       ),
     ];
-  }, [dynamicDatasetColumns, experimentsCount]);
+  }, [dynamicDatasetColumns, experimentsCount, sortableColumns]);
 
   const outputColumnsData = useMemo(() => {
     return [
@@ -514,19 +513,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   ]);
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    return dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -579,16 +566,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     const retVal = [
       generateSelectColumDef<ExperimentsCompare>({
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
-      }),
-      mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
-        id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        size: 180,
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
       }),
     ];
 
@@ -721,6 +698,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           type: columnType,
         }),
       ),
+      {
+        id: COLUMN_ID_ID,
+        label: "Dataset item ID",
+        type: COLUMN_TYPE.string,
+      },
       ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({
         id,
         label: `${label} (Output)`,
