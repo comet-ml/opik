@@ -14,6 +14,14 @@ _PYTHON_TO_BACKEND_TYPE: typing.Dict[type, str] = {
     bool: "boolean",
 }
 
+_BACKEND_TO_PYTHON_TYPE: typing.Dict[str, type] = {
+    v: k for k, v in _PYTHON_TO_BACKEND_TYPE.items()
+}
+
+
+def backend_type_to_python_type(backend_type: str) -> typing.Optional[type]:
+    return _BACKEND_TO_PYTHON_TYPE.get(backend_type)
+
 
 def is_prompt_type(py_type: typing.Any) -> bool:
     return isinstance(py_type, type) and issubclass(py_type, BasePrompt)

@@ -76,6 +76,29 @@ class TestIsPromptType:
         assert type_helpers.is_prompt_type(MyPrompt) is True
 
 
+class TestBackendTypeToPythonType:
+    @pytest.mark.parametrize(
+        "backend_type, expected",
+        [
+            ("string", str),
+            ("integer", int),
+            ("float", float),
+            ("boolean", bool),
+        ],
+        ids=["string", "integer", "float", "boolean"],
+    )
+    def test_primitive_types__returns_python_type(self, backend_type, expected):
+        assert type_helpers.backend_type_to_python_type(backend_type) is expected
+
+    @pytest.mark.parametrize(
+        "backend_type",
+        ["prompt", "promptcommit", "unknown", ""],
+        ids=["prompt", "promptcommit", "unknown", "empty"],
+    )
+    def test_non_primitive_types__returns_none(self, backend_type):
+        assert type_helpers.backend_type_to_python_type(backend_type) is None
+
+
 class TestIsSupportedType:
     @pytest.mark.parametrize(
         "py_type, expected",

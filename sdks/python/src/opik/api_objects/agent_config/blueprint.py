@@ -34,43 +34,72 @@ def _resolve_prompt_version_from_version_id(
     return rest_client_.prompts.get_prompt_version_by_id(version_id)
 
 
-def _resolve_values(
+def _convert_primitives(
     raw_blueprint: AgentBlueprintPublic,
     field_types: typing.Optional[typing.Dict[str, typing.Any]],
-    rest_client_: typing.Optional[rest_client.OpikApi],
 ) -> typing.Dict[str, typing.Any]:
     values: typing.Dict[str, typing.Any] = {}
     for param in raw_blueprint.values:
         if field_types and param.key in field_types:
             py_type = field_types[param.key]
+        else:
+            py_type = type_helpers.backend_type_to_python_type(param.type)
+
+        if py_type is not None:
             values[param.key] = type_helpers.backend_value_to_python_value(
                 param.value, param.type, py_type
             )
         else:
             values[param.key] = param.value
+    return values
 
-    if not field_types or not rest_client_:
-        return values
 
-    for key, raw_value in list(values.items()):
-        if key not in field_types:
+def _is_prompt_field(
+    key: str,
+    backend_type: str,
+    field_types: typing.Optional[typing.Dict[str, typing.Any]],
+) -> bool:
+    if field_types and key in field_types:
+        return type_helpers.is_prompt_type(field_types[key])
+    return backend_type == "prompt"
+
+
+def _is_prompt_version_field(
+    key: str,
+    backend_type: str,
+    field_types: typing.Optional[typing.Dict[str, typing.Any]],
+) -> bool:
+    if field_types and key in field_types:
+        return type_helpers.is_prompt_version_type(field_types[key])
+    return backend_type == "promptcommit"
+
+
+def _resolve_prompts(
+    raw_blueprint: AgentBlueprintPublic,
+    values: typing.Dict[str, typing.Any],
+    field_types: typing.Optional[typing.Dict[str, typing.Any]],
+    rest_client_: rest_client.OpikApi,
+) -> None:
+    for param in raw_blueprint.values:
+        raw_value = values.get(param.key)
+        if not isinstance(raw_value, str):
             continue
-        py_type = field_types[key]
-        if type_helpers.is_prompt_type(py_type) and isinstance(raw_value, str):
+
+        if _is_prompt_field(param.key, param.type, field_types):
             try:
-                values[key] = _resolve_prompt_from_version_id(rest_client_, raw_value)
+                values[param.key] = _resolve_prompt_from_version_id(
+                    rest_client_, raw_value
+                )
             except Exception:
                 logger.debug(
                     "Failed to resolve prompt version %s",
                     raw_value,
                     exc_info=True,
                 )
-                del values[key]
-        elif type_helpers.is_prompt_version_type(py_type) and isinstance(
-            raw_value, str
-        ):
+                del values[param.key]
+        elif _is_prompt_version_field(param.key, param.type, field_types):
             try:
-                values[key] = _resolve_prompt_version_from_version_id(
+                values[param.key] = _resolve_prompt_version_from_version_id(
                     rest_client_, raw_value
                 )
             except Exception:
@@ -79,8 +108,17 @@ def _resolve_values(
                     raw_value,
                     exc_info=True,
                 )
-                del values[key]
+                del values[param.key]
 
+
+def _resolve_values(
+    raw_blueprint: AgentBlueprintPublic,
+    field_types: typing.Optional[typing.Dict[str, typing.Any]],
+    rest_client_: typing.Optional[rest_client.OpikApi],
+) -> typing.Dict[str, typing.Any]:
+    values = _convert_primitives(raw_blueprint, field_types)
+    if rest_client_:
+        _resolve_prompts(raw_blueprint, values, field_types, rest_client_)
     return values
 
 

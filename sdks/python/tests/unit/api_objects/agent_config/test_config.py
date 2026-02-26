@@ -85,6 +85,18 @@ class TestAgentConfigGetBlueprint:
         assert result["temp"] == 0.6
         assert result["name"] == "agent"
 
+    def test_get_blueprint__without_field_types__infers_types_from_backend(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.get_blueprint.return_value = _make_raw_blueprint()
+
+        result = agent_config.get_blueprint()
+
+        assert result["temp"] == 0.6
+        assert isinstance(result["temp"], float)
+        assert result["name"] == "agent"
+        assert isinstance(result["name"], str)
+
     def test_get_blueprint__not_found__raises_value_error(
         self, agent_config, mock_config_client
     ):

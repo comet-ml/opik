@@ -23,7 +23,7 @@ def _make_raw_blueprint(
 ):
     if values is None:
         values = [
-            AgentConfigValuePublic(key="temperature", type="number", value="0.6"),
+            AgentConfigValuePublic(key="temperature", type="float", value="0.6"),
             AgentConfigValuePublic(key="name", type="string", value="agent"),
         ]
     return AgentBlueprintPublic(
@@ -60,10 +60,12 @@ class TestBlueprintProperties:
 
 
 class TestBlueprintValueResolution:
-    def test_without_field_types__values_are_raw_strings(self):
+    def test_without_field_types__values_are_inferred_from_backend_type(self):
         bp = Blueprint(_make_raw_blueprint())
-        assert bp["temperature"] == "0.6"
+        assert bp["temperature"] == 0.6
+        assert isinstance(bp["temperature"], float)
         assert bp["name"] == "agent"
+        assert isinstance(bp["name"], str)
 
     def test_with_field_types__deserializes_values(self):
         bp = Blueprint(
@@ -83,7 +85,7 @@ class TestBlueprintValueResolution:
     def test_with_field_types__int_deserialization(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="count", type="number", value="42"),
+                AgentConfigValuePublic(key="count", type="integer", value="42"),
             ]
         )
         bp = Blueprint(raw, field_types={"count": int})
@@ -93,7 +95,7 @@ class TestBlueprintValueResolution:
 class TestBlueprintDictLikeAccess:
     def test_get__existing_key(self):
         bp = Blueprint(_make_raw_blueprint())
-        assert bp.get("temperature") == "0.6"
+        assert bp.get("temperature") == 0.6
 
     def test_get__missing_key__returns_default(self):
         bp = Blueprint(_make_raw_blueprint())
@@ -355,3 +357,109 @@ class TestBlueprintPromptResolution:
 
         assert mock_rest.prompts.get_prompt_version_by_id.call_count == 2
         assert mock_rest.prompts.get_prompt_by_id.call_count == 2
+
+
+class TestBlueprintPromptResolutionWithoutFieldTypes:
+    def test_prompt_type__resolves_to_prompt_object(self):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(
+                    key="system_prompt", type="prompt", value="ver-111"
+                ),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        version_detail = mock.Mock()
+        version_detail.prompt_id = "prompt-1"
+        version_detail.template_structure = "text"
+        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
+
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+
+        fake_prompt = mock.Mock(spec=Prompt)
+        with mock.patch(
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
+            return_value=fake_prompt,
+        ):
+            bp = Blueprint(raw, rest_client_=mock_rest)
+
+        assert bp["system_prompt"] is fake_prompt
+
+    def test_chat_prompt_type__resolves_to_chat_prompt_object(self):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(key="messages", type="prompt", value="ver-222"),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        version_detail = mock.Mock()
+        version_detail.prompt_id = "prompt-2"
+        version_detail.template_structure = "chat"
+        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
+
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "chat-prompt"
+        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+
+        fake_chat_prompt = mock.Mock(spec=ChatPrompt)
+        with mock.patch(
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
+            return_value=fake_chat_prompt,
+        ):
+            bp = Blueprint(raw, rest_client_=mock_rest)
+
+        assert bp["messages"] is fake_chat_prompt
+
+    def test_promptcommit_type__resolves_to_prompt_version_detail(self):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(
+                    key="version", type="promptcommit", value="ver-pv-111"
+                ),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        fake_version_detail = mock.Mock(spec=PromptVersionDetail)
+        mock_rest.prompts.get_prompt_version_by_id.return_value = fake_version_detail
+
+        bp = Blueprint(raw, rest_client_=mock_rest)
+
+        assert bp["version"] is fake_version_detail
+        mock_rest.prompts.get_prompt_version_by_id.assert_called_once_with("ver-pv-111")
+        mock_rest.prompts.get_prompt_by_id.assert_not_called()
+
+    def test_prompt_resolution_fails__omits_key(self):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(
+                    key="system_prompt", type="prompt", value="ver-bad"
+                ),
+            ]
+        )
+
+        mock_rest = mock.Mock()
+        mock_rest.prompts.get_prompt_version_by_id.side_effect = Exception(
+            "network error"
+        )
+
+        bp = Blueprint(raw, rest_client_=mock_rest)
+
+        assert "system_prompt" not in bp.keys()
+
+    def test_without_rest_client__prompt_stays_raw_string(self):
+        raw = _make_raw_blueprint(
+            values=[
+                AgentConfigValuePublic(
+                    key="system_prompt", type="prompt", value="ver-111"
+                ),
+            ]
+        )
+
+        bp = Blueprint(raw)
+
+        assert bp["system_prompt"] == "ver-111"
