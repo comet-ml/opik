@@ -32,25 +32,20 @@
         ],
         "envFile": "${workspaceFolder}/.env.local"
       },
-      "Atlassian": {
-        "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
-        "env": {},
-        "args": []
-      },
       "Jira-Headless": {
         "command": "uvx",
         "args": ["mcp-atlassian"],
         "envFile": "${workspaceFolder}/.env.local"
       },
       "Notion": {
-        "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
-        "env": {},
-        "args": []
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://mcp.notion.com/mcp"],
+        "env": {}
       },
       "Playwright": {
-        "command": "npx @playwright/mcp@latest",
-        "env": {},
-        "args": []
+        "command": "npx",
+        "args": ["@playwright/mcp@latest"],
+        "env": {}
       },
       "chrome-devtools": {
         "command": "npx",
