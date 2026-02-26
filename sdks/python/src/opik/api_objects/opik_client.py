@@ -2281,50 +2281,13 @@ class Opik:
     def get_agent_config(
         self,
         project_name: Optional[str] = None,
-        env: Optional[str] = None,
-        mask_id: Optional[str] = None,
     ) -> AgentConfig:
-        if project_name is None:
-            project_name = self._project_name
+        project_name = project_name or self._project_name
         config_client_ = ConfigClient(self._rest_client)
-        config_data = config_client_.get_blueprint(
+        return AgentConfig(
             project_name=project_name,
-            env=env,
-            mask_id=mask_id,
-        )
-        return AgentConfig.from_backend_data(config_data=config_data)
-
-    def create_agent_config(
-        self,
-        parameters: Dict[str, Any],
-        project_name: Optional[str] = None,
-        description: Optional[str] = None,
-    ) -> AgentConfig:
-        if project_name is None:
-            project_name = self._project_name
-        config_client_ = ConfigClient(self._rest_client)
-
-        fields_with_values: Dict[str, tuple] = {}
-        for key, value in parameters.items():
-            fields_with_values[key] = (type(value), value)
-
-        config_data = config_client_.create_config(
-            fields_with_values=fields_with_values,
-            project_name=project_name,
-            description=description,
-        )
-        return AgentConfig.from_backend_data(config_data=config_data)
-
-    def update_agent_config(
-        self,
-        parameters: Dict[str, Any],
-        project_name: Optional[str] = None,
-        description: Optional[str] = None,
-    ) -> AgentConfig:
-        return self.create_agent_config(
-            parameters=parameters,
-            project_name=project_name,
-            description=description,
+            config_client=config_client_,
+            rest_client_=self._rest_client,
         )
 
 

@@ -382,169 +382,21 @@ class TestOpikClientGetDataset:
         assert result.name == "test_dataset"
 
 
-def _make_blueprint(blueprint_id="bp-1", values=None, description=None):
-    bp = Mock()
-    bp.id = blueprint_id
-    bp.values = values or []
-    bp.description = description
-    return bp
-
-
 class TestOpikClientConfigMethods:
     def test_get_agent_config__no_project_name__uses_instance_default(self):
+        from opik.api_objects.agent_config.config import AgentConfig
+
         opik_client_ = opik_client.Opik(project_name="my-project")
+        result = opik_client_.get_agent_config()
 
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-1"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ) as mock_get_blueprint,
-        ):
-            opik_client_.get_agent_config()
-
-        assert mock_get_blueprint.call_args[1]["project_id"] == "proj-1"
+        assert isinstance(result, AgentConfig)
+        assert result.project_name == "my-project"
 
     def test_get_agent_config__explicit_project_name__overrides_default(self):
+        from opik.api_objects.agent_config.config import AgentConfig
+
         opik_client_ = opik_client.Opik(project_name="my-project")
+        result = opik_client_.get_agent_config(project_name="other-project")
 
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-2"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ) as mock_get_blueprint,
-        ):
-            opik_client_.get_agent_config(project_name="other-project")
-
-        assert mock_get_blueprint.call_args[1]["project_id"] == "proj-2"
-
-    def test_create_agent_config__no_project_name__uses_instance_default(self):
-        opik_client_ = opik_client.Opik(project_name="my-project")
-
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-1"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "create_agent_config",
-                return_value=None,
-            ) as mock_create,
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_blueprint_by_id",
-                return_value=_make_blueprint(),
-            ),
-        ):
-            opik_client_.create_agent_config(parameters={"temp": 0.7})
-
-        assert mock_create.call_args[1]["project_name"] == "my-project"
-
-    def test_create_agent_config__explicit_project_name__overrides_default(self):
-        opik_client_ = opik_client.Opik(project_name="my-project")
-
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-1"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "create_agent_config",
-                return_value=None,
-            ) as mock_create,
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_blueprint_by_id",
-                return_value=_make_blueprint(),
-            ),
-        ):
-            opik_client_.create_agent_config(
-                parameters={"temp": 0.7}, project_name="other-project"
-            )
-
-        assert mock_create.call_args[1]["project_name"] == "other-project"
-
-    def test_update_agent_config__no_project_name__uses_instance_default(self):
-        opik_client_ = opik_client.Opik(project_name="my-project")
-
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-1"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "create_agent_config",
-                return_value=None,
-            ) as mock_create,
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_blueprint_by_id",
-                return_value=_make_blueprint(),
-            ),
-        ):
-            opik_client_.update_agent_config(parameters={"temp": 0.9})
-
-        assert mock_create.call_args[1]["project_name"] == "my-project"
-
-    def test_update_agent_config__explicit_project_name__overrides_default(self):
-        opik_client_ = opik_client.Opik(project_name="my-project")
-
-        with (
-            patch.object(
-                opik_client_._rest_client.projects,
-                "retrieve_project",
-                return_value=Mock(id="proj-1"),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "create_agent_config",
-                return_value=None,
-            ) as mock_create,
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_latest_blueprint",
-                return_value=_make_blueprint(),
-            ),
-            patch.object(
-                opik_client_._rest_client.agent_configs,
-                "get_blueprint_by_id",
-                return_value=_make_blueprint(),
-            ),
-        ):
-            opik_client_.update_agent_config(
-                parameters={"temp": 0.9}, project_name="other-project"
-            )
-
-        assert mock_create.call_args[1]["project_name"] == "other-project"
+        assert isinstance(result, AgentConfig)
+        assert result.project_name == "other-project"

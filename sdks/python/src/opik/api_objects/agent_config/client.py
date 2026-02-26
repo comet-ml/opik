@@ -1,4 +1,3 @@
-import dataclasses
 import typing
 import logging
 
@@ -8,41 +7,10 @@ from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
 from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
 from opik.api_objects import rest_helpers
-from opik.api_objects.prompt.text.prompt import Prompt
-from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
-from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 from opik import id_helpers
 from . import type_helpers
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_prompt_from_version_id(
-    rest_client_: rest_client.OpikApi, version_id: str
-) -> typing.Any:
-    version_detail = rest_client_.prompts.get_prompt_version_by_id(version_id)
-    prompt_detail = rest_client_.prompts.get_prompt_by_id(version_detail.prompt_id)
-
-    if version_detail.template_structure == "chat":
-        return ChatPrompt.from_fern_prompt_version(
-            name=prompt_detail.name, prompt_version=version_detail
-        )
-    return Prompt.from_fern_prompt_version(
-        name=prompt_detail.name, prompt_version=version_detail
-    )
-
-
-def _resolve_prompt_version_from_version_id(
-    rest_client_: rest_client.OpikApi, version_id: str
-) -> PromptVersionDetail:
-    return rest_client_.prompts.get_prompt_version_by_id(version_id)
-
-
-@dataclasses.dataclass
-class ConfigData:
-    blueprint_id: typing.Optional[str]
-    values: typing.Dict[str, typing.Any]
-    description: typing.Optional[str] = None
 
 
 class ConfigClient:
@@ -53,7 +21,7 @@ class ConfigClient:
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
         description: typing.Optional[str],
-        blueprint_id: typing.Optional[str] = None,
+        id: typing.Optional[str] = None,
         config_type: str = "blueprint",
     ) -> AgentBlueprintWrite:
         backend_values = []
@@ -71,7 +39,7 @@ class ConfigClient:
                 )
             )
         return AgentBlueprintWrite(
-            id=blueprint_id,
+            id=id,
             type=config_type,
             values=backend_values,
             description=description,
@@ -84,23 +52,10 @@ class ConfigClient:
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
     ) -> str:
-        """Post a new blueprint to the backend without fetching it back.
-
-        Use this when you need to write a blueprint but will retrieve the
-        result separately (e.g. the decorator writes new keys first, then
-        fetches the merged blueprint once).
-
-        Args:
-            fields_with_values: Mapping of field name → ``(python_type, value)``
-                tuples to include in the blueprint.
-            project_name: Name of the project the blueprint belongs to.
-            project_id: Optional explicit project ID; forwarded to the backend.
-            description: Optional human-readable description stored with the
-                blueprint.
-        """
+        """Post a new blueprint to the backend, return the client-generated ID."""
         blueprint_id = id_helpers.generate_id()
         blueprint_payload = self._build_blueprint_payload(
-            fields_with_values, description, blueprint_id=blueprint_id
+            fields_with_values, description, id=blueprint_id
         )
         self._rest_client.agent_configs.create_agent_config(
             blueprint=blueprint_payload,
@@ -115,36 +70,15 @@ class ConfigClient:
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> ConfigData:
-        """Create a new blueprint on the backend and return its resolved data.
-
-        Equivalent to calling :meth:`create_blueprint` followed by
-        :meth:`get_blueprint`.
-
-        Use :meth:`create_blueprint` directly when you need to write without
-        an immediate fetch (e.g. the decorator writes new keys first, then
-        fetches the merged blueprint once).
-
-        Args:
-            fields_with_values: Mapping of field name → ``(python_type, value)``
-                tuples to include in the blueprint.
-            project_name: Name of the project the blueprint belongs to.
-            project_id: Optional explicit project ID; forwarded to the backend.
-            description: Optional human-readable description stored with the
-                blueprint.
-            field_types: Optional mapping used to deserialize backend values.
-
-        Returns:
-            :class:`ConfigData` for the newly created blueprint.
-        """
+    ) -> AgentBlueprintPublic:
+        """Create a new blueprint and fetch it back."""
         blueprint_id = self.create_blueprint(
             fields_with_values=fields_with_values,
             project_name=project_name,
             project_id=project_id,
             description=description,
         )
-        return self._get_blueprint_by_id(blueprint_id, field_types=field_types)
+        return self.get_blueprint_by_id(blueprint_id)
 
     def create_mask(
         self,
@@ -152,69 +86,43 @@ class ConfigClient:
         project_name: str,
         project_id: typing.Optional[str] = None,
         description: typing.Optional[str] = None,
-    ) -> ConfigData:
-        """Create a mask config on the backend and return its data.
-
-        Primarily for internal use. Works the same as :meth:`create_config` but
-        marks the payload as ``type="mask"``.  A mask typically covers only a
-        subset of the blueprint's keys and is used to produce override variants
-        (e.g. A/B experiment arms).
-
-        Args:
-            fields_with_values: Mapping of field name → ``(python_type, value)``
-                tuples for the keys to include in the mask.
-            project_name: Name of the project the mask belongs to.
-            project_id: Optional explicit project ID; forwarded to the backend.
-            description: Optional human-readable description stored with the mask.
-
-        Returns:
-            :class:`ConfigData` representing the blueprint that is active after
-            the mask is applied.
-        """
+    ) -> AgentBlueprintPublic:
+        """Create a mask config and fetch it back by ID."""
         mask_id = id_helpers.generate_id()
         mask_payload = self._build_blueprint_payload(
-            fields_with_values, description, blueprint_id=mask_id, config_type="mask"
+            fields_with_values, description, id=mask_id, config_type="mask"
         )
         self._rest_client.agent_configs.create_agent_config(
             blueprint=mask_payload,
             project_name=project_name,
             project_id=project_id,
         )
-        result = self._try_get_blueprint(project_name=project_name, mask_id=mask_id)
-        if result is None:
-            raise ValueError(f"Mask blueprint '{mask_id}' not found after creation")
-        result.blueprint_id = mask_id
-        return result
+        return self.get_blueprint_by_id(mask_id)
 
-    def _get_blueprint_by_id(
+    def get_blueprint_by_id(
         self,
         blueprint_id: str,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> ConfigData:
-        blueprint = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
-        return self._blueprint_to_config_data(
-            blueprint=blueprint, field_types=field_types
-        )
+    ) -> AgentBlueprintPublic:
+        return self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
 
-    def _try_get_blueprint(
+    def try_get_blueprint(
         self,
         project_name: str,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> typing.Optional[ConfigData]:
+    ) -> typing.Optional[AgentBlueprintPublic]:
         try:
             project_id = rest_helpers.resolve_project_id_by_name(
                 self._rest_client, project_name
             )
             if env is not None:
-                blueprint = self._rest_client.agent_configs.get_blueprint_by_env(
+                return self._rest_client.agent_configs.get_blueprint_by_env(
                     env_name=env,
                     project_id=project_id,
                     mask_id=mask_id,
                 )
             else:
-                blueprint = self._rest_client.agent_configs.get_latest_blueprint(
+                return self._rest_client.agent_configs.get_latest_blueprint(
                     project_id=project_id,
                     mask_id=mask_id,
                 )
@@ -223,94 +131,18 @@ class ConfigClient:
                 return None
             raise
 
-        return self._blueprint_to_config_data(
-            blueprint=blueprint,
-            field_types=field_types,
-        )
-
     def get_blueprint(
         self,
         project_name: str,
         env: typing.Optional[str] = None,
         mask_id: typing.Optional[str] = None,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> ConfigData:
-        """Retrieve an existing blueprint from the backend.
-
-        Args:
-            project_name: Name of the project whose blueprint to fetch.
-            env: Return the blueprint pinned to this environment label.
-            mask_id: Return the blueprint resolved through this mask ID.
-            field_types: Optional mapping of field name → Python type used to
-                deserialize backend values.  When provided, numeric strings are
-                cast to ``float``/``int``, boolean strings to ``bool``, and
-                prompt version IDs to the corresponding prompt object.
-
-        Returns:
-            :class:`ConfigData` populated with the blueprint's values.
-
-        Raises:
-            ValueError: If no blueprint exists for the given parameters.
-        """
-        result = self._try_get_blueprint(
+    ) -> AgentBlueprintPublic:
+        """Retrieve an existing blueprint. Raises ValueError if not found."""
+        result = self.try_get_blueprint(
             project_name=project_name,
             env=env,
             mask_id=mask_id,
-            field_types=field_types,
         )
         if result is None:
             raise ValueError("Config not found")
-        if mask_id is not None:
-            result.blueprint_id = mask_id
         return result
-
-    def _blueprint_to_config_data(
-        self,
-        blueprint: AgentBlueprintPublic,
-        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
-    ) -> ConfigData:
-        values: typing.Dict[str, typing.Any] = {}
-        for param in blueprint.values:
-            if field_types and param.key in field_types:
-                py_type = field_types[param.key]
-                values[param.key] = type_helpers.backend_value_to_python_value(
-                    param.value, param.type, py_type
-                )
-            else:
-                values[param.key] = param.value
-
-        for key, raw_value in list(values.items()):
-            if field_types and key in field_types:
-                py_type = field_types[key]
-                if type_helpers.is_prompt_type(py_type) and isinstance(raw_value, str):
-                    try:
-                        values[key] = _resolve_prompt_from_version_id(
-                            self._rest_client, raw_value
-                        )
-                    except Exception:
-                        logger.debug(
-                            "Failed to resolve prompt version %s",
-                            raw_value,
-                            exc_info=True,
-                        )
-                        del values[key]
-                elif type_helpers.is_prompt_version_type(py_type) and isinstance(
-                    raw_value, str
-                ):
-                    try:
-                        values[key] = _resolve_prompt_version_from_version_id(
-                            self._rest_client, raw_value
-                        )
-                    except Exception:
-                        logger.debug(
-                            "Failed to resolve prompt version detail %s",
-                            raw_value,
-                            exc_info=True,
-                        )
-                        del values[key]
-
-        return ConfigData(
-            blueprint_id=blueprint.id,
-            values=values,
-            description=blueprint.description,
-        )

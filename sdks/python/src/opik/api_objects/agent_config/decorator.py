@@ -4,8 +4,10 @@ import typing
 
 from opik import context_storage
 from . import type_helpers
+from .blueprint import Blueprint
 from .cache import SharedConfigCache, get_shared_cache
-from .client import ConfigClient, ConfigData
+from .client import ConfigClient
+from .config import AgentConfig
 from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,19 @@ def agent_config_decorator(
             shared_cache = get_shared_cache(resolved_project, env, mask_id)
             shared_cache.register_fields(prefixed_field_types)
 
+            try:
+                from opik.api_objects import opik_client as opik_client_module
+
+                client = opik_client_module.get_client_cached()
+                config_client = ConfigClient(client.rest_client)
+                agent_cfg = AgentConfig(
+                    project_name=resolved_project,
+                    config_client=config_client,
+                    rest_client_=client.rest_client,
+                )
+            except Exception:
+                agent_cfg = None
+
             object.__setattr__(self, "__opik_shared_cache__", shared_cache)
             object.__setattr__(self, "__opik_class_prefix__", class_prefix)
             object.__setattr__(self, "__opik_local_fields__", local_field_names)
@@ -61,6 +76,7 @@ def agent_config_decorator(
             object.__setattr__(self, "__opik_env__", env)
             object.__setattr__(self, "__opik_project_name__", resolved_project)
             object.__setattr__(self, "__opik_description__", description)
+            object.__setattr__(self, "__opik_agent_config__", agent_cfg)
             _sync_config_with_backend(self)
 
         cls.__init__ = new_init  # type: ignore[assignment]
@@ -99,22 +115,21 @@ def _maybe_sync_from_cache(instance: typing.Any, attr: str) -> None:
 
 def _sync_config_with_backend(instance: typing.Any) -> None:
     try:
-        from opik.api_objects import opik_client
-
-        client = opik_client.get_client_cached()
-        config_client = ConfigClient(client.rest_client)
+        agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
+            instance, "__opik_agent_config__"
+        )
+        if agent_cfg is None:
+            return
 
         shared_cache: SharedConfigCache = object.__getattribute__(
             instance, "__opik_shared_cache__"
         )
         all_field_types = shared_cache.all_field_types
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
         description = object.__getattribute__(instance, "__opik_description__")
         mask_id_val = object.__getattribute__(instance, "__opik_mask_id__")
         env_val = object.__getattribute__(instance, "__opik_env__")
 
-        existing = config_client._try_get_blueprint(
-            project_name=project_name,
+        existing = agent_cfg.try_get_blueprint(
             env=env_val,
             mask_id=mask_id_val,
             field_types=all_field_types,
@@ -126,20 +141,9 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
             if existing is not None:
                 _apply_backend_values(instance, existing)
         elif existing is None:
-            _handle_no_blueprint(
-                instance,
-                config_client,
-                project_name,
-                description,
-            )
+            _handle_no_blueprint(instance, agent_cfg, description)
         else:
-            _handle_existing_blueprint(
-                instance,
-                config_client,
-                existing,
-                project_name,
-                description,
-            )
+            _handle_existing_blueprint(instance, agent_cfg, existing, description)
 
     except Exception:
         logger.debug("Failed to sync config with backend", exc_info=True)
@@ -147,8 +151,7 @@ def _sync_config_with_backend(instance: typing.Any) -> None:
 
 def _handle_no_blueprint(
     instance: typing.Any,
-    config_client: ConfigClient,
-    project_name: str,
+    agent_cfg: AgentConfig,
     description: typing.Optional[str],
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
@@ -166,23 +169,18 @@ def _handle_no_blueprint(
     shared_cache: SharedConfigCache = object.__getattribute__(
         instance, "__opik_shared_cache__"
     )
-    blueprint_id = config_client.create_blueprint(
+    bp = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
-        project_name=project_name,
         description=description,
-    )
-    created = config_client._get_blueprint_by_id(
-        blueprint_id,
         field_types=shared_cache.all_field_types,
     )
-    _apply_backend_values(instance, created)
+    _apply_backend_values(instance, bp)
 
 
 def _handle_existing_blueprint(
     instance: typing.Any,
-    config_client: ConfigClient,
-    existing: ConfigData,
-    project_name: str,
+    agent_cfg: AgentConfig,
+    existing: Blueprint,
     description: typing.Optional[str],
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
@@ -203,25 +201,21 @@ def _handle_existing_blueprint(
         shared_cache: SharedConfigCache = object.__getattribute__(
             instance, "__opik_shared_cache__"
         )
-        blueprint_id = config_client.create_blueprint(
+        bp = agent_cfg.create_blueprint(
             fields_with_values=extra_fields,
-            project_name=project_name,
             description=description,
-        )
-        fetched = config_client._get_blueprint_by_id(
-            blueprint_id,
             field_types=shared_cache.all_field_types,
         )
-        _apply_backend_values(instance, fetched)
+        _apply_backend_values(instance, bp)
     else:
         _apply_backend_values(instance, existing)
 
 
-def _apply_backend_values(instance: typing.Any, config_data: ConfigData) -> None:
+def _apply_backend_values(instance: typing.Any, blueprint: Blueprint) -> None:
     shared_cache: SharedConfigCache = object.__getattribute__(
         instance, "__opik_shared_cache__"
     )
-    shared_cache.apply(config_data)
+    shared_cache.apply(blueprint)
 
     class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
     local_fields: typing.Set[str] = object.__getattribute__(
@@ -254,42 +248,42 @@ def _maybe_refetch(instance: typing.Any) -> None:
         return
 
     try:
-        from opik.api_objects import opik_client
+        agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
+            instance, "__opik_agent_config__"
+        )
+        if agent_cfg is None:
+            return
 
-        client = opik_client.get_client_cached()
-        config_client = ConfigClient(client.rest_client)
         all_field_types = shared_cache.all_field_types
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
         env_val = object.__getattribute__(instance, "__opik_env__")
 
-        config_data = config_client.get_blueprint(
-            project_name=project_name,
+        bp = agent_cfg.get_blueprint(
             env=env_val,
             field_types=all_field_types,
         )
-        _apply_backend_values(instance, config_data)
+        _apply_backend_values(instance, bp)
     except Exception:
         logger.debug("Failed to refetch config", exc_info=True)
 
 
 def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
     try:
-        from opik.api_objects import opik_client
+        agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
+            instance, "__opik_agent_config__"
+        )
+        if agent_cfg is None:
+            return
 
-        client = opik_client.get_client_cached()
-        config_client = ConfigClient(client.rest_client)
         shared_cache: SharedConfigCache = object.__getattribute__(
             instance, "__opik_shared_cache__"
         )
         all_field_types = shared_cache.all_field_types
-        project_name = object.__getattribute__(instance, "__opik_project_name__")
 
-        config_data = config_client.get_blueprint(
-            project_name=project_name,
+        bp = agent_cfg.get_blueprint(
             mask_id=mask_id,
             field_types=all_field_types,
         )
-        _apply_backend_values(instance, config_data)
+        _apply_backend_values(instance, bp)
     except Exception:
         logger.debug("Failed to refetch config with mask", exc_info=True)
 

@@ -2,7 +2,7 @@ import os
 import time
 import typing
 
-from .client import ConfigData
+from .blueprint import Blueprint
 
 DEFAULT_TTL_SECONDS = 300
 
@@ -53,9 +53,9 @@ class SharedConfigCache:
     def all_field_types(self) -> typing.Dict[str, typing.Any]:
         return dict(self._registered_field_types)
 
-    def apply(self, config_data: ConfigData) -> None:
-        self.blueprint_id = config_data.blueprint_id
-        self.values = dict(config_data.values)
+    def apply(self, blueprint: Blueprint) -> None:
+        self.blueprint_id = blueprint.id
+        self.values = dict(blueprint._values)
         self._last_fetch = time.monotonic()
 
     def is_stale(self) -> bool:

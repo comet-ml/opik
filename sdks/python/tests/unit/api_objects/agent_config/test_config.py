@@ -3,374 +3,194 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.agent_config.config import AgentConfig
-from opik.api_objects.agent_config.client import ConfigData
+from opik.api_objects.agent_config.blueprint import Blueprint
+from opik.api_objects.agent_config.client import ConfigClient
+from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
+from opik.rest_api.types.agent_config_value_public import AgentConfigValuePublic
+
+
+def _make_raw_blueprint(blueprint_id="bp-1", values=None, description=None):
+    if values is None:
+        values = [
+            AgentConfigValuePublic(key="temp", type="number", value="0.6"),
+            AgentConfigValuePublic(key="name", type="string", value="agent"),
+        ]
+    return AgentBlueprintPublic(
+        id=blueprint_id, type="blueprint", values=values, description=description
+    )
 
 
 @pytest.fixture
-def sample_config():
-    return AgentConfig.from_backend_data(
-        config_data=ConfigData(
-            blueprint_id="bp-1",
-            values={"temp": 0.6, "name": "agent", "count": 10},
-        ),
+def mock_config_client():
+    return mock.Mock(spec=ConfigClient)
+
+
+@pytest.fixture
+def mock_rest_client():
+    return mock.Mock()
+
+
+@pytest.fixture
+def agent_config(mock_config_client, mock_rest_client):
+    return AgentConfig(
+        project_name="my-project",
+        config_client=mock_config_client,
+        rest_client_=mock_rest_client,
     )
 
 
-class TestConfigFromBackendData:
-    def test_from_backend_data__happy_path__sets_all_properties(self):
-        config_data = ConfigData(
-            blueprint_id="bp-1",
-            values={"temperature": 0.6, "name": "agent"},
-        )
-
-        config = AgentConfig.from_backend_data(config_data=config_data)
-
-        assert config.blueprint_id == "bp-1"
-        assert config.values == {"temperature": 0.6, "name": "agent"}
-
-    def test_from_backend_data__values_property__returns_deep_copy(self):
-        config_data = ConfigData(
-            blueprint_id="bp-1",
-            values={"items": [1, 2, 3]},
-        )
-
-        config = AgentConfig.from_backend_data(config_data=config_data)
-        values = config.values
-        values["items"].append(4)
-
-        assert config.values["items"] == [1, 2, 3]
+class TestAgentConfigProperties:
+    def test_project_name(self, agent_config):
+        assert agent_config.project_name == "my-project"
 
 
-class TestConfigDictLikeAccess:
-    @pytest.mark.parametrize(
-        "key, expected",
-        [
-            ("temp", 0.6),
-            ("name", "agent"),
-            ("count", 10),
-        ],
-        ids=["float_value", "str_value", "int_value"],
-    )
-    def test_get__existing_key__returns_value(self, sample_config, key, expected):
-        assert sample_config.get(key) == expected
+class TestAgentConfigGetBlueprint:
+    def test_get_blueprint__returns_blueprint(self, agent_config, mock_config_client):
+        mock_config_client.get_blueprint.return_value = _make_raw_blueprint()
 
-    @pytest.mark.parametrize(
-        "default",
-        [None, 42, "fallback"],
-        ids=["default_none", "default_int", "default_str"],
-    )
-    def test_get__missing_key__returns_default(self, sample_config, default):
-        assert sample_config.get("missing", default) == default
+        result = agent_config.get_blueprint()
 
-    def test_get__missing_key_no_default__returns_none(self, sample_config):
-        assert sample_config.get("missing") is None
+        assert isinstance(result, Blueprint)
+        assert result.id == "bp-1"
 
-    def test_getitem__existing_key__returns_value(self, sample_config):
-        assert sample_config["name"] == "agent"
-
-    def test_getitem__missing_key__raises_key_error(self, sample_config):
-        with pytest.raises(KeyError):
-            _ = sample_config["missing"]
-
-    def test_keys__returns_all_value_keys(self, sample_config):
-        assert set(sample_config.keys()) == {"temp", "name", "count"}
-
-
-class TestConfigInit:
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_init__happy_path__syncs_with_backend(self, mock_get_client):
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            mock.Mock(
-                id="bp-new",
-                values=[
-                    mock.Mock(key="temperature", type="number", value=0.8),
-                ],
-                description=None,
-            )
-        )
-
-        config = AgentConfig(parameters={"temperature": 0.8})
-
-        assert config.blueprint_id == "bp-new"
-        mock_client.rest_client.agent_configs.create_agent_config.assert_called_once()
-
-
-class TestConfigUpdate:
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_update__posts_new_blueprint_and_updates_state(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(
-                blueprint_id="bp-1",
-                values={"temp": 0.6},
-            ),
-        )
-
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            mock.Mock(
-                id="bp-2",
-                values=[mock.Mock(key="temp", type="number", value=0.9)],
-                description="Updated",
-            )
-        )
-        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
-            id="proj-1"
-        )
-
-        config.update(values={"temp": 0.9}, description="Updated")
-
-        mock_client.rest_client.agent_configs.create_agent_config.assert_called_once()
-        assert config.blueprint_id == "bp-2"
-        assert config["temp"] == 0.9
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_update__passes_description_to_blueprint(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
-        )
-
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            mock.Mock(id="bp-2", values=[], description="bump")
-        )
-
-        config.update(values={"temp": 0.9}, description="bump")
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.create_agent_config.call_args[1]
-        )
-        assert call_kwargs["blueprint"].description == "bump"
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_update__passes_project_id_to_backend(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temp": 0.6}),
-        )
-
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            mock.Mock(id="bp-2", values=[], description=None)
-        )
-
-        config.update(values={"temp": 0.9}, project_id="proj-42")
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.create_agent_config.call_args[1]
-        )
-        assert call_kwargs["project_id"] == "proj-42"
-
-
-class TestConfigCreateMask:
-    def _make_mock_client(self, mock_get_client, blueprint_id="bp-mask", values=None):
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-
-        mock_client.rest_client.agent_configs.create_agent_config.return_value = None
-        mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            mock.Mock(
-                id=blueprint_id,
-                values=values
-                or [mock.Mock(key="temperature", type="number", value=0.3)],
-                description=None,
-            )
-        )
-        mock_client.rest_client.agent_configs.get_latest_blueprint.return_value = (
-            mock.Mock(
-                id=blueprint_id,
-                values=values
-                or [mock.Mock(key="temperature", type="number", value=0.3)],
-                description=None,
-            )
-        )
-        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
-            id="proj-mask"
-        )
-        return mock_client
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_create_mask__calls_backend_with_mask_type(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temperature": 0.8}),
-        )
-        mock_client = self._make_mock_client(mock_get_client)
-
-        config.create_mask(values={"temperature": 0.3})
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.create_agent_config.call_args[1]
-        )
-        assert call_kwargs["blueprint"].type == "mask"
-        assert call_kwargs["blueprint"].values is not None
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_create_mask__returns_new_agent_config_instance(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temperature": 0.8}),
-        )
-        self._make_mock_client(mock_get_client)
-
-        mask = config.create_mask(values={"temperature": 0.3})
-
-        assert isinstance(mask, AgentConfig)
-        assert mask.blueprint_id is not None
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_create_mask__does_not_mutate_original_config(self, mock_get_client):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temperature": 0.8}),
-        )
-        self._make_mock_client(mock_get_client)
-
-        config.create_mask(values={"temperature": 0.3})
-
-        assert config.blueprint_id == "bp-1"
-        assert config["temperature"] == 0.8
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_create_mask__with_description__passes_description_to_backend(
-        self, mock_get_client
+    def test_get_blueprint__with_env__passes_env(
+        self, agent_config, mock_config_client
     ):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temperature": 0.8}),
+        mock_config_client.get_blueprint.return_value = _make_raw_blueprint()
+
+        agent_config.get_blueprint(env="prod")
+
+        mock_config_client.get_blueprint.assert_called_once_with(
+            project_name="my-project", env="prod", mask_id=None
         )
-        mock_client = self._make_mock_client(mock_get_client)
 
-        config.create_mask(values={"temperature": 0.3}, description="variant-B")
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.create_agent_config.call_args[1]
-        )
-        assert call_kwargs["blueprint"].description == "variant-B"
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_create_mask__with_project_id__passes_project_id_to_backend(
-        self, mock_get_client
+    def test_get_blueprint__with_mask_id__passes_mask_id(
+        self, agent_config, mock_config_client
     ):
-        config = AgentConfig.from_backend_data(
-            config_data=ConfigData(blueprint_id="bp-1", values={"temperature": 0.8}),
+        mock_config_client.get_blueprint.return_value = _make_raw_blueprint()
+
+        agent_config.get_blueprint(mask_id="mask-1")
+
+        mock_config_client.get_blueprint.assert_called_once_with(
+            project_name="my-project", env=None, mask_id="mask-1"
         )
-        mock_client = self._make_mock_client(mock_get_client)
 
-        config.create_mask(values={"temperature": 0.3}, project_id="proj-42")
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.create_agent_config.call_args[1]
-        )
-        assert call_kwargs["project_id"] == "proj-42"
-
-
-class TestConfigGetBlueprint:
-    def _make_mock_client(
-        self, mock_get_client, blueprint_id="bp-fetched", values=None
+    def test_get_blueprint__with_field_types__resolves_values(
+        self, agent_config, mock_config_client
     ):
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
+        mock_config_client.get_blueprint.return_value = _make_raw_blueprint()
 
-        mock_client.rest_client.agent_configs.get_latest_blueprint.return_value = (
-            mock.Mock(
-                id=blueprint_id,
-                values=values
-                or [mock.Mock(key="temperature", type="number", value=0.7)],
-                description=None,
-            )
-        )
-        mock_client.rest_client.agent_configs.get_blueprint_by_env.return_value = (
-            mock.Mock(
-                id=blueprint_id,
-                values=values
-                or [mock.Mock(key="temperature", type="number", value=0.7)],
-                description=None,
-            )
-        )
-        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
-            id="proj-1"
-        )
-        return mock_client
+        result = agent_config.get_blueprint(field_types={"temp": float, "name": str})
 
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_get_blueprint__happy_path__returns_agent_config(self, mock_get_client):
-        self._make_mock_client(mock_get_client, blueprint_id="bp-fetched")
+        assert result["temp"] == 0.6
+        assert result["name"] == "agent"
 
-        config = AgentConfig.get_blueprint(project_name="my-project")
-
-        assert isinstance(config, AgentConfig)
-        assert config.blueprint_id == "bp-fetched"
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_get_blueprint__with_env__routes_to_get_blueprint_by_env(
-        self, mock_get_client
+    def test_get_blueprint__not_found__raises_value_error(
+        self, agent_config, mock_config_client
     ):
-        mock_client = self._make_mock_client(mock_get_client)
-
-        AgentConfig.get_blueprint(project_name="my-project", env="prod")
-
-        mock_client.rest_client.agent_configs.get_blueprint_by_env.assert_called_once()
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.get_blueprint_by_env.call_args[1]
-        )
-        assert call_kwargs.get("env_name") == "prod"
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_get_blueprint__with_mask_id__passes_mask_id_to_backend(
-        self, mock_get_client
-    ):
-        mock_client = self._make_mock_client(mock_get_client)
-
-        AgentConfig.get_blueprint(project_name="my-project", mask_id="mask-xyz")
-
-        call_kwargs = (
-            mock_client.rest_client.agent_configs.get_latest_blueprint.call_args[1]
-        )
-        assert call_kwargs.get("mask_id") == "mask-xyz"
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_get_blueprint__no_project_name__uses_client_default_project(
-        self, mock_get_client
-    ):
-        mock_client = self._make_mock_client(mock_get_client)
-        mock_client._project_name = "client-default"
-
-        AgentConfig.get_blueprint()
-
-        mock_client.rest_client.projects.retrieve_project.assert_called_once_with(
-            name="client-default"
-        )
-
-    @mock.patch("opik.api_objects.opik_client.get_client_cached")
-    def test_get_blueprint__not_found__raises_value_error(self, mock_get_client):
-        from opik.rest_api import core as rest_api_core
-
-        mock_client = mock.Mock()
-        mock_client._project_name = "default-project"
-        mock_get_client.return_value = mock_client
-        mock_client.rest_client.agent_configs.get_latest_blueprint.side_effect = (
-            rest_api_core.ApiError(status_code=404, body="not found")
-        )
-        mock_client.rest_client.projects.retrieve_project.return_value = mock.Mock(
-            id="proj-1"
-        )
+        mock_config_client.get_blueprint.side_effect = ValueError("Config not found")
 
         with pytest.raises(ValueError):
-            AgentConfig.get_blueprint(project_name="my-project")
+            agent_config.get_blueprint()
+
+
+class TestAgentConfigTryGetBlueprint:
+    def test_try_get_blueprint__found__returns_blueprint(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.try_get_blueprint.return_value = _make_raw_blueprint()
+
+        result = agent_config.try_get_blueprint()
+
+        assert isinstance(result, Blueprint)
+        assert result.id == "bp-1"
+
+    def test_try_get_blueprint__not_found__returns_none(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.try_get_blueprint.return_value = None
+
+        result = agent_config.try_get_blueprint()
+
+        assert result is None
+
+
+class TestAgentConfigGetBlueprintById:
+    def test_get_blueprint_by_id__returns_blueprint(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.get_blueprint_by_id.return_value = _make_raw_blueprint(
+            blueprint_id="bp-specific"
+        )
+
+        result = agent_config.get_blueprint_by_id("bp-specific")
+
+        assert isinstance(result, Blueprint)
+        assert result.id == "bp-specific"
+        mock_config_client.get_blueprint_by_id.assert_called_once_with("bp-specific")
+
+
+class TestAgentConfigCreateBlueprint:
+    def test_create_blueprint__with_parameters__returns_blueprint(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.create_config.return_value = _make_raw_blueprint(
+            blueprint_id="bp-new"
+        )
+
+        result = agent_config.create_blueprint(
+            parameters={"temp": 0.6, "name": "agent"}
+        )
+
+        assert isinstance(result, Blueprint)
+        assert result.id == "bp-new"
+        call_kwargs = mock_config_client.create_config.call_args[1]
+        assert "temp" in call_kwargs["fields_with_values"]
+        assert "name" in call_kwargs["fields_with_values"]
+
+    def test_create_blueprint__with_fields_with_values__returns_blueprint(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.create_config.return_value = _make_raw_blueprint()
+
+        result = agent_config.create_blueprint(
+            fields_with_values={"temp": (float, 0.6)}
+        )
+
+        assert isinstance(result, Blueprint)
+        call_kwargs = mock_config_client.create_config.call_args[1]
+        assert call_kwargs["fields_with_values"] == {"temp": (float, 0.6)}
+
+    def test_create_blueprint__with_description__passes_description(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.create_config.return_value = _make_raw_blueprint()
+
+        agent_config.create_blueprint(parameters={"temp": 0.6}, description="v1")
+
+        call_kwargs = mock_config_client.create_config.call_args[1]
+        assert call_kwargs["description"] == "v1"
+
+
+class TestAgentConfigCreateMask:
+    def test_create_mask__with_parameters__returns_blueprint(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.create_mask.return_value = _make_raw_blueprint(
+            blueprint_id="mask-1"
+        )
+
+        result = agent_config.create_mask(parameters={"temp": 0.3})
+
+        assert isinstance(result, Blueprint)
+        assert result.id == "mask-1"
+
+    def test_create_mask__with_description__passes_description(
+        self, agent_config, mock_config_client
+    ):
+        mock_config_client.create_mask.return_value = _make_raw_blueprint()
+
+        agent_config.create_mask(parameters={"temp": 0.3}, description="variant-A")
+
+        call_kwargs = mock_config_client.create_mask.call_args[1]
+        assert call_kwargs["description"] == "variant-A"
