@@ -255,6 +255,15 @@ class AgentConfigServiceImpl implements AgentConfigService {
             throw new NotFoundException("Blueprint not found");
         }
 
+        if (blueprint.type() == AgentBlueprint.BlueprintType.MASK) {
+            throw new BadRequestException(
+                    Response.status(Response.Status.BAD_REQUEST)
+                            .entity(new ErrorMessage(
+                                    List.of("Cannot retrieve mask blueprint '" + blueprint.id()
+                                            + "' as a configuration snapshot")))
+                            .build());
+        }
+
         List<AgentConfigValue> values = dao.getValuesByBlueprintId(
                 workspaceId, projectId, blueprint.id());
 

@@ -783,6 +783,82 @@ class AgentConfigResourceTest {
             agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("when retrieving mask by ID, then return 400")
+        void getBlueprintById__whenMask__thenReturn400() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Regular blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Test mask")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.8").type(ValueType.STRING).build()))
+                    .build();
+
+            var maskId = agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("when retrieving mask by environment, then return 400")
+        void getBlueprintByEnv__whenMask__thenReturn400() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Regular blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Test mask")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.8").type(ValueType.STRING).build()))
+                    .build();
+
+            var maskId = agentConfigResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("test-env")
+                                    .blueprintId(maskId)
+                                    .build()))
+                    .build();
+
+            agentConfigResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            agentConfigResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
     }
 
     @Nested
