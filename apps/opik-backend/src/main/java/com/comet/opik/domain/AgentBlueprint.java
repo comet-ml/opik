@@ -26,9 +26,9 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentBlueprint(
         @JsonView( {
-                AgentConfig.View.Public.class,
-                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        UUID projectId,
+                AgentConfig.View.Public.class, AgentConfig.View.History.class,
+                AgentConfig.View.Write.class}) UUID id,
+        @Schema(hidden = true) UUID projectId,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotNull BlueprintType type,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
