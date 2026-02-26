@@ -492,6 +492,17 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
+  runnersEnabled: "true"
+
+# Local Runner configuration
+runner:
+  enabled: true
+  jobTimeoutSeconds: 1800
+  maxPendingJobsPerRunner: 100
+  heartbeatTtlSeconds: 15
+  nextJobPollTimeoutSeconds: 10
+  deadRunnerPurgeHours: 24
+  completedJobTtlDays: 7
 
 # Trace Thread configuration
 traceThreadConfig:
