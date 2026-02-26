@@ -3,6 +3,7 @@ package com.comet.opik.domain.experiments.aggregations;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -43,7 +44,7 @@ public class ExperimentAggregatesService {
         // First, populate experiment-level aggregates
         return Mono.deferContextual(ctx -> {
 
-            String workspaceId = ctx.get("workspaceId");
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             log.info("Starting aggregation population for experiment: '{}' in workspace: '{}', batchSize: '{}'",
                     experimentId, workspaceId, batchSize);

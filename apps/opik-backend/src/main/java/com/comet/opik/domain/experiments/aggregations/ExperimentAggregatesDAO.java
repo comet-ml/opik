@@ -24,6 +24,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -72,7 +73,7 @@ public interface ExperimentAggregatesDAO {
 @Slf4j
 class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
-    public static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
+    private static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
     };
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -162,8 +163,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             )
             SELECT DISTINCT project_id
             FROM traces FINAL
+            INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
             WHERE workspace_id = :workspace_id
-            AND id IN (SELECT trace_id FROM experiment_trace_items)
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -186,7 +187,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT trace_id FROM experiment_trace_items)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             )
@@ -676,7 +676,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     public Mono<BatchResult> populateExperimentItemAggregates(UUID experimentId, UUID cursorId, int limit) {
 
         return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get("workspaceId");
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             return getExperimentItems(experimentId, cursorId, limit)
                     .collectList()
@@ -816,29 +816,30 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             // Convert Maps to key/value arrays for ClickHouse mapFromArrays
             var experimentScoresArrays = mapToArrays(
-                    defaultIfNull(experimentData.experimentScores(), Map.of()),
+                    ObjectUtils.defaultIfNull(experimentData.experimentScores(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v.doubleValue());
             var durationPercentilesArrays = mapToArrays(
-                    defaultIfNull(traceAgg.durationPercentiles(), Map.of()),
+                    ObjectUtils.defaultIfNull(traceAgg.durationPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v);
             var totalEstimatedCostPercentilesArrays = mapToArrays(
-                    defaultIfNull(spanAgg.totalEstimatedCostPercentiles(), Map.of()),
+                    ObjectUtils.defaultIfNull(spanAgg.totalEstimatedCostPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v);
             var usageAvgArrays = mapToArrays(
-                    defaultIfNull(spanAgg.usageAvg(), Map.of()),
+                    ObjectUtils.defaultIfNull(spanAgg.usageAvg(), Map.of()),
                     String[]::new, Double[]::new,
                     Double::doubleValue);
-            Map<String, Double> usageTotalTokensPercentiles = defaultIfNull(spanAgg.usageTotalTokensPercentiles(),
+            Map<String, Double> usageTotalTokensPercentiles = ObjectUtils.defaultIfNull(
+                    spanAgg.usageTotalTokensPercentiles(),
                     Map.of());
             var usageTotalTokensPercentilesArrays = mapToArrays(
                     usageTotalTokensPercentiles,
                     String[]::new, Double[]::new,
                     v -> (v).doubleValue());
             var feedbackScoresAvgArrays = mapToArrays(
-                    defaultIfNull(feedbackAgg.feedbackScoresAvg(), Map.of()),
+                    ObjectUtils.defaultIfNull(feedbackAgg.feedbackScoresAvg(), Map.of()),
                     String[]::new, Double[]::new,
                     Double::doubleValue);
 
@@ -852,11 +853,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("last_updated_at", experimentData.lastUpdatedAt())
                     .bind("created_by", experimentData.createdBy())
                     .bind("last_updated_by", experimentData.lastUpdatedBy())
-                    .bind("metadata", defaultIfNull(experimentData.metadata(), ""))
-                    .bind("prompt_versions", defaultIfNull(experimentData.promptVersions(), Map.of()))
-                    .bind("optimization_id", defaultIfNull(experimentData.optimizationId(), ""))
-                    .bind("dataset_version_id", defaultIfNull(experimentData.datasetVersionId(), ""))
-                    .bind("tags", defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
+                    .bind("metadata", ObjectUtils.defaultIfNull(experimentData.metadata(), ""))
+                    .bind("prompt_versions", ObjectUtils.defaultIfNull(experimentData.promptVersions(), Map.of()))
+                    .bind("optimization_id", ObjectUtils.defaultIfNull(experimentData.optimizationId(), ""))
+                    .bind("dataset_version_id", ObjectUtils.defaultIfNull(experimentData.datasetVersionId(), ""))
+                    .bind("tags", ObjectUtils.defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
                     .bind("type", experimentData.type())
                     .bind("status", experimentData.status())
                     .bind("experiment_scores_keys", experimentScoresArrays.keys())
@@ -866,7 +867,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("duration_percentiles_keys", durationPercentilesArrays.keys())
                     .bind("duration_percentiles_values", durationPercentilesArrays.values())
                     .bind("feedback_scores_percentiles",
-                            defaultIfNull(feedbackAgg.feedbackScoresPercentiles(), Map.of()))
+                            ObjectUtils.defaultIfNull(feedbackAgg.feedbackScoresPercentiles(), Map.of()))
                     .bind("total_estimated_cost_sum", spanAgg.totalEstimatedCostSum())
                     .bind("total_estimated_cost_avg", spanAgg.totalEstimatedCostAvg())
                     .bind("total_estimated_cost_percentiles_keys", totalEstimatedCostPercentilesArrays.keys())
@@ -975,6 +976,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Map<UUID, SpanData> spansMap,
             Map<UUID, FeedbackScoreData> feedbackMap) {
 
+        var now = Instant.now().toString();
         for (int i = 0; i < items.size(); i++) {
             var item = items.get(i);
 
@@ -995,8 +997,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("duration" + i, trace != null ? trace.duration() : BigDecimal.ZERO)
                     .bind("total_estimated_cost" + i,
                             span != null ? span.totalEstimatedCost() : BigDecimal.ZERO)
-                    .bind("created_at" + i, java.time.Instant.now().toString())
-                    .bind("last_updated_at" + i, java.time.Instant.now().toString());
+                    .bind("created_at" + i, now)
+                    .bind("last_updated_at" + i, now);
 
             // Bind array parameters only if maps are not empty
 
@@ -1139,10 +1141,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .traceId(getUUID(row, "trace_id"))
                 .datasetItemId(getUUID(row, "dataset_item_id"))
                 .build();
-    }
-
-    private <T> T defaultIfNull(T value, T defaultValue) {
-        return value != null ? value : defaultValue;
     }
 
     /**
