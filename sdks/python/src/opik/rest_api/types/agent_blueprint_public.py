@@ -11,7 +11,6 @@ from .agent_config_value_public import AgentConfigValuePublic
 
 class AgentBlueprintPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
     type: AgentBlueprintPublicType
     description: typing.Optional[str] = None
     envs: typing.Optional[typing.List[str]] = None

@@ -10,7 +10,6 @@ from .agent_blueprint_history_type import AgentBlueprintHistoryType
 
 class AgentBlueprintHistory(UniversalBaseModel):
     id: typing.Optional[str] = None
-    project_id: typing.Optional[str] = None
     type: AgentBlueprintHistoryType
     description: typing.Optional[str] = None
     envs: typing.Optional[typing.List[str]] = None

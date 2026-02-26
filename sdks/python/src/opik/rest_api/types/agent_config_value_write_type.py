@@ -2,4 +2,6 @@
 
 import typing
 
-AgentConfigValueWriteType = typing.Union[typing.Literal["string", "number", "prompt", "promptcommit"], typing.Any]
+AgentConfigValueWriteType = typing.Union[
+    typing.Literal["string", "integer", "float", "boolean", "prompt", "promptcommit"], typing.Any
+]

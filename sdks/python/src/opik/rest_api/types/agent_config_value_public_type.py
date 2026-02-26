@@ -2,4 +2,6 @@
 
 import typing
 
-AgentConfigValuePublicType = typing.Union[typing.Literal["string", "number", "prompt", "promptcommit"], typing.Any]
+AgentConfigValuePublicType = typing.Union[
+    typing.Literal["string", "integer", "float", "boolean", "prompt", "promptcommit"], typing.Any
+]

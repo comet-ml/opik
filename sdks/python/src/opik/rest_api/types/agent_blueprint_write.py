@@ -9,7 +9,7 @@ from .agent_config_value_write import AgentConfigValueWrite
 
 
 class AgentBlueprintWrite(UniversalBaseModel):
-    project_id: typing.Optional[str] = None
+    id: typing.Optional[str] = None
     type: AgentBlueprintWriteType
     description: typing.Optional[str] = None
     values: typing.List[AgentConfigValueWrite]
