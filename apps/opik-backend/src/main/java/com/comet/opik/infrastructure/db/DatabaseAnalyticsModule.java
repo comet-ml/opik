@@ -46,6 +46,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
+    @Named("ClickHouse Health Check Timeout Seconds")
+    public int getHealthCheckTimeoutSeconds() {
+        return databaseAnalyticsFactory.getHealthCheckTimeoutSeconds();
+    }
+
+    @Provides
+    @Singleton
     public TransactionTemplateAsync getTransactionTemplate(ConnectionFactory connectionFactory) {
         return new TransactionTemplateAsyncImpl(connectionFactory);
     }
