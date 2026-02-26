@@ -12,6 +12,16 @@ from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
 
+_ATTR_SHARED_CACHE = "__opik_shared_cache__"
+_ATTR_CLASS_PREFIX = "__opik_class_prefix__"
+_ATTR_LOCAL_FIELDS = "__opik_local_fields__"
+_ATTR_FIELD_TYPES = "__opik_field_types__"
+_ATTR_MASK_ID = "__opik_mask_id__"
+_ATTR_ENV = "__opik_env__"
+_ATTR_PROJECT_NAME = "__opik_project_name__"
+_ATTR_DESCRIPTION = "__opik_description__"
+_ATTR_AGENT_CONFIG = "__opik_agent_config__"
+
 
 def agent_config_decorator(
     cls: typing.Optional[type] = None,
@@ -68,15 +78,15 @@ def agent_config_decorator(
             except Exception:
                 agent_cfg = None
 
-            object.__setattr__(self, "__opik_shared_cache__", shared_cache)
-            object.__setattr__(self, "__opik_class_prefix__", class_prefix)
-            object.__setattr__(self, "__opik_local_fields__", local_field_names)
-            object.__setattr__(self, "__opik_field_types__", prefixed_field_types)
-            object.__setattr__(self, "__opik_mask_id__", mask_id)
-            object.__setattr__(self, "__opik_env__", env)
-            object.__setattr__(self, "__opik_project_name__", resolved_project)
-            object.__setattr__(self, "__opik_description__", description)
-            object.__setattr__(self, "__opik_agent_config__", agent_cfg)
+            object.__setattr__(self, _ATTR_SHARED_CACHE, shared_cache)
+            object.__setattr__(self, _ATTR_CLASS_PREFIX, class_prefix)
+            object.__setattr__(self, _ATTR_LOCAL_FIELDS, local_field_names)
+            object.__setattr__(self, _ATTR_FIELD_TYPES, prefixed_field_types)
+            object.__setattr__(self, _ATTR_MASK_ID, mask_id)
+            object.__setattr__(self, _ATTR_ENV, env)
+            object.__setattr__(self, _ATTR_PROJECT_NAME, resolved_project)
+            object.__setattr__(self, _ATTR_DESCRIPTION, description)
+            object.__setattr__(self, _ATTR_AGENT_CONFIG, agent_cfg)
             _sync_config_with_backend(self)
 
         cls.__init__ = new_init  # type: ignore[assignment]
@@ -104,9 +114,9 @@ def agent_config_decorator(
 
 def _maybe_sync_from_cache(instance: typing.Any, attr: str) -> None:
     shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, "__opik_shared_cache__"
+        instance, _ATTR_SHARED_CACHE
     )
-    class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
+    class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
     prefixed_key = f"{class_prefix}.{attr}"
 
     if prefixed_key in shared_cache.values:
@@ -116,18 +126,18 @@ def _maybe_sync_from_cache(instance: typing.Any, attr: str) -> None:
 def _sync_config_with_backend(instance: typing.Any) -> None:
     try:
         agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
-            instance, "__opik_agent_config__"
+            instance, _ATTR_AGENT_CONFIG
         )
         if agent_cfg is None:
             return
 
         shared_cache: SharedConfigCache = object.__getattribute__(
-            instance, "__opik_shared_cache__"
+            instance, _ATTR_SHARED_CACHE
         )
         all_field_types = shared_cache.all_field_types
-        description = object.__getattribute__(instance, "__opik_description__")
-        mask_id_val = object.__getattribute__(instance, "__opik_mask_id__")
-        env_val = object.__getattribute__(instance, "__opik_env__")
+        description = object.__getattribute__(instance, _ATTR_DESCRIPTION)
+        mask_id_val = object.__getattribute__(instance, _ATTR_MASK_ID)
+        env_val = object.__getattribute__(instance, _ATTR_ENV)
 
         existing = agent_cfg.try_get_blueprint(
             env=env_val,
@@ -155,9 +165,9 @@ def _handle_no_blueprint(
     description: typing.Optional[str],
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
-        instance, "__opik_field_types__"
+        instance, _ATTR_FIELD_TYPES
     )
-    class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
+    class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
     prefix = f"{class_prefix}."
 
     fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
@@ -167,7 +177,7 @@ def _handle_no_blueprint(
         fields_with_values[prefixed_name] = (f_type, value)
 
     shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, "__opik_shared_cache__"
+        instance, _ATTR_SHARED_CACHE
     )
     bp = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
@@ -184,9 +194,9 @@ def _handle_existing_blueprint(
     description: typing.Optional[str],
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
-        instance, "__opik_field_types__"
+        instance, _ATTR_FIELD_TYPES
     )
-    class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
+    class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
     prefix = f"{class_prefix}."
 
     extra_keys = set(instance_field_types) - set(existing.values)
@@ -199,7 +209,7 @@ def _handle_existing_blueprint(
             extra_fields[prefixed_name] = (f_type, value)
 
         shared_cache: SharedConfigCache = object.__getattribute__(
-            instance, "__opik_shared_cache__"
+            instance, _ATTR_SHARED_CACHE
         )
         bp = agent_cfg.create_blueprint(
             fields_with_values=extra_fields,
@@ -213,13 +223,13 @@ def _handle_existing_blueprint(
 
 def _apply_backend_values(instance: typing.Any, blueprint: Blueprint) -> None:
     shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, "__opik_shared_cache__"
+        instance, _ATTR_SHARED_CACHE
     )
     shared_cache.apply(blueprint)
 
-    class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
+    class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
     local_fields: typing.Set[str] = object.__getattribute__(
-        instance, "__opik_local_fields__"
+        instance, _ATTR_LOCAL_FIELDS
     )
     prefix = f"{class_prefix}."
 
@@ -232,7 +242,7 @@ def _apply_backend_values(instance: typing.Any, blueprint: Blueprint) -> None:
 
 def _maybe_refetch(instance: typing.Any) -> None:
     context_mask = get_active_config_mask()
-    instance_mask = object.__getattribute__(instance, "__opik_mask_id__")
+    instance_mask = object.__getattribute__(instance, _ATTR_MASK_ID)
 
     if context_mask is not None:
         _refetch_with_mask(instance, context_mask)
@@ -242,20 +252,20 @@ def _maybe_refetch(instance: typing.Any) -> None:
         return
 
     shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, "__opik_shared_cache__"
+        instance, _ATTR_SHARED_CACHE
     )
     if not shared_cache.is_stale():
         return
 
     try:
         agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
-            instance, "__opik_agent_config__"
+            instance, _ATTR_AGENT_CONFIG
         )
         if agent_cfg is None:
             return
 
         all_field_types = shared_cache.all_field_types
-        env_val = object.__getattribute__(instance, "__opik_env__")
+        env_val = object.__getattribute__(instance, _ATTR_ENV)
 
         bp = agent_cfg.get_blueprint(
             env=env_val,
@@ -269,13 +279,13 @@ def _maybe_refetch(instance: typing.Any) -> None:
 def _refetch_with_mask(instance: typing.Any, mask_id: str) -> None:
     try:
         agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
-            instance, "__opik_agent_config__"
+            instance, _ATTR_AGENT_CONFIG
         )
         if agent_cfg is None:
             return
 
         shared_cache: SharedConfigCache = object.__getattribute__(
-            instance, "__opik_shared_cache__"
+            instance, _ATTR_SHARED_CACHE
         )
         all_field_types = shared_cache.all_field_types
 
@@ -295,9 +305,9 @@ def _maybe_inject_trace_metadata(instance: typing.Any, attr: str) -> None:
             return
 
         shared_cache: SharedConfigCache = object.__getattribute__(
-            instance, "__opik_shared_cache__"
+            instance, _ATTR_SHARED_CACHE
         )
-        class_prefix: str = object.__getattribute__(instance, "__opik_class_prefix__")
+        class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
         prefixed_key = f"{class_prefix}.{attr}"
 
         config_metadata = {
