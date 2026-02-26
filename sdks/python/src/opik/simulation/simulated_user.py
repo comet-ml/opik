@@ -15,7 +15,7 @@ class SimulatedUser:
     def __init__(
         self,
         persona: str,
-        model: str = "gpt-4o-mini",
+        model: Optional[str] = None,
         fixed_responses: Optional[List[str]] = None,
         max_history_messages: Optional[int] = 10,
     ):
@@ -24,7 +24,9 @@ class SimulatedUser:
 
         Args:
             persona: Description of the user's personality and behavior
-            model: LLM model to use for generating responses (default: gpt-4o-mini)
+            model: LLM model to use for generating responses. If omitted, uses the
+                central default model resolved by `get_default_model_name()`
+                (override with `OPIK_DEFAULT_LLM`).
             fixed_responses: Optional list of predefined responses to cycle through
             max_history_messages: Maximum number of most recent conversation messages
                 to include for LLM generation. Use None for no limit.
@@ -34,7 +36,7 @@ class SimulatedUser:
             raise ValueError("max_history_messages must be greater than 0 or None")
 
         self.persona = persona
-        self.model = model
+        self.model = model or get_default_model_name()
         self.fixed_responses = fixed_responses or []
         self.max_history_messages = max_history_messages
         self._response_index = 0

@@ -27,7 +27,7 @@ public record DatasetItemUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item expected output") String expectedOutput,
         @Schema(description = "Dataset item metadata", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> metadata,
         @Schema(description = "Dataset item data", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
-        @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item description") String description,
+        @Schema(description = "Dataset item description") String description,
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags") @Schema(description = "Tags") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags,
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags to add") @Schema(description = "Tags to add") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToAdd,
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags to remove") @Schema(description = "Tags to remove") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToRemove,

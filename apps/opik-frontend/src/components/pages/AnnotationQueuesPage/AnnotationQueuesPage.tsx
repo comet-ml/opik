@@ -45,7 +45,7 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -110,7 +110,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -121,7 +121,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
 ];
@@ -137,7 +137,7 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) => row.feedback_scores ?? [],
     cell: FeedbackScoreListCell as never,
@@ -183,22 +183,28 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "progress",
-  "last_updated_at",
-  "scope",
-  "items_count",
   COLUMN_PROJECT_ID,
+  "instructions",
+  "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
-  "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "last_updated_at",
-  "scope",
-  "items_count",
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
   COLUMN_PROJECT_ID,
+  "instructions",
+  "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
+  "created_at",
+  "created_by",
+  "reviewers",
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";

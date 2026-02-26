@@ -19,13 +19,14 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import {
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import {
@@ -54,7 +55,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     sortable: true,
   },
   {
-    id: "id",
+    id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
@@ -81,7 +82,7 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -99,6 +100,16 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "type",
   "values",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "description",
+  "type",
+  "values",
+  "created_at",
+  "created_by",
 ];
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
@@ -153,7 +164,7 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
