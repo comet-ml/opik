@@ -24,6 +24,10 @@ public record Runner(
     public record Agent(
             String name,
             String project,
+            String description,
+            String language,
+            String executable,
+            String sourceFile,
             List<Param> params) {
 
         @Builder(toBuilder = true)

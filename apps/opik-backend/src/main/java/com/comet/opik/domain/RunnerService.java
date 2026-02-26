@@ -129,11 +129,9 @@ class RunnerServiceImpl implements RunnerService {
         String code = generateUniqueCode();
         String runnerId = idGenerator.generateId().toString();
 
-        // Store pairing key
         RBucket<String> pairBucket = redisClient.getBucket(PAIR_KEY.formatted(code), StringCodec.INSTANCE);
         pairBucket.set(runnerId + ":" + workspaceId, Duration.ofSeconds(PAIRING_CODE_TTL_SECONDS));
 
-        // Pre-create runner hash with pairing status and TTL
         RMap<String, String> runnerMap = redisClient.getMap(RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
         runnerMap.putAll(Map.of(
                 "name", "",
@@ -142,10 +140,8 @@ class RunnerServiceImpl implements RunnerService {
                 "user_name", userName));
         runnerMap.expire(Duration.ofSeconds(PAIRING_RUNNER_TTL_SECONDS));
 
-        // Add to workspace sets
         addRunnerToWorkspace(workspaceId, runnerId);
 
-        // Store user-runner mapping
         RBucket<String> userRunnerBucket = redisClient.getBucket(
                 USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
         userRunnerBucket.set(runnerId);
@@ -181,15 +177,12 @@ class RunnerServiceImpl implements RunnerService {
             addRunnerToWorkspace(workspaceId, runnerId);
         }
 
-        // Handle runner replacement — evict any existing runner for this user
         evictExistingRunner(workspaceId, userName, runnerId);
 
-        // Store user-runner mapping
         RBucket<String> userRunnerBucket = redisClient.getBucket(
                 USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
         userRunnerBucket.set(runnerId);
 
-        // Update runner hash
         RMap<String, String> runnerMap = redisClient.getMap(
                 RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
         runnerMap.put("name", request.runnerName());
@@ -197,7 +190,6 @@ class RunnerServiceImpl implements RunnerService {
         runnerMap.put("connected_at", Instant.now().toString());
         runnerMap.clearExpire();
 
-        // Set heartbeat
         setHeartbeat(runnerId);
 
         return ConnectResponse.builder()
@@ -263,7 +255,6 @@ class RunnerServiceImpl implements RunnerService {
             throw new NotFoundException("Runner not found");
         }
 
-        // Check if this runner has been replaced
         String userName = fields.get("user_name");
         if (userName != null) {
             RBucket<String> currentRunnerBucket = redisClient.getBucket(
@@ -276,10 +267,8 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        // Refresh heartbeat
         setHeartbeat(runnerId);
 
-        // Update last_heartbeat on all active jobs
         RList<String> activeJobs = redisClient.getList(
                 ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
         List<String> activeJobIds = activeJobs.readAll();
@@ -291,7 +280,6 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        // Read and clear cancellation set
         RSet<String> cancellations = redisClient.getSet(
                 RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
         Set<String> cancelledIds = cancellations.readAll();
@@ -310,7 +298,6 @@ class RunnerServiceImpl implements RunnerService {
         String runnerId = request.runnerId();
 
         if (StringUtils.isBlank(runnerId)) {
-            // Look up user's runner
             RBucket<String> userRunnerBucket = redisClient.getBucket(
                     USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
             runnerId = userRunnerBucket.get();
@@ -323,7 +310,6 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        // Verify runner is online
         if (!isRunnerAlive(runnerId)) {
             throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
                     .entity(new ErrorMessage(List.of(
@@ -331,7 +317,6 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
-        // Check pending queue depth
         RList<String> pendingJobs = redisClient.getList(
                 PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
         if (pendingJobs.size() >= runnerConfig.getMaxPendingJobsPerRunner()) {
@@ -340,7 +325,6 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
-        // Create job
         String jobId = idGenerator.generateId().toString();
         String now = Instant.now().toString();
 
@@ -361,7 +345,6 @@ class RunnerServiceImpl implements RunnerService {
         RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
         jobMap.putAll(jobFields);
 
-        // Add to pending queue and runner's job set
         pendingJobs.add(jobId);
         RSet<String> runnerJobs = redisClient.getSet(
                 RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
@@ -385,11 +368,9 @@ class RunnerServiceImpl implements RunnerService {
                         return null;
                     }
 
-                    // Add to active list
                     RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
                     activeList.add(jobId);
 
-                    // Update job status
                     RMap<String, String> jobMap = redisClient.getMap(
                             JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
                     String now = Instant.now().toString();
@@ -424,7 +405,6 @@ class RunnerServiceImpl implements RunnerService {
             jobs.add(buildRunnerJob(fields));
         }
 
-        // Sort by created_at descending
         jobs.sort((a, b) -> {
             if (b.createdAt() == null && a.createdAt() == null) return 0;
             if (b.createdAt() == null) return -1;
@@ -432,7 +412,6 @@ class RunnerServiceImpl implements RunnerService {
             return b.createdAt().compareTo(a.createdAt());
         });
 
-        // Paginate
         int total = jobs.size();
         int fromIndex = Math.min(page * size, total);
         int toIndex = Math.min(fromIndex + size, total);
@@ -461,7 +440,6 @@ class RunnerServiceImpl implements RunnerService {
 
     @Override
     public List<LogEntry> getJobLogs(@NonNull String jobId, int offset, @NonNull String workspaceId) {
-        // Validate job belongs to workspace
         RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
         Map<String, String> fields = jobMap.readAllMap();
         if (fields.isEmpty()) {
@@ -528,7 +506,6 @@ class RunnerServiceImpl implements RunnerService {
             jobMap.put("trace_id", result.traceId());
         }
 
-        // Remove from active list
         String runnerId = fields.get("runner_id");
         if (runnerId != null) {
             RList<String> activeList = redisClient.getList(
@@ -536,7 +513,6 @@ class RunnerServiceImpl implements RunnerService {
             activeList.remove(jobId);
         }
 
-        // Set TTLs
         Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
         jobMap.expire(ttl);
         RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
@@ -557,20 +533,18 @@ class RunnerServiceImpl implements RunnerService {
 
         String runnerId = fields.get("runner_id");
         if (runnerId != null) {
-            // If the job is still pending, remove it from the pending queue directly
             RList<String> pendingJobs = redisClient.getList(
                     PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
             boolean wasInPending = pendingJobs.remove(jobId);
 
             if (wasInPending) {
-                // Job was pending — set TTL since it will never go through reportResult
+                // Set TTL since pending jobs never go through reportResult
                 Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
                 jobMap.expire(ttl);
                 RList<String> logsList = redisClient.getList(
                         JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
                 logsList.expire(ttl);
             } else {
-                // Job is active (running) — notify runner via cancellation set
                 RSet<String> cancellations = redisClient.getSet(
                         RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
                 cancellations.add(jobId);
@@ -606,7 +580,6 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        // Clean up workspace if no runners left
         if (runnerIds.isEmpty()) {
             workspacesWithRunners(workspaceId, false);
         }
@@ -627,19 +600,16 @@ class RunnerServiceImpl implements RunnerService {
 
         Map<String, String> runnerFields = runnerMap.readAllMap();
 
-        // Record when we first observed this runner as dead
         String disconnectedAt = runnerFields.get("disconnected_at");
         if (disconnectedAt == null) {
             disconnectedAt = Instant.now().toString();
             runnerMap.put("disconnected_at", disconnectedAt);
         }
 
-        // Check if runner has been dead long enough to purge
         Instant disconnected = Instant.parse(disconnectedAt);
         boolean shouldPurge = Duration.between(disconnected, Instant.now()).toHours() >= runnerConfig
                 .getDeadRunnerPurgeHours();
 
-        // Fail orphaned active jobs
         failOrphanedJobs(runnerId);
 
         if (shouldPurge) {
@@ -648,7 +618,6 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     private void failOrphanedJobs(String runnerId) {
-        // Fail active jobs
         RList<String> activeJobs = redisClient.getList(
                 ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
         List<String> activeJobIds = activeJobs.readAll();
@@ -657,7 +626,6 @@ class RunnerServiceImpl implements RunnerService {
         }
         activeJobs.delete();
 
-        // Fail pending jobs
         RList<String> pendingJobs = redisClient.getList(
                 PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
         List<String> pendingJobIds = pendingJobs.readAll();
@@ -666,7 +634,6 @@ class RunnerServiceImpl implements RunnerService {
         }
         pendingJobs.delete();
 
-        // Clean up the runner's job set to avoid stale references
         redisClient.getSet(RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
     }
 
@@ -693,7 +660,6 @@ class RunnerServiceImpl implements RunnerService {
     private void purgeRunner(String runnerId, String workspaceId, Map<String, String> runnerFields) {
         log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
 
-        // Delete runner hash and related keys
         redisClient.getMap(RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getMap(RUNNER_AGENTS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getBucket(RUNNER_HEARTBEAT_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
@@ -704,7 +670,6 @@ class RunnerServiceImpl implements RunnerService {
 
         removeRunnerFromWorkspace(workspaceId, runnerId);
 
-        // Remove user-runner mapping
         String userName = runnerFields.get("user_name");
         if (userName != null) {
             RBucket<String> userRunnerBucket = redisClient.getBucket(
@@ -817,10 +782,8 @@ class RunnerServiceImpl implements RunnerService {
             return null;
         }
 
-        // Derive status from heartbeat
         String status = isRunnerAlive(runnerId) ? STATUS_CONNECTED : STATUS_DISCONNECTED;
 
-        // Load agents
         List<Runner.Agent> agents = List.of();
         if (STATUS_CONNECTED.equals(status)) {
             agents = loadAgents(runnerId);
@@ -860,9 +823,18 @@ class RunnerServiceImpl implements RunnerService {
                     }
                 }
 
+                String description = meta.has("description") ? meta.get("description").asText() : null;
+                String language = meta.has("language") ? meta.get("language").asText() : null;
+                String executable = meta.has("executable") ? meta.get("executable").asText() : null;
+                String sourceFile = meta.has("source_file") ? meta.get("source_file").asText() : null;
+
                 agents.add(Runner.Agent.builder()
                         .name(entry.getKey())
                         .project(project)
+                        .description(description)
+                        .language(language)
+                        .executable(executable)
+                        .sourceFile(sourceFile)
                         .params(params)
                         .build());
             } catch (Exception e) {

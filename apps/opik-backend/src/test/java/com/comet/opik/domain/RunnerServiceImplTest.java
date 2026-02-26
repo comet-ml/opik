@@ -378,14 +378,23 @@ class RunnerServiceImplTest {
 
             ObjectNode meta = MAPPER.createObjectNode();
             meta.put("project", "my-project");
+            meta.put("description", "Summarizes documents");
+            meta.put("language", "python");
+            meta.put("executable", "/usr/bin/python3.11");
+            meta.put("source_file", "agents/summarizer.py");
             runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
 
             Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.id()).isEqualTo(runnerId);
             assertThat(runner.status()).isEqualTo("connected");
             assertThat(runner.agents()).hasSize(1);
-            assertThat(runner.agents().get(0).name()).isEqualTo("agent1");
-            assertThat(runner.agents().get(0).project()).isEqualTo("my-project");
+            Runner.Agent agent = runner.agents().get(0);
+            assertThat(agent.name()).isEqualTo("agent1");
+            assertThat(agent.project()).isEqualTo("my-project");
+            assertThat(agent.description()).isEqualTo("Summarizes documents");
+            assertThat(agent.language()).isEqualTo("python");
+            assertThat(agent.executable()).isEqualTo("/usr/bin/python3.11");
+            assertThat(agent.sourceFile()).isEqualTo("agents/summarizer.py");
         }
 
         @Test
