@@ -477,6 +477,9 @@ navigation:
               - page: OpenAI
                 path: docs/tracing/integrations/openai-typescript.mdx
                 slug: openai-typescript
+              - page: Exa
+                path: docs/tracing/integrations/exa-typescript.mdx
+                slug: exa-typescript
           - page: Opik TypeScript SDK
             path: docs/reference/typescript-sdk/overview.mdx
             slug: typescript-sdk
@@ -655,6 +658,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: Exa
+                path: docs/tracing/integrations/exa.mdx
+                slug: exa
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
