@@ -21,7 +21,7 @@ import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { toString } from "@/lib/utils";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
@@ -98,7 +98,7 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
+      cell: TimeCell as never,
       sortable: true,
     },
   ],

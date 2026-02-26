@@ -63,7 +63,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
   generateActionsColumDef,
@@ -410,7 +410,7 @@ function EvaluationSuiteItemsTab({
           id: "last_updated_at",
           label: "Last updated",
           type: COLUMN_TYPE.time,
-          accessorFn: (row) => formatDate(row.last_updated_at),
+          cell: TimeCell as never,
         },
         {
           id: "data",
@@ -463,7 +463,7 @@ function EvaluationSuiteItemsTab({
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
+        cell: TimeCell as never,
       },
     );
 
@@ -474,7 +474,7 @@ function EvaluationSuiteItemsTab({
         id: "last_updated_at",
         label: "Last updated",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.last_updated_at),
+        cell: TimeCell as never,
       });
     }
 

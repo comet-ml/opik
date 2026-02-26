@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
@@ -59,22 +59,36 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const canViewExperiments = useMemo(() => {
-    if (isWorkspaceOwner) return true;
+  const checkNullablePermission = useCallback(
+    (permissionName: ManagementPermissionsNames) => {
+      if (isWorkspaceOwner) return true;
 
-    const permissionValue = getUserPermissionValue(
-      workspacePermissions,
-      ManagementPermissionsNames.EXPERIMENT_VIEW,
-    );
+      const permissionValue = getUserPermissionValue(
+        workspacePermissions,
+        permissionName,
+      );
 
-    // should default to true if the permission is not found
-    return permissionValue !== false;
-  }, [workspacePermissions, isWorkspaceOwner]);
+      // should default to true if the permission is not found
+      return permissionValue !== false;
+    },
+    [workspacePermissions, isWorkspaceOwner],
+  );
+
+  const canViewExperiments = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canViewDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_VIEW),
+    [checkNullablePermission],
+  );
 
   return {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
+    canViewDashboards,
     isPending: isEnabled && isPending,
   };
 };

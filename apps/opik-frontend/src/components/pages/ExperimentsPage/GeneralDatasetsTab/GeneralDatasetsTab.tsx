@@ -102,6 +102,27 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_COMMENTS_ID,
 ];
 
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  COLUMN_DATASET_ID,
+  "dataset_version",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_avg",
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+  COLUMN_PROJECT_ID,
+  "prompt",
+  COLUMN_COMMENTS_ID,
+  "tags",
+  COLUMN_METADATA_ID,
+  "created_by",
+];
+
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 const GeneralDatasetsTab: React.FC = () => {
@@ -431,6 +452,7 @@ const GeneralDatasetsTab: React.FC = () => {
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
+    defaultColumnsOrder: DEFAULT_COLUMNS_ORDER,
     groups,
     sortableBy,
     dynamicScoresColumns,

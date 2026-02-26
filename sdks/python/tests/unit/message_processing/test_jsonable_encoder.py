@@ -1,5 +1,9 @@
 import base64
 import dataclasses
+import decimal
+import importlib
+import uuid
+import warnings
 from datetime import date, datetime, timezone
 from threading import Lock
 from typing import Any, Optional
@@ -9,6 +13,7 @@ import numpy as np
 import pytest
 
 import opik.jsonable_encoder as jsonable_encoder
+from opik.rest_api.core import pydantic_utilities
 
 
 @dataclasses.dataclass
@@ -164,3 +169,29 @@ def test_jsonable_encoder__non_serializable_to_text__bytes():
     data = b"deadbeef"
 
     assert base64.b64encode(data).decode("utf-8") == jsonable_encoder.encode(data)
+
+
+def test_jsonable_encoder__uuid_and_decimal_remain_serializable():
+    payload = {
+        "id": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        "score": decimal.Decimal("1.23"),
+    }
+
+    encoded = jsonable_encoder.encode(payload)
+
+    assert encoded["id"] == "12345678-1234-5678-1234-567812345678"
+    assert encoded["score"] == "1.23"
+
+
+def test_pydantic_utilities__import_does_not_emit_v1_py314_warning():
+    pytest.importorskip("pydantic")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(pydantic_utilities)
+
+    assert not any(
+        "Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater."
+        in str(w.message)
+        for w in caught
+    )

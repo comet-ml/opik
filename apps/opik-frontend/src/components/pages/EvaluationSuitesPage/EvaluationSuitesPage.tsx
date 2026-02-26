@@ -23,7 +23,13 @@ import { Separator } from "@/components/ui/separator";
 import { buildDocsUrl } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { COLUMN_SELECT_ID } from "@/types/shared";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import {
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -33,11 +39,12 @@ import {
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
-  DEFAULT_COLUMNS,
   DEFAULT_SELECTED_COLUMNS,
-  FILTERS_COLUMNS,
   TYPE_LABELS,
 } from "@/components/pages/EvaluationSuitesPage/columns";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 
 const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({
   entityName: "evaluation suite",
@@ -54,7 +61,107 @@ const COLUMNS_ORDER_KEY = "evaluation-suites-columns-order";
 const COLUMNS_SORT_KEY = "evaluation-suites-columns-sort";
 const PAGINATION_SIZE_KEY = "evaluation-suites-pagination-size";
 
-const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: TextCell as never,
+  },
+  {
+    id: "id",
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "dataset_items_count",
+    label: "Item count",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+    cell: ListCell as never,
+  },
+  {
+    id: "most_recent_experiment_at",
+    label: "Most recent experiment",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+  },
+  {
+    id: "most_recent_optimization_at",
+    label: "Most recent optimization",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+];
+
+export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "id",
+    label: "ID",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "description",
+    label: "Description",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
+    id: "last_updated_at",
+    label: "Last updated",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+];
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
   right: [],
 };

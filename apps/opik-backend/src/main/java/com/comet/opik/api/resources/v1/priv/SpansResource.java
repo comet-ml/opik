@@ -388,7 +388,7 @@ public class SpansResource {
     @GET
     @Path("/feedback-scores/names")
     @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
-            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,

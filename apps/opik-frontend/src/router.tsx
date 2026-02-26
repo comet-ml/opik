@@ -10,6 +10,7 @@ import {
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/components/layout/ExperimentsPageGuard";
+import DashboardsPageGuard from "@/components/layout/DashboardsPageGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/components/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/components/pages/CompareExperimentsPage/CompareExperimentsPage";
@@ -162,6 +163,7 @@ const homeRouteNew = createRoute({
 const dashboardsRoute = createRoute({
   path: "/dashboards",
   getParentRoute: () => workspaceRoute,
+  component: DashboardsPageGuard,
   staticData: {
     title: "Dashboards",
   },

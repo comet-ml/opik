@@ -4,71 +4,93 @@
 
 Generate a comprehensive Playwright E2E test for an Opik feature using the three-agent workflow: Plan -> Generate -> Heal.
 
-This workflow will:
-
-- Explore the Opik UI to understand the feature under test
-- Generate a structured test plan with fixture and page object references
-- Transform the plan into an executable Playwright test following all Opik conventions
-- Run the generated test and automatically fix any failures
-- Produce a test that is ~90% complete and ready for human review
-
 ---
 
 ## Prerequisites
 
 - Opik must be running locally (`http://localhost:5173`)
+- The `playwright-test` MCP server must be connected
 - Playwright must be installed: `cd tests_end_to_end/typescript-tests && npm install && npx playwright install chromium`
+
+---
+
+## Safety: Verify Local Config
+
+**Before doing anything else**, check `~/.opik.config` and ensure it points to localhost. The Python Opik SDK (used by the Flask test helper service) reads this file, and if it points to a cloud environment, the agent will accidentally create real data there.
+
+Run this command to check:
+```bash
+cat ~/.opik.config
+```
+
+If `url_override` points to anything other than `http://localhost:5173/api`, back up the config and set it to local:
+
+```bash
+cp ~/.opik.config ~/.opik.config.bak 2>/dev/null || true
+
+cat > ~/.opik.config << 'EOF'
+[opik]
+url_override = http://localhost:5173/api
+workspace = default
+EOF
+```
+
+**After the test generation workflow is complete, remind the user to restore their original config:**
+```bash
+cp ~/.opik.config.bak ~/.opik.config
+```
+
+If `~/.opik.config` already points to localhost, skip this step.
 
 ---
 
 ## Inputs
 
-- **Feature to test** (required): Description of the feature or user flow to generate tests for (e.g., "prompt versioning", "dataset item CRUD", "experiment creation")
+- **Feature to test** (required): A description of what to test. The more specific you are, the better the output.
+
+### What makes a good input
+
+**A thorough plain-English description is the best input.** Be specific about:
+- Which feature area (e.g., "prompts", "datasets", "experiments")
+- Which user flows to cover (e.g., "create, edit, delete", "versioning", "search and filter")
+- Any edge cases you care about (e.g., "empty state", "duplicate names", "special characters")
+- Whether to focus on happy paths, error cases, or both
+
+**Good examples:**
+- "Generate tests for the prompt versioning flow: creating a prompt, editing it to create a new version, switching between versions in the UI, and verifying version history"
+- "Test dataset item CRUD - adding items manually, editing cell values inline, deleting individual items and bulk delete, and verify counts update correctly"
+- "Cover the experiment comparison page: run two experiments on the same dataset, open the comparison view, verify columns show both experiment results side by side"
+
+**Optional extra context you can provide:**
+- **GitHub PR URL or number**: If the feature was recently added/changed, point to the PR so the agent can read the diff and understand what changed (e.g., "PR #5300 added a new feedback score column")
+- **Jira ticket**: Reference a ticket for requirements context (e.g., "OPIK-3500 describes the acceptance criteria")
+- **Specific UI page URL**: Point to exactly where the feature lives (e.g., "the page at localhost:5173/default/projects/123/experiments")
+- **Existing test to extend**: If you want to add scenarios to an existing test file (e.g., "add error cases to tests/prompts/prompts.spec.ts")
+
+The agent will always explore the live UI regardless of what extra context you provide — the description just helps it know where to focus.
 
 ---
 
-## Steps
+## Instructions
 
-### 1. Understand the Feature
+**Read the skill definition at `skills/playwright-e2e/SKILL.md` and follow it exactly.**
 
-- Read the relevant skill context files:
-  - `skills/playwright-e2e/opik-app-context.md` - Domain knowledge
-  - `skills/playwright-e2e/test-conventions.md` - Coding standards
-  - `skills/playwright-e2e/page-object-catalog.md` - Available page objects
-  - `skills/playwright-e2e/fixture-catalog.md` - Available fixtures
-- Check if tests already exist for this feature in `tests_end_to_end/typescript-tests/tests/`
-- Identify which page objects and fixtures are relevant
+The skill contains:
+- The knowledge base (context documents for domain, conventions, page objects, fixtures)
+- The three-phase workflow (Planning, Generation, Healing) with specific agent prompts
+- References to the `playwright-test` MCP server tools that MUST be used
 
-### 2. Plan (Planner Agent)
+**You MUST use the `playwright-test` MCP tools** (`planner_setup_page`, `generator_setup_page`, `playwright_test_run_test`, `playwright_test_debug_test`, etc.) to interact with the running Opik application. Do NOT just read code files — the agents are designed to explore the live UI via a real browser.
 
-- Use the **playwright-test-planner** agent (from `skills/playwright-e2e/agents/`)
-- Input: Feature description + seed test (`tests/seed-for-planner.spec.ts`)
-- The planner will explore the Opik UI and produce a test plan
-- Output: Saved to `tests_end_to_end/typescript-tests/specs/{feature-name}.md`
+### Workflow Summary
 
-### 3. Generate (Generator Agent)
-
-- Use the **playwright-test-generator** agent (from `skills/playwright-e2e/agents/`)
-- Input: The markdown test plan from `specs/`
-- The generator will create executable Playwright tests following all Opik conventions
-- Output: Test files in `tests_end_to_end/typescript-tests/tests/{feature-area}/`
-
-### 4. Heal (Healer Agent)
-
-- Use the **playwright-test-healer** agent (from `skills/playwright-e2e/agents/`)
-- Run the generated tests
-- If any tests fail, the healer will:
-  - Debug each failure
-  - Diagnose root cause (selector change, timing, assertion)
-  - Fix the test code
-  - Re-run to verify
-- Output: Passing tests (or `test.fixme()` for genuinely broken features)
-
-### 5. Review
-
-- Present the generated test files to the user
-- Highlight any tests marked as `test.fixme()` that may indicate application issues
-- Suggest additional edge cases or scenarios if applicable
+1. **Verify config** — check `~/.opik.config` points to localhost (see Safety section above)
+2. **Read** `skills/playwright-e2e/SKILL.md` and all linked knowledge base documents
+3. **Plan** using the planner agent prompt (`skills/playwright-e2e/agents/playwright-test-planner.md`) and `planner_setup_page` MCP tool
+4. **Generate** using the generator agent prompt (`skills/playwright-e2e/agents/playwright-test-generator.md`) and `generator_setup_page` MCP tool
+5. **Heal** using the healer agent prompt (`skills/playwright-e2e/agents/playwright-test-healer.md`) and `playwright_test_run_test` / `playwright_test_debug_test` MCP tools
+6. **Review** — present the generated test files, highlight any `test.fixme()` tests, suggest additional scenarios
+7. **Remind user** to restore `~/.opik.config` if it was modified
 
 ---
 
@@ -84,11 +106,11 @@ This workflow will:
 
 ## Notes
 
-- This workflow requires the Playwright and playwright-test MCP servers to be configured
+- If the `playwright-test` MCP server is not connected, STOP and tell the user to connect it before proceeding
 - The Flask test helper service starts automatically via Playwright's `webServer` config
 - Generated tests should be reviewed by a human before merging
-- If new page object methods are needed, the generator should add them to the page object file
-- If new fixtures are needed, they should follow the existing fixture hierarchy pattern
+- If new page object methods are needed, add them to the page object file
+- If `data-testid` attributes are needed for reliable locators, add them to the React components in `apps/opik-frontend/src/`
 
 ---
 
