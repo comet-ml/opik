@@ -155,6 +155,9 @@ navigation:
               - page: SDK configuration
                 path: docs/tracing/sdk_configuration.mdx
                 slug: sdk_configuration
+              - page: RFC - Retrieval Span Type Expansion
+                path: docs/tracing/retrieval-span-type-rfc.mdx
+                slug: retrieval-span-type-rfc
               - page: Log Agent Graphs
                 path: docs/tracing/log_agent_graph.mdx
                 slug: log_agent_graphs
