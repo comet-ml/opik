@@ -438,6 +438,21 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str, **kw
 
 @MetricFactory.register("numerical_similarity")
 def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
+    """Normalized similarity between a numeric LLM output and a reference value.
+
+    Score = max(0, 1 - |output - reference| / scale_range)
+
+    The scale_range is inferred from the dataset via ``dataset_items_provider``
+    (max − min of parseable reference values).  When the provider is absent, the
+    dataset has fewer than 2 numeric references, or all references are identical,
+    scale_range defaults to 1.0 (raw absolute-error mode).
+
+    Non-numeric LLM outputs or missing/non-numeric references yield a score of
+    0.0 with an explanatory reason string.
+
+    Based on normalised absolute error:
+    https://en.wikipedia.org/wiki/Mean_absolute_error#Normalized_mean_absolute_error
+    """
     from opik.evaluation.metrics.score_result import ScoreResult
 
     reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
