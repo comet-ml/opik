@@ -19,10 +19,6 @@ public class UniqueKeysValidator implements ConstraintValidator<UniqueKeysValida
                 .count();
 
         if (uniqueKeyCount != blueprint.values().size()) {
-            context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate("Duplicate configuration keys are not allowed")
-                    .addPropertyNode("values")
-                    .addConstraintViolation();
             return false;
         }
 
