@@ -49,7 +49,7 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
     },
     {
       id: "dataset",
-      label: "Dataset",
+      label: "Evaluation suite",
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       customMeta: {

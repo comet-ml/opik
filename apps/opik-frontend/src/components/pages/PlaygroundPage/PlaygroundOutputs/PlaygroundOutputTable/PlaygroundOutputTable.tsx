@@ -86,7 +86,9 @@ const PlaygroundOutputTable = ({
   }, [datasetItems, hydrateDatasetItemData]);
 
   const noDataMessage =
-    isLoadingDatasetItems || isHydrating ? "Loading..." : "No dataset items";
+    isLoadingDatasetItems || isHydrating
+      ? "Loading..."
+      : "No evaluation suite items";
 
   const rows = useMemo(() => {
     if (isLoadingDatasetItems || isHydrating) {
@@ -112,7 +114,9 @@ const PlaygroundOutputTable = ({
 
     const retVal: ColumnDef<PlaygroundOutputTableData>[] = [];
     const explainer =
-      EXPLAINERS_MAP[EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground];
+      EXPLAINERS_MAP[
+        EXPLAINER_ID.how_do_i_use_the_evaluation_suite_in_the_playground
+      ];
 
     const inputColumns = datasetColumns
       .sort((c1, c2) => c1.name.localeCompare(c2.name))

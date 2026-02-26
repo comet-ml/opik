@@ -1,9 +1,9 @@
 import {
   Bell,
-  Database,
   FlaskConical,
   LayoutGrid,
   FileTerminal,
+  ListChecks,
   LucideHome,
   Blocks,
   Brain,
@@ -80,12 +80,12 @@ const getMenuItems = ({
             ]
           : []),
         {
-          id: "datasets",
-          path: "/$workspaceName/datasets",
+          id: "evaluation_suites",
+          path: "/$workspaceName/evaluation-suites",
           type: MENU_ITEM_TYPE.router,
-          icon: Database,
-          label: "Datasets",
-          count: "datasets",
+          icon: ListChecks,
+          label: "Evaluation suites",
+          count: "evaluation_suites",
         },
         {
           id: "annotation_queues",
