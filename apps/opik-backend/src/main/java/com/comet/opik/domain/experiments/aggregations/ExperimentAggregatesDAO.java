@@ -667,7 +667,14 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                                                 feedbackAgg,
                                                                 itemsCount);
                                                     });
-                                        });
+                                        })
+                                        // Fallback: items exist but all referenced traces were deleted
+                                        .switchIfEmpty(Mono.defer(() -> insertExperimentAggregate(
+                                                experimentData,
+                                                createEmptyTraceAggregations(experimentId),
+                                                createEmptySpanAggregations(experimentId),
+                                                createEmptyFeedbackScoreAggregations(experimentId),
+                                                itemsCount)));
                             });
                 });
     }
