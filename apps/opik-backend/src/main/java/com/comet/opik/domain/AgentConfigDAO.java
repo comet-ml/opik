@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.db.BlueprintTypeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -41,15 +42,19 @@ interface AgentConfigDAO {
     record BlueprintProject(UUID id, UUID projectId) {
     }
 
-    @SqlQuery("SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at " +
-            "FROM agent_config " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id")
+    @SqlQuery("""
+            SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at
+            FROM agent_config
+            WHERE workspace_id = :workspace_id AND project_id = :project_id
+            """)
     AgentConfig getConfigByProjectId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId);
 
-    @SqlUpdate("INSERT INTO agent_config (id, workspace_id, project_id, created_by, last_updated_by) " +
-            "VALUES (:id, :workspace_id, :project_id, :created_by, :last_updated_by)")
+    @SqlUpdate("""
+            INSERT INTO agent_config (id, workspace_id, project_id, created_by, last_updated_by)
+            VALUES (:id, :workspace_id, :project_id, :created_by, :last_updated_by)
+            """)
     void insertConfig(
             @Bind("id") UUID id,
             @Bind("workspace_id") String workspaceId,
@@ -57,9 +62,10 @@ interface AgentConfigDAO {
             @Bind("created_by") String createdBy,
             @Bind("last_updated_by") String lastUpdatedBy);
 
-    @SqlUpdate("INSERT INTO agent_blueprint (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by) "
-            +
-            "VALUES (:id, :workspace_id, :project_id, :config_id, :type, :description, :created_by, :last_updated_by)")
+    @SqlUpdate("""
+            INSERT INTO agent_blueprint (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by)
+            VALUES (:id, :workspace_id, :project_id, :config_id, :type, :description, :created_by, :last_updated_by)
+            """)
     void insertBlueprint(
             @Bind("id") UUID id,
             @Bind("workspace_id") String workspaceId,
@@ -100,47 +106,60 @@ interface AgentConfigDAO {
             @Bind("config_id") UUID configId,
             @BindMethods("bean") List<AgentConfigValue> values);
 
-    @SqlUpdate("UPDATE agent_config_values " +
-            "SET valid_to_blueprint_id = :valid_to_blueprint_id " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
-            "AND valid_to_blueprint_id IS NULL " +
-            "AND `key` IN (<keys>)")
+    @SqlUpdate("""
+            UPDATE agent_config_values
+            SET valid_to_blueprint_id = :valid_to_blueprint_id
+            WHERE workspace_id = :workspace_id AND project_id = :project_id
+                AND valid_to_blueprint_id IS NULL
+                AND `key` IN (<keys>)
+            """)
     void closeValuesForKeys(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("valid_to_blueprint_id") UUID validToBlueprintId,
             @BindList("keys") List<String> keys);
 
-    @SqlQuery("SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
-            "FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint' " +
-            "ORDER BY created_at DESC LIMIT 1")
+    @SqlQuery("""
+            SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
+            FROM agent_blueprint
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = :type
+            ORDER BY created_at DESC LIMIT 1
+            """)
     AgentBlueprint getLatestBlueprint(
             @Bind("workspace_id") String workspaceId,
-            @Bind("project_id") UUID projectId);
+            @Bind("project_id") UUID projectId,
+            @Bind("type") BlueprintType type);
 
-    @SqlQuery("SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at " +
-            "FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
+    @SqlQuery("""
+            SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
+            FROM agent_blueprint
+            WHERE workspace_id = :workspace_id AND id = :blueprint_id
+            """)
     AgentBlueprint getBlueprintById(
             @Bind("workspace_id") String workspaceId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT project_id FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND id = :blueprint_id")
+    @SqlQuery("""
+            SELECT project_id FROM agent_blueprint
+            WHERE workspace_id = :workspace_id AND id = :blueprint_id
+            """)
     UUID getProjectIdByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT id, project_id FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN (<blueprint_ids>)")
+    @SqlQuery("""
+            SELECT id, project_id FROM agent_blueprint
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN (<blueprint_ids>)
+            """)
     List<BlueprintProject> getBlueprintsByIds(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @BindList("blueprint_ids") List<UUID> blueprintIds);
 
-    @SqlQuery("SELECT blueprint_id FROM agent_config_envs " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name")
+    @SqlQuery("""
+            SELECT blueprint_id FROM agent_config_envs
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name = :env_name
+            """)
     UUID getBlueprintIdByEnvName(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
@@ -164,16 +183,20 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT * FROM agent_config_values " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id " +
-            "AND valid_from_blueprint_id = :blueprint_id")
+    @SqlQuery("""
+            SELECT * FROM agent_config_values
+            WHERE workspace_id = :workspace_id AND project_id = :project_id
+                AND valid_from_blueprint_id = :blueprint_id
+            """)
     List<AgentConfigValue> getValuesDeltaByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
             @Bind("blueprint_id") UUID blueprintId);
 
-    @SqlQuery("SELECT env_name FROM agent_config_envs " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND blueprint_id = :blueprint_id")
+    @SqlQuery("""
+            SELECT env_name FROM agent_config_envs
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND blueprint_id = :blueprint_id
+            """)
     List<String> getEnvsByBlueprintId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
@@ -208,16 +231,19 @@ interface AgentConfigDAO {
             @Bind("limit") int limit,
             @Bind("offset") int offset);
 
-    @SqlQuery("SELECT COUNT(*) FROM agent_blueprint " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint'")
+    @SqlQuery("""
+            SELECT COUNT(*) FROM agent_blueprint
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint'
+            """)
     long countBlueprints(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId);
 
-    @SqlQuery("SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at "
-            +
-            "FROM agent_config_envs " +
-            "WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name IN (<env_names>)")
+    @SqlQuery("""
+            SELECT id, project_id, env_name, blueprint_id, created_by, created_at, last_updated_by, last_updated_at
+            FROM agent_config_envs
+            WHERE workspace_id = :workspace_id AND project_id = :project_id AND env_name IN (<env_names>)
+            """)
     List<AgentConfigEnv> getEnvsByNames(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
@@ -275,7 +301,7 @@ interface AgentConfigDAO {
             List<String> envs = null;
             try {
                 String envsString = rs.getString("envs");
-                if (envsString != null && !envsString.isEmpty()) {
+                if (StringUtils.isNotBlank(envsString)) {
                     envs = Arrays.asList(envsString.split(","));
                 }
             } catch (SQLException e) {

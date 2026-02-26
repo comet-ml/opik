@@ -249,7 +249,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         AgentBlueprint blueprint = blueprintId != null
                 ? dao.getBlueprintById(workspaceId, blueprintId)
-                : dao.getLatestBlueprint(workspaceId, projectId);
+                : dao.getLatestBlueprint(workspaceId, projectId, AgentBlueprint.BlueprintType.BLUEPRINT);
 
         if (blueprint == null) {
             throw new NotFoundException("Blueprint not found");
@@ -324,6 +324,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 .toList();
 
         if (blueprintIds.isEmpty()) {
+            log.info("No blueprint IDs to validate for project '{}' in workspace '{}'", projectId, workspaceId);
             return;
         }
 
@@ -374,12 +375,16 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     .toList();
 
             if (!newEnvs.isEmpty()) {
-                log.info("Inserting {} new environments", newEnvs.size());
+                log.info("Inserting {} new environments for project '{}' in workspace '{}': {}",
+                        newEnvs.size(), projectId, workspaceId,
+                        newEnvs.stream().map(AgentConfigEnv::envName).toList());
                 dao.batchInsertEnvs(workspaceId, projectId, config.id(), userName, userName, newEnvs);
             }
 
             if (!envsToUpdate.isEmpty()) {
-                log.info("Updating {} existing environments", envsToUpdate.size());
+                log.info("Updating {} existing environments for project '{}' in workspace '{}': {}",
+                        envsToUpdate.size(), projectId, workspaceId,
+                        envsToUpdate.stream().map(AgentConfigEnv::envName).toList());
                 dao.batchUpdateEnvs(workspaceId, projectId, userName, envsToUpdate);
             }
 
