@@ -90,7 +90,7 @@ def run_optimization(
     )
     baseline_trial = adapter.evaluate(
         config=baseline_config,
-        dataset_item_ids=split.validation_item_ids,
+        dataset_item_ids=dataset_item_ids,
         step_index=-1,
     )
     initial_score = baseline_trial.score if baseline_trial else 0.0
