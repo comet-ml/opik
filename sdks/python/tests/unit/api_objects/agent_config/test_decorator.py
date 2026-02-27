@@ -15,12 +15,34 @@ from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
 class TestConfigDecoratorValidation:
-    def test_non_dataclass__raises_type_error(self):
-        with pytest.raises(TypeError, match="can only be applied to dataclasses"):
+    def test_plain_class__auto_converted_to_dataclass(self, mock_backend):
+        @agent_config_decorator
+        class MyConfig:
+            temp: float = 0.8
 
-            @agent_config_decorator
-            class NotADataclass:
-                pass
+        assert dataclasses.is_dataclass(MyConfig)
+
+    def test_plain_class__instance_fields_accessible(self, mock_backend):
+        @agent_config_decorator
+        class MyConfig:
+            temp: float = 0.8
+            name: str = "agent"
+
+        instance = MyConfig()
+        assert instance.temp == 0.8
+        assert instance.name == "agent"
+
+    def test_plain_class__no_defaults__requires_args_at_instantiation(
+        self, mock_backend
+    ):
+        @agent_config_decorator
+        class MyConfig:
+            my_param: int
+            name: str
+
+        instance = MyConfig(my_param=11, name="Steve")
+        assert instance.my_param == 11
+        assert instance.name == "Steve"
 
     def test_dataclass__preserves_dataclass_status(self, mock_backend):
         @agent_config_decorator

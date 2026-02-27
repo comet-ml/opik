@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Dict, List
 
 import pytest
@@ -40,7 +40,6 @@ def test_agent_config_decorator__all_primitive_and_collection_types__happyflow(
     project_name: str,
 ):
     @opik.agent_config(project=project_name)
-    @dataclass
     class AllTypesConfig:
         temperature: float = 0.7
         max_tokens: int = 512
@@ -68,7 +67,6 @@ def test_agent_config_decorator__backend_overrides_local_defaults__happyflow(
 ):
     # First instantiation creates the blueprint with temperature=0.3
     @opik.agent_config(project=project_name)
-    @dataclass
     class MyConfig:
         temperature: float = 0.3
         model: str = "gpt-3.5"
@@ -82,7 +80,6 @@ def test_agent_config_decorator__backend_overrides_local_defaults__happyflow(
 
     # Second instantiation with different local defaults — backend values must win
     @opik.agent_config(project=project_name)
-    @dataclass
     class MyConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         model: str = "gpt-4"
@@ -216,7 +213,6 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
     project_name: str,
 ):
     @opik.agent_config(project=project_name)
-    @dataclass
     class BaseConfig:
         temperature: float = 0.5
 
@@ -235,7 +231,6 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
     clear_shared_caches()
 
     @opik.agent_config(project=project_name, mask_id=mask_id)
-    @dataclass
     class BaseConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         name: str = "placeholder"
@@ -252,7 +247,6 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
     project_name: str,
 ):
     @opik.agent_config(project=project_name)
-    @dataclass
     class EnvConfig:
         temperature: float = 0.4
 
@@ -269,7 +263,6 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
     clear_shared_caches()
 
     @opik.agent_config(project=project_name, env="staging")
-    @dataclass
     class EnvConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         name: str = "placeholder"
@@ -290,7 +283,6 @@ def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyfl
     should return the value from the first registration, not the new arg."""
 
     @opik.agent_config(project=project_name, env="prod")
-    @dataclass
     class MyAgentConfig:
         my_param: int
         name: str
@@ -305,7 +297,6 @@ def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyfl
 
     # Second instantiation: backend is now source of truth, "Bob" should be ignored
     @opik.agent_config(project=project_name, env="prod")
-    @dataclass
     class MyAgentConfig:  # type: ignore[no-redef]
         my_param: int
         name: str

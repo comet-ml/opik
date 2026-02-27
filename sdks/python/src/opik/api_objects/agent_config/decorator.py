@@ -34,9 +34,7 @@ def agent_config_decorator(
 ) -> typing.Any:
     def wrap(cls: type) -> type:
         if not dataclasses.is_dataclass(cls):
-            raise TypeError(
-                f"@opik.agent_config can only be applied to dataclasses, got {cls.__name__}"
-            )
+            cls = dataclasses.dataclass(cls)
 
         supported_fields = type_helpers.extract_dataclass_fields(cls)
         class_prefix = name or cls.__name__
