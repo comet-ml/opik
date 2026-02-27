@@ -6,6 +6,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { toString } from "@/lib/utils";
+import { LINKIFY_OPTIONS } from "@/lib/linkify";
 
 export type CompareFiledValue = string | number | undefined | null;
 
@@ -41,21 +42,7 @@ const CompareExperimentsConfigCell: React.FC<
         {showDiffView ? (
           <TextDiff content1={toString(baseData)} content2={toString(data)} />
         ) : (
-          <Linkify
-            options={{
-              defaultProtocol: "https",
-              target: "_blank",
-              rel: "noopener noreferrer",
-              className:
-                "break-all text-blue-600 underline hover:text-blue-800",
-              ignoreTags: ["script", "style"],
-              validate: {
-                url: (value) => /^https?:\/\//.test(value),
-              },
-            }}
-          >
-            {toString(data)}
-          </Linkify>
+          <Linkify options={LINKIFY_OPTIONS}>{toString(data)}</Linkify>
         )}
       </div>
     );

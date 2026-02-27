@@ -1,6 +1,8 @@
 import React from "react";
 import isString from "lodash/isString";
+import Linkify from "linkify-react";
 import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
+import { LINKIFY_OPTIONS } from "@/lib/linkify";
 import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 
@@ -19,7 +21,9 @@ const TextAndMediaContentRenderer: React.FC<
   if (!isBig) {
     return (
       <CellTooltipWrapper content={displayValue}>
-        <span className="truncate">{displayValue}</span>
+        <span className="truncate">
+          <Linkify options={LINKIFY_OPTIONS}>{displayValue}</Linkify>
+        </span>
       </CellTooltipWrapper>
     );
   }
@@ -34,7 +38,7 @@ const TextAndMediaContentRenderer: React.FC<
 
   return (
     <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
-      {displayValue}
+      <Linkify options={LINKIFY_OPTIONS}>{displayValue}</Linkify>
     </div>
   );
 };
