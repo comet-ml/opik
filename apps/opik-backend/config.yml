@@ -648,7 +648,7 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
-  # Default: false
+  # Always enabled (feature flag removed)
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: "true"
   # Default: true

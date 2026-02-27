@@ -60,7 +60,7 @@ public class DatasetVersioningStartupMigration {
             return;
         }
 
-        log.info("Dataset versioning startup migration: found {} unmigrated dataset versions, running migration",
+        log.info("Dataset versioning startup migration: found '{}' unmigrated dataset versions, running migration",
                 unmigrated);
 
         try {
