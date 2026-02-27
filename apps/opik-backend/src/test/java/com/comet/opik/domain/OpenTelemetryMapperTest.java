@@ -446,7 +446,7 @@ class OpenTelemetryMapperTest {
     @ParameterizedTest(name = "Test total_tokens computation when missing 'gen_ai.usage.total_tokens' but only have {0} and {1}")
     @CsvSource({
             "gen_ai.usage.prompt_tokens,gen_ai.usage.completion_tokens",
-            "gen_ai.usage.input_tokens, gen_ai.usage.output_tokens"
+            "gen_ai.usage.input_tokens,gen_ai.usage.output_tokens"
     })
     void testTotalTokensComputedWhenMissing(String promptTokensKey, String completionTokensKey) {
         // PydanticAI sends prompt_tokens and completion_tokens directly but omits total_tokens
@@ -479,7 +479,7 @@ class OpenTelemetryMapperTest {
     @ParameterizedTest(name = "Test total_tokens computation the 'gen_ai.usage.total_tokens' is not overwritten when also have {0} and {1}")
     @CsvSource({
             "gen_ai.usage.prompt_tokens,gen_ai.usage.completion_tokens",
-            "gen_ai.usage.input_tokens, gen_ai.usage.output_tokens"
+            "gen_ai.usage.input_tokens,gen_ai.usage.output_tokens"
     })
     void testTotalTokensNotOverwrittenWhenAlreadyPresent(String promptTokensKey, String completionTokensKey) {
         // When total_tokens is explicitly provided, it must not be overwritten
