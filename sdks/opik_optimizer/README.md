@@ -75,6 +75,34 @@ To get started with Opik Optimizer, follow these steps:
 
     The optimizer utilizes LiteLLM, so you can configure keys for various providers as per LiteLLM's documentation.
 
+4. **Use the agent-friendly CLI TUI mode (optional):**
+
+    ```bash
+    # Basic status as JSON event output
+    opik-optimizer tui status --json
+
+    # Convert Cursor MCP config to OpenAI-style tool entries
+    opik-optimizer tui normalize-tools --cursor-config ~/.cursor/mcp.json --json
+
+    # Resolve MCP tools into callable function definitions
+    opik-optimizer tui resolve-tools --cursor-config ~/.cursor/mcp.json --json
+    ```
+
+    The `--json` flag emits newline-delimited event objects suitable for agent pipelines.
+
+5. **Enable shell completion (optional):**
+
+    ```bash
+    # Bash
+    eval "$(opik-optimizer completion --shell bash)"
+
+    # Zsh
+    eval "$(opik-optimizer completion --shell zsh)"
+
+    # Fish
+    opik-optimizer completion --shell fish | source
+    ```
+
 You'll typically need:
 
 * An LLM model name (e.g., "gpt-4o-mini", "claude-3-haiku-20240307").
