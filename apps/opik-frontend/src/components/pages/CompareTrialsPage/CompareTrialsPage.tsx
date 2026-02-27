@@ -15,6 +15,7 @@ import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useAppStore from "@/store/AppStore";
+import { checkIsEvaluationSuite } from "@/lib/optimizations";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
@@ -79,7 +80,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
       ...memorizedExperiments,
       ...(optimizationExperimentsData?.content ?? []),
     ];
-    return allExperiments.some((e) => (e.experiment_scores?.length ?? 0) > 0);
+    return checkIsEvaluationSuite(allExperiments);
   }, [memorizedExperiments, optimizationExperimentsData?.content]);
 
   return (

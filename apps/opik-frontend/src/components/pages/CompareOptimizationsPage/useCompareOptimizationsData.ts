@@ -14,7 +14,10 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
-import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
+import {
+  OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+  checkIsEvaluationSuite,
+} from "@/lib/optimizations";
 import { migrateSelectedColumns } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
@@ -163,8 +166,7 @@ export const useCompareOptimizationsData = () => {
   const noDataText = noData ? "There are no trials yet" : "No search results";
 
   const isEvaluationSuite = useMemo(
-    () =>
-      (data?.content ?? []).some((e) => (e.experiment_scores?.length ?? 0) > 0),
+    () => checkIsEvaluationSuite(data?.content ?? []),
     [data?.content],
   );
 

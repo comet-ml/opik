@@ -52,7 +52,7 @@ def run_experiment(
 
     score = _extract_score(result)
 
-    _log_experiment_score(client, result.experiment_id, "pass_rate", score)
+    _log_experiment_score(client, result.experiment_id, metric_type, score)
 
     return TrialResult(
         candidate_id=candidate.candidate_id,

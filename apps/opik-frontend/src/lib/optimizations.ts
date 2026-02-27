@@ -5,6 +5,7 @@ import {
   OptimizerParameters,
   MetricParameters,
 } from "@/types/optimizations";
+import { Experiment } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
@@ -152,6 +153,10 @@ export const getOptimizationDefaultConfigByProvider = (
   }
 
   return {};
+};
+
+export const checkIsEvaluationSuite = (experiments: Experiment[]): boolean => {
+  return experiments.some((e) => (e.experiment_scores?.length ?? 0) > 0);
 };
 
 export const convertOptimizationVariableFormat = (

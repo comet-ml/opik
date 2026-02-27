@@ -6,7 +6,7 @@ when the Flask application starts under Gunicorn.
 
 Environment Variables (for self-hosted deployments):
     OPTSTUDIO_MAX_CONCURRENT_JOBS: Number of parallel optimization workers (default: 5)
-    RQ_QUEUE_NAMES: Comma-separated queue names to listen to (default: opik:optimizer-cloud)
+    RQ_QUEUE_NAMES: Comma-separated queue names to listen to (default: opik:optimizer-cloud,opik:optimizer-framework)
     RQ_WORKER_ENABLED: Enable/disable RQ worker (default: true)
 """
 
@@ -30,7 +30,7 @@ ENV_RQ_QUEUE_NAMES = "RQ_QUEUE_NAMES"
 ENV_MAX_CONCURRENT_JOBS = "OPTSTUDIO_MAX_CONCURRENT_JOBS"
 
 # Default values
-DEFAULT_QUEUE_NAME = "opik:optimizer-cloud"
+DEFAULT_QUEUE_NAMES = "opik:optimizer-cloud,opik:optimizer-framework"
 DEFAULT_MAX_CONCURRENT_JOBS = 5
 
 # Redis key constants
@@ -97,7 +97,7 @@ class RqWorkerManager:
         self.should_stop: threading.Event = threading.Event()
 
         # Queue names to listen to (comma-separated)
-        queue_names_str: str = os.getenv(ENV_RQ_QUEUE_NAMES, DEFAULT_QUEUE_NAME)
+        queue_names_str: str = os.getenv(ENV_RQ_QUEUE_NAMES, DEFAULT_QUEUE_NAMES)
         self.queue_names: List[str] = [
             name.strip() for name in queue_names_str.split(",") if name.strip()
         ]
@@ -339,7 +339,7 @@ def init_rq_worker(app: Optional[object] = None) -> None:
     Environment Variables:
         RQ_WORKER_ENABLED: Enable/disable RQ worker (default: true)
         OPTSTUDIO_MAX_CONCURRENT_JOBS: Number of parallel workers (default: 5)
-        RQ_QUEUE_NAMES: Comma-separated queue names (default: opik:optimizer-cloud)
+        RQ_QUEUE_NAMES: Comma-separated queue names (default: opik:optimizer-cloud,opik:optimizer-framework)
 
     Args:
         app: Flask application instance (unused; accepted for compatibility)
