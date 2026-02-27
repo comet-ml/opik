@@ -100,17 +100,8 @@ public class DatabaseUtils {
         }
     }
 
-    static final String TRACE_SEARCH_CLAUSE = """
-            (ilike(toString(id), :search_text)
-            OR ilike(name, :search_text)
-            OR ilike(input, :search_text)
-            OR ilike(output, :search_text)
-            OR ilike(metadata, :search_text)
-            OR ilike(error_info, :search_text)
-            OR arrayExists(element -> ilike(element, :search_text), tags)
-            OR ilike(thread_id, :search_text))""";
-
-    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
+    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria,
+            String searchClause) {
         var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -151,7 +142,7 @@ public class DatabaseUtils {
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
 
         Optional.ofNullable(traceSearchCriteria.searchText())
-                .ifPresent(searchText -> template.add("search_text", TRACE_SEARCH_CLAUSE));
+                .ifPresent(searchText -> template.add("search_text", searchClause));
         return template;
     }
 

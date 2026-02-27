@@ -613,6 +613,7 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
+            @QueryParam("search") @Schema(description = "Full-text search across thread fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -640,6 +641,7 @@ public class TracesResource {
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
+                .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
@@ -865,6 +867,7 @@ public class TracesResource {
     public Response getThreadStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across thread fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -876,6 +879,7 @@ public class TracesResource {
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(threadFilters)
+                .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
