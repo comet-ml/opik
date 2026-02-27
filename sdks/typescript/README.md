@@ -55,6 +55,34 @@ const client = new Opik({
 });
 ```
 
+## Agent-Friendly TUI JSON Mode
+
+The SDK now includes a lightweight terminal interface for agent workflows:
+
+```bash
+# Runtime status as newline-delimited JSON events
+npx opik-tui tui status --json
+
+# Normalize Cursor MCP config into OpenAI-style MCP tool entries
+npx opik-tui tui normalize-tools --cursor-config .cursor/mcp.json --json
+
+# Build deterministic function-call tool stubs for agent planning
+npx opik-tui tui resolve-tools --cursor-config .cursor/mcp.json --json
+```
+
+Shell completion:
+
+```bash
+# Bash
+eval "$(npx opik-tui completion --shell bash)"
+
+# Zsh
+eval "$(npx opik-tui completion --shell zsh)"
+
+# Fish
+npx opik-tui completion --shell fish | source
+```
+
 ## Usage
 
 ```typescript
