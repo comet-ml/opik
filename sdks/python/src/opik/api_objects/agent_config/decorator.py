@@ -180,11 +180,10 @@ def sync_config_with_backend(instance: typing.Any) -> None:
 
         pinned = mask_id_val is not None or env_val is not None
 
-        if pinned:
-            if existing is not None:
-                apply_backend_values(instance, existing)
-        elif existing is None:
-            handle_no_blueprint(instance, agent_cfg, description)
+        if existing is None:
+            handle_no_blueprint(instance, agent_cfg, description, env_val)
+        elif pinned:
+            apply_backend_values(instance, existing)
         else:
             handle_existing_blueprint(instance, agent_cfg, existing, description)
 
@@ -196,6 +195,7 @@ def handle_no_blueprint(
     instance: typing.Any,
     agent_cfg: AgentConfig,
     description: typing.Optional[str],
+    env: typing.Optional[str] = None,
 ) -> None:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
         instance, _ATTR_FIELD_TYPES
@@ -217,6 +217,10 @@ def handle_no_blueprint(
         description=description,
         field_types=shared_cache.all_field_types,
     )
+
+    if env is not None and bp.id is not None:
+        agent_cfg.tag_bluepring_with_env(env=env, blueprint_id=bp.id)
+
     apply_backend_values(instance, bp)
 
 

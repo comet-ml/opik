@@ -6,6 +6,7 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_blueprint_public import AgentBlueprintPublic
 from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
 from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
+from opik.rest_api.types.agent_config_env import AgentConfigEnv
 from opik.api_objects import rest_helpers
 from opik import id_helpers
 from . import type_helpers
@@ -130,6 +131,20 @@ class ConfigClient:
             if e.status_code == 404:
                 return None
             raise
+
+    def tag_blueprint_with_env(
+        self,
+        project_name: str,
+        env: str,
+        blueprint_id: str,
+    ) -> None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
+        self._rest_client.agent_configs.create_or_update_envs(
+            project_id=project_id,
+            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
+        )
 
     def get_blueprint(
         self,

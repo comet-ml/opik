@@ -201,7 +201,7 @@ class TestConfigDecoratorMaskAndEnv:
         ],
         ids=["mask_id", "env"],
     )
-    def test_mask_or_env__no_existing_blueprint__does_not_create(
+    def test_mask_or_env__no_existing_blueprint__creates_config(
         self, mock_backend, decorator_kwargs
     ):
         @agent_config_decorator(**decorator_kwargs)
@@ -211,7 +211,7 @@ class TestConfigDecoratorMaskAndEnv:
 
         MyConfig()
 
-        mock_backend.agent_configs.create_agent_config.assert_not_called()
+        mock_backend.agent_configs.create_agent_config.assert_called_once()
 
     @pytest.mark.parametrize(
         "decorator_kwargs",
@@ -261,6 +261,32 @@ class TestConfigDecoratorMaskAndEnv:
             assert call_kwargs.get("mask_id") == decorator_kwargs["mask_id"]
         if "env" in decorator_kwargs:
             assert call_kwargs.get("env_name") == decorator_kwargs["env"]
+
+    def test_env__no_existing_blueprint__pins_new_blueprint_to_env(self, mock_backend):
+        @agent_config_decorator(env="prod")
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        MyConfig()
+
+        mock_backend.agent_configs.create_or_update_envs.assert_called_once()
+        call_kwargs = mock_backend.agent_configs.create_or_update_envs.call_args[1]
+        assert call_kwargs["project_id"] == "proj-test"
+        envs = call_kwargs["envs"]
+        assert len(envs) == 1
+        assert envs[0].env_name == "prod"
+        assert envs[0].blueprint_id == "bp-test"
+
+    def test_mask_id__no_existing_blueprint__does_not_pin_env(self, mock_backend):
+        @agent_config_decorator(mask_id="mask-1")
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        MyConfig()
+
+        mock_backend.agent_configs.create_or_update_envs.assert_not_called()
 
 
 class TestConfigDecoratorTraceMetadata:

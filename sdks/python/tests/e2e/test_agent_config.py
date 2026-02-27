@@ -282,6 +282,40 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
     assert latest.id == base_blueprint_id
 
 
+def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyflow(
+    opik_client: opik.Opik,
+    project_name: str,
+):
+    """Backend is source of truth: re-instantiating with a different constructor arg
+    should return the value from the first registration, not the new arg."""
+
+    @opik.agent_config(project=project_name, env="prod")
+    @dataclass
+    class MyAgentConfig:
+        my_param: int
+        name: str
+        temperature: float = 0.8
+
+    # First instantiation: registers with backend
+    config = MyAgentConfig(my_param=11, name="Steve")
+    assert config.name == "Steve"
+    assert config.temperature == pytest.approx(0.8)
+
+    clear_shared_caches()
+
+    # Second instantiation: backend is now source of truth, "Bob" should be ignored
+    @opik.agent_config(project=project_name, env="prod")
+    @dataclass
+    class MyAgentConfig:  # type: ignore[no-redef]
+        my_param: int
+        name: str
+        temperature: float = 0.8
+
+    config = MyAgentConfig(my_param=10, name="Bob")
+    assert config.name == "Steve"
+    assert config.temperature == pytest.approx(0.8)
+
+
 def test_agent_config__multiple_mask_updates__each_produce_distinct_mask_id__happyflow(
     opik_client: opik.Opik,
     project_name: str,

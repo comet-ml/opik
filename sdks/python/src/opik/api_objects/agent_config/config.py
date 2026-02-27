@@ -94,6 +94,13 @@ class AgentConfig:
             rest_client_=self._rest_client,
         )
 
+    def tag_bluepring_with_env(self, env: str, blueprint_id: str) -> None:
+        self._config_client.tag_blueprint_with_env(
+            project_name=self._project_name,
+            env=env,
+            blueprint_id=blueprint_id,
+        )
+
     def create_mask(
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
