@@ -147,7 +147,7 @@ public class RunnersResource {
         return Response.ok(jobPage).build();
     }
 
-    @GET
+    @POST
     @Path("/{runnerId}/jobs/next")
     @Operation(operationId = "nextJob", summary = "Long-poll for the next pending job")
     public void nextJob(@PathParam("runnerId") String runnerId,

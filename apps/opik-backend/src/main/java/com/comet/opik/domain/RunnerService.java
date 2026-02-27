@@ -495,6 +495,11 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
+        String currentStatus = fields.get("status");
+        if (TERMINAL_JOB_STATUSES.contains(currentStatus) || JOB_STATUS_CANCELLED.equals(currentStatus)) {
+            return;
+        }
+
         String now = Instant.now().toString();
         jobMap.put("status", result.status());
         jobMap.put("completed_at", now);
@@ -771,7 +776,7 @@ class RunnerServiceImpl implements RunnerService {
         if (oldRunnerId != null && !oldRunnerId.equals(newRunnerId)) {
             // Delete old runner's heartbeat to trigger eviction on next heartbeat call
             redisClient.getBucket(RUNNER_HEARTBEAT_KEY.formatted(oldRunnerId), StringCodec.INSTANCE).delete();
-            log.info("Evicted runner {} for user {} in workspace {}", oldRunnerId, userName, workspaceId);
+            log.info("Evicted runner {} in workspace {}", oldRunnerId, workspaceId);
         }
     }
 
