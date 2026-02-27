@@ -88,6 +88,10 @@ export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   REFERENCE_KEY: "",
 };
 
+export const DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS = {
+  REFERENCE_KEY: "",
+};
+
 export const DEFAULT_CODE_METRIC_CONFIGS = {
   CODE: `from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -154,6 +158,12 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     value: METRIC_TYPE.LEVENSHTEIN,
     label: "Levenshtein",
     description: "Measures edit distance between output and expected text.",
+  },
+  {
+    value: METRIC_TYPE.NUMERICAL_SIMILARITY,
+    label: "Numerical Similarity",
+    description:
+      "Compares numeric output against a reference value. Closer values score higher.",
   },
 ];
 

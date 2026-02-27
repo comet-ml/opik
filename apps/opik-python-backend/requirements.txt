@@ -30,3 +30,4 @@ rq==2.6.0
 opik-optimizer==3.1.0
 gepa==0.0.17
 pyrate-limiter>=3.0.0,<4.0.0
+python-jsonpath>=2.0.0,<3.0.0
