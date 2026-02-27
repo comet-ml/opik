@@ -150,6 +150,7 @@ def main():
                 config.metric_type,
                 config.metric_params,
                 config.model,
+                dataset_items_provider=lambda: list(dataset.get_items()),
             )
 
             # Build optimizer

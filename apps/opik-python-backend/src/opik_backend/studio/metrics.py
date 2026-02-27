@@ -41,8 +41,10 @@ running within isolated optimization subprocesses.
 
 import logging
 import os
-from typing import Callable, Dict, Any, Optional
+import re
+from typing import Callable, Dict, List, Any, Optional
 
+import jsonpath
 from opik.evaluation.metrics import (
     Equals,
     GEval,
@@ -57,6 +59,31 @@ from .config import DEFAULT_REFERENCE_KEY, DEFAULT_CASE_SENSITIVE
 from .exceptions import InvalidMetricError
 
 logger = logging.getLogger(__name__)
+
+_JSONPATH_PATTERN = re.compile(r'[\[$?@]|\.\.')
+
+
+def _is_jsonpath(key: str) -> bool:
+    return bool(_JSONPATH_PATTERN.search(key))
+
+
+def _resolve_reference(dataset_item: dict, reference_key: str, default=""):
+    """Resolve a reference value from a dataset item.
+
+    Supports both plain field names (e.g. "answer") and JSONPath expressions
+    (e.g. "$.feedback_scores[?(@.name == 'Useful')].value").
+    """
+    if not _is_jsonpath(reference_key):
+        return dataset_item.get(reference_key, default)
+
+    try:
+        matches = jsonpath.findall(reference_key, dataset_item)
+        if matches:
+            return matches[0]
+        return default
+    except Exception as e:
+        logger.warning(f"JSONPath parse error for '{reference_key}': {e}, falling back to dict lookup")
+        return dataset_item.get(reference_key, default)
 
 # Environment variable to control execution strategy (same as evaluator.py)
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
@@ -149,13 +176,18 @@ class MetricFactory:
         return decorator
     
     @classmethod
-    def build(cls, metric_type: str, metric_params: Dict[str, Any], model: str) -> Callable:
+    def build(cls, metric_type: str, metric_params: Dict[str, Any], model: str,
+              dataset_items_provider: Callable[[], List[Dict[str, Any]]] = None) -> Callable:
         """Build a metric function from config.
         
         Args:
             metric_type: The type of metric to build
             metric_params: Parameters for the metric
             model: LLM model identifier (required for LLM-based metrics)
+            dataset_items_provider: Optional zero-arg callable that returns
+                dataset items. Only invoked by metrics that need to inspect
+                the data at build time (e.g., numerical_similarity for
+                scale inference), avoiding eager materialization.
             
         Returns:
             A callable metric function(dataset_item, llm_output) -> ScoreResult
@@ -171,13 +203,15 @@ class MetricFactory:
             )
         
         logger.debug(f"Building metric: {metric_type} with params: {metric_params}")
-        metric_fn = cls._BUILDERS[metric_type](metric_params, model)
+        metric_fn = cls._BUILDERS[metric_type](
+            metric_params, model, dataset_items_provider=dataset_items_provider,
+        )
         logger.debug(f"Created metric function: {metric_fn.__name__}")
         return metric_fn
 
 
 @MetricFactory.register("equals")
-def _build_equals_metric(params: Dict[str, Any], model: str) -> Callable:
+def _build_equals_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build an Equals metric function.
     
     Compares output with reference from dataset using exact string match.
@@ -198,10 +232,9 @@ def _build_equals_metric(params: Dict[str, Any], model: str) -> Callable:
     equals_metric = Equals(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
-        reference = dataset_item.get(reference_key, "")
+        reference = _resolve_reference(dataset_item, reference_key, "")
         result = equals_metric.score(reference=reference, output=llm_output)
         
-        # Add reason for hierarchical_reflective optimizer compatibility
         if result.value == 1.0:
             reason = "Exact match: output equals reference"
         else:
@@ -214,7 +247,7 @@ def _build_equals_metric(params: Dict[str, Any], model: str) -> Callable:
 
 
 @MetricFactory.register("levenshtein_ratio")
-def _build_levenshtein_metric(params: Dict[str, Any], model: str) -> Callable:
+def _build_levenshtein_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a LevenshteinRatio metric function.
     
     Computes string similarity using Levenshtein distance.
@@ -235,7 +268,7 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str) -> Callable:
     levenshtein_metric = LevenshteinRatio(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
-        reference = dataset_item.get(reference_key, "")
+        reference = _resolve_reference(dataset_item, reference_key, "")
         result = levenshtein_metric.score(reference=reference, output=llm_output)
         
         reason = f"Similarity: {result.value * 100:.0f}%"
@@ -284,7 +317,7 @@ def _has_template_placeholders(text: str) -> bool:
 
 
 @MetricFactory.register("geval")
-def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
+def _build_geval_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a GEval metric function.
     
     Uses an LLM to evaluate outputs based on custom criteria.
@@ -364,7 +397,7 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
 
 
 @MetricFactory.register("json_schema_validator")
-def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> Callable:
+def _build_json_schema_validator_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a JSON Schema Validator metric function.
     
     Validates that the LLM output complies with a JSON schema from the dataset item.
@@ -402,8 +435,94 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     return metric_fn
 
 
+@MetricFactory.register("numerical_similarity")
+def _build_numerical_similarity_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
+    """Normalized similarity between a numeric LLM output and a reference value.
+
+    Score = max(0, 1 - |output - reference| / scale_range)
+
+    The scale_range is inferred from the dataset via ``dataset_items_provider``
+    (max - min of parseable reference values).  When the provider is absent, the
+    dataset has fewer than 2 numeric references, or all references are identical,
+    scale_range defaults to 1.0 (raw absolute-error mode).
+
+    Non-numeric LLM outputs or missing/non-numeric references yield a score of
+    0.0 with an explanatory reason string.
+
+    Based on normalised absolute error:
+    https://en.wikipedia.org/wiki/Mean_absolute_error#Normalized_mean_absolute_error
+    """
+    from opik.evaluation.metrics.score_result import ScoreResult
+
+    reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
+
+    # Infer the value range from dataset reference values so the error is
+    # normalized relative to the scale (e.g., 0-5).  Falls back to 1.0
+    # when the range can't be determined.
+    scale_range = 1.0
+    dataset_items_provider = kwargs.get("dataset_items_provider")
+    if dataset_items_provider:
+        ref_values = []
+        for item in dataset_items_provider():
+            raw = _resolve_reference(item, reference_key, None)
+            if raw is not None:
+                try:
+                    ref_values.append(float(raw))
+                except (ValueError, TypeError):
+                    pass
+        if len(ref_values) >= 2:
+            inferred = max(ref_values) - min(ref_values)
+            if inferred > 0:
+                scale_range = inferred
+                logger.info(
+                    f"numerical_similarity: inferred scale_range={scale_range} "
+                    f"from {len(ref_values)} reference values"
+                )
+
+    def metric_fn(dataset_item, llm_output):
+        reference = _resolve_reference(dataset_item, reference_key, None)
+
+        try:
+            output_val = float(str(llm_output).strip())
+        except (ValueError, TypeError):
+            return ScoreResult(
+                value=0.0,
+                name="numerical_similarity",
+                reason=f"Could not parse LLM output as number: {str(llm_output)[:100]}"
+            )
+
+        if reference is None:
+            return ScoreResult(
+                value=0.0,
+                name="numerical_similarity",
+                reason=f"Missing reference value for key '{reference_key}'"
+            )
+
+        try:
+            reference_val = float(reference)
+        except (ValueError, TypeError):
+            return ScoreResult(
+                value=0.0,
+                name="numerical_similarity",
+                reason=f"Reference value is not numeric: {str(reference)[:100]}"
+            )
+
+        normalized_error = abs(output_val - reference_val) / scale_range
+        score = max(0.0, 1.0 - normalized_error)
+
+        return ScoreResult(
+            value=score,
+            name="numerical_similarity",
+            reason=f"output={output_val}, reference={reference_val}, "
+                   f"abs_error={abs(output_val - reference_val):.4f}, scale_range={scale_range}"
+        )
+
+    metric_fn.__name__ = "numerical_similarity"
+    return metric_fn
+
+
 @MetricFactory.register("code")
-def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
+def _build_code_metric(params: Dict[str, Any], model: str, **kwargs) -> Callable:
     """Build a custom code metric function using the secure executor infrastructure.
     
     User code is executed using the same executor infrastructure as the automations
