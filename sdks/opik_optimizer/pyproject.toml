@@ -81,6 +81,9 @@ opik_optimizer = ["data/*.json", "data/*.jsonl"]
 Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
 Repository = "https://github.com/comet-ml/opik"
 
+[project.scripts]
+opik-optimizer = "opik_optimizer.cli:main"
+
 [tool.mypy]
 follow_imports = "normal"
 ignore_missing_imports = false
