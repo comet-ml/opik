@@ -839,3 +839,74 @@ class TestConfigDecoratorPromptFields:
         instance = MyConfig()
 
         assert instance.version is None
+
+
+class TestConfigDecoratorContextMask:
+    def test_context_mask__attribute_returns_masked_value(self, mock_backend):
+        from opik.api_objects.agent_config.context import agent_config_context
+
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.2)],
+        )
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        assert instance.temp == 0.8
+
+        with agent_config_context("mask-ctx"):
+            assert instance.temp == 0.2
+
+    def test_context_mask__takes_precedence_over_class_mask(self, mock_backend):
+        from opik.api_objects.agent_config.context import agent_config_context
+
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.5)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.1)],
+        )
+
+        @agent_config_decorator(mask_id="class-mask")
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        assert instance.temp == 0.5
+
+        with agent_config_context("mask-ctx"):
+            assert instance.temp == 0.1
+
+    def test_context_mask__calls_get_blueprint_with_mask_id(self, mock_backend):
+        from opik.api_objects.agent_config.context import agent_config_context
+
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.2)],
+        )
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        mock_backend.agent_configs.get_latest_blueprint.reset_mock()
+
+        with agent_config_context("mask-ctx"):
+            _ = instance.temp
+
+        call_kwargs = mock_backend.agent_configs.get_latest_blueprint.call_args[1]
+        assert call_kwargs.get("mask_id") == "mask-ctx"
