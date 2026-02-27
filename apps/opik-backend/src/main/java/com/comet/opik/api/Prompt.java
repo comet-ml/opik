@@ -57,7 +57,7 @@ public record Prompt(
         @JsonView({
                 Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion latestVersion,
         @JsonView({
-                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion version){
+                Prompt.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable PromptVersion requestedVersion){
 
     public static class View {
         public static class Write {

@@ -122,8 +122,8 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
-            "type"};
+    public static final String[] PROMPT_IGNORED_FIELDS = {"latestVersion", "requestedVersion", "template", "metadata",
+            "changeDescription", "type"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -4322,7 +4322,7 @@ class PromptResourceTest {
             // fetch the prompt via its own endpoint (same view: Prompt.View.Detail), then
             // strip latestVersion since by-commit intentionally omits it
             var expectedPrompt = promptResourceClient.getPrompt(promptId, apiKey, workspaceName)
-                    .toBuilder().latestVersion(null).version(expectedVersion).build();
+                    .toBuilder().latestVersion(null).requestedVersion(expectedVersion).build();
 
             assertThat(result)
                     .usingRecursiveComparison(
@@ -4334,113 +4334,80 @@ class PromptResourceTest {
                     .isEqualTo(expectedPrompt);
         }
 
-        @Test
-        @DisplayName("when commit is malformed, then return 400")
-        void getPromptByCommitWhenCommitMalformed() {
-            var malformedCommit = "not-valid!!";
-
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("when request is invalid or unresolvable, then return error")
+        void getPromptByCommitErrorCases(String label, String commit, String requestApiKey, String requestWorkspace,
+                int expectedStatus) {
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                     .path("by-commit")
-                    .path(malformedCommit)
+                    .path(commit)
                     .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .header(HttpHeaders.AUTHORIZATION, requestApiKey)
+                    .header(WORKSPACE_HEADER, requestWorkspace)
                     .get()) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
             }
         }
 
-        @Test
-        @DisplayName("when commit not found, then return 404")
-        void getPromptByCommitWhenCommitNotFound() {
+        Stream<Arguments> getPromptByCommitErrorCases() {
+            // case 1: malformed commit fails pattern validation → 400
+            var malformed = arguments(
+                    "when commit is malformed, then return 400",
+                    "not-valid!!", API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+
+            // case 2: valid format but non-existent commit → 404
             var unknownCommit = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            var notFound = arguments(
+                    "when commit not found, then return 404",
+                    unknownCommit, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("by-commit")
-                    .path(unknownCommit)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-
-        @Test
-        @DisplayName("when commit belongs to another workspace, then return 404")
-        void getPromptByCommitWhenCommitBelongsToAnotherWorkspace() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            // case 3: commit exists in a different workspace → 404
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+            var otherPrompt = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER).createdBy(USER).template(null).build();
-            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
-
-            var version = promptVersionResourceClient.createPromptVersion(
-                    CreatePromptVersion.builder().name(prompt.name())
+            UUID otherPromptId = createPrompt(otherPrompt, otherApiKey, otherWorkspaceName);
+            var otherVersion = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(otherPrompt.name())
                             .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
-                                    .promptId(promptId).build())
+                                    .promptId(otherPromptId).build())
                             .build(),
-                    apiKey, workspaceName);
+                    otherApiKey, otherWorkspaceName);
+            var wrongWorkspace = arguments(
+                    "when commit belongs to another workspace, then return 404",
+                    otherVersion.commit(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("by-commit")
-                    .path(version.commit())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-
-        @Test
-        @DisplayName("when same commit exists across multiple prompts in workspace, then return 409")
-        void getPromptByCommitWhenCommitIsDuplicatedAcrossPrompts() {
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceName = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
+            // case 4: same commit across multiple prompts in one workspace → 409
+            var dupApiKey = UUID.randomUUID().toString();
+            var dupWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(dupApiKey, dupWorkspaceName, UUID.randomUUID().toString());
             var sharedCommit = "a1b2c3d4";
-
-            var prompt1 = factory.manufacturePojo(Prompt.class).toBuilder()
+            var dupPrompt1 = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER).createdBy(USER).template(null).build();
-            UUID promptId1 = createPrompt(prompt1, apiKey, workspaceName);
-
-            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+            var dupPrompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
                     .lastUpdatedBy(USER).createdBy(USER).template(null).build();
-            UUID promptId2 = createPrompt(prompt2, apiKey, workspaceName);
-
             promptVersionResourceClient.createPromptVersion(
-                    CreatePromptVersion.builder().name(prompt1.name())
+                    CreatePromptVersion.builder().name(dupPrompt1.name())
                             .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
-                                    .promptId(promptId1).commit(sharedCommit).build())
+                                    .promptId(createPrompt(dupPrompt1, dupApiKey, dupWorkspaceName))
+                                    .commit(sharedCommit).build())
                             .build(),
-                    apiKey, workspaceName);
-
+                    dupApiKey, dupWorkspaceName);
             promptVersionResourceClient.createPromptVersion(
-                    CreatePromptVersion.builder().name(prompt2.name())
+                    CreatePromptVersion.builder().name(dupPrompt2.name())
                             .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
-                                    .promptId(promptId2).commit(sharedCommit).build())
+                                    .promptId(createPrompt(dupPrompt2, dupApiKey, dupWorkspaceName))
+                                    .commit(sharedCommit).build())
                             .build(),
-                    apiKey, workspaceName);
+                    dupApiKey, dupWorkspaceName);
+            var conflict = arguments(
+                    "when same commit exists across multiple prompts in workspace, then return 409",
+                    sharedCommit, dupApiKey, dupWorkspaceName, HttpStatus.SC_CONFLICT);
 
-            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("by-commit")
-                    .path(sharedCommit)
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, apiKey)
-                    .header(WORKSPACE_HEADER, workspaceName)
-                    .get()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
-            }
+            return Stream.of(malformed, notFound, wrongWorkspace, conflict);
         }
     }
 }
