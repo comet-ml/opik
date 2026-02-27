@@ -142,6 +142,20 @@ interface AgentConfigDAO {
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("""
+            SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
+            FROM agent_blueprints
+            WHERE workspace_id = :workspace_id
+                AND id = :blueprint_id
+                AND project_id = :project_id
+                AND type = :type
+            """)
+    AgentBlueprint getBlueprintByIdAndType(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("blueprint_id") UUID blueprintId,
+            @Bind("project_id") UUID projectId,
+            @Bind("type") BlueprintType type);
+
+    @SqlQuery("""
             SELECT project_id FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND id = :blueprint_id
             """)
@@ -284,8 +298,7 @@ interface AgentConfigDAO {
     @SqlBatch("""
             UPDATE agent_config_envs
             SET blueprint_id = :bean.blueprintId,
-                last_updated_by = :last_updated_by,
-                last_updated_at = CURRENT_TIMESTAMP(6)
+                last_updated_by = :last_updated_by
             WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND env_name = :bean.envName

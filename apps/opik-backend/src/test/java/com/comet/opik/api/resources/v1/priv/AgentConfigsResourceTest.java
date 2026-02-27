@@ -678,8 +678,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("when mask belongs to different project, then return 400")
-        void applyMask__whenMaskFromDifferentProject__thenReturn400() {
+        @DisplayName("when mask belongs to different project, then return 404")
+        void applyMask__whenMaskFromDifferentProject__thenReturn404() {
             var projectName1 = UUID.randomUUID().toString();
             var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, TEST_WORKSPACE);
 
@@ -709,7 +709,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             agentConfigsResourceClient.getLatestBlueprint(projectId1, maskId, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_BAD_REQUEST);
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
@@ -789,8 +789,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("when retrieving mask by ID, then return 400")
-        void getBlueprintById__whenMask__thenReturn400() {
+        @DisplayName("when retrieving mask by ID, then return 404")
+        void getBlueprintById__whenMask__thenReturn404() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -817,12 +817,12 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             agentConfigsResourceClient.getBlueprintById(maskId, null, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_BAD_REQUEST);
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
-        @DisplayName("when retrieving mask by environment, then return 400")
-        void getBlueprintByEnv__whenMask__thenReturn400() {
+        @DisplayName("when retrieving mask by environment, then return 404")
+        void getBlueprintByEnv__whenMask__thenReturn404() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -861,7 +861,7 @@ class AgentConfigsResourceTest {
                     HttpStatus.SC_NO_CONTENT);
 
             agentConfigsResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_BAD_REQUEST);
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 

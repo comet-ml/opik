@@ -23,6 +23,6 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record AgentConfigCreate(
         @Nullable @Schema(description = "Project ID. Either project_id or project_name must be provided") UUID projectId,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Project name. Either project_id or project_name must be provided") String projectName,
-        @Nullable @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Agent config ID. Generated automatically if not provided") UUID id,
+        @Nullable @Schema(description = "Agent config ID. Generated automatically if not provided") UUID id,
         @NotNull @Valid AgentBlueprint blueprint) {
 }

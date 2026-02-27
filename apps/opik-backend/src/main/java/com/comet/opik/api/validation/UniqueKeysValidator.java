@@ -4,12 +4,13 @@ import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfigValue;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
+import org.apache.commons.collections4.CollectionUtils;
 
 public class UniqueKeysValidator implements ConstraintValidator<UniqueKeysValidation, AgentBlueprint> {
 
     @Override
     public boolean isValid(AgentBlueprint blueprint, ConstraintValidatorContext context) {
-        if (blueprint == null || blueprint.values() == null || blueprint.values().isEmpty()) {
+        if (blueprint == null || CollectionUtils.isEmpty(blueprint.values())) {
             return true;
         }
 

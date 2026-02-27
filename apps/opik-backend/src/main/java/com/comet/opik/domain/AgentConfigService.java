@@ -3,15 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -233,20 +230,12 @@ class AgentConfigServiceImpl implements AgentConfigService {
             UUID maskId) {
 
         AgentBlueprint blueprint = blueprintId != null
-                ? dao.getBlueprintById(workspaceId, blueprintId)
+                ? dao.getBlueprintByIdAndType(workspaceId, blueprintId, projectId,
+                        AgentBlueprint.BlueprintType.BLUEPRINT)
                 : dao.getLatestBlueprint(workspaceId, projectId, AgentBlueprint.BlueprintType.BLUEPRINT);
 
         if (blueprint == null) {
             throw new NotFoundException("Blueprint not found");
-        }
-
-        if (blueprint.type() == AgentBlueprint.BlueprintType.MASK) {
-            throw new BadRequestException(
-                    Response.status(Response.Status.BAD_REQUEST)
-                            .entity(new ErrorMessage(
-                                    List.of("Cannot retrieve mask blueprint '" + blueprint.id()
-                                            + "' as a configuration snapshot")))
-                            .build());
         }
 
         List<AgentConfigValue> values = dao.getValuesByBlueprintId(
@@ -408,25 +397,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
             UUID maskId,
             List<AgentConfigValue> blueprintValues) {
 
-        AgentBlueprint mask = dao.getBlueprintById(workspaceId, maskId);
+        AgentBlueprint mask = dao.getBlueprintByIdAndType(workspaceId, maskId, projectId,
+                AgentBlueprint.BlueprintType.MASK);
         if (mask == null) {
-            throw new NotFoundException("Mask blueprint '" + maskId + "' not found");
-        }
-
-        if (mask.type() != AgentBlueprint.BlueprintType.MASK) {
-            throw new BadRequestException(
-                    Response.status(Response.Status.BAD_REQUEST)
-                            .entity(new ErrorMessage(List.of("Blueprint '" + maskId + "' is not a mask")))
-                            .build());
-        }
-
-        if (!mask.projectId().equals(projectId)) {
-            throw new BadRequestException(
-                    Response.status(Response.Status.BAD_REQUEST)
-                            .entity(new ErrorMessage(
-                                    List.of("Mask blueprint '" + maskId + "' does not belong to project '" + projectId
-                                            + "'")))
-                            .build());
+            throw new NotFoundException("Mask blueprint '" + maskId + "' not found in project '" + projectId + "'");
         }
 
         List<AgentConfigValue> maskDelta = dao.getValuesDeltaByBlueprintId(

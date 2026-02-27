@@ -19,6 +19,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AgentConfigsResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/agent-configs";
+    private static final String BLUEPRINTS_PATH = RESOURCE_PATH + "/blueprints";
+    private static final String LATEST_BLUEPRINT_PATH = RESOURCE_PATH + "/blueprints/latest/projects/%s";
+    private static final String BLUEPRINT_BY_ID_PATH = RESOURCE_PATH + "/blueprints/%s";
+    private static final String BLUEPRINT_BY_ENV_PATH = RESOURCE_PATH + "/blueprints/environments/%s/projects/%s";
+    private static final String DELTA_PATH = RESOURCE_PATH + "/blueprints/%s/deltas";
+    private static final String ENVIRONMENTS_PATH = RESOURCE_PATH + "/blueprints/environments";
+    private static final String HISTORY_PATH = RESOURCE_PATH + "/blueprints/history/projects/%s";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -30,7 +37,7 @@ public class AgentConfigsResourceClient {
 
     public UUID createAgentConfig(AgentConfigCreate request, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
+        try (var actualResponse = client.target(BLUEPRINTS_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -51,7 +58,7 @@ public class AgentConfigsResourceClient {
 
     public Response createAgentConfigWithResponse(AgentConfigCreate request, String apiKey,
             String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
+        return client.target(BLUEPRINTS_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -60,7 +67,7 @@ public class AgentConfigsResourceClient {
     }
 
     public Response createAgentConfigWithResponse(String body, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints")
+        return client.target(BLUEPRINTS_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -70,8 +77,7 @@ public class AgentConfigsResourceClient {
 
     public AgentBlueprint getLatestBlueprint(UUID projectId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(
-                RESOURCE_PATH.formatted(baseURI) + "/blueprints/latest/projects/" + projectId.toString());
+        var target = client.target(LATEST_BLUEPRINT_PATH.formatted(baseURI, projectId));
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -96,7 +102,7 @@ public class AgentConfigsResourceClient {
 
     public AgentBlueprint getBlueprintById(UUID blueprintId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/" + blueprintId);
+        var target = client.target(BLUEPRINT_BY_ID_PATH.formatted(baseURI, blueprintId));
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -121,8 +127,7 @@ public class AgentConfigsResourceClient {
 
     public AgentBlueprint getBlueprintByEnv(String envName, UUID projectId, UUID maskId, String apiKey,
             String workspaceName, int expectedStatus) {
-        var target = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/environments/" + envName
-                + "/projects/" + projectId);
+        var target = client.target(BLUEPRINT_BY_ENV_PATH.formatted(baseURI, envName, projectId));
 
         if (maskId != null) {
             target = target.queryParam("mask_id", maskId);
@@ -147,7 +152,7 @@ public class AgentConfigsResourceClient {
 
     public AgentBlueprint getDelta(UUID blueprintId, String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client
-                .target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/" + blueprintId + "/deltas")
+                .target(DELTA_PATH.formatted(baseURI, blueprintId))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -166,7 +171,7 @@ public class AgentConfigsResourceClient {
 
     public void createOrUpdateEnvs(com.comet.opik.api.AgentConfigEnvUpdate request, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/environments")
+        try (var actualResponse = client.target(ENVIRONMENTS_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -179,7 +184,7 @@ public class AgentConfigsResourceClient {
     public AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size,
             String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client
-                .target(RESOURCE_PATH.formatted(baseURI) + "/blueprints/history/projects/" + projectId)
+                .target(HISTORY_PATH.formatted(baseURI, projectId))
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .request()
