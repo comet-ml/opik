@@ -150,6 +150,9 @@ export interface Experiment {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
@@ -170,6 +173,15 @@ export interface ExperimentItem {
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
+  status?: "passed" | "failed" | "skipped";
+  assertion_results?: AssertionResult[];
+}
+
+export interface AssertionResult {
+  name: string;
+  passed: boolean;
+  pass_score?: number;
+  reason?: string;
 }
 
 export interface ExperimentsCompare extends DatasetItem {
@@ -181,6 +193,9 @@ export interface ExperimentsAggregations {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];

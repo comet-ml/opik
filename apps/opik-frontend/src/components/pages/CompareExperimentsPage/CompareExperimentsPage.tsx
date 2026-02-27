@@ -12,6 +12,7 @@ import ExperimentsDashboardsTab from "@/components/pages/CompareExperimentsPage/
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
+import { isEvalSuiteExperimentType } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -33,18 +34,18 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     experimentsIds,
   });
 
-  const isPending = response.reduce<boolean>(
-    (acc, r) => acc || r.isPending,
-    false,
-  );
+  const isPending = response.some((r) => r.isPending);
 
   const experiments: Experiment[] = response
     .map((r) => r.data)
     .filter((e) => !isUndefined(e));
 
-  const memorizedExperiments: Experiment[] = useDeepMemo(() => {
-    return experiments ?? [];
-  }, [experiments]);
+  const memorizedExperiments: Experiment[] = useDeepMemo(
+    () => experiments,
+    [experiments],
+  );
+
+  const isEvalSuite = isEvalSuiteExperimentType(memorizedExperiments[0]?.type);
 
   const renderContent = () => {
     if (view === VIEW_TYPE.DETAILS) {
@@ -64,11 +65,13 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
                 Configuration
               </TabsTrigger>
               <TabsTrigger variant="underline" value="scores">
-                Feedback scores
-                <ExplainerIcon
-                  className="ml-1"
-                  {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
-                />
+                {isEvalSuite ? "Assertions" : "Feedback scores"}
+                {!isEvalSuite && (
+                  <ExplainerIcon
+                    className="ml-1"
+                    {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
+                  />
+                )}
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
@@ -76,6 +79,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             <ExperimentItemsTab
               experimentsIds={experimentsIds}
               experiments={memorizedExperiments}
+              isEvalSuite={isEvalSuite}
             />
           </TabsContent>
           <TabsContent value="config">

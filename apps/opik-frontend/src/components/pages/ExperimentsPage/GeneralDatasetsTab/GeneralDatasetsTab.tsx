@@ -20,6 +20,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
+import PassRateCell from "@/components/shared/DataTableCells/PassRateCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
@@ -94,12 +95,11 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  COLUMN_PROJECT_ID,
   "created_at",
   "duration.p50",
-  "trace_count",
+  "total_estimated_cost_avg",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
-  COLUMN_COMMENTS_ID,
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
@@ -113,6 +113,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   COLUMN_PROJECT_ID,
@@ -316,20 +317,12 @@ const GeneralDatasetsTab: React.FC = () => {
       {
         id: "pass_rate",
         label: "Pass rate",
-        type: COLUMN_TYPE.string,
-        accessorFn: (row: GroupedExperiment) => {
-          const record = row as unknown as Record<string, unknown>;
-          const passRate = record.pass_rate as number | undefined;
-          const passedCount = record.passed_count as number | undefined;
-          const totalCount = record.total_count as number | undefined;
-
-          if (passRate == null || passedCount == null || totalCount == null) {
-            return undefined;
-          }
-
-          return `${(passRate * 100).toFixed(
-            1,
-          )}% (${passedCount}/${totalCount})`;
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) => row.pass_rate,
+        cell: PassRateCell as never,
+        aggregatedCell: PassRateCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "pass_rate",
         },
       },
       {
