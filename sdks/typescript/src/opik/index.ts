@@ -25,6 +25,8 @@ export type { FilterExpression } from "@/query";
 
 export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
+export { runCli } from "@/cli";
+export type { CliDeps, CliIo } from "@/cli";
 
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";
