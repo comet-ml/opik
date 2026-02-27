@@ -109,8 +109,8 @@ def test_agent_config__programmatic_create_and_get__happyflow(
         description="v1",
     )
     assert bp_v1.id is not None
-    assert bp_v1["temperature"] == "0.5"
-    assert bp_v1["max_tokens"] == "100"
+    assert bp_v1["temperature"] == 0.5
+    assert bp_v1["max_tokens"] == 100
 
     bp_v2 = agent_config.create_blueprint(
         parameters={"temperature": 0.8, "max_tokens": 200},
@@ -118,12 +118,12 @@ def test_agent_config__programmatic_create_and_get__happyflow(
     )
     assert bp_v2.id is not None
     assert bp_v2.id != bp_v1.id
-    assert bp_v2["temperature"] == "0.8"
-    assert bp_v2["max_tokens"] == "200"
+    assert bp_v2["temperature"] == 0.8
+    assert bp_v2["max_tokens"] == 200
 
     latest = agent_config.get_blueprint()
-    assert latest["temperature"] == "0.8"
-    assert latest["max_tokens"] == "200"
+    assert latest["temperature"] == 0.8
+    assert latest["max_tokens"] == 200
 
 
 def test_agent_config__get_blueprint_by_env_tag__happyflow(
@@ -148,7 +148,7 @@ def test_agent_config__get_blueprint_by_env_tag__happyflow(
     # We fetch the correct blueprint by env
     prod_bp = agent_config.get_blueprint(env="prod")
     assert prod_bp.id == blueprint_id
-    assert prod_bp["temperature"] == "0.4"
+    assert prod_bp["temperature"] == 0.4
 
 
 def test_agent_config__mask_creation_and_application__happyflow(
@@ -169,11 +169,11 @@ def test_agent_config__mask_creation_and_application__happyflow(
     assert isinstance(mask_id, str)
     assert mask_id != base_bp.id
 
-    assert base_bp["temperature"] == "0.7"
-    assert base_bp["max_tokens"] == "256"
+    assert base_bp["temperature"] == 0.7
+    assert base_bp["max_tokens"] == 256
 
     masked = agent_config.get_blueprint(mask_id=mask_id)
-    assert masked["temperature"] == "0.2"
+    assert masked["temperature"] == 0.2
 
 
 def test_agent_config__multiple_blueprints_each_produce_new_id__happyflow(
@@ -194,8 +194,8 @@ def test_agent_config__multiple_blueprints_each_produce_new_id__happyflow(
     id_v2 = bp_v2.id
     assert id_v2 is not None
     assert id_v2 != id_v1
-    assert bp_v2["temperature"] == "0.2"
-    assert bp_v2["max_tokens"] == "20"
+    assert bp_v2["temperature"] == 0.2
+    assert bp_v2["max_tokens"] == 20
 
     bp_v3 = agent_config.create_blueprint(
         parameters={"temperature": 0.3, "max_tokens": 30}, description="v3"
@@ -203,12 +203,12 @@ def test_agent_config__multiple_blueprints_each_produce_new_id__happyflow(
     id_v3 = bp_v3.id
     assert id_v3 is not None
     assert id_v3 != id_v2
-    assert bp_v3["temperature"] == "0.3"
-    assert bp_v3["max_tokens"] == "30"
+    assert bp_v3["temperature"] == 0.3
+    assert bp_v3["max_tokens"] == 30
 
     latest = agent_config.get_blueprint()
     assert latest.id == id_v3
-    assert latest["temperature"] == "0.3"
+    assert latest["temperature"] == 0.3
 
 
 def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
@@ -307,5 +307,5 @@ def test_agent_config__multiple_mask_updates__each_produce_distinct_mask_id__hap
     fetched_b = agent_config.get_blueprint(mask_id=mask_id_b)
     # Blueprint ids are the same, but masks are applied on top
     assert fetched_a.id == fetched_b.id
-    assert fetched_a["temperature"] == "0.1"
-    assert fetched_b["temperature"] == "0.9"
+    assert fetched_a["temperature"] == 0.1
+    assert fetched_b["temperature"] == 0.9
