@@ -486,7 +486,7 @@ class TestConfigDecoratorMultiClass:
         assert m.temp == 0.5
         assert p.template == "backend"
 
-    def test_refetch_after_ttl__single_call_for_all(self, mock_backend):
+    def test_background_refresh_after_ttl__updates_cache(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
                 mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
@@ -507,10 +507,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         _p = PromptConfig()
 
-        mock_backend.agent_configs.get_latest_blueprint.reset_mock()
-
         cache: SharedConfigCache = object.__getattribute__(m, "__opik_shared_cache__")
-        cache._last_fetch = time.monotonic() - cache._ttl_seconds - 1
 
         mock_backend.set_blueprint_values(
             [
@@ -519,11 +516,15 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        _ = m.temp
+        cache._last_fetch = time.monotonic() - cache._ttl_seconds - 1
+        cache.try_background_refresh()
 
-        assert mock_backend.agent_configs.get_latest_blueprint.call_count == 1
+        assert cache.values["ModelConfig.temp"] == 0.9
+        assert cache.values["PromptConfig.template"] == "v2"
 
-    def test_stale_refetch_via_classA__classB_sees_update(self, mock_backend):
+    def test_background_refresh__classB_sees_update_from_classA_refresh(
+        self, mock_backend
+    ):
         mock_backend.set_blueprint_values(
             [
                 mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
@@ -545,7 +546,6 @@ class TestConfigDecoratorMultiClass:
         p = PromptConfig()
 
         cache: SharedConfigCache = object.__getattribute__(m, "__opik_shared_cache__")
-        cache._last_fetch = time.monotonic() - cache._ttl_seconds - 1
 
         mock_backend.set_blueprint_values(
             [
@@ -554,11 +554,10 @@ class TestConfigDecoratorMultiClass:
             ]
         )
 
-        _ = m.temp
-        assert m.temp == 0.9
+        cache._last_fetch = time.monotonic() - cache._ttl_seconds - 1
+        cache.try_background_refresh()
 
-        assert cache.values["PromptConfig.template"] == "v2"
-        _ = p.template
+        assert m.temp == 0.9
         assert p.template == "v2"
 
     def test_different_projects__separate_caches(self, mock_backend):

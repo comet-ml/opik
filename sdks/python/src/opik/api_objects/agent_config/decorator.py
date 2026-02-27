@@ -5,7 +5,7 @@ import typing
 from opik import context_storage
 from . import type_helpers
 from .blueprint import Blueprint
-from .cache import SharedConfigCache, get_shared_cache
+from .cache import SharedConfigCache, get_shared_cache, _ensure_refresh_thread_started
 from .client import ConfigClient
 from .config import AgentConfig
 from .context import get_active_config_mask
@@ -54,10 +54,14 @@ def agent_config_decorator(
             original_init(self, *args, **kwargs)
 
             resolved_project = resolve_project(project)
-            shared_cache = init_shared_cache(
-                resolved_project, env, mask_id, prefixed_field_types
-            )
             agent_cfg = build_agent_config(resolved_project)
+            shared_cache = init_shared_cache(
+                resolved_project,
+                env,
+                mask_id,
+                prefixed_field_types,
+                agent_cfg=agent_cfg,
+            )
 
             object.__setattr__(self, _ATTR_SHARED_CACHE, shared_cache)
             object.__setattr__(self, _ATTR_CLASS_PREFIX, class_prefix)
@@ -107,9 +111,22 @@ def init_shared_cache(
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
     prefixed_field_types: typing.Dict[str, typing.Any],
+    agent_cfg: typing.Optional[AgentConfig] = None,
 ) -> SharedConfigCache:
     shared_cache = get_shared_cache(resolved_project, env, mask_id)
     shared_cache.register_fields(prefixed_field_types)
+
+    if agent_cfg is not None and mask_id is None:
+
+        def _refresh() -> typing.Optional["Blueprint"]:
+            return agent_cfg.get_blueprint(
+                env=env,
+                field_types=shared_cache.all_field_types,
+            )
+
+        shared_cache.set_refresh_callback(_refresh)
+        _ensure_refresh_thread_started()
+
     return shared_cache
 
 
@@ -266,15 +283,6 @@ def refetch_stale_cache(instance: typing.Any) -> None:
 
     if instance_mask is not None:
         return
-
-    shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, _ATTR_SHARED_CACHE
-    )
-    if not shared_cache.is_stale():
-        return
-
-    env_val = object.__getattribute__(instance, _ATTR_ENV)
-    do_refetch(instance, env=env_val)
 
 
 def do_refetch(
