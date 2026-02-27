@@ -38,6 +38,11 @@ setup(
             "gepa>=0.0.7",
         ],
     },
+    entry_points={
+        "console_scripts": [
+            "opik-optimizer=opik_optimizer.cli:main",
+        ],
+    },
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
