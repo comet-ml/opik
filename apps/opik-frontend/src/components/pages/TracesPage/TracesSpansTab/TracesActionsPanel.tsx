@@ -153,7 +153,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         }
       />
       {type === TRACE_DATA_TYPE.traces && canDeleteTraces && (
-        <TooltipWrapper content="Delete ef">
+        <TooltipWrapper content="Delete">
           <Button
             variant="outline"
             size="icon-sm"
