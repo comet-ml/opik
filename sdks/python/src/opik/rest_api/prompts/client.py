@@ -8,6 +8,7 @@ from ..types.json_node_write import JsonNodeWrite
 from ..types.prompt_detail import PromptDetail
 from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
+from ..types.prompt_version_link_public import PromptVersionLinkPublic
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from ..types.prompt_version_update import PromptVersionUpdate
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
@@ -422,6 +423,33 @@ class PromptsClient:
         _response = self._raw_client.get_prompt_versions(
             id, page=page, size=size, search=search, sorting=sorting, filters=filters, request_options=request_options
         )
+        return _response.data
+
+    def get_prompts_by_commits(
+        self, *, commits: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[PromptVersionLinkPublic]:
+        """
+        Get prompts by prompt version commits
+
+        Parameters
+        ----------
+        commits : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[PromptVersionLinkPublic]
+            OK
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.prompts.get_prompts_by_commits(commits=['commits'], )
+        """
+        _response = self._raw_client.get_prompts_by_commits(commits=commits, request_options=request_options)
         return _response.data
 
     def restore_prompt_version(
@@ -918,6 +946,36 @@ class AsyncPromptsClient:
         _response = await self._raw_client.get_prompt_versions(
             id, page=page, size=size, search=search, sorting=sorting, filters=filters, request_options=request_options
         )
+        return _response.data
+
+    async def get_prompts_by_commits(
+        self, *, commits: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[PromptVersionLinkPublic]:
+        """
+        Get prompts by prompt version commits
+
+        Parameters
+        ----------
+        commits : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[PromptVersionLinkPublic]
+            OK
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.prompts.get_prompts_by_commits(commits=['commits'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_prompts_by_commits(commits=commits, request_options=request_options)
         return _response.data
 
     async def restore_prompt_version(

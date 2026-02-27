@@ -6,6 +6,7 @@ export type { GetPromptVersionByIdRequest } from "./GetPromptVersionByIdRequest.
 export type { GetPromptVersionsRequest } from "./GetPromptVersionsRequest.js";
 export type { PromptUpdatable } from "./PromptUpdatable.js";
 export type { PromptVersionBatchUpdate } from "./PromptVersionBatchUpdate.js";
+export type { PromptVersionCommitsRequestPublic } from "./PromptVersionCommitsRequestPublic.js";
 export type { PromptVersionRetrieveDetail } from "./PromptVersionRetrieveDetail.js";
 export type { PromptWrite } from "./PromptWrite.js";
 export type { RestorePromptVersionRequest } from "./RestorePromptVersionRequest.js";

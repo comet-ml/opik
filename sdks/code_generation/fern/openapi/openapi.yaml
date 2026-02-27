@@ -4129,6 +4129,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PromptVersionPage_Public"
+  /v1/private/prompts/retrieve-by-commits:
+    post:
+      tags:
+      - Prompts
+      summary: Get prompts by commits
+      description: Get prompts by prompt version commits
+      operationId: getPromptsByCommits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionCommitsRequest_Public"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PromptVersionLink_Public"
   /v1/private/prompts/{promptId}/versions/{versionId}/restore:
     post:
       tags:
@@ -9093,7 +9114,6 @@ components:
         data:
           $ref: "#/components/schemas/JsonNode"
         description:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
           description: Dataset item description
         tags:
@@ -11873,23 +11893,18 @@ components:
           type: object
       - type: string
     PromptVersionLink_Public:
-      required:
-      - id
       type: object
       properties:
-        id:
+        prompt_version_id:
           type: string
           format: uuid
         commit:
           type: string
-          readOnly: true
         prompt_id:
           type: string
           format: uuid
-          readOnly: true
         prompt_name:
           type: string
-          readOnly: true
     FeedbackScoreNames_Public:
       type: object
       properties:
@@ -14394,6 +14409,18 @@ components:
           type: integer
           format: int64
           readOnly: true
+    PromptVersionCommitsRequest_Public:
+      required:
+      - commits
+      type: object
+      properties:
+        commits:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            minLength: 1
+            type: string
     PromptVersionRetrieve_Detail:
       required:
       - name
