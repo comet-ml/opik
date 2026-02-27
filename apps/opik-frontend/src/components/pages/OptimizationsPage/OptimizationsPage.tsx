@@ -35,7 +35,6 @@ import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { toString } from "@/lib/utils";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
-import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
   COLUMN_DATASET_ID,
   COLUMN_ID_ID,
@@ -72,7 +71,10 @@ import {
 import { checkIsGroupRowType } from "@/lib/groups";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import {
+  getOptimizerLabel,
+  getBestOptimizationScore,
+} from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
@@ -133,9 +135,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     id: "objective_name",
     label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name) ??
-      getFeedbackScore(row.experiment_scores ?? [], row.objective_name),
+    accessorFn: (row) => getBestOptimizationScore(row),
     cell: FeedbackScoreTagCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
   },
