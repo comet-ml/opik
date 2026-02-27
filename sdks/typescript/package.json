@@ -37,7 +37,15 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./tui": {
+      "types": "./dist/tui.d.ts",
+      "import": "./dist/tui.js",
+      "require": "./dist/tui.cjs"
     }
+  },
+  "bin": {
+    "opik-tui": "./dist/tui-cli.js"
   },
   "main": "dist/index.cjs",
   "module": "dist/index.js",
