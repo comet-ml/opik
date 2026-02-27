@@ -4,6 +4,7 @@ import { CellContext } from "@tanstack/react-table";
 import { ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
+import LinkifyText from "@/components/shared/LinkifyText/LinkifyText";
 import { prettifyMessage } from "@/lib/traces";
 import useLocalStorageState from "use-local-storage-state";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
@@ -69,14 +70,16 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     if (isSmall) {
       return (
         <CellTooltipWrapper content={displayMessage}>
-          <span className="comet-code truncate">{displayMessage}</span>
+          <span className="comet-code truncate">
+            <LinkifyText>{displayMessage}</LinkifyText>
+          </span>
         </CellTooltipWrapper>
       );
     }
 
     return (
       <div className="comet-code size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {displayMessage}
+        <LinkifyText>{displayMessage}</LinkifyText>
       </div>
     );
   }, [isSmall, displayMessage]);

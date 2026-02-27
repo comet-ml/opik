@@ -3,6 +3,7 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import { Explainer, ROW_HEIGHT } from "@/types/shared";
 import { formatNumericData, toString } from "@/lib/utils";
+import LinkifyText from "@/components/shared/LinkifyText/LinkifyText";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
@@ -25,11 +26,13 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     >
       {isSmall ? (
         <CellTooltipWrapper content={value}>
-          <span className="truncate">{value}</span>
+          <span className="truncate">
+            <LinkifyText>{value}</LinkifyText>
+          </span>
         </CellTooltipWrapper>
       ) : (
         <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
-          {value}
+          <LinkifyText>{value}</LinkifyText>
         </div>
       )}
     </CellWrapper>
