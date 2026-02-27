@@ -4078,6 +4078,152 @@ class FindSpansResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("When searching by span name substring, should return only matching spans")
+        void findSpans__whenSearchByName__thenReturnMatchingSpans() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .name("span-" + uniqueTerm + "-matching")
+                    .feedbackScores(null)
+                    .build();
+
+            var nonMatchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .name("span-other-nonmatching")
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(matchingSpan, nonMatchingSpan), apiKey, workspaceName);
+
+            var actualPage = spanResourceClient.findSpans(
+                    workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    null, null, List.of(), null, null, uniqueTerm);
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().name()).isEqualTo(matchingSpan.name());
+        }
+
+        @Test
+        @DisplayName("When searching by input content, should return only matching spans")
+        void findSpans__whenSearchByInput__thenReturnMatchingSpans() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .input(com.comet.opik.utils.JsonUtils
+                            .getJsonNodeFromString("{\"prompt\": \"search-" + uniqueTerm + "\"}"))
+                    .feedbackScores(null)
+                    .build();
+
+            var nonMatchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .input(com.comet.opik.utils.JsonUtils
+                            .getJsonNodeFromString("{\"prompt\": \"other-content\"}"))
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(matchingSpan, nonMatchingSpan), apiKey, workspaceName);
+
+            var actualPage = spanResourceClient.findSpans(
+                    workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    null, null, List.of(), null, null, uniqueTerm);
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("When searching by model name, should return only matching spans")
+        void findSpans__whenSearchByModel__thenReturnMatchingSpans() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .model("gpt-" + uniqueTerm)
+                    .feedbackScores(null)
+                    .build();
+
+            var nonMatchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .model("claude-other")
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(matchingSpan, nonMatchingSpan), apiKey, workspaceName);
+
+            var actualPage = spanResourceClient.findSpans(
+                    workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    null, null, List.of(), null, null, uniqueTerm);
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().model()).isEqualTo(matchingSpan.model());
+        }
+
+        @Test
+        @DisplayName("When searching with no match, should return empty results")
+        void findSpans__whenSearchHasNoMatch__thenReturnEmpty() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .parentSpanId(null)
+                    .projectName(projectName)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            var actualPage = spanResourceClient.findSpans(
+                    workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    null, null, List.of(), null, null, "nonexistent_xyz_12345");
+
+            assertThat(actualPage.total()).isEqualTo(0);
+            assertThat(actualPage.content()).isEmpty();
+        }
+
         @ParameterizedTest
         @EnumSource(Span.SpanField.class)
         void findSpans__whenExcludeParamIdDefined__thenReturnSpanExcludingFields(Span.SpanField field) {
