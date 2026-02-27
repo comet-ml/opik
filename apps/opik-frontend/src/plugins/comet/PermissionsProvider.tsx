@@ -11,6 +11,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canViewDashboards,
     canDeleteProjects,
     canDeleteAnnotationQueues,
+    canDeleteTraces,
     isPending,
   } = useUserPermission();
 
@@ -21,6 +22,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canViewDashboards,
         canDeleteProjects,
         canDeleteAnnotationQueues,
+        canDeleteTraces,
       },
       isPending,
     }),
@@ -29,6 +31,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canViewDashboards,
       canDeleteProjects,
       canDeleteAnnotationQueues,
+      canDeleteTraces,
       isPending,
     ],
   );
