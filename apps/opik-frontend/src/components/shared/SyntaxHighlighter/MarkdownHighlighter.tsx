@@ -3,6 +3,7 @@ import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import { cn, isStringMarkdown } from "@/lib/utils";
+import LinkifyText from "@/components/shared/LinkifyText/LinkifyText";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
@@ -59,7 +60,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
 
     return (
       <div className="comet-markdown whitespace-pre-wrap">
-        {searchPlainText(codeOutput.message)}
+        <LinkifyText>{searchPlainText(codeOutput.message)}</LinkifyText>
       </div>
     );
   }, [codeOutput.message, searchPlugin, searchPlainText]);
