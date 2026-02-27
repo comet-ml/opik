@@ -134,7 +134,8 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     label: "Best score",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) =>
-      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name) ??
+      getFeedbackScore(row.experiment_scores ?? [], row.objective_name),
     cell: FeedbackScoreTagCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
   },

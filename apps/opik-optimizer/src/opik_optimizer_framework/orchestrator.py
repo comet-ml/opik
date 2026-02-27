@@ -44,12 +44,6 @@ def run_optimization(
     """
     logger.info("Starting optimization %s", context.optimization_id)
 
-    if len(dataset_item_ids) < 2:
-        raise ValueError(
-            f"Dataset must contain at least 2 items for train/validation split, "
-            f"got {len(dataset_item_ids)}"
-        )
-
     # Sample train/validation split
     split = sample_split(dataset_item_ids, seed=seed)
     logger.info(

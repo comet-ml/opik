@@ -95,6 +95,68 @@ class TestOrchestrator:
                 dataset_item_ids=[f"item-{i}" for i in range(10)],
             )
 
+    def test_small_dataset(self):
+        """Verify the pipeline works with the minimum dataset size (2 items)."""
+        context = OptimizationContext(
+            optimization_id="small-test",
+            dataset_name="tiny-dataset",
+            prompt_messages=[{"role": "user", "content": "Hi {name}"}],
+            model="openai/gpt-4o-mini",
+            model_parameters={},
+            metric_type="equals",
+            metric_parameters={},
+            optimizer_type="SimpleOptimizer",
+            optimizer_parameters={},
+        )
+
+        improved = json.dumps([{"role": "user", "content": "Hello {name}"}])
+        mock_resp = MagicMock()
+        mock_resp.choices = [MagicMock()]
+        mock_resp.choices[0].message.content = improved
+
+        # Build 4 items, 3 passing -> pass_rate = 0.75
+        test_results = []
+        for i in range(4):
+            tc = MagicMock()
+            tc.dataset_item_id = f"item-{i}"
+            tc.dataset_item = None
+            sr = MagicMock()
+            sr.value = 1.0 if i < 3 else 0.0
+            tr = MagicMock()
+            tr.test_case = tc
+            tr.score_results = [sr]
+            tr.trial_id = "trial-1"
+            test_results.append(tr)
+
+        mock_eval = MagicMock()
+        mock_eval.test_results = test_results
+        mock_eval.experiment_id = "exp-1"
+        mock_eval.experiment_name = "trial-1"
+
+        client = MagicMock()
+        client.get_dataset.return_value = MagicMock()
+
+        with (
+            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.tasks.litellm"),
+            patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
+            patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,
+        ):
+            mock_litellm.completion.return_value = mock_resp
+            mock_opik.Opik = type(client)
+            mock_eval_suite.return_value = mock_eval
+
+            result = run_optimization(
+                context=context,
+                client=client,
+                dataset_item_ids=["item-a", "item-b"],
+                seed=1,
+            )
+
+        assert result.best_trial is not None
+        assert result.initial_score == 0.75
+        assert result.score == 0.75
+
     def test_error_propagation(self, sample_optimization_context):
         item_ids = [f"item-{i}" for i in range(10)]
         client = MagicMock()

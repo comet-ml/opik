@@ -9,32 +9,12 @@ optimizer_runner.py but routes to the framework's run_optimization().
 
 import json
 import logging
-import os
 import sys
-import warnings
 
-# Deferred imports pattern — see optimizer_runner.py for explanation
-TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "150"))
+from opik_backend.jobs.runner_common import setup_runner_environment
 
-os.environ["COLUMNS"] = str(TERMINAL_WIDTH)
-os.environ["LINES"] = "50"
-os.environ["FORCE_COLOR"] = "1"
-os.environ["TERM"] = "xterm-256color"
-
-LOG_LEVEL = os.environ.get("OPTSTUDIO_LOG_LEVEL", "INFO").upper()
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    stream=sys.stderr,
-    force=True,
-)
-
-logging.getLogger("pyrate_limiter").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+# Must run before importing opik_optimizer_framework (Rich reads env at import time)
+setup_runner_environment()
 
 logger = logging.getLogger(__name__)
 

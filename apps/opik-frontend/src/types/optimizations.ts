@@ -136,6 +136,7 @@ export interface Optimization {
   metadata?: object;
   studio_config?: OptimizationStudioConfig;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
   num_trials: number;
   objective_name: string;
   status: OPTIMIZATION_STATUS;

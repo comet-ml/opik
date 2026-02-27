@@ -35,9 +35,12 @@ class TestSampler:
         with pytest.raises(ValueError, match="empty"):
             sample_split([], seed=42)
 
-    def test_single_item_raises(self):
-        with pytest.raises(ValueError, match="single item"):
-            sample_split(["only-one"], seed=42)
+    def test_single_item_goes_to_train(self):
+        result = sample_split(["only-one"], seed=42)
+        assert result.train_item_ids == ["only-one"]
+        assert result.validation_item_ids == []
+        assert result.dataset_size == 1
+        assert result.seed == 42
 
     def test_no_overlap(self):
         ids = [f"item-{i}" for i in range(50)]

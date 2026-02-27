@@ -28,7 +28,12 @@ def sample_split(
         raise ValueError("Cannot split an empty list of item IDs")
 
     if len(item_ids) == 1:
-        raise ValueError("Cannot split a single item into two non-empty sets")
+        return SplitResult(
+            train_item_ids=list(item_ids),
+            validation_item_ids=[],
+            dataset_size=1,
+            seed=seed,
+        )
 
     sorted_ids = sorted(item_ids)
     derived = _derive_seed(seed, len(sorted_ids))
