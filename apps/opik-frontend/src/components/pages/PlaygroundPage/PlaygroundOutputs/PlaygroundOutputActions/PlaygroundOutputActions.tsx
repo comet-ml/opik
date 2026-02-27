@@ -102,7 +102,7 @@ const PlaygroundOutputActions = ({
   const createProjectMutation = useProjectCreateMutation();
 
   const {
-    permissions: { canViewExperiments },
+    permissions: { canViewExperiments, canInteractWithApp },
   } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
@@ -277,6 +277,7 @@ const PlaygroundOutputActions = ({
             className="mt-2.5"
             variant="outline"
             onClick={stopAll}
+            disabled={!canInteractWithApp}
           >
             <Pause className="mr-1 size-4" />
             Stop all
@@ -306,7 +307,8 @@ const PlaygroundOutputActions = ({
       isLoadingDatasets ||
       isDatasetRemoved ||
       isDatasetEmpty ||
-      hasMediaCompatibilityIssues;
+      hasMediaCompatibilityIssues ||
+      !canInteractWithApp;
 
     const shouldTooltipAppear =
       !allPromptsHaveModels ||

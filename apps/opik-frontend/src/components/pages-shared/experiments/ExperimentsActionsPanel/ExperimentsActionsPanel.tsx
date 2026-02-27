@@ -13,6 +13,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Separator } from "@/components/ui/separator";
 import AddTagDialog from "@/components/pages-shared/experiments/AddTagDialog/AddTagDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
@@ -26,6 +27,9 @@ const ExperimentsActionsPanel: React.FunctionComponent<
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const disabled = !experiments?.length;
 
   const handleCompareClick = () => {
@@ -109,7 +113,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Tag />
         </Button>
@@ -122,7 +126,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
             setOpen(2);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Trash />
         </Button>

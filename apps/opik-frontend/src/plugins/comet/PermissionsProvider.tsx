@@ -13,6 +13,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     () => ({
       permissions: {
         canViewExperiments,
+        canInteractWithApp: true,
         canViewDashboards,
       },
       isPending,

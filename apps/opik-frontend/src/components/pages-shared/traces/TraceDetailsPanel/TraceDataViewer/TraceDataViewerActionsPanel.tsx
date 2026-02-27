@@ -9,6 +9,7 @@ import {
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import { ButtonLayoutSize } from "@/components/pages-shared/traces/DetailsActionSection";
 import { isObjectSpan } from "@/lib/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TraceDataViewerActionsPanelProps = {
   layoutSize: ButtonLayoutSize;
@@ -20,6 +21,9 @@ type TraceDataViewerActionsPanelProps = {
 const TraceDataViewerActionsPanel: React.FunctionComponent<
   TraceDataViewerActionsPanelProps
 > = ({ data, activeSection, setActiveSection, layoutSize }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const rows = useMemo(() => (data ? [data] : []), [data]);
 
   const annotationCount = data.feedback_scores?.length;
@@ -34,6 +38,7 @@ const TraceDataViewerActionsPanel: React.FunctionComponent<
         getDataForExport={async () => rows}
         selectedRows={rows}
         dataType={dataType}
+        disabled={!canInteractWithApp}
       />
 
       <DetailsActionSectionToggle

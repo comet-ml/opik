@@ -3,3 +3,6 @@ export const SENTRY_ENABLED = import.meta.env.VITE_SENTRY_ENABLED === "true";
 export const SENTRY_MODE = import.meta.env.VITE_SENTRY_ENVIRONMENT;
 
 export const IS_SENTRY_ENABLED = Boolean(SENTRY_DSN && SENTRY_ENABLED);
+
+export const WRITE_ACTIONS_ENABLED =
+  import.meta.env.VITE_WRITE_ACTIONS_ENABLED === "true";

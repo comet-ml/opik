@@ -12,6 +12,7 @@ import { CommentItem } from "@/types/comment";
 import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
 import useThreadCommentsBatchDeleteMutation from "@/api/traces/useThreadCommentsBatchDeleteMutation";
 import useUpdateThreadCommentMutation from "@/api/traces/useUpdateThreadCommentMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export type ThreadCommentsProps = {
   activeSection?: DetailsActionSectionValue | null;
@@ -34,6 +35,9 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
   const updateThreadCommentMutation = useUpdateThreadCommentMutation();
 
   const userName = useLoggedInUserName();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const onSubmit = (text: string) => {
     createThreadCommentMutation.mutate({
@@ -71,11 +75,14 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
         className="mt-4 px-6"
         actions={
           <TooltipWrapper content={"Submit"} hotkeys={["⌘", "⏎"]}>
-            <UserCommentForm.SubmitButton />
+            <UserCommentForm.SubmitButton disabled={!canInteractWithApp} />
           </TooltipWrapper>
         }
       >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." />
+        <UserCommentForm.TextareaField
+          placeholder="Add a comment..."
+          disabled={!canInteractWithApp}
+        />
       </UserCommentForm>
       <div className="mt-3 h-full overflow-auto pb-3">
         {comments?.length ? (
@@ -85,10 +92,12 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
               comment={comment}
               avatar={<UserComment.Avatar />}
               actions={
-                <UserComment.Menu>
-                  <UserComment.MenuEditItem />
-                  <UserComment.MenuDeleteItem onDelete={onDelete} />
-                </UserComment.Menu>
+                canInteractWithApp ? (
+                  <UserComment.Menu>
+                    <UserComment.MenuEditItem />
+                    <UserComment.MenuDeleteItem onDelete={onDelete} />
+                  </UserComment.Menu>
+                ) : undefined
               }
               userName={userName}
               header={
@@ -100,7 +109,9 @@ const ThreadComments: React.FC<ThreadCommentsProps> = ({
               className="px-6 hover:bg-soft-background"
             >
               <UserComment.Text />
-              <UserComment.Form onSubmit={onEditSubmit} />
+              {canInteractWithApp && (
+                <UserComment.Form onSubmit={onEditSubmit} />
+              )}
             </UserComment>
           ))
         ) : (

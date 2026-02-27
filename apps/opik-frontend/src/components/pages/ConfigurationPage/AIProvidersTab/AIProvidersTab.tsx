@@ -19,6 +19,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [
   {
@@ -57,6 +58,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const AIProvidersTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
 
   const [search, setSearch] = useState("");
   const resetDialogKeyRef = useRef(0);
@@ -133,7 +137,11 @@ const AIProvidersTab = () => {
           placeholder="Search by name"
           dimension="sm"
         />
-        <Button onClick={handleAddConfigurationClick} size="sm">
+        <Button
+          onClick={handleAddConfigurationClick}
+          size="sm"
+          disabled={!canInteractWithApp}
+        >
           Add configuration
         </Button>
       </div>
@@ -145,7 +153,11 @@ const AIProvidersTab = () => {
         noData={
           <DataTableNoData title={noDataLabel}>
             {search === "" && (
-              <Button variant="link" onClick={handleAddConfigurationClick}>
+              <Button
+                variant="link"
+                onClick={handleAddConfigurationClick}
+                disabled={!canInteractWithApp}
+              >
                 Add configuration
               </Button>
             )}

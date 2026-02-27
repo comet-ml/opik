@@ -46,6 +46,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const getRowId = (d: EvaluatorsRule) => d.id;
 
@@ -138,6 +139,9 @@ type RulesTabProps = {
 };
 
 export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
@@ -334,7 +338,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewRuleClick}>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleNewRuleClick}
+            disabled={!canInteractWithApp}
+          >
             Create new rule
           </Button>
         </div>

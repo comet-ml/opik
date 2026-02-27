@@ -15,6 +15,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 import slugify from "slugify";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -38,6 +39,9 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const { mutate } = useTracesBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteTracesHandler = useCallback(() => {
@@ -104,7 +108,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
-        disabled={disabled}
+        disabled={disabled || !canInteractWithApp}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
       <TooltipWrapper content="Manage tags">
@@ -115,7 +119,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
-          disabled={disabled}
+          disabled={disabled || !canInteractWithApp}
         >
           <Tag />
         </Button>
@@ -129,7 +133,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
               setOpen(4);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
-            disabled={disabled}
+            disabled={disabled || !canInteractWithApp}
           >
             <Brain />
           </Button>
@@ -154,7 +158,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
               setOpen(2);
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
-            disabled={disabled}
+            disabled={disabled || !canInteractWithApp}
           >
             <Trash />
           </Button>

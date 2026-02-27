@@ -85,6 +85,7 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -114,6 +115,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   onRowChange,
 }) => {
   const navigate = useNavigate();
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [height, setHeight] = useState<number>(0);
@@ -572,6 +576,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             getDataForExport={async () => rows}
             selectedRows={rows}
             dataType="threads"
+            disabled={!canInteractWithApp}
           />
           <DetailsActionSectionToggle
             activeSection={currentActiveSection}
@@ -668,6 +673,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <DropdownMenuItem
                 onClick={() => setPopupOpen(true)}
                 variant="destructive"
+                disabled={!canInteractWithApp}
               >
                 <Trash className="mr-2 size-4" />
                 Delete

@@ -1,6 +1,7 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +28,10 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   onConfirm,
   isSubmitting,
 }) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
+
   const handleSubmit = (data: VersionFormData) => {
     onConfirm?.(data.tags, data.versionNote);
   };
@@ -70,7 +75,7 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
           <Button
             type="submit"
             form={ADD_VERSION_FORM_ID}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canInteractWithApp}
           >
             {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
             Save changes

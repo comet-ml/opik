@@ -20,11 +20,15 @@ import useAnnotationQueueDeleteMutation from "@/api/annotation-queues/useAnnotat
 import useAppStore from "@/store/AppStore";
 import { generateSMEURL } from "@/lib/annotation-queues";
 import AddEditAnnotationQueueDialog from "./AddEditAnnotationQueueDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const AnnotationQueueRowActionsCell: React.FunctionComponent<
   CellContext<AnnotationQueue, unknown>
 > = (context) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const queue = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
@@ -77,7 +81,7 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
         scope={queue.scope}
       />
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={!canInteractWithApp}>
           <Button variant="minimal" size="icon" className="-mr-2.5">
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />

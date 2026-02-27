@@ -14,10 +14,14 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
 > = (context) => {
+  const {
+    permissions: { canInteractWithApp },
+  } = usePermissions();
   const resetKeyRef = useRef(0);
   const dashboard = context.row.original;
 
@@ -58,7 +62,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
     >
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="minimal" size="icon">
+          <Button variant="minimal" size="icon" disabled={!canInteractWithApp}>
             <span className="sr-only">Actions menu</span>
             <MoreHorizontal className="size-4" />
           </Button>
