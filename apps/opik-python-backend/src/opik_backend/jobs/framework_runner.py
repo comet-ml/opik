@@ -77,7 +77,7 @@ def main():
 
             # Get dataset item IDs
             dataset_items = dataset.get_items()
-            dataset_item_ids = [str(item.id) for item in dataset_items]
+            dataset_item_ids = [str(item["id"]) for item in dataset_items]
 
             # Build framework optimization context
             opt_context = OptimizationContext(

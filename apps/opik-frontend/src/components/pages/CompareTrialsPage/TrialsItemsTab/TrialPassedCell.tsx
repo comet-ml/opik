@@ -17,7 +17,7 @@ const TrialPassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
     const passed = item.feedback_scores.every((s) => s.value >= 1.0);
 
     return (
-      <span className={passed ? "text-[#12B76A]" : "text-destructive"}>
+      <span className={passed ? "text-success" : "text-destructive"}>
         {passed ? "Yes" : "No"}
       </span>
     );
