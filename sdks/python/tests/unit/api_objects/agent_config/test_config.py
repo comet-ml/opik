@@ -97,57 +97,53 @@ class TestAgentConfigGetBlueprint:
         assert result["name"] == "agent"
         assert isinstance(result["name"], str)
 
-    def test_get_blueprint__not_found__raises_value_error(
+    def test_get_blueprint__not_found__returns_none(
         self, agent_config, mock_config_client
     ):
-        mock_config_client.get_blueprint.side_effect = ValueError("Config not found")
+        mock_config_client.get_blueprint.return_value = None
 
-        with pytest.raises(ValueError):
-            agent_config.get_blueprint()
-
-
-class TestAgentConfigTryGetBlueprint:
-    def test_try_get_blueprint__found__returns_blueprint(
-        self, agent_config, mock_config_client
-    ):
-        mock_config_client.try_get_blueprint.return_value = _make_raw_blueprint()
-
-        result = agent_config.try_get_blueprint()
-
-        assert isinstance(result, Blueprint)
-        assert result.id == "bp-1"
-
-    def test_try_get_blueprint__not_found__returns_none(
-        self, agent_config, mock_config_client
-    ):
-        mock_config_client.try_get_blueprint.return_value = None
-
-        result = agent_config.try_get_blueprint()
+        result = agent_config.get_blueprint()
 
         assert result is None
 
 
 class TestAgentConfigGetBlueprintById:
     def test_get_blueprint_by_id__returns_blueprint(
-        self, agent_config, mock_config_client
+        self, agent_config, mock_rest_client
     ):
-        mock_config_client.get_blueprint_by_id.return_value = _make_raw_blueprint(
-            blueprint_id="bp-specific"
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            _make_raw_blueprint(blueprint_id="bp-specific")
         )
 
-        result = agent_config.get_blueprint_by_id("bp-specific")
+        result = agent_config.get_blueprint(id="bp-specific")
 
         assert isinstance(result, Blueprint)
         assert result.id == "bp-specific"
-        mock_config_client.get_blueprint_by_id.assert_called_once_with("bp-specific")
+        mock_rest_client.agent_configs.get_blueprint_by_id.assert_called_once_with(
+            "bp-specific"
+        )
+
+    def test_get_blueprint_by_id__not_found__returns_none(
+        self, agent_config, mock_rest_client
+    ):
+        from opik.rest_api import core as rest_api_core
+
+        mock_rest_client.agent_configs.get_blueprint_by_id.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="not found")
+        )
+
+        result = agent_config.get_blueprint(id="nonexistent")
+
+        assert result is None
 
 
 class TestAgentConfigCreateBlueprint:
     def test_create_blueprint__with_parameters__returns_blueprint(
-        self, agent_config, mock_config_client
+        self, agent_config, mock_config_client, mock_rest_client
     ):
-        mock_config_client.create_config.return_value = _make_raw_blueprint(
-            blueprint_id="bp-new"
+        mock_config_client.create_blueprint.return_value = "bp-new"
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            _make_raw_blueprint(blueprint_id="bp-new")
         )
 
         result = agent_config.create_blueprint(
@@ -156,31 +152,40 @@ class TestAgentConfigCreateBlueprint:
 
         assert isinstance(result, Blueprint)
         assert result.id == "bp-new"
-        call_kwargs = mock_config_client.create_config.call_args[1]
+        call_kwargs = mock_config_client.create_blueprint.call_args[1]
         assert "temp" in call_kwargs["fields_with_values"]
         assert "name" in call_kwargs["fields_with_values"]
+        mock_rest_client.agent_configs.get_blueprint_by_id.assert_called_once_with(
+            "bp-new"
+        )
 
     def test_create_blueprint__with_fields_with_values__returns_blueprint(
-        self, agent_config, mock_config_client
+        self, agent_config, mock_config_client, mock_rest_client
     ):
-        mock_config_client.create_config.return_value = _make_raw_blueprint()
+        mock_config_client.create_blueprint.return_value = "bp-new"
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            _make_raw_blueprint()
+        )
 
         result = agent_config.create_blueprint(
             fields_with_values={"temp": (float, 0.6)}
         )
 
         assert isinstance(result, Blueprint)
-        call_kwargs = mock_config_client.create_config.call_args[1]
+        call_kwargs = mock_config_client.create_blueprint.call_args[1]
         assert call_kwargs["fields_with_values"] == {"temp": (float, 0.6)}
 
     def test_create_blueprint__with_description__passes_description(
-        self, agent_config, mock_config_client
+        self, agent_config, mock_config_client, mock_rest_client
     ):
-        mock_config_client.create_config.return_value = _make_raw_blueprint()
+        mock_config_client.create_blueprint.return_value = "bp-new"
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            _make_raw_blueprint()
+        )
 
         agent_config.create_blueprint(parameters={"temp": 0.6}, description="v1")
 
-        call_kwargs = mock_config_client.create_config.call_args[1]
+        call_kwargs = mock_config_client.create_blueprint.call_args[1]
         assert call_kwargs["description"] == "v1"
 
 

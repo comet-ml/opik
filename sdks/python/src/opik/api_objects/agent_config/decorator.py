@@ -81,7 +81,7 @@ def agent_config_decorator(
             if attr.startswith("_") or attr not in local_field_names:
                 return original_getattribute(self, attr)
 
-            refetch_stale_cache(self)
+            refetch_if_mask_applied(self)
             maybe_sync_from_cache(self, attr)
             inject_trace_metadata(self, attr)
 
@@ -171,8 +171,11 @@ def sync_config_with_backend(instance: typing.Any) -> None:
         description = object.__getattribute__(instance, _ATTR_DESCRIPTION)
         mask_id_val = object.__getattribute__(instance, _ATTR_MASK_ID)
         env_val = object.__getattribute__(instance, _ATTR_ENV)
+        instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
+            instance, _ATTR_FIELD_TYPES
+        )
 
-        existing = agent_cfg.try_get_blueprint(
+        existing = agent_cfg.get_blueprint(
             env=env_val,
             mask_id=mask_id_val,
             field_types=all_field_types,
@@ -181,22 +184,43 @@ def sync_config_with_backend(instance: typing.Any) -> None:
         pinned = mask_id_val is not None or env_val is not None
 
         if existing is None:
-            handle_no_blueprint(instance, agent_cfg, description, env_val)
+            bp = create_and_apply(
+                instance,
+                agent_cfg,
+                instance_field_types.keys(),
+                description,
+                shared_cache,
+            )
+            if env_val is not None and bp.id is not None:
+                agent_cfg.tag_bluepring_with_env(env=env_val, blueprint_id=bp.id)
+
         elif pinned:
             apply_backend_values(instance, existing)
+
         else:
-            handle_existing_blueprint(instance, agent_cfg, existing, description)
+            extra_keys = set(instance_field_types) - set(existing.values)
+            if extra_keys:
+                create_and_apply(
+                    instance,
+                    agent_cfg,
+                    extra_keys,
+                    description,
+                    shared_cache,
+                )
+            else:
+                apply_backend_values(instance, existing)
 
     except Exception:
         logger.debug("Failed to sync config with backend", exc_info=True)
 
 
-def handle_no_blueprint(
+def create_and_apply(
     instance: typing.Any,
     agent_cfg: AgentConfig,
+    prefixed_keys: typing.Iterable[str],
     description: typing.Optional[str],
-    env: typing.Optional[str] = None,
-) -> None:
+    shared_cache: SharedConfigCache,
+) -> Blueprint:
     instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
         instance, _ATTR_FIELD_TYPES
     )
@@ -204,58 +228,19 @@ def handle_no_blueprint(
     prefix = f"{class_prefix}."
 
     fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
-    for prefixed_name, f_type in instance_field_types.items():
+    for prefixed_name in prefixed_keys:
         local_name = prefixed_name[len(prefix) :]
+        f_type = instance_field_types[prefixed_name]
         value = object.__getattribute__(instance, local_name)
         fields_with_values[prefixed_name] = (f_type, value)
 
-    shared_cache: SharedConfigCache = object.__getattribute__(
-        instance, _ATTR_SHARED_CACHE
-    )
     bp = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
         description=description,
         field_types=shared_cache.all_field_types,
     )
-
-    if env is not None and bp.id is not None:
-        agent_cfg.tag_bluepring_with_env(env=env, blueprint_id=bp.id)
-
     apply_backend_values(instance, bp)
-
-
-def handle_existing_blueprint(
-    instance: typing.Any,
-    agent_cfg: AgentConfig,
-    existing: Blueprint,
-    description: typing.Optional[str],
-) -> None:
-    instance_field_types: typing.Dict[str, typing.Any] = object.__getattribute__(
-        instance, _ATTR_FIELD_TYPES
-    )
-    class_prefix: str = object.__getattribute__(instance, _ATTR_CLASS_PREFIX)
-    prefix = f"{class_prefix}."
-
-    extra_keys = set(instance_field_types) - set(existing.values)
-    if extra_keys:
-        extra_fields: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
-        for prefixed_name in extra_keys:
-            local_name = prefixed_name[len(prefix) :]
-            f_type = instance_field_types[prefixed_name]
-            value = object.__getattribute__(instance, local_name)
-            extra_fields[prefixed_name] = (f_type, value)
-
-        shared_cache: SharedConfigCache = object.__getattribute__(
-            instance, _ATTR_SHARED_CACHE
-        )
-        bp = agent_cfg.create_blueprint(
-            fields_with_values=extra_fields,
-            description=description,
-            field_types=shared_cache.all_field_types,
-        )
-        apply_backend_values(instance, bp)
-    else:
-        apply_backend_values(instance, existing)
+    return bp
 
 
 def apply_backend_values(instance: typing.Any, blueprint: Blueprint) -> None:
@@ -277,24 +262,11 @@ def apply_backend_values(instance: typing.Any, blueprint: Blueprint) -> None:
                 object.__setattr__(instance, local_name, value)
 
 
-def refetch_stale_cache(instance: typing.Any) -> None:
+def refetch_if_mask_applied(instance: typing.Any) -> None:
     context_mask = get_active_config_mask()
-    instance_mask = object.__getattribute__(instance, _ATTR_MASK_ID)
-
-    if context_mask is not None:
-        do_refetch(instance, mask_id=context_mask)
+    if context_mask is None:
         return
 
-    if instance_mask is not None:
-        return
-
-
-def do_refetch(
-    instance: typing.Any,
-    *,
-    mask_id: typing.Optional[str] = None,
-    env: typing.Optional[str] = None,
-) -> None:
     try:
         agent_cfg: typing.Optional[AgentConfig] = object.__getattribute__(
             instance, _ATTR_AGENT_CONFIG
@@ -306,11 +278,11 @@ def do_refetch(
             instance, _ATTR_SHARED_CACHE
         )
         bp = agent_cfg.get_blueprint(
-            mask_id=mask_id,
-            env=env,
+            mask_id=context_mask,
             field_types=shared_cache.all_field_types,
         )
-        apply_backend_values(instance, bp)
+        if bp is not None:
+            apply_backend_values(instance, bp)
     except Exception:
         logger.debug("Failed to refetch config", exc_info=True)
 

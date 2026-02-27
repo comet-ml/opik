@@ -65,22 +65,6 @@ class ConfigClient:
         )
         return blueprint_id
 
-    def create_config(
-        self,
-        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
-        project_name: str,
-        project_id: typing.Optional[str] = None,
-        description: typing.Optional[str] = None,
-    ) -> AgentBlueprintPublic:
-        """Create a new blueprint and fetch it back."""
-        blueprint_id = self.create_blueprint(
-            fields_with_values=fields_with_values,
-            project_name=project_name,
-            project_id=project_id,
-            description=description,
-        )
-        return self.get_blueprint_by_id(blueprint_id)
-
     def create_mask(
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
@@ -100,13 +84,7 @@ class ConfigClient:
         )
         return mask_id
 
-    def get_blueprint_by_id(
-        self,
-        blueprint_id: str,
-    ) -> AgentBlueprintPublic:
-        return self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
-
-    def try_get_blueprint(
+    def get_blueprint(
         self,
         project_name: str,
         env: typing.Optional[str] = None,
@@ -145,19 +123,3 @@ class ConfigClient:
             project_id=project_id,
             envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
         )
-
-    def get_blueprint(
-        self,
-        project_name: str,
-        env: typing.Optional[str] = None,
-        mask_id: typing.Optional[str] = None,
-    ) -> AgentBlueprintPublic:
-        """Retrieve an existing blueprint. Raises ValueError if not found."""
-        result = self.try_get_blueprint(
-            project_name=project_name,
-            env=env,
-            mask_id=mask_id,
-        )
-        if result is None:
-            raise ValueError("Config not found")
-        return result
