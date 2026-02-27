@@ -64,6 +64,7 @@ export enum ManagementPermissionsNames {
   EXPERIMENT_VIEW = "experiment_view",
   DASHBOARD_VIEW = "dashboard_view",
   PROJECT_DELETE = "project_delete",
+  TRACE_DELETE = "trace_delete",
 }
 
 export interface UserPermission {
