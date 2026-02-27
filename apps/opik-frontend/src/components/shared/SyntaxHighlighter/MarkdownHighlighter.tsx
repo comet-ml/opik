@@ -1,10 +1,9 @@
 import React, { ReactNode, useMemo } from "react";
-import Linkify from "linkify-react";
 import { CodeOutput } from "@/components/shared/SyntaxHighlighter/types";
 import SyntaxHighlighterLayout from "@/components/shared/SyntaxHighlighter/SyntaxHighlighterLayout";
 import { useMarkdownSearch } from "@/components/shared/SyntaxHighlighter/hooks/useMarkdownSearch";
 import { cn, isStringMarkdown } from "@/lib/utils";
-import { LINKIFY_OPTIONS } from "@/lib/linkify";
+import LinkifyText from "@/components/shared/LinkifyText/LinkifyText";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
@@ -61,9 +60,7 @@ const MarkdownHighlighter: React.FC<MarkdownHighlighterProps> = ({
 
     return (
       <div className="comet-markdown whitespace-pre-wrap">
-        <Linkify options={LINKIFY_OPTIONS}>
-          {searchPlainText(codeOutput.message)}
-        </Linkify>
+        <LinkifyText>{searchPlainText(codeOutput.message)}</LinkifyText>
       </div>
     );
   }, [codeOutput.message, searchPlugin, searchPlainText]);

@@ -1,12 +1,11 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
 import { CellContext } from "@tanstack/react-table";
-import Linkify from "linkify-react";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { ROW_HEIGHT } from "@/types/shared";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
 import { toString } from "@/lib/utils";
-import { LINKIFY_OPTIONS } from "@/lib/linkify";
+import LinkifyText from "@/components/shared/LinkifyText/LinkifyText";
 
 export type CompareFiledValue = string | number | undefined | null;
 
@@ -42,7 +41,7 @@ const CompareExperimentsConfigCell: React.FC<
         {showDiffView ? (
           <TextDiff content1={toString(baseData)} content2={toString(data)} />
         ) : (
-          <Linkify options={LINKIFY_OPTIONS}>{toString(data)}</Linkify>
+          <LinkifyText>{toString(data)}</LinkifyText>
         )}
       </div>
     );
