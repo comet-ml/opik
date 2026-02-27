@@ -44,7 +44,7 @@ interface AgentConfigDAO {
 
     @SqlQuery("""
             SELECT id, project_id, created_by, created_at, last_updated_by, last_updated_at
-            FROM agent_config
+            FROM agent_configs
             WHERE workspace_id = :workspace_id AND project_id = :project_id
             """)
     AgentConfig getConfigByProjectId(
@@ -52,7 +52,7 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId);
 
     @SqlUpdate("""
-            INSERT INTO agent_config (id, workspace_id, project_id, created_by, last_updated_by)
+            INSERT INTO agent_configs (id, workspace_id, project_id, created_by, last_updated_by)
             VALUES (:id, :workspace_id, :project_id, :created_by, :last_updated_by)
             """)
     void insertConfig(
@@ -63,7 +63,7 @@ interface AgentConfigDAO {
             @Bind("last_updated_by") String lastUpdatedBy);
 
     @SqlUpdate("""
-            INSERT INTO agent_blueprint (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by)
+            INSERT INTO agent_blueprints (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by)
             VALUES (:id, :workspace_id, :project_id, :config_id, :type, :description, :created_by, :last_updated_by)
             """)
     void insertBlueprint(
@@ -121,7 +121,7 @@ interface AgentConfigDAO {
 
     @SqlQuery("""
             SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
-            FROM agent_blueprint
+            FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = :type
             ORDER BY id DESC LIMIT 1
             """)
@@ -132,7 +132,7 @@ interface AgentConfigDAO {
 
     @SqlQuery("""
             SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
-            FROM agent_blueprint
+            FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND id = :blueprint_id
             """)
     AgentBlueprint getBlueprintById(
@@ -140,7 +140,7 @@ interface AgentConfigDAO {
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("""
-            SELECT project_id FROM agent_blueprint
+            SELECT project_id FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND id = :blueprint_id
             """)
     UUID getProjectIdByBlueprintId(
@@ -148,7 +148,7 @@ interface AgentConfigDAO {
             @Bind("blueprint_id") UUID blueprintId);
 
     @SqlQuery("""
-            SELECT id, project_id FROM agent_blueprint
+            SELECT id, project_id FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN (<blueprint_ids>)
             """)
     List<BlueprintProject> getBlueprintsByIds(
@@ -168,7 +168,7 @@ interface AgentConfigDAO {
     @SqlQuery("""
             SELECT v.*
             FROM agent_config_values v
-            JOIN agent_blueprint b
+            JOIN agent_blueprints b
                 ON b.id = v.valid_from_blueprint_id
                 AND b.workspace_id = v.workspace_id
                 AND b.project_id = v.project_id
@@ -213,7 +213,7 @@ interface AgentConfigDAO {
                 b.last_updated_by,
                 b.last_updated_at,
                 GROUP_CONCAT(e.env_name) as envs
-            FROM agent_blueprint b
+            FROM agent_blueprints b
             LEFT JOIN agent_config_envs e
                 ON e.workspace_id = b.workspace_id
                 AND e.project_id = b.project_id
@@ -232,7 +232,7 @@ interface AgentConfigDAO {
             @Bind("offset") int offset);
 
     @SqlQuery("""
-            SELECT COUNT(*) FROM agent_blueprint
+            SELECT COUNT(*) FROM agent_blueprints
             WHERE workspace_id = :workspace_id AND project_id = :project_id AND type = 'blueprint'
             """)
     long countBlueprints(

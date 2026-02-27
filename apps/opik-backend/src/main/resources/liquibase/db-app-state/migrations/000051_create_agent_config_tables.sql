@@ -2,7 +2,7 @@
 --changeset borystkachenko:000051_create_agent_config_tables
 --comment: Create agent configuration tables
 
-CREATE TABLE IF NOT EXISTS agent_config (
+CREATE TABLE IF NOT EXISTS agent_configs (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS agent_config (
     CONSTRAINT agent_config_workspace_id_uk UNIQUE (workspace_id, project_id)
 );
 
-CREATE TABLE IF NOT EXISTS agent_blueprint (
+CREATE TABLE IF NOT EXISTS agent_blueprints (
     id CHAR(36) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS agent_config_values (
     project_id CHAR(36) NOT NULL,
     config_id CHAR(36) NOT NULL,
     `key` VARCHAR(255) NOT NULL,
-    `value` VARCHAR(255) NOT NULL,
+    `value` VARCHAR(512) NOT NULL,
     type ENUM('string', 'integer', 'float', 'boolean', 'prompt', 'prompt_commit') NOT NULL DEFAULT 'string',
     valid_from_blueprint_id CHAR(36) NOT NULL,
     valid_to_blueprint_id CHAR(36),
