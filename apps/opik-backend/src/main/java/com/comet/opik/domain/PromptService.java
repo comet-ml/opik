@@ -7,7 +7,6 @@ import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
-import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -92,7 +91,7 @@ public interface PromptService {
 
     List<PromptVersionLink> getByCommits(List<String> commits);
 
-    PromptVersionWithPrompt getByCommit(String commit);
+    Prompt getByCommit(String commit);
 }
 
 @Singleton
@@ -698,14 +697,13 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersionWithPrompt getByCommit(@NonNull String commit) {
+    public Prompt getByCommit(@NonNull String commit) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            List<PromptVersion> matches = promptVersionDAO.findAllByCommit(commit, workspaceId);
+            List<Prompt> matches = promptDAO.findByCommit(commit, workspaceId);
 
             if (matches.isEmpty()) {
                 throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
@@ -716,20 +714,7 @@ class PromptServiceImpl implements PromptService {
                         "Ambiguous commit: multiple prompt versions found for commit '%s'".formatted(commit));
             }
 
-            PromptVersion promptVersion = matches.getFirst();
-
-            Prompt prompt = promptDAO.findByIdWithoutLatestVersion(promptVersion.promptId(), workspaceId);
-
-            if (prompt == null) {
-                throw new NotFoundException(PROMPT_NOT_FOUND);
-            }
-
-            return PromptVersionWithPrompt.builder()
-                    .version(promptVersion.toBuilder()
-                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                            .build())
-                    .prompt(prompt)
-                    .build();
+            return matches.getFirst();
         });
     }
 

@@ -11,7 +11,6 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
-import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
@@ -225,9 +224,9 @@ public class PromptResource {
     }
 
     @GET
-    @Path("/versions/by-commit/{commit}")
-    @Operation(operationId = "getPromptByCommit", summary = "Get prompt by commit", description = "Get prompt version and prompt by commit", responses = {
-            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = PromptVersionWithPrompt.class))),
+    @Path("/by-commit/{commit}")
+    @Operation(operationId = "getPromptByCommit", summary = "Get prompt by commit", description = "Get prompt by commit", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = Prompt.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
@@ -240,7 +239,7 @@ public class PromptResource {
 
         log.info("Getting prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
 
-        PromptVersionWithPrompt result = promptService.getByCommit(commit);
+        Prompt result = promptService.getByCommit(commit);
 
         log.info("Got prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
 

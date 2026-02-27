@@ -9,7 +9,6 @@ import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.PromptVersionUpdate;
-import com.comet.opik.api.PromptVersionWithPrompt;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ErrorMessage;
@@ -4315,7 +4314,7 @@ class PromptResourceTest {
                             .build(),
                     apiKey, workspaceName);
 
-            PromptVersionWithPrompt result = promptResourceClient.getPromptByCommit(
+            Prompt result = promptResourceClient.getPromptByCommit(
                     version.commit(), apiKey, workspaceName);
 
             // promptId is not exposed by Prompt.View.Detail on PromptVersion
@@ -4323,18 +4322,9 @@ class PromptResourceTest {
             // fetch the prompt via its own endpoint (same view: Prompt.View.Detail), then
             // strip latestVersion since by-commit intentionally omits it
             var expectedPrompt = promptResourceClient.getPrompt(promptId, apiKey, workspaceName)
-                    .toBuilder().latestVersion(null).build();
+                    .toBuilder().latestVersion(null).version(expectedVersion).build();
 
-            assertThat(result.version())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(
-                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
-                                            Instant.class)
-                                    .build())
-                    .isEqualTo(expectedVersion);
-
-            assertThat(result.prompt())
+            assertThat(result)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
                                     .withComparatorForType(
@@ -4350,7 +4340,7 @@ class PromptResourceTest {
             var malformedCommit = "not-valid!!";
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("versions/by-commit")
+                    .path("by-commit")
                     .path(malformedCommit)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -4364,10 +4354,10 @@ class PromptResourceTest {
         @Test
         @DisplayName("when commit not found, then return 404")
         void getPromptByCommitWhenCommitNotFound() {
-            var unknownCommit = UUID.randomUUID().toString();
+            var unknownCommit = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("versions/by-commit")
+                    .path("by-commit")
                     .path(unknownCommit)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -4398,7 +4388,7 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("versions/by-commit")
+                    .path("by-commit")
                     .path(version.commit())
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, API_KEY)
@@ -4442,7 +4432,7 @@ class PromptResourceTest {
                     apiKey, workspaceName);
 
             try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                    .path("versions/by-commit")
+                    .path("by-commit")
                     .path(sharedCommit)
                     .request()
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
