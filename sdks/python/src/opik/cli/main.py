@@ -11,6 +11,7 @@ from . import harbor
 from . import healthcheck
 from . import imports
 from . import proxy
+from . import query
 from . import usage_report
 
 __version__: str = "0.0.0+dev"
@@ -43,6 +44,7 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 cli.add_command(configure.configure)
 cli.add_command(proxy.proxy)
 cli.add_command(healthcheck.healthcheck)
+cli.add_command(query.query_group)
 cli.add_command(exports.export_group)
 cli.add_command(imports.import_group)
 cli.add_command(usage_report.usage_report)
