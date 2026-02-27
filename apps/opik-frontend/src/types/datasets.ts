@@ -6,6 +6,7 @@ import {
   UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
+import { ExecutionPolicy } from "./evaluation-suites";
 
 export interface Dataset {
   id: string;
@@ -18,6 +19,7 @@ export interface Dataset {
   most_recent_optimization_at: string;
   last_created_optimization_at: string;
   optimization_count: number;
+  type?: DATASET_TYPE;
   tags?: string[];
   created_at: string;
   last_updated_at: string;
@@ -40,10 +42,17 @@ export interface DatasetVersion {
   change_description?: string;
   metadata?: Record<string, unknown>;
   tags?: string[];
+  evaluators?: Evaluator[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
+}
+
+export enum DATASET_TYPE {
+  DATASET = "dataset",
+  EVALUATION_SUITE = "evaluation_suite",
 }
 
 export enum DATASET_STATUS {
@@ -67,6 +76,12 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
+export interface Evaluator {
+  name: string;
+  type: string;
+  config: Record<string, unknown>;
+}
+
 export interface DatasetItem {
   id: string;
   data: object;
@@ -74,6 +89,9 @@ export interface DatasetItem {
   trace_id?: string;
   span_id?: string;
   tags?: string[];
+  description?: string;
+  evaluators?: Evaluator[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   last_updated_at: string;
 }
@@ -132,6 +150,9 @@ export interface Experiment {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
@@ -152,6 +173,15 @@ export interface ExperimentItem {
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
+  status?: "passed" | "failed" | "skipped";
+  assertion_results?: AssertionResult[];
+}
+
+export interface AssertionResult {
+  name: string;
+  passed: boolean;
+  pass_score?: number;
+  reason?: string;
 }
 
 export interface ExperimentsCompare extends DatasetItem {
@@ -163,6 +193,9 @@ export interface ExperimentsAggregations {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  pass_rate?: number;
+  passed_count?: number;
+  total_count?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];

@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/components/ui/use-toast";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import AddEditEvaluationSuiteDialog from "@/components/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";
@@ -127,10 +127,12 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       }
 
       const explainer =
-        EXPLAINERS_MAP[EXPLAINER_ID.i_added_traces_to_a_dataset_now_what];
+        EXPLAINERS_MAP[
+          EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what
+        ];
 
       toast({
-        title: `${itemType} added to dataset`,
+        title: `${itemType} added to evaluation suite`,
         description: explainer.description,
         actions: [
           <ToastAction
@@ -229,7 +231,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     }
 
     if (datasets.length === 0) {
-      const text = search ? "No search results" : "There are no datasets yet";
+      const text = search
+        ? "No search results"
+        : "There are no evaluation suites yet";
 
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
@@ -285,8 +289,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
 
   const renderAlert = () => {
     const text = noValidRows
-      ? "There are no rows that can be added as dataset items. The input field is missing."
-      : "Only rows with input fields will be added as dataset items.";
+      ? "There are no rows that can be added as evaluation suite items. The input field is missing."
+      : "Only rows with input fields will be added as evaluation suite items.";
 
     if (noValidRows || partialValid) {
       return (
@@ -384,19 +388,20 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Add to dataset</DialogTitle>
+            <DialogTitle>Add to evaluation suite</DialogTitle>
           </DialogHeader>
           <DialogAutoScrollBody>
             <ExplainerDescription
               className="mb-4"
               {...EXPLAINERS_MAP[
-                EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset
+                EXPLAINER_ID
+                  .why_would_i_want_to_add_traces_to_an_evaluation_suite
               ]}
             />
             {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
             {hasOnlySpans && renderMetadataConfiguration("span")}
             <div className="my-2 flex items-center justify-between">
-              <h3 className="comet-title-xs">Select a dataset</h3>
+              <h3 className="comet-title-xs">Select an evaluation suite</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -406,7 +411,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 disabled={noValidRows}
               >
                 <Plus className="mr-2 size-4" />
-                Create new dataset
+                Create new evaluation suite
               </Button>
             </div>
             <SearchInput
@@ -446,18 +451,17 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               }}
               disabled={!selectedDataset || noValidRows || fetching}
             >
-              Add to dataset
+              Add to evaluation suite
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AddEditDatasetDialog
+      <AddEditEvaluationSuiteDialog
         open={openDialog}
         setOpen={setOpenDialog}
         onDatasetCreated={(dataset) => {
           setSelectedDataset(dataset);
         }}
-        hideUpload={true}
       />
     </>
   );

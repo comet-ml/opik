@@ -70,8 +70,6 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
 const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
@@ -116,9 +114,6 @@ interface ExperimentsTabProps {
 
 const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const isDatasetVersioningEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
-  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -211,7 +206,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Dataset",
+        label: "Evaluation suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -220,19 +215,15 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           resource: RESOURCE_TYPE.dataset,
         },
       },
-      ...(isDatasetVersioningEnabled
-        ? [
-            {
-              id: "dataset_version",
-              label: "Dataset version",
-              type: COLUMN_TYPE.string,
-              iconType: "version" as const,
-              accessorFn: (row: GroupedExperiment) =>
-                row.dataset_version_summary?.version_name || "",
-              cell: DatasetVersionCell as never,
-            },
-          ]
-        : []),
+      {
+        id: "dataset_version",
+        label: "Evaluation suite version",
+        type: COLUMN_TYPE.string,
+        iconType: "version" as const,
+        accessorFn: (row: GroupedExperiment) =>
+          row.dataset_version_summary?.version_name || "",
+        cell: DatasetVersionCell as never,
+      },
       {
         id: "created_at",
         label: "Created",
@@ -346,7 +337,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: CodeCell as never,
       },
     ];
-  }, [isDatasetVersioningEnabled]);
+  }, []);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();

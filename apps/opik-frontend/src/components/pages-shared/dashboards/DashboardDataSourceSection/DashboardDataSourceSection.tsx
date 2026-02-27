@@ -43,7 +43,7 @@ type ExperimentColumnData = {
 export const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },

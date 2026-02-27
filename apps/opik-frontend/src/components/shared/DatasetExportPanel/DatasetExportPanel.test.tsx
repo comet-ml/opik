@@ -318,7 +318,7 @@ describe("DatasetExportPanel", () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: "Export failed",
-          description: 'Failed to export dataset "My Dataset Name"',
+          description: 'Failed to export evaluation suite "My Dataset Name"',
           variant: "destructive",
         });
       });
