@@ -3,6 +3,7 @@ export interface Permissions {
   canViewDashboards: boolean;
   canDeleteProjects: boolean;
   canDeleteTraces: boolean;
+  canDeletePrompts: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -16,6 +17,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canViewDashboards: true,
     canDeleteProjects: true,
     canDeleteTraces: true,
+    canDeletePrompts: true,
   },
   isPending: false,
 };

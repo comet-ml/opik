@@ -94,6 +94,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeletePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_DELETE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -101,6 +106,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canViewDashboards,
     canDeleteProjects,
     canDeleteTraces,
+    canDeletePrompts,
     isPending: isEnabled && isPending,
   };
 };
