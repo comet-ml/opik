@@ -55,6 +55,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -116,6 +117,10 @@ const ProjectsPage: React.FunctionComponent = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const {
+    permissions: { canDeleteProjects },
+  } = usePermissions();
 
   const columnsDef: ColumnData<ProjectWithStatistic>[] = useMemo(() => {
     return [
@@ -373,7 +378,9 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<ProjectWithStatistic>(),
+      ...(canDeleteProjects
+        ? [generateSelectColumDef<ProjectWithStatistic>()]
+        : []),
       ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
         columnsDef,
         {
@@ -385,7 +392,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef]);
+  }, [selectedColumns, columnsOrder, columnsDef, canDeleteProjects]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -436,8 +443,12 @@ const ProjectsPage: React.FunctionComponent = () => {
           dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
-          <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteProjects && (
+            <>
+              <ProjectsActionsPanel projects={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}
@@ -460,12 +471,16 @@ const ProjectsPage: React.FunctionComponent = () => {
           setSorting: setSortedColumns,
         }}
         resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
+        selectionConfig={
+          canDeleteProjects
+            ? {
+                rowSelection,
+                setRowSelection,
+              }
+            : undefined
+        }
         getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
+        columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
