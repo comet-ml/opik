@@ -9,6 +9,7 @@ import { DatasetItem, ExperimentItem } from "@/types/datasets";
 import CompareExperimentsViewer from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsViewer";
 import { OnChangeFn } from "@/types/shared";
 import ExperimentDataset from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/ExperimentDataset";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface DataTabProps {
   data?: DatasetItem["data"];
@@ -23,6 +24,10 @@ const DataTab = ({
   openTrace,
   datasetItemId,
 }: DataTabProps) => {
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const renderExperimentsSection = () => {
     return experimentItems.map((experimentItem, idx) => (
       <React.Fragment key={experimentItem.id}>
@@ -46,10 +51,14 @@ const DataTab = ({
       style={{ height: "unset", overflow: "unset" }}
       className="min-h-full"
     >
-      <ResizablePanel defaultSize={30} className="min-w-72">
-        <ExperimentDataset data={data} datasetItemId={datasetItemId} />
-      </ResizablePanel>
-      <ResizableHandle />
+      {canViewDatasets && (
+        <>
+          <ResizablePanel defaultSize={30} className="min-w-72">
+            <ExperimentDataset data={data} datasetItemId={datasetItemId} />
+          </ResizablePanel>
+          <ResizableHandle />
+        </>
+      )}
       {renderExperimentsSection()}
     </ResizablePanelGroup>
   );

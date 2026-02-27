@@ -38,6 +38,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ToastAction } from "@/components/ui/toast";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DEFAULT_SIZE = 100;
 
@@ -71,6 +72,10 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const { toast } = useToast();
   const { navigate } = useNavigateToExperiment();
 
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   // Enrichment options state - all checked by default (opt-out design)
   const [enrichmentOptions, setEnrichmentOptions] = useState({
     includeSpans: true,
@@ -93,6 +98,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     },
     {
       placeholderData: keepPreviousData,
+      enabled: canViewDatasets,
     },
   );
 
