@@ -337,7 +337,3 @@ export function runCli(argv: string[], io: CliIo = defaultIo): number {
     return 1;
   }
 }
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  process.exit(runCli(process.argv.slice(2)));
-}
