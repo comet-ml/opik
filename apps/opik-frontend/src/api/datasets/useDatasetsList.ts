@@ -68,6 +68,5 @@ export default function useDatasetsList(
     queryKey: ["datasets", params],
     queryFn: (context) => getDatasetsList(context, params),
     ...options,
-    enabled: false,
   });
 }
