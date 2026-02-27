@@ -641,7 +641,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.metric_reference_key]: {
     id: EXPLAINER_ID.metric_reference_key,
-    description: "The key in the evaluation suite item to compare against.",
+    description:
+      "The key in the evaluation suite item to compare against. Supports JSONPath for nested values (e.g., $.scores[?(@.name=='Useful')].value).",
   },
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
