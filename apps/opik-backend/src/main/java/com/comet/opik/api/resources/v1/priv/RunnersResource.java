@@ -58,6 +58,7 @@ public class RunnersResource {
 
     @POST
     @Path("/pair")
+    @RateLimited
     @Operation(operationId = "generatePairingCode", summary = "Generate a pairing code for the current workspace")
     public Response generatePairingCode() {
         ensureEnabled();
@@ -69,6 +70,7 @@ public class RunnersResource {
 
     @POST
     @Path("/connect")
+    @RateLimited
     @Operation(operationId = "connectRunner", summary = "Exchange a pairing code or API key for runner credentials")
     public Response connect(@NotNull @Valid ConnectRequest request) {
         ensureEnabled();

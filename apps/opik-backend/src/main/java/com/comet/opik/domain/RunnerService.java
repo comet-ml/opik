@@ -92,6 +92,8 @@ class RunnerServiceImpl implements RunnerService {
     private static final int PAIRING_CODE_LENGTH = 6;
     private static final int PAIRING_CODE_TTL_SECONDS = 300;
     private static final int PAIRING_RUNNER_TTL_SECONDS = 600;
+    private static final int MAX_AGENTS_PER_RUNNER = 50;
+    private static final int MAX_LOG_ENTRIES_PER_BATCH = 1000;
 
     private static final String PAIR_KEY = "opik:pair:%s";
     private static final String RUNNER_KEY = "opik:runner:%s";
@@ -228,6 +230,13 @@ class RunnerServiceImpl implements RunnerService {
     public void registerAgents(@NonNull String runnerId, @NonNull String workspaceId,
             @NonNull Map<String, JsonNode> agents) {
         validateRunnerWorkspace(runnerId, workspaceId);
+
+        if (agents.size() > MAX_AGENTS_PER_RUNNER) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of(
+                            "Too many agents. Maximum is " + MAX_AGENTS_PER_RUNNER)))
+                    .build());
+        }
 
         String key = RUNNER_AGENTS_KEY.formatted(runnerId);
         RMap<String, String> agentsMap = redisClient.getMap(key, StringCodec.INSTANCE);
@@ -456,6 +465,13 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public void appendLogs(@NonNull String jobId, @NonNull String workspaceId,
             @NonNull List<LogEntry> entries) {
+        if (entries.size() > MAX_LOG_ENTRIES_PER_BATCH) {
+            throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(List.of(
+                            "Too many log entries. Maximum per batch is " + MAX_LOG_ENTRIES_PER_BATCH)))
+                    .build());
+        }
+
         loadValidatedJob(jobId, workspaceId);
 
         RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
@@ -499,10 +515,7 @@ class RunnerServiceImpl implements RunnerService {
             activeList.remove(jobId);
         }
 
-        Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
-        jobMap.expire(ttl);
-        RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
-        logsList.expire(ttl);
+        expireJobAndLogs(jobId, jobMap);
     }
 
     @Override
@@ -526,12 +539,7 @@ class RunnerServiceImpl implements RunnerService {
             boolean wasInPending = pendingJobs.remove(jobId);
 
             if (wasInPending) {
-                // Set TTL since pending jobs never go through reportResult
-                Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
-                jobMap.expire(ttl);
-                RList<String> logsList = redisClient.getList(
-                        JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
-                logsList.expire(ttl);
+                expireJobAndLogs(jobId, jobMap);
             } else {
                 RSet<String> cancellations = redisClient.getSet(
                         RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
@@ -659,7 +667,7 @@ class RunnerServiceImpl implements RunnerService {
             }
 
             if (Duration.between(startedAt, now).getSeconds() > timeoutSeconds) {
-                log.info("Job {} on runner {} exceeded timeout of {}s", jobId, runnerId, timeoutSeconds);
+                log.warn("Job {} on runner {} exceeded timeout of {}s", jobId, runnerId, timeoutSeconds);
                 failJob(jobId, "Job timed out after " + timeoutSeconds + "s");
                 activeJobs.remove(jobId);
             }
@@ -680,6 +688,10 @@ class RunnerServiceImpl implements RunnerService {
         jobMap.put("error", error);
         jobMap.put("completed_at", Instant.now().toString());
 
+        expireJobAndLogs(jobId, jobMap);
+    }
+
+    private void expireJobAndLogs(String jobId, RMap<String, String> jobMap) {
         Duration ttl = Duration.ofDays(runnerConfig.getCompletedJobTtlDays());
         jobMap.expire(ttl);
         RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
