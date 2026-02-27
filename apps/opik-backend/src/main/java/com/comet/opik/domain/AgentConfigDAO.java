@@ -85,6 +85,7 @@ interface AgentConfigDAO {
                 `key`,
                 value,
                 type,
+                description,
                 valid_from_blueprint_id,
                 valid_to_blueprint_id
             )
@@ -96,6 +97,7 @@ interface AgentConfigDAO {
                 :bean.key,
                 :bean.value,
                 :bean.type,
+                :bean.description,
                 :bean.validFromBlueprintId,
                 NULL
             )

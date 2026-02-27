@@ -30,6 +30,7 @@ public record AgentConfigValue(
         @JsonView({AgentConfig.View.Public.class,
                 AgentConfig.View.Write.class}) @NotBlank @Size(max = 512, message = "value cannot exceed 512 characters") String value,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.Write.class}) @NotNull ValueType type,
+        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.Write.class}) String description,
         @JsonView({
                 AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
         @JsonView({

@@ -135,11 +135,13 @@ class AgentConfigsResourceTest {
                             .key("model")
                             .value("gpt-4")
                             .type(ValueType.STRING)
+                            .description("LLM model to use")
                             .build(),
                     AgentConfigValue.builder()
                             .key("temperature")
                             .value("0.7")
                             .type(ValueType.FLOAT)
+                            .description("Sampling temperature")
                             .build(),
                     AgentConfigValue.builder()
                             .key("stream")
@@ -372,7 +374,8 @@ class AgentConfigsResourceTest {
                     .type(BlueprintType.BLUEPRINT)
                     .description("Initial configuration")
                     .values(List.of(
-                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING)
+                                    .description("LLM model to use").build(),
                             AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT)
                                     .build(),
                             AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER)
@@ -452,7 +455,8 @@ class AgentConfigsResourceTest {
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
-                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING)
+                            .description("LLM model to use").build(),
                     AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
                     AgentConfigValue.builder().key("max_tokens").value("2048").type(ValueType.INTEGER).build(),
                     AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
@@ -481,7 +485,8 @@ class AgentConfigsResourceTest {
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
-                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING)
+                            .description("LLM model to use").build(),
                     AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
                     AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
                     AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
@@ -539,7 +544,8 @@ class AgentConfigsResourceTest {
             assertThat(blueprint.values()).hasSize(6);
 
             var expectedValues = List.of(
-                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING)
+                            .description("LLM model to use").build(),
                     AgentConfigValue.builder().key("temperature").value("0.5").type(ValueType.FLOAT).build(),
                     AgentConfigValue.builder().key("max_tokens").value("1024").type(ValueType.INTEGER).build(),
                     AgentConfigValue.builder().key("stream").value("false").type(ValueType.BOOLEAN).build(),
