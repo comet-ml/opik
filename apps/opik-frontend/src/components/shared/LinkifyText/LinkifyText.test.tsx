@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import LinkifyText from "./LinkifyText";
 
 const getLinks = (container: HTMLElement) =>
@@ -105,9 +105,7 @@ describe("LinkifyText", () => {
     });
 
     it("should render numeric string without links", () => {
-      const { container } = render(
-        <LinkifyText>{"12345.678"}</LinkifyText>,
-      );
+      const { container } = render(<LinkifyText>{"12345.678"}</LinkifyText>);
       expect(getLinks(container)).toHaveLength(0);
     });
 
@@ -165,11 +163,7 @@ describe("LinkifyText", () => {
       const { container } = render(
         <LinkifyText>{"javascript:alert('xss')"}</LinkifyText>,
       );
-      const links = getLinks(container);
-      const jsLinks = links.filter((a) =>
-        a.href.startsWith("javascript:"),
-      );
-      expect(jsLinks).toHaveLength(0);
+      expect(getLinks(container)).toHaveLength(0);
     });
 
     it("should not execute script tags in content", () => {
@@ -190,9 +184,7 @@ describe("LinkifyText", () => {
           {"data:text/html,<script>alert('xss')</script>"}
         </LinkifyText>,
       );
-      const links = getLinks(container);
-      const dataLinks = links.filter((a) => a.href.startsWith("data:"));
-      expect(dataLinks).toHaveLength(0);
+      expect(getLinks(container)).toHaveLength(0);
     });
 
     it("should safely handle XSS in URL path", () => {
@@ -237,7 +229,6 @@ describe("LinkifyText", () => {
     it("should stop propagation on link click", () => {
       const parentHandler = vi.fn();
       const { container } = render(
-        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div onClick={parentHandler}>
           <LinkifyText>{"https://example.com"}</LinkifyText>
         </div>,
@@ -339,9 +330,7 @@ describe("LinkifyText", () => {
         "Error: Connection refused at https://api.internal.com:8443/v2/health\n" +
         "Traceback (most recent call last):\n" +
         '  File "/app/main.py", line 42';
-      const { container } = render(
-        <LinkifyText>{errorText}</LinkifyText>,
-      );
+      const { container } = render(<LinkifyText>{errorText}</LinkifyText>);
       const links = getLinks(container);
       expect(links).toHaveLength(1);
       expect(links[0].href).toContain("api.internal.com");
@@ -356,9 +345,7 @@ describe("LinkifyText", () => {
         null,
         2,
       );
-      const { container } = render(
-        <LinkifyText>{jsonText}</LinkifyText>,
-      );
+      const { container } = render(<LinkifyText>{jsonText}</LinkifyText>);
       const links = getLinks(container);
       expect(links).toHaveLength(2);
     });
@@ -370,9 +357,7 @@ describe("LinkifyText", () => {
         "https://example.com/very/long/path/" +
         Array.from({ length: 50 }, (_, i) => `segment${i}`).join("/") +
         "?key=value";
-      const { container } = render(
-        <LinkifyText>{longUrl}</LinkifyText>,
-      );
+      const { container } = render(<LinkifyText>{longUrl}</LinkifyText>);
       const links = getLinks(container);
       expect(links).toHaveLength(1);
       expect(links[0].href).toContain("segment49");
@@ -382,9 +367,7 @@ describe("LinkifyText", () => {
       const longUrl =
         "https://example.com/search?" +
         Array.from({ length: 20 }, (_, i) => `p${i}=v${i}`).join("&");
-      const { container } = render(
-        <LinkifyText>{longUrl}</LinkifyText>,
-      );
+      const { container } = render(<LinkifyText>{longUrl}</LinkifyText>);
       expect(getLinks(container)).toHaveLength(1);
     });
   });
@@ -400,9 +383,7 @@ describe("LinkifyText", () => {
 
     it("should still process strings that contain http/https", () => {
       const { container } = render(
-        <LinkifyText>
-          {"Check https://example.com for info"}
-        </LinkifyText>,
+        <LinkifyText>{"Check https://example.com for info"}</LinkifyText>,
       );
       expect(getLinks(container)).toHaveLength(1);
     });
