@@ -8,7 +8,7 @@ export const PromptVersionLinkPublic: core.serialization.ObjectSchema<
     serializers.PromptVersionLinkPublic.Raw,
     OpikApi.PromptVersionLinkPublic
 > = core.serialization.object({
-    id: core.serialization.string(),
+    promptVersionId: core.serialization.property("prompt_version_id", core.serialization.string().optional()),
     commit: core.serialization.string().optional(),
     promptId: core.serialization.property("prompt_id", core.serialization.string().optional()),
     promptName: core.serialization.property("prompt_name", core.serialization.string().optional()),
@@ -16,7 +16,7 @@ export const PromptVersionLinkPublic: core.serialization.ObjectSchema<
 
 export declare namespace PromptVersionLinkPublic {
     export interface Raw {
-        id: string;
+        prompt_version_id?: string | null;
         commit?: string | null;
         prompt_id?: string | null;
         prompt_name?: string | null;

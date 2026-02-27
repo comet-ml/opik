@@ -63,6 +63,8 @@ export enum ManagementPermissionsNames {
   INVITE_USERS = "invite_users_to_workspace",
   EXPERIMENT_VIEW = "experiment_view",
   DASHBOARD_VIEW = "dashboard_view",
+  PROJECT_DELETE = "project_delete",
+  TRACE_DELETE = "trace_delete",
 }
 
 export interface UserPermission {

@@ -8,6 +8,7 @@ import {
   JsonSchemaValidatorMetricParameters,
   GEvalMetricParameters,
   LevenshteinMetricParameters,
+  NumericalSimilarityMetricParameters,
   CodeMetricParameters,
 } from "@/types/optimizations";
 import {
@@ -20,6 +21,7 @@ import EqualsMetricConfigs from "@/components/pages-shared/optimizations/MetricS
 import JsonSchemaValidatorMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/JsonSchemaValidatorMetricConfigs";
 import GEvalMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/GEvalMetricConfigs";
 import LevenshteinMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/LevenshteinMetricConfigs";
+import NumericalSimilarityMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/NumericalSimilarityMetricConfigs";
 import CodeMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/CodeMetricConfigs";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -78,6 +80,16 @@ const MetricConfigs = ({
       return (
         <LevenshteinMetricConfigs
           configs={configs as Partial<LevenshteinMetricParameters>}
+          onChange={onChange}
+          datasetVariables={datasetVariables}
+        />
+      );
+    }
+
+    if (metricType === METRIC_TYPE.NUMERICAL_SIMILARITY) {
+      return (
+        <NumericalSimilarityMetricConfigs
+          configs={configs as Partial<NumericalSimilarityMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
         />

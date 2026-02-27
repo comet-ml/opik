@@ -84,11 +84,23 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeleteProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeleteTraces = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
     canViewDashboards,
+    canDeleteProjects,
+    canDeleteTraces,
     isPending: isEnabled && isPending,
   };
 };

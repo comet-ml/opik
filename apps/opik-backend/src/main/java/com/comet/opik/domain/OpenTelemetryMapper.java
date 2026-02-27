@@ -167,6 +167,13 @@ public class OpenTelemetryMapper {
             spanBuilder.input(input);
         }
         if (!usage.isEmpty()) {
+            // Some integrations (e.g. PydanticAI) send prompt_tokens and completion_tokens
+            // but omit total_tokens. Compute it so callers always get a complete picture.
+            if (!usage.containsKey("total_tokens")
+                    && usage.containsKey("prompt_tokens")
+                    && usage.containsKey("completion_tokens")) {
+                usage.put("total_tokens", usage.get("prompt_tokens") + usage.get("completion_tokens"));
+            }
             spanBuilder.usage(usage);
         }
         if (!tags.isEmpty()) {
