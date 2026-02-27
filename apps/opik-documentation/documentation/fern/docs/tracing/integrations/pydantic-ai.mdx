@@ -179,6 +179,16 @@ logfire.instrument_httpx(capture_all=False)
 When this parameter is set to `False`, we will not log the exact request made
 to the LLM provider.
 
+## Logging threads
+
+You can group multiple agent calls into a conversation thread by setting `thread_id` as a span attribute on the root Logfire span. Opik's OTEL ingestion recognizes this attribute and maps it directly to the trace's `thread_id` field:
+
+```python
+# Logfire wraps OTEL - thread_id becomes a span attribute automatically
+with logfire.span("chat_turn", thread_id=thread_id):
+    result = agent.run_sync("What is machine learning?")
+```
+
 ## Further improvements
 
 If you would like to see us improve this integration, simply open a new feature
