@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Tag, Trash, Brain } from "lucide-react";
-
+import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -14,7 +14,7 @@ import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvalua
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
-import slugify from "slugify";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -40,6 +40,10 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
+  const {
+    permissions: { canDeleteTraces },
+  } = usePermissions();
+
   const deleteTracesHandler = useCallback(() => {
     mutate({
       projectId,
@@ -63,16 +67,18 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   return (
     <div className="flex items-center gap-2">
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 2}
-        setOpen={setOpen}
-        onConfirm={deleteTracesHandler}
-        title="Delete traces"
-        description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
-        confirmText="Delete traces"
-        confirmButtonVariant="destructive"
-      />
+      {canDeleteTraces && (
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 2}
+          setOpen={setOpen}
+          onConfirm={deleteTracesHandler}
+          title="Delete traces"
+          description="Deleting these traces will also remove their data from related experiment samples. This action cannot be undone. Are you sure you want to continue?"
+          confirmText="Delete traces"
+          confirmButtonVariant="destructive"
+        />
+      )}
       <AddTagDialog
         key={`tag-${resetKeyRef.current}`}
         rows={selectedRows}
@@ -145,7 +151,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             : undefined
         }
       />
-      {type === TRACE_DATA_TYPE.traces && (
+      {type === TRACE_DATA_TYPE.traces && canDeleteTraces && (
         <TooltipWrapper content="Delete">
           <Button
             variant="outline"
