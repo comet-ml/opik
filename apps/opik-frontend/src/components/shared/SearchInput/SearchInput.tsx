@@ -17,6 +17,7 @@ export type SearchInputProps = {
   dimension?: InputProps["dimension"];
   variant?: "default" | "ghost";
   size?: "sm" | "md";
+  active?: boolean;
 };
 
 export const SearchInput = ({
@@ -28,6 +29,7 @@ export const SearchInput = ({
   dimension,
   variant = "default",
   size = "md",
+  active = false,
 }: SearchInputProps) => {
   return (
     <div className={cn("relative w-full", className)}>
@@ -36,6 +38,16 @@ export const SearchInput = ({
       </div>
       <DebounceInput
         className={cn("px-8", size === "sm" && "h-8")}
+        style={
+          active
+            ? {
+                borderColor:
+                  "color-mix(in srgb, var(--search-highlight) 50%, transparent)",
+                boxShadow:
+                  "0 0 0 1px color-mix(in srgb, var(--search-highlight) 50%, transparent)",
+              }
+            : undefined
+        }
         delay={SEARCH_TEXT_DELAY}
         onValueChange={setSearchText as (value: unknown) => void}
         placeholder={placeholder}

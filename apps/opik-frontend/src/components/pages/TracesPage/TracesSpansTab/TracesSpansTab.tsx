@@ -367,6 +367,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       updateType: "replaceIn",
     },
   );
+  const trimmedSearch = (search as string).trim().toLowerCase();
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -557,7 +558,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         filters,
         page: page as number,
         size: size as number,
-        search: search as string,
+        search: trimmedSearch,
         truncate: truncationEnabled,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -596,7 +597,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         projectId,
         type: type as TRACE_DATA_TYPE,
         filters,
-        search: search as string,
+        search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
       },
@@ -865,8 +866,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         handleRowClick(row, DetailsActionSection.Comments);
       },
       enableUserFeedbackEditing: true,
+      searchText: !isPlaceholderData ? trimmedSearch : undefined,
     }),
-    [handleRowClick],
+    [handleRowClick, trimmedSearch, isPlaceholderData],
   );
 
   const handleThreadIdClick = useCallback(
@@ -1185,10 +1187,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder={`Search ${type}...`}
             className="w-[320px]"
             dimension="sm"
-          ></SearchInput>
+            active={!isPlaceholderData && !!trimmedSearch}
+          />
           <FiltersButton
             columns={filtersColumnData}
             config={filtersConfig as never}

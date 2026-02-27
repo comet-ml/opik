@@ -5218,4 +5218,128 @@ class GetTracesByProjectResourceTest {
 
     }
 
+    @Nested
+    @DisplayName("Search Traces:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SearchTraces {
+
+        @Test
+        @DisplayName("When searching by trace name substring, should return only matching traces")
+        void searchTraces__whenSearchByName__thenReturnMatchingTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name("trace-" + uniqueTerm + "-matching")
+                    .build();
+
+            var nonMatchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name("trace-other-nonmatching")
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, nonMatchingTrace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", uniqueTerm));
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().name()).isEqualTo(matchingTrace.name());
+        }
+
+        @Test
+        @DisplayName("When searching by input content, should return only matching traces")
+        void searchTraces__whenSearchByInput__thenReturnMatchingTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"search-" + uniqueTerm + "\"}"))
+                    .build();
+
+            var nonMatchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"other-content\"}"))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, nonMatchingTrace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", uniqueTerm));
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("When searching by tag value, should return only matching traces")
+        void searchTraces__whenSearchByTag__thenReturnMatchingTraces() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .tags(Set.of("tag-" + uniqueTerm))
+                    .build();
+
+            var nonMatchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .tags(Set.of("other-tag"))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, nonMatchingTrace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", uniqueTerm));
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("When searching with no match, should return empty results")
+        void searchTraces__whenSearchHasNoMatch__thenReturnEmpty() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", "nonexistent_xyz_12345"));
+
+            assertThat(actualPage.total()).isEqualTo(0);
+            assertThat(actualPage.content()).isEmpty();
+        }
+    }
+
 }

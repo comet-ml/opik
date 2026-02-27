@@ -333,6 +333,14 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
             UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
             List<SortingField> sortingFields, List<Span.SpanField> exclude, String fromTime, String toTime) {
+        return findSpans(workspaceName, apiKey, projectName, projectId, page, size, traceId, type, filters,
+                sortingFields, exclude, fromTime, toTime, null);
+    }
+
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields, List<Span.SpanField> exclude, String fromTime, String toTime,
+            String search) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
 
         if (page != null) {
@@ -377,6 +385,10 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         if (toTime != null) {
             webTarget = webTarget.queryParam("to_time", toTime);
+        }
+
+        if (StringUtils.isNotBlank(search)) {
+            webTarget = webTarget.queryParam("search", search);
         }
 
         try (var actualResponse = webTarget
