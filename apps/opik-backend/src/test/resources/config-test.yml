@@ -566,6 +566,9 @@ datasetVersioningMigration:
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: 3600
+  # Default: false for testing
+  # Description: Whether to run the items_total migration synchronously at startup with fail-fast behavior
+  startupMigrationEnabled: false
 
 # Job timeout configuration
 jobTimeout:

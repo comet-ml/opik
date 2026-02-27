@@ -650,7 +650,7 @@ serviceToggles:
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"true"}
+  datasetVersioningEnabled: "true"
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
@@ -879,3 +879,7 @@ datasetVersioningMigration:
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
+  # Default: true
+  # Description: Whether to run the items_total migration synchronously at startup with fail-fast behavior.
+  # Set to false to skip the startup migration and investigate manually if it fails.
+  startupMigrationEnabled: ${DATASET_VERSIONING_STARTUP_MIGRATION_ENABLED:-"true"}

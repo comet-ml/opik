@@ -27,6 +27,14 @@ public class DatasetVersioningMigrationConfig {
     @NotNull private boolean itemsTotalEnabled;
 
     /**
+     * Enable/disable the blocking startup migration.
+     * When enabled, runs items_total migration synchronously at startup with fail-fast behavior.
+     * Set to false to skip and investigate manually if it fails.
+     */
+    @JsonProperty
+    @NotNull private boolean startupMigrationEnabled = true;
+
+    /**
      * Number of dataset versions to process in each batch for items_total migration.
      * Smaller batches reduce memory usage but increase total migration time.
      */

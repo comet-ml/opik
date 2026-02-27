@@ -577,6 +577,9 @@ public interface DatasetVersionDAO {
             @Bind("lastSeenVersionId") String lastSeenVersionId,
             @Bind("limit") int limit);
 
+    @SqlQuery("SELECT COUNT(*) FROM dataset_versions WHERE dataset_id = id AND items_total = -1")
+    long countVersionsNeedingItemsTotalMigration();
+
     @SqlUpdate("""
             INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id, created_at, last_updated_at)
             SELECT
