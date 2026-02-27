@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Tag, Trash, Brain } from "lucide-react";
-
+import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -14,7 +14,6 @@ import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvalua
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
-import slugify from "slugify";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type TracesActionsPanelProps = {
