@@ -155,6 +155,30 @@ turn evaluate.
     </Step>
 </Steps>
 
+## Simple multi-turn simulation pattern
+
+If you want a minimal setup first, run your real agent callable and pair it with a basic `SimulatedUser` persona (no custom state adapter needed):
+
+```python title="Minimal real-agent + simulated-user pattern" maxLines=1000
+from opik.simulation import run_simulation, SimulatedUser
+
+def run_agent(user_message: str, *, thread_id: str, **kwargs) -> str:
+    # Replace this with your real app entrypoint.
+    return "Thanks, I can help with that."
+
+simulation = run_simulation(
+    app=run_agent,
+    user_simulator=SimulatedUser(
+        persona="You want to request a refund politely and provide details when asked."
+    ),
+    max_turns=3,
+    project_name="multi_turn_evaluation",
+)
+
+print(simulation["thread_id"])
+print(simulation["conversation_history"])
+```
+
 ## Advanced: Stateful simulations
 
 For more realistic multi-turn behavior, you can pass a shared `simulation_state` object into `run_simulation`.
