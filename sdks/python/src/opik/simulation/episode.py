@@ -89,6 +89,9 @@ class EpisodeResult(pydantic.BaseModel):
             return value
         if isinstance(value, dict):
             payload = {**value}
+            # Backward-compatible alias for clearer naming in returned dict payloads.
+            if "assertions" not in payload and "validation_verdicts" in payload:
+                payload["assertions"] = payload.pop("validation_verdicts")
             payload.setdefault("scenario_id", fallback_scenario_id)
             if fallback_thread_id is not None:
                 payload.setdefault("thread_id", fallback_thread_id)
@@ -115,6 +118,11 @@ class EpisodeResult(pydantic.BaseModel):
             return
 
         raise AssertionError(self.model_dump_json(indent=2))
+
+    @property
+    def validation_verdicts(self) -> List[EpisodeAssertion]:
+        """Alias for `assertions` when you want verdict-focused terminology."""
+        return self.assertions
 
 
 def build_trajectory_summary(trajectory: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
