@@ -102,6 +102,8 @@ Example with GitHub Actions:
 
 For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions and, when enabled, emit structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
 
+In this model, `EpisodeResult.assertions` contains structured verdict records (for example, `"assistant_replied_each_turn" => passed=True`) rather than executable validators. `episode.is_passing()` and `episode.assert_is_passing()` evaluate those records plus budgets into the final test outcome.
+
 The example below uses `SimulatedUser` with fixed responses so the scenario is deterministic and easy to run in CI:
 
 ```python
@@ -221,8 +223,8 @@ def test_refund_episode_ci_gate():
         metadata={"tags": simulation.get("tags")},
     )
 
-    # Native pytest failure signal.
-    assert episode.is_passing(), episode.model_dump_json(indent=2)
+    # Native pytest failure signal with structured output on failure.
+    episode.assert_is_passing()
     # Structured episode payload for Opik artifact/reporting.
     return episode
 ```
