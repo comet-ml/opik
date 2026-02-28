@@ -105,3 +105,15 @@ def test_episode_result__assert_is_passing__raises_with_payload__happyflow():
         assert '"passed": false' in message
     else:
         assert False, "Expected AssertionError for failing episode"
+
+
+def test_episode_result__dict_input_validation_verdicts_alias__happyflow():
+    episode = EpisodeResult.from_any(
+        {"validation_verdicts": [{"name": "schema", "passed": True}]},
+        fallback_scenario_id="fallback-scenario",
+    )
+
+    assert episode is not None
+    assert len(episode.assertions) == 1
+    assert len(episode.validation_verdicts) == 1
+    assert episode.validation_verdicts[0].name == "schema"
