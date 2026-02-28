@@ -8,6 +8,8 @@ import pydantic
 
 
 class EpisodeAssertion(pydantic.BaseModel):
+    """Structured verdict for one validation check within an episode."""
+
     name: str
     passed: bool
     reason: Optional[str] = None
@@ -15,12 +17,16 @@ class EpisodeAssertion(pydantic.BaseModel):
 
 
 class EpisodeScore(pydantic.BaseModel):
+    """Optional numeric score captured for the scenario."""
+
     name: str
     value: float
     reason: Optional[str] = None
 
 
 class EpisodeBudgetMetric(pydantic.BaseModel):
+    """Used/limit pair for one budget dimension."""
+
     used: float
     limit: float
     unit: Optional[str] = None
@@ -31,6 +37,8 @@ class EpisodeBudgetMetric(pydantic.BaseModel):
 
 
 class EpisodeBudgets(pydantic.BaseModel):
+    """Budget checks attached to an episode result."""
+
     max_turns: Optional[EpisodeBudgetMetric] = None
     tool_calls: Optional[EpisodeBudgetMetric] = None
     latency_ms: Optional[EpisodeBudgetMetric] = None
@@ -52,6 +60,13 @@ class EpisodeBudgets(pydantic.BaseModel):
 
 
 class EpisodeResult(pydantic.BaseModel):
+    """Episode-level validation report returned by an `@llm_episode` test.
+
+    `assertions` are verdict records (already-evaluated outcomes), while
+    `is_passing()`/`assert_is_passing()` compute the final pass/fail status by
+    combining hard assertions (`severity="error"`) and optional budgets.
+    """
+
     scenario_id: str
     thread_id: Optional[str] = None
     assertions: List[EpisodeAssertion] = pydantic.Field(default_factory=list)
@@ -81,6 +96,7 @@ class EpisodeResult(pydantic.BaseModel):
         return None
 
     def is_passing(self) -> bool:
+        """Return True when hard assertions and budgets are satisfied."""
         hard_assertions = [
             assertion for assertion in self.assertions if assertion.severity == "error"
         ]
@@ -92,6 +108,13 @@ class EpisodeResult(pydantic.BaseModel):
                 return False
 
         return True
+
+    def assert_is_passing(self) -> None:
+        """Raise AssertionError with a formatted episode report when failing."""
+        if self.is_passing():
+            return
+
+        raise AssertionError(self.model_dump_json(indent=2))
 
 
 def build_trajectory_summary(trajectory: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
