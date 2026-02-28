@@ -80,3 +80,28 @@ def test_make_max_turns_assertion__within_limit__happyflow():
     assertion = make_max_turns_assertion(conversation_history, max_turns=2)
     assert assertion.passed is True
     assert assertion.reason == "turns_used=2, limit=2"
+
+
+def test_episode_result__assert_is_passing__passes_without_error__happyflow():
+    episode = EpisodeResult(
+        scenario_id="scenario-ok",
+        assertions=[EpisodeAssertion(name="schema", passed=True, severity="error")],
+    )
+
+    episode.assert_is_passing()
+
+
+def test_episode_result__assert_is_passing__raises_with_payload__happyflow():
+    episode = EpisodeResult(
+        scenario_id="scenario-fail",
+        assertions=[EpisodeAssertion(name="schema", passed=False, severity="error")],
+    )
+
+    try:
+        episode.assert_is_passing()
+    except AssertionError as exc:
+        message = str(exc)
+        assert "scenario-fail" in message
+        assert '"passed": false' in message
+    else:
+        assert False, "Expected AssertionError for failing episode"
