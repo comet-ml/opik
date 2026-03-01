@@ -6053,6 +6053,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
 
@@ -6071,6 +6072,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
 
@@ -6088,6 +6090,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
 
@@ -6261,6 +6264,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
 
@@ -6278,6 +6282,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
 
@@ -6456,7 +6461,9 @@ class DatasetsResourceTest {
                             .totalEstimatedCost(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
-                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
+                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .description(datasetItemBatchWithImage.items().get(i).description())
+                            .build())
                     .toList();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -6792,7 +6799,7 @@ class DatasetsResourceTest {
                     .comments(null) // API returns null for comments in this context
                     .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
                     .usage(null) // API returns null for usage in this context
-                    // Don't set duration - let it be compared as-is from the API response
+                    .description(null) // NULL because dataset item was hard-deleted
                     .build();
 
             // Query for dataset items with experiment items using assertion helper
@@ -6830,6 +6837,7 @@ class DatasetsResourceTest {
                                 : Stream.of(score)
                                         .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                         .toList())
+                        .description(item.description())
                         .build();
 
                 experimentItems.add(experimentItem);
