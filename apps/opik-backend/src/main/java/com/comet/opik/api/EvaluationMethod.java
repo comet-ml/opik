@@ -13,6 +13,8 @@ public enum EvaluationMethod {
     DATASET("dataset"),
     EVALUATION_SUITE("evaluation_suite");
 
+    public static final String UNKNOWN_VALUE = "unknown";
+
     @JsonValue
     private final String value;
 
