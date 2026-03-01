@@ -22,23 +22,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 2
         outputs:
-          unit-tests: ${{ steps.split.outputs.unit_tests }}
-          integration-group-1: ${{ steps.split.outputs.ig1 }}
-          integration-group-2: ${{ steps.split.outputs.ig2 }}
-          integration-group-3: ${{ steps.split.outputs.ig3 }}
-          integration-group-4: ${{ steps.split.outputs.ig4 }}
-          integration-group-5: ${{ steps.split.outputs.ig5 }}
-          integration-group-6: ${{ steps.split.outputs.ig6 }}
-          integration-group-7: ${{ steps.split.outputs.ig7 }}
-          integration-group-8: ${{ steps.split.outputs.ig8 }}
-          integration-group-9: ${{ steps.split.outputs.ig9 }}
-          integration-group-10: ${{ steps.split.outputs.ig10 }}
-          integration-group-11: ${{ steps.split.outputs.ig11 }}
-          integration-group-12: ${{ steps.split.outputs.ig12 }}
-          integration-group-13: ${{ steps.split.outputs.ig13 }}
-          integration-group-14: ${{ steps.split.outputs.ig14 }}
-          integration-group-15: ${{ steps.split.outputs.ig15 }}
-          integration-group-16: ${{ steps.split.outputs.ig16 }}
+          matrix: ${{ steps.split.outputs.matrix }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4.1.1
@@ -68,13 +52,12 @@ jobs:
                 # Convert file path to Maven class pattern: com.foo.BarTest
                 to_class() { echo "$1" | sed "s|^$TEST_DIR/||;s|/|.|g;s|\.java$||"; }
 
-                # Output unit tests
+                # Build unit test list
                 unit_list=""
                 for f in "${unit_files[@]}"; do
                   c=$(to_class "$f")
                   unit_list="${unit_list:+$unit_list,}$c"
                 done
-                echo "unit_tests=$unit_list" >> "$GITHUB_OUTPUT"
 
                 # Balanced split: sort integration files by line count desc,
                 # then greedy-assign each to the smallest group
@@ -85,7 +68,6 @@ jobs:
                 done
 
                 while IFS=' ' read -r lines file; do
-                  # Find group with minimum total size
                   min_g=1
                   for ((i=2; i<=NUM_GROUPS; i++)); do
                     if (( group_size[i] < group_size[min_g] )); then
@@ -101,9 +83,14 @@ jobs:
                   done | sort -rn
                 )
 
+                # Build JSON matrix: unit tests + N integration groups
+                matrix="{\"include\":["
+                matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":15}"
                 for ((i=1; i<=NUM_GROUPS; i++)); do
-                  echo "ig$i=${group_list[$i]}" >> "$GITHUB_OUTPUT"
+                  matrix+=",{\"name\":\"Integration Group $i\",\"tests\":\"${group_list[$i]}\",\"timeout\":20}"
                 done
+                matrix+="]}"
+                echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
                 # Summary
                 echo "### Test Split Summary" >> "$GITHUB_STEP_SUMMARY"
@@ -124,59 +111,7 @@ jobs:
             working-directory: apps/opik-backend/
         strategy:
           fail-fast: false
-          matrix:
-            include:
-              - name: "Unit Tests"
-                test-list-key: unit-tests
-                timeout: 15
-              - name: "Integration Group 1"
-                test-list-key: integration-group-1
-                timeout: 20
-              - name: "Integration Group 2"
-                test-list-key: integration-group-2
-                timeout: 20
-              - name: "Integration Group 3"
-                test-list-key: integration-group-3
-                timeout: 20
-              - name: "Integration Group 4"
-                test-list-key: integration-group-4
-                timeout: 20
-              - name: "Integration Group 5"
-                test-list-key: integration-group-5
-                timeout: 20
-              - name: "Integration Group 6"
-                test-list-key: integration-group-6
-                timeout: 20
-              - name: "Integration Group 7"
-                test-list-key: integration-group-7
-                timeout: 20
-              - name: "Integration Group 8"
-                test-list-key: integration-group-8
-                timeout: 20
-              - name: "Integration Group 9"
-                test-list-key: integration-group-9
-                timeout: 20
-              - name: "Integration Group 10"
-                test-list-key: integration-group-10
-                timeout: 20
-              - name: "Integration Group 11"
-                test-list-key: integration-group-11
-                timeout: 20
-              - name: "Integration Group 12"
-                test-list-key: integration-group-12
-                timeout: 20
-              - name: "Integration Group 13"
-                test-list-key: integration-group-13
-                timeout: 20
-              - name: "Integration Group 14"
-                test-list-key: integration-group-14
-                timeout: 20
-              - name: "Integration Group 15"
-                test-list-key: integration-group-15
-                timeout: 20
-              - name: "Integration Group 16"
-                test-list-key: integration-group-16
-                timeout: 20
+          matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4.1.1
@@ -190,35 +125,12 @@ jobs:
                 distribution: 'corretto'
                 cache: maven
 
-            - name: Resolve test list
-              id: tests
-              run: |
-                case "${{ matrix.test-list-key }}" in
-                  unit-tests)              echo "list=${{ needs.discover-tests.outputs.unit-tests }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-1)     echo "list=${{ needs.discover-tests.outputs.integration-group-1 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-2)     echo "list=${{ needs.discover-tests.outputs.integration-group-2 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-3)     echo "list=${{ needs.discover-tests.outputs.integration-group-3 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-4)     echo "list=${{ needs.discover-tests.outputs.integration-group-4 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-5)     echo "list=${{ needs.discover-tests.outputs.integration-group-5 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-6)     echo "list=${{ needs.discover-tests.outputs.integration-group-6 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-7)     echo "list=${{ needs.discover-tests.outputs.integration-group-7 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-8)     echo "list=${{ needs.discover-tests.outputs.integration-group-8 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-9)     echo "list=${{ needs.discover-tests.outputs.integration-group-9 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-10)    echo "list=${{ needs.discover-tests.outputs.integration-group-10 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-11)    echo "list=${{ needs.discover-tests.outputs.integration-group-11 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-12)    echo "list=${{ needs.discover-tests.outputs.integration-group-12 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-13)    echo "list=${{ needs.discover-tests.outputs.integration-group-13 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-14)    echo "list=${{ needs.discover-tests.outputs.integration-group-14 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-15)    echo "list=${{ needs.discover-tests.outputs.integration-group-15 }}" >> "$GITHUB_OUTPUT" ;;
-                  integration-group-16)    echo "list=${{ needs.discover-tests.outputs.integration-group-16 }}" >> "$GITHUB_OUTPUT" ;;
-                esac
-
             - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
               run: >-
                 mvn clean test
-                -Dtest="${{ steps.tests.outputs.list }}"
+                -Dtest="${{ matrix.tests }}"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
 
