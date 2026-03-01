@@ -41,6 +41,32 @@ def agent_config_decorator(
     mask_id: typing.Optional[str] = None,
     description: typing.Optional[str] = None,
 ) -> typing.Any:
+    """Decorate a dataclass to back its fields with an Opik agent config blueprint.
+
+    Dataclass fields become live config values: on attribute access the
+    decorator transparently returns the value from the cached remote blueprint
+    instead of the locally-set default.
+
+    Can be used with or without arguments::
+
+        @agent_config_decorator
+        class MyConfig:
+            model: str = "gpt-4o"
+
+        @agent_config_decorator(env="production", description="Prod config")
+        class MyConfig:
+            model: str = "gpt-4o"
+
+    Args:
+        cls: The class being decorated (set automatically).
+        name: Prefix used for backend field keys. Defaults to the class name.
+        project: Opik project name. Defaults to the client's default project.
+        workspace: Opik workspace. Reserved for future use.
+        env: Pin this config instance to a specific environment blueprint.
+        mask_id: ID of a mask blueprint to overlay on every attribute read.
+        description: Description stored when a new blueprint is auto-created.
+    """
+
     def wrap(cls: type) -> type:
         if not dataclasses.is_dataclass(cls):
             cls = dataclasses.dataclass(cls)
@@ -126,6 +152,19 @@ def init_cache_entry(
     prefixed_field_types: typing.Dict[str, typing.Any],
     agent_cfg: typing.Optional[AgentConfig] = None,
 ) -> SharedConfigCache:
+    """Initialise (or return the existing) shared cache entry for a config key.
+
+    Registers the given field types and, when ``agent_cfg`` is provided and no
+    mask is active, attaches a background-refresh callback so the cache stays
+    up to date.
+
+    Args:
+        resolved_project: Resolved Opik project name.
+        env: Environment name used as part of the cache key.
+        mask_id: Mask ID used as part of the cache key.
+        prefixed_field_types: Mapping of prefixed field key to Python type.
+        agent_cfg: ``AgentConfig`` instance used to build the refresh callback.
+    """
     shared_cache = get_shared_cache(resolved_project, env, mask_id)
     shared_cache.register_fields(prefixed_field_types)
 
@@ -145,12 +184,19 @@ def init_cache_entry(
 
 
 def get_base_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
+    """Return the cached blueprint value for ``attr``, or ``_MISSING``."""
     cache = _get_cached_config(instance)
     prefixed_key = instance.__opik_field_map__[attr]
     return cache.values.get(prefixed_key, _MISSING)
 
 
 def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
+    """Fetch the remote blueprint and populate the shared cache.
+
+    If the remote blueprint already contains all local fields, only the cache
+    is updated. Otherwise a new blueprint is created with the missing fields
+    merged in (unless the config is pinned to an env or mask).
+    """
     agent_cfg = instance.__opik_agent_config__
     if agent_cfg is None:
         return
@@ -204,6 +250,16 @@ def create_blueprint(
     description: typing.Optional[str],
     cache: SharedConfigCache,
 ) -> Blueprint:
+    """Create a new blueprint from the instance's current field values.
+
+    Args:
+        instance: The decorated config instance providing field values.
+        agent_cfg: ``AgentConfig`` used to call the backend.
+        local_keys: Subset of local (unprefixed) field names to include.
+        description: Description forwarded to the backend.
+        cache: Shared cache whose ``all_field_types`` is used for
+            deserialisation of the returned blueprint.
+    """
     fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
     for local_name in local_keys:
         prefixed_key = instance.__opik_field_map__[local_name]
@@ -220,6 +276,13 @@ def create_blueprint(
 
 
 def get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
+    """Return the mask-overridden value for ``attr``, or ``_MISSING``.
+
+    Checks the active context mask (set via ``opik_config_mask`` context var).
+    Fetches and caches the mask blueprint on first access per mask ID.
+    Returns ``_MISSING`` when no mask is active or the mask has no value for
+    the requested field.
+    """
     context_mask = get_active_config_mask()
     if context_mask is None:
         return _MISSING
@@ -256,6 +319,16 @@ def get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
 def inject_trace_metadata(
     instance: AgentConfigInstance, attr: str, value: typing.Any = _MISSING
 ) -> None:
+    """Attach the accessed config value to the active trace's metadata.
+
+    No-ops silently when there is no active trace or on any error.
+
+    Args:
+        instance: The decorated config instance.
+        attr: Local (unprefixed) field name being accessed.
+        value: The resolved value to record. Falls back to the cached value
+            when ``_MISSING``.
+    """
     try:
         trace_data = context_storage.get_trace_data()
         if trace_data is None:

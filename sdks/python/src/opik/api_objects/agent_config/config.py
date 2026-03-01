@@ -62,6 +62,17 @@ class AgentConfig:
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> typing.Optional[Blueprint]:
+        """Fetch a blueprint by ID, environment name, or latest.
+
+        Priority: ``id`` > ``env`` > latest. Returns ``None`` if not found.
+
+        Args:
+            id: Fetch the blueprint with this exact ID.
+            env: Fetch the blueprint tagged with this environment name.
+            mask_id: ID of a mask blueprint to overlay on the result.
+            field_types: Mapping of prefixed field key to Python type used
+                for deserialising backend values.
+        """
         try:
             if id is not None:
                 raw = self._rest_client.agent_configs.get_blueprint_by_id(
@@ -101,6 +112,21 @@ class AgentConfig:
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> Blueprint:
+        """Create a new blueprint and return it.
+
+        Pass either ``parameters`` (plain key-value pairs whose types are
+        inferred) or ``fields_with_values`` (explicit ``{key: (type, value)}``
+        mapping). If both are given ``fields_with_values`` takes precedence.
+
+        Args:
+            parameters: Plain ``{field_name: value}`` dict; types are inferred
+                via ``type(value)``.
+            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+                mapping, bypassing type inference.
+            description: Human-readable description stored with the blueprint.
+            field_types: Mapping of prefixed field key to Python type used
+                when fetching back the created blueprint.
+        """
         if fields_with_values is None:
             fields_with_values = {
                 k: (type(v), v) for k, v in (parameters or {}).items()
@@ -121,6 +147,12 @@ class AgentConfig:
         )
 
     def tag_bluepring_with_env(self, env: str, blueprint_id: str) -> None:
+        """Associate a blueprint with an environment name.
+
+        Args:
+            env: Environment name (e.g. ``"production"``).
+            blueprint_id: ID of the blueprint to tag.
+        """
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, self._project_name
         )
@@ -137,7 +169,18 @@ class AgentConfig:
         ] = None,
         description: typing.Optional[str] = None,
     ) -> str:
-        """Create a mask and return its ID. Apply via get_blueprint(mask_id=...)."""
+        """Create a mask blueprint and return its ID.
+
+        A mask overlays a subset of fields on top of an existing blueprint.
+        Apply it by passing the returned ID to ``get_blueprint(mask_id=...)``.
+
+        Args:
+            parameters: Plain ``{field_name: value}`` dict; types are inferred
+                via ``type(value)``.
+            fields_with_values: Explicit ``{field_name: (python_type, value)}``
+                mapping, bypassing type inference.
+            description: Human-readable description stored with the mask.
+        """
         if fields_with_values is None:
             fields_with_values = {
                 k: (type(v), v) for k, v in (parameters or {}).items()
