@@ -295,6 +295,13 @@ check_containers_status() {
   check_docker_status
 
   local containers=("${CONTAINERS[@]}")
+  if [[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]]; then
+    local filtered=()
+    for c in "${containers[@]}"; do
+      [[ "$c" != "${COMPOSE_PROJECT_NAME}-python-backend-1" ]] && filtered+=("$c")
+    done
+    containers=("${filtered[@]}")
+  fi
 
   for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
@@ -363,6 +370,14 @@ start_missing_containers() {
   all_running=true
 
   local containers=("${CONTAINERS[@]}")
+  if [[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]]; then
+    local filtered=()
+    for c in "${containers[@]}"; do
+      [[ "$c" != "${COMPOSE_PROJECT_NAME}-python-backend-1" ]] && filtered+=("$c")
+    done
+    containers=("${filtered[@]}")
+  fi
+
   for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
 

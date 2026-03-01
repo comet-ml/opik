@@ -255,6 +255,9 @@ function Test-ContainersStatus {
     $allOk = $true
 
     $containers = Get-Containers
+    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
+        $containers = $containers | Where-Object { $_ -ne "opik-python-backend-1" }
+    }
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -423,6 +426,9 @@ function Start-MissingContainers {
     $allRunning = $true
 
     $containers = Get-Containers
+    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
+        $containers = $containers | Where-Object { $_ -ne "opik-python-backend-1" }
+    }
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
