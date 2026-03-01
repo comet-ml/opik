@@ -266,12 +266,7 @@ public class StatsUtils {
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
 
-        Map<String, Double> usageSum = calculateUsageSum(usages);
-        usageSum.keySet()
-                .stream()
-                .sorted()
-                .forEach(key -> stats
-                        .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE_SUM, key), usageSum.get(key))));
+        stats.addAll(calculateUsageSum(usages));
 
         feedback.keySet()
                 .stream()
@@ -298,7 +293,7 @@ public class StatsUtils {
         return stats;
     }
 
-    public static Map<String, Double> calculateUsageSum(List<Map<String, Long>> data) {
+    public static List<AvgValueStat> calculateUsageSum(List<Map<String, Long>> data) {
         return data.stream()
                 .filter(Objects::nonNull)
                 .map(Map::entrySet)
@@ -308,9 +303,13 @@ public class StatsUtils {
                         mapping(Map.Entry::getValue, toList())))
                 .entrySet()
                 .stream()
-                .map(e -> Map.entry(e.getKey(),
-                        e.getValue().stream().mapToDouble(Long::doubleValue).sum()))
-                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> (AvgValueStat) AvgValueStat.builder()
+                        .name("%s.%s".formatted(StatsMapper.USAGE_SUM, e.getKey()))
+                        .value(e.getValue().stream().mapToDouble(Long::doubleValue).sum())
+                        .type(ProjectStats.StatsType.AVG)
+                        .build())
+                .toList();
     }
 
     public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
