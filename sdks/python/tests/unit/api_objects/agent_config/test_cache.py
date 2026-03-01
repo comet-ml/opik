@@ -47,7 +47,7 @@ class TestSharedConfigCacheThreadSafety:
                 bp = mock.Mock()
                 bp.id = f"bp-{i}"
                 bp._values = {f"key-{j}": f"val-{i}" for j in range(5)}
-                cache.apply(bp)
+                cache.update(bp)
 
         def reader():
             while not stop.is_set():
@@ -173,7 +173,7 @@ class TestCacheRefreshThread:
         bp._values = {"K.v": "initial"}
 
         cache = get_shared_cache("fresh-proj", None, None)
-        cache.apply(bp)
+        cache.update(bp)
         callback = mock.Mock()
         cache.set_refresh_callback(callback)
 

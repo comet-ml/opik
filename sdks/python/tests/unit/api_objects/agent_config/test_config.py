@@ -120,7 +120,7 @@ class TestAgentConfigGetBlueprintById:
         assert isinstance(result, Blueprint)
         assert result.id == "bp-specific"
         mock_rest_client.agent_configs.get_blueprint_by_id.assert_called_once_with(
-            "bp-specific"
+            "bp-specific", mask_id=None
         )
 
     def test_get_blueprint_by_id__not_found__returns_none(

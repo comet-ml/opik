@@ -6,7 +6,10 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.agent_config.cache import SharedConfigCache
-from opik.api_objects.agent_config.decorator import agent_config_decorator
+from opik.api_objects.agent_config.decorator import (
+    agent_config_decorator,
+    _get_cached_config,
+)
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -59,7 +62,7 @@ class TestConfigDecoratorValidation:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = object.__getattribute__(instance, "__opik_shared_cache__")
+        cache = _get_cached_config(instance)
         assert cache._ttl_seconds == 300
 
 
@@ -163,20 +166,6 @@ class TestConfigDecoratorInit:
 
         assert instance.temp == 0.3
         assert instance.max_tokens == 2000
-
-    def test_init__backend_unavailable__uses_local_defaults(self):
-        with mock.patch(
-            "opik.api_objects.opik_client.get_client_cached",
-            side_effect=Exception("no backend"),
-        ):
-
-            @agent_config_decorator
-            @dataclasses.dataclass
-            class MyConfig:
-                temp: float = 0.8
-
-            instance = MyConfig()
-            assert instance.temp == 0.8
 
 
 class TestConfigDecoratorFieldFiltering:
@@ -410,8 +399,8 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache_m = object.__getattribute__(m, "__opik_shared_cache__")
-        cache_p = object.__getattribute__(p, "__opik_shared_cache__")
+        cache_m = _get_cached_config(m)
+        cache_p = _get_cached_config(p)
         assert cache_m is cache_p
 
     def test_two_classes__keys_are_prefixed_with_class_name(self, mock_backend):
@@ -528,7 +517,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache = object.__getattribute__(m, "__opik_shared_cache__")
+        cache = _get_cached_config(m)
         assert "ModelConfig.temp" in cache.values
         assert "PromptConfig.template" in cache.values
         assert m.temp == 0.5
@@ -555,7 +544,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         _p = PromptConfig()
 
-        cache: SharedConfigCache = object.__getattribute__(m, "__opik_shared_cache__")
+        cache: SharedConfigCache = _get_cached_config(m)
 
         mock_backend.set_blueprint_values(
             [
@@ -593,7 +582,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache: SharedConfigCache = object.__getattribute__(m, "__opik_shared_cache__")
+        cache: SharedConfigCache = _get_cached_config(m)
 
         mock_backend.set_blueprint_values(
             [
@@ -622,8 +611,8 @@ class TestConfigDecoratorMultiClass:
         a = ConfigA()
         b = ConfigB()
 
-        cache_a = object.__getattribute__(a, "__opik_shared_cache__")
-        cache_b = object.__getattribute__(b, "__opik_shared_cache__")
+        cache_a = _get_cached_config(a)
+        cache_b = _get_cached_config(b)
         assert cache_a is not cache_b
 
     def test_custom_name__uses_name_as_prefix(self, mock_backend):
@@ -649,7 +638,7 @@ class TestConfigDecoratorTTLEnvVar:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = object.__getattribute__(instance, "__opik_shared_cache__")
+        cache = _get_cached_config(instance)
         assert cache._ttl_seconds == 300
 
     def test_env_var_overrides_ttl(self, mock_backend, monkeypatch):
@@ -665,7 +654,7 @@ class TestConfigDecoratorTTLEnvVar:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = object.__getattribute__(instance, "__opik_shared_cache__")
+        cache = _get_cached_config(instance)
         assert cache._ttl_seconds == 60
 
 

@@ -16,8 +16,8 @@ class AgentConfig:
         rest_client_: rest_client.OpikApi,
     ) -> None:
         self._project_name = project_name
-        self._config_client = config_client
-        self._rest_client = rest_client_
+        self._config_client = config_client  # This can be moved here
+        self._rest_client = rest_client_  # We probably don't need this
 
     @property
     def project_name(self) -> str:
@@ -33,8 +33,11 @@ class AgentConfig:
     ) -> typing.Optional[Blueprint]:
         if id is not None:
             try:
-                raw = self._rest_client.agent_configs.get_blueprint_by_id(id)
+                raw = self._rest_client.agent_configs.get_blueprint_by_id(
+                    id, mask_id=mask_id
+                )
             except rest_api_core.ApiError as e:
+                # No blueprint with this id
                 if e.status_code == 404:
                     return None
                 raise
@@ -49,6 +52,7 @@ class AgentConfig:
             env=env,
             mask_id=mask_id,
         )
+        # No blueprint with this mask/env
         if raw is None:
             return None
         return Blueprint(

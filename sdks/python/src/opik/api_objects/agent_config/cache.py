@@ -78,7 +78,7 @@ class SharedConfigCache:
         with self._lock:
             return dict(self._registered_field_types)
 
-    def apply(self, blueprint: Blueprint) -> None:
+    def update(self, blueprint: Blueprint) -> None:
         new_values = dict(blueprint._values)
         with self._lock:
             self.blueprint_id = blueprint.id
@@ -99,7 +99,7 @@ class SharedConfigCache:
         try:
             bp = callback()
             if bp is not None:
-                self.apply(bp)
+                self.update(bp)
         except Exception:
             logger.debug("Background cache refresh failed", exc_info=True)
 

@@ -5,6 +5,7 @@ from typing import Dict, List
 import pytest
 import opik
 from opik.api_objects.agent_config.cache import clear_shared_caches
+from opik.api_objects.agent_config.decorator import _get_cached_config
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_config_env import AgentConfigEnv
 
@@ -251,7 +252,7 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
         temperature: float = 0.4
 
     base_instance = EnvConfig()
-    base_blueprint_id = base_instance.__opik_shared_cache__.blueprint_id
+    base_blueprint_id = _get_cached_config(base_instance).blueprint_id
     assert base_blueprint_id is not None
 
     project_id = opik_client.rest_client.projects.retrieve_project(name=project_name).id
