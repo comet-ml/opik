@@ -14,7 +14,98 @@ on:
   workflow_dispatch:
 
 jobs:
+    # Automatically classify tests as unit/integration and split integration
+    # tests into balanced groups. No manual maintenance when adding new tests.
+    discover-tests:
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        outputs:
+          unit-tests: ${{ steps.split.outputs.unit_tests }}
+          integration-group-1: ${{ steps.split.outputs.ig1 }}
+          integration-group-2: ${{ steps.split.outputs.ig2 }}
+          integration-group-3: ${{ steps.split.outputs.ig3 }}
+          integration-group-4: ${{ steps.split.outputs.ig4 }}
+          integration-group-5: ${{ steps.split.outputs.ig5 }}
+          integration-group-6: ${{ steps.split.outputs.ig6 }}
+          integration-group-7: ${{ steps.split.outputs.ig7 }}
+          integration-group-8: ${{ steps.split.outputs.ig8 }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4.1.1
+              with:
+                fetch-depth: 1
+                sparse-checkout: apps/opik-backend/src/test/java
+
+            - name: Classify and split tests
+              id: split
+              working-directory: apps/opik-backend
+              run: |
+                NUM_GROUPS=8
+                TEST_DIR="src/test/java"
+                PATTERN="DropwizardAppExtensionProvider\|MySQLContainer\|ClickHouseContainer\|RedisContainer\|MinIOContainer"
+
+                # Classify: integration tests reference container/Dropwizard patterns
+                integration_files=()
+                unit_files=()
+                while IFS= read -r file; do
+                  if grep -ql "$PATTERN" "$file" 2>/dev/null; then
+                    integration_files+=("$file")
+                  else
+                    unit_files+=("$file")
+                  fi
+                done < <(find "$TEST_DIR" -name "*Test.java" -o -name "*E2eTest.java" | sort)
+
+                # Convert file path to Maven class pattern: com.foo.BarTest
+                to_class() { echo "$1" | sed "s|^$TEST_DIR/||;s|/|.|g;s|\.java$||"; }
+
+                # Output unit tests
+                unit_list=""
+                for f in "${unit_files[@]}"; do
+                  c=$(to_class "$f")
+                  unit_list="${unit_list:+$unit_list,}$c"
+                done
+                echo "unit_tests=$unit_list" >> "$GITHUB_OUTPUT"
+
+                # Balanced split: sort integration files by line count desc,
+                # then greedy-assign each to the smallest group
+                declare -a group_size group_list
+                for ((i=1; i<=NUM_GROUPS; i++)); do
+                  group_size[$i]=0
+                  group_list[$i]=""
+                done
+
+                while IFS=' ' read -r lines file; do
+                  # Find group with minimum total size
+                  min_g=1
+                  for ((i=2; i<=NUM_GROUPS; i++)); do
+                    if (( group_size[i] < group_size[min_g] )); then
+                      min_g=$i
+                    fi
+                  done
+                  group_size[$min_g]=$(( group_size[min_g] + lines ))
+                  c=$(to_class "$file")
+                  group_list[$min_g]="${group_list[$min_g]:+${group_list[$min_g]},}$c"
+                done < <(
+                  for f in "${integration_files[@]}"; do
+                    echo "$(wc -l < "$f") $f"
+                  done | sort -rn
+                )
+
+                for ((i=1; i<=NUM_GROUPS; i++)); do
+                  echo "ig$i=${group_list[$i]}" >> "$GITHUB_OUTPUT"
+                done
+
+                # Summary
+                echo "### Test Split Summary" >> "$GITHUB_STEP_SUMMARY"
+                echo "- **Unit tests**: ${#unit_files[@]} classes" >> "$GITHUB_STEP_SUMMARY"
+                echo "- **Integration tests**: ${#integration_files[@]} classes in $NUM_GROUPS groups" >> "$GITHUB_STEP_SUMMARY"
+                for ((i=1; i<=NUM_GROUPS; i++)); do
+                  count=$(echo "${group_list[$i]}" | tr ',' '\n' | grep -c '.' || true)
+                  echo "  - Group $i: $count classes (~${group_size[$i]} lines)" >> "$GITHUB_STEP_SUMMARY"
+                done
+
     run-backend-tests:
+        needs: discover-tests
         name: ${{ matrix.name }}
         runs-on: ubuntu-latest
         timeout-minutes: ${{ matrix.timeout }}
@@ -25,32 +116,32 @@ jobs:
           fail-fast: false
           matrix:
             include:
-              - profile: test-unit
-                name: "Unit Tests"
+              - name: "Unit Tests"
+                test-list-key: unit-tests
                 timeout: 15
-              - profile: test-traces
-                name: "Integration - Traces"
+              - name: "Integration Group 1"
+                test-list-key: integration-group-1
                 timeout: 20
-              - profile: test-datasets
-                name: "Integration - Datasets"
+              - name: "Integration Group 2"
+                test-list-key: integration-group-2
                 timeout: 20
-              - profile: test-spans
-                name: "Integration - Spans"
-                timeout: 15
-              - profile: test-projects
-                name: "Integration - Projects"
-                timeout: 15
-              - profile: test-experiments
-                name: "Integration - Experiments"
-                timeout: 15
-              - profile: test-infra
-                name: "Integration - Infrastructure"
-                timeout: 15
-              - profile: test-group-a
-                name: "Integration - Group A"
+              - name: "Integration Group 3"
+                test-list-key: integration-group-3
                 timeout: 20
-              - profile: test-group-b
-                name: "Integration - Group B"
+              - name: "Integration Group 4"
+                test-list-key: integration-group-4
+                timeout: 20
+              - name: "Integration Group 5"
+                test-list-key: integration-group-5
+                timeout: 20
+              - name: "Integration Group 6"
+                test-list-key: integration-group-6
+                timeout: 20
+              - name: "Integration Group 7"
+                test-list-key: integration-group-7
+                timeout: 20
+              - name: "Integration Group 8"
+                test-list-key: integration-group-8
                 timeout: 20
         steps:
             - name: Checkout
@@ -65,12 +156,27 @@ jobs:
                 distribution: 'corretto'
                 cache: maven
 
+            - name: Resolve test list
+              id: tests
+              run: |
+                case "${{ matrix.test-list-key }}" in
+                  unit-tests)              echo "list=${{ needs.discover-tests.outputs.unit-tests }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-1)     echo "list=${{ needs.discover-tests.outputs.integration-group-1 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-2)     echo "list=${{ needs.discover-tests.outputs.integration-group-2 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-3)     echo "list=${{ needs.discover-tests.outputs.integration-group-3 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-4)     echo "list=${{ needs.discover-tests.outputs.integration-group-4 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-5)     echo "list=${{ needs.discover-tests.outputs.integration-group-5 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-6)     echo "list=${{ needs.discover-tests.outputs.integration-group-6 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-7)     echo "list=${{ needs.discover-tests.outputs.integration-group-7 }}" >> "$GITHUB_OUTPUT" ;;
+                  integration-group-8)     echo "list=${{ needs.discover-tests.outputs.integration-group-8 }}" >> "$GITHUB_OUTPUT" ;;
+                esac
+
             - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
               run: >-
                 mvn clean test
-                -P${{ matrix.profile }}
+                -Dtest="${{ steps.tests.outputs.list }}"
                 -Dmaven.test.failure.ignore=true
                 -Dsurefire.rerunFailingTestsCount=3
 
