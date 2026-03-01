@@ -239,7 +239,10 @@ def test_pytest_sessionfinish__uses_plugin_config(monkeypatch):
     item = types.SimpleNamespace(
         nodeid=nodeid, report=types.SimpleNamespace(passed=True)
     )
-    session = types.SimpleNamespace(items=[item])
+    session = types.SimpleNamespace(
+        items=[item],
+        config=types.SimpleNamespace(option=types.SimpleNamespace(opik=True)),
+    )
 
     test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
@@ -409,7 +412,10 @@ def test_pytest_sessionfinish__writes_episode_artifact__happyflow(
         item = types.SimpleNamespace(
             nodeid=nodeid, report=types.SimpleNamespace(passed=True)
         )
-        session = types.SimpleNamespace(items=[item])
+        session = types.SimpleNamespace(
+            items=[item],
+            config=types.SimpleNamespace(option=types.SimpleNamespace(opik=True)),
+        )
 
         test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
         test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
@@ -468,7 +474,10 @@ def test_pytest_sessionfinish__episode_artifact_skips_missing_reports__happyflow
         item = types.SimpleNamespace(
             nodeid=nodeid, report=types.SimpleNamespace(passed=True)
         )
-        session = types.SimpleNamespace(items=[item])
+        session = types.SimpleNamespace(
+            items=[item],
+            config=types.SimpleNamespace(option=types.SimpleNamespace(opik=True)),
+        )
 
         test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
         test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
@@ -527,7 +536,10 @@ def test_pytest_sessionfinish__invalid_artifact_path__raises_value_error(monkeyp
         item = types.SimpleNamespace(
             nodeid=nodeid, report=types.SimpleNamespace(passed=True)
         )
-        session = types.SimpleNamespace(items=[item])
+        session = types.SimpleNamespace(
+            items=[item],
+            config=types.SimpleNamespace(option=types.SimpleNamespace(opik=True)),
+        )
         test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
         test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
             id="trace-episode-123"
