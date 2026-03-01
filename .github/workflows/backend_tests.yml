@@ -15,6 +15,10 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
     # Automatically classify tests as unit/integration and split integration
     # tests into balanced groups. No manual maintenance when adding new tests.
