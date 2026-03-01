@@ -8,7 +8,7 @@ subtitle: Describes how to use Opik with Pytest to write LLM unit tests
 title: Pytest integration
 ---
 
-Ensuring your LLM applications is working as expected is a crucial step before deploying to production. Opik provides a Pytest integration so that you can easily track the overall pass / fail rates of your tests as well as the individual pass / fail rates of each test.
+Ensuring your LLM applications are working as expected is a crucial step before deploying to production. Opik provides a Pytest integration so you can track both the overall pass/fail rate of your suite and the pass/fail result of each test.
 
 ## Using the Pytest Integration
 
@@ -46,7 +46,7 @@ When you run the tests, Opik will create a new experiment for each run and log e
 
 ### Advanced Usage
 
-The `llm_unit` decorator also works well when used in conjunctions with the `parametrize` Pytest decorator that allows you to run the same test with different inputs:
+The `llm_unit` decorator also works well with `pytest.mark.parametrize`, which lets you run the same test with different inputs:
 
 ```python
 import pytest
@@ -98,13 +98,15 @@ Example with GitHub Actions:
     path: .opik/pytest_episode_report.json
 ```
 
-### Episode-Based Tests with Simulated Users
+### Final Example: Episode-Based Tests with Simulated Users
 
-For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions and, when enabled, emit structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
+Use this pattern after the previous `llm_unit` examples, when you need multi-turn agent validation in CI.
 
-In this model, `EpisodeResult.assertions` contains structured verdict records (for example, `"assistant_replied_each_turn" => passed=True`) rather than executable validators. If you return a plain dictionary, `validation_verdicts` is also accepted as an alias for `assertions` when you prefer verdict-focused naming. `episode.is_passing()` and `episode.assert_is_passing()` evaluate those records plus budgets into the final test outcome.
+`llm_episode` lets you return an `EpisodeResult` while still using native pytest failure semantics and optional structured artifacts (assertions, scores, budgets, trajectory summary).
 
-The example below uses `SimulatedUser` with fixed responses so the scenario is deterministic and easy to run in CI:
+In this model, `EpisodeResult.assertions` stores structured verdict records (for example, `"assistant_replied_each_turn" => passed=True`), not executable validators. If you return a plain dictionary, `validation_verdicts` is accepted as an alias for `assertions` when you prefer verdict-focused naming. `episode.is_passing()` and `episode.assert_is_passing()` evaluate those verdicts plus budgets into the final outcome.
+
+The example below uses `SimulatedUser` with fixed responses so the scenario is deterministic and CI-friendly:
 
 ```python
 import pytest
