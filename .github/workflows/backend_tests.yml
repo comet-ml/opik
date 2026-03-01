@@ -5,11 +5,13 @@ on:
   pull_request:
     paths:
       - "apps/opik-backend/**"
+      - ".github/workflows/backend_tests.yml"
   push:
     branches:
       - 'main'
     paths:
       - "apps/opik-backend/**"
+      - ".github/workflows/backend_tests.yml"
 
   workflow_dispatch:
 
