@@ -3,45 +3,81 @@ run-name: "Backend Tests on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
   pull_request:
-    paths: 
+    paths:
       - "apps/opik-backend/**"
   push:
-    branches: 
+    branches:
       - 'main'
-    paths: 
+    paths:
       - "apps/opik-backend/**"
 
   workflow_dispatch:
 
 jobs:
     run-backend-tests:
+        name: ${{ matrix.name }}
         runs-on: ubuntu-latest
-        timeout-minutes: 45
+        timeout-minutes: ${{ matrix.timeout }}
         defaults:
           run:
             working-directory: apps/opik-backend/
+        strategy:
+          fail-fast: false
+          matrix:
+            include:
+              - profile: test-unit
+                name: "Unit Tests"
+                timeout: 15
+              - profile: test-traces
+                name: "Integration - Traces"
+                timeout: 20
+              - profile: test-datasets
+                name: "Integration - Datasets"
+                timeout: 20
+              - profile: test-spans
+                name: "Integration - Spans"
+                timeout: 15
+              - profile: test-projects
+                name: "Integration - Projects"
+                timeout: 15
+              - profile: test-experiments
+                name: "Integration - Experiments"
+                timeout: 15
+              - profile: test-infra
+                name: "Integration - Infrastructure"
+                timeout: 15
+              - profile: test-group-a
+                name: "Integration - Group A"
+                timeout: 20
+              - profile: test-group-b
+                name: "Integration - Group B"
+                timeout: 20
         steps:
             - name: Checkout
               uses: actions/checkout@v4.1.1
               with:
                 fetch-depth: 1
-    
+
             - name: Set up JDK 21
               uses: actions/setup-java@v4
               with:
                 java-version: '21'
                 distribution: 'corretto'
                 cache: maven
-    
-            - name: Run Tests for backend
+
+            - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
-              run: mvn clean test -Dmaven.test.failure.ignore=true -Dsurefire.rerunFailingTestsCount=3
+              run: >-
+                mvn clean test
+                -P${{ matrix.profile }}
+                -Dmaven.test.failure.ignore=true
+                -Dsurefire.rerunFailingTestsCount=3
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2
               if: always()
               with:
                 action_fail: true
-                check_name: Backend Tests Results
+                check_name: "Backend Tests - ${{ matrix.name }}"
                 files: '**/target/surefire-reports/TEST-*.xml'
