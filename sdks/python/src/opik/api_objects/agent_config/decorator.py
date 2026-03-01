@@ -7,7 +7,6 @@ from opik.api_objects import opik_client
 from . import type_helpers
 from .blueprint import Blueprint
 from .cache import SharedConfigCache, get_shared_cache, _ensure_refresh_thread_started
-from .client import ConfigClient
 from .config import AgentConfig
 from .context import get_active_config_mask
 
@@ -66,7 +65,6 @@ def agent_config_decorator(
             resolved_project = project or client.project_name
             agent_cfg = AgentConfig(
                 project_name=resolved_project,
-                config_client=ConfigClient(client.rest_client),
                 rest_client_=client.rest_client,
             )
             init_cache_entry(

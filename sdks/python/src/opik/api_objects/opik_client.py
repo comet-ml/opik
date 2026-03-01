@@ -47,7 +47,6 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .agent_config.client import ConfigClient
 from .agent_config.config import AgentConfig
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
@@ -2283,10 +2282,8 @@ class Opik:
         project_name: Optional[str] = None,
     ) -> AgentConfig:
         project_name = project_name or self._project_name
-        config_client_ = ConfigClient(self._rest_client)
         return AgentConfig(
             project_name=project_name,
-            config_client=config_client_,
             rest_client_=self._rest_client,
         )
 

@@ -2,8 +2,13 @@ import typing
 
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
+from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
+from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
+from opik.rest_api.types.agent_config_env import AgentConfigEnv
+from opik.api_objects import rest_helpers
+from opik import id_helpers
 from .blueprint import Blueprint
-from .client import ConfigClient
+from . import type_helpers
 
 
 class AgentConfig:
@@ -12,16 +17,42 @@ class AgentConfig:
     def __init__(
         self,
         project_name: str,
-        config_client: ConfigClient,
         rest_client_: rest_client.OpikApi,
     ) -> None:
         self._project_name = project_name
-        self._config_client = config_client  # This can be moved here
-        self._rest_client = rest_client_  # We probably don't need this
+        self._rest_client = rest_client_
 
     @property
     def project_name(self) -> str:
         return self._project_name
+
+    def _build_blueprint_payload(
+        self,
+        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
+        description: typing.Optional[str],
+        id: typing.Optional[str] = None,
+        config_type: str = "blueprint",
+    ) -> AgentBlueprintWrite:
+        backend_values = []
+        for field_name, (py_type, value) in fields_with_values.items():
+            if (
+                type_helpers.is_prompt_type(py_type)
+                or type_helpers.is_prompt_version_type(py_type)
+            ) and value is None:
+                continue
+            backend_values.append(
+                AgentConfigValueWrite(
+                    key=field_name,
+                    type=type_helpers.python_type_to_backend_type(py_type),
+                    value=type_helpers.python_value_to_backend_value(value, py_type),
+                )
+            )
+        return AgentBlueprintWrite(
+            id=id,
+            type=config_type,
+            values=backend_values,
+            description=description,
+        )
 
     def get_blueprint(
         self,
@@ -31,30 +62,30 @@ class AgentConfig:
         mask_id: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ) -> typing.Optional[Blueprint]:
-        if id is not None:
-            try:
+        try:
+            if id is not None:
                 raw = self._rest_client.agent_configs.get_blueprint_by_id(
                     id, mask_id=mask_id
                 )
-            except rest_api_core.ApiError as e:
-                # No blueprint with this id
-                if e.status_code == 404:
-                    return None
-                raise
-            return Blueprint(
-                raw_blueprint=raw,
-                field_types=field_types,
-                rest_client_=self._rest_client,
-            )
-
-        raw = self._config_client.get_blueprint(
-            project_name=self._project_name,
-            env=env,
-            mask_id=mask_id,
-        )
-        # No blueprint with this mask/env
-        if raw is None:
-            return None
+            else:
+                project_id = rest_helpers.resolve_project_id_by_name(
+                    self._rest_client, self._project_name
+                )
+                if env is not None:
+                    raw = self._rest_client.agent_configs.get_blueprint_by_env(
+                        env_name=env,
+                        project_id=project_id,
+                        mask_id=mask_id,
+                    )
+                else:
+                    raw = self._rest_client.agent_configs.get_latest_blueprint(
+                        project_id=project_id,
+                        mask_id=mask_id,
+                    )
+        except rest_api_core.ApiError as e:
+            if e.status_code == 404:
+                return None
+            raise
         return Blueprint(
             raw_blueprint=raw,
             field_types=field_types,
@@ -74,10 +105,13 @@ class AgentConfig:
             fields_with_values = {
                 k: (type(v), v) for k, v in (parameters or {}).items()
             }
-        blueprint_id = self._config_client.create_blueprint(
-            fields_with_values=fields_with_values,
+        blueprint_id = id_helpers.generate_id()
+        payload = self._build_blueprint_payload(
+            fields_with_values, description, id=blueprint_id
+        )
+        self._rest_client.agent_configs.create_agent_config(
+            blueprint=payload,
             project_name=self._project_name,
-            description=description,
         )
         raw = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
         return Blueprint(
@@ -87,10 +121,12 @@ class AgentConfig:
         )
 
     def tag_bluepring_with_env(self, env: str, blueprint_id: str) -> None:
-        self._config_client.tag_blueprint_with_env(
-            project_name=self._project_name,
-            env=env,
-            blueprint_id=blueprint_id,
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, self._project_name
+        )
+        self._rest_client.agent_configs.create_or_update_envs(
+            project_id=project_id,
+            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
         )
 
     def create_mask(
@@ -106,8 +142,12 @@ class AgentConfig:
             fields_with_values = {
                 k: (type(v), v) for k, v in (parameters or {}).items()
             }
-        return self._config_client.create_mask(
-            fields_with_values=fields_with_values,
-            project_name=self._project_name,
-            description=description,
+        mask_id = id_helpers.generate_id()
+        payload = self._build_blueprint_payload(
+            fields_with_values, description, id=mask_id, config_type="mask"
         )
+        self._rest_client.agent_configs.create_agent_config(
+            blueprint=payload,
+            project_name=self._project_name,
+        )
+        return mask_id
