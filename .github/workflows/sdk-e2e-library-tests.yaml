@@ -33,6 +33,7 @@ env:
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_URL_OVERRIDE: http://localhost:8080
+  SKIP_PYTHON_BACKEND: true
 
 jobs:
   has_needed_secrets:

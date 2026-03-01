@@ -380,7 +380,12 @@ start_missing_containers() {
 
   local cmd
   cmd=$(get_docker_compose_cmd)
-  $cmd up -d ${BUILD_MODE:+--build}
+  if [[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]]; then
+    [[ "$BUILD_MODE" == "true" ]] && $cmd build backend
+    $cmd up -d --scale python-backend=0
+  else
+    $cmd up -d ${BUILD_MODE:+--build}
+  fi
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60

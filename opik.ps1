@@ -440,11 +440,20 @@ function Start-MissingContainers {
 
     Initialize-BuildxBake
 
-    $dockerArgs = Get-DockerComposeCommand
-    $dockerArgs += "up", "-d"
-
-    if ($BUILD_MODE -eq "true") {
-        $dockerArgs += "--build"
+    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
+        if ($BUILD_MODE -eq "true") {
+            $buildArgs = Get-DockerComposeCommand
+            $buildArgs += "build", "backend"
+            docker @buildArgs | Where-Object { $_.Trim() -ne '' }
+        }
+        $dockerArgs = Get-DockerComposeCommand
+        $dockerArgs += "up", "-d", "--scale", "python-backend=0"
+    } else {
+        $dockerArgs = Get-DockerComposeCommand
+        $dockerArgs += "up", "-d"
+        if ($BUILD_MODE -eq "true") {
+            $dockerArgs += "--build"
+        }
     }
 
     docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
