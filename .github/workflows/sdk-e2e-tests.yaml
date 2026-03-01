@@ -1,17 +1,23 @@
 name: SDK E2E Tests
 run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 on:
     workflow_dispatch:
     pull_request:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
+          - '.github/workflows/sdk-e2e-tests.yaml'
     push:
-        branches: 
+        branches:
           - 'main'
-        paths: 
+        paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
+          - '.github/workflows/sdk-e2e-tests.yaml'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -51,7 +57,7 @@ jobs:
             COMPOSE_BAKE: false
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --build --guardrails
+            ./opik.sh --backend --guardrails --build
         
         - name: Check Opik server availability
           shell: bash

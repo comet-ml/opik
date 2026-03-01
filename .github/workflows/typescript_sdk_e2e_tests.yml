@@ -6,12 +6,14 @@ on:
     paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
+      - '.github/workflows/typescript_sdk_e2e_tests.yml'
   push:
-    branches: 
+    branches:
       - 'main'
-    paths: 
+    paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
+      - '.github/workflows/typescript_sdk_e2e_tests.yml'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -48,7 +50,7 @@ jobs:
           COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --build --guardrails
+          ./opik.sh --backend --guardrails --build
       
       - name: Check Opik server availability
         shell: bash
