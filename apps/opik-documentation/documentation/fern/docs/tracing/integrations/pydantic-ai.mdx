@@ -134,7 +134,7 @@ import logfire
 logfire.configure(
     send_to_logfire=False,
 )
-logfire.instrument_httpx(capture_all=True)
+logfire.instrument_pydantic_ai()
 ```
 
 ## Practical Example
@@ -162,22 +162,6 @@ print(result.data)
 <Frame>
   <img src="/img/cookbook/pydantic-ai_trace_cookbook.png" alt="Pydantic AI tracing" />
 </Frame>
-
-## Advanced usage
-
-You can reduce the amount of data logged to Opik by setting `capture_all` to `False`:
-
-```python
-import logfire
-
-logfire.configure(
-    send_to_logfire=False,
-)
-logfire.instrument_httpx(capture_all=False)
-```
-
-When this parameter is set to `False`, we will not log the exact request made
-to the LLM provider.
 
 ## Logging threads
 
