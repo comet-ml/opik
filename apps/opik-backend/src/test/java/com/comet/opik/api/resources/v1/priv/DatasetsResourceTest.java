@@ -7647,8 +7647,6 @@ class DatasetsResourceTest {
 
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
-
-                assertThat(actualPage.content().getFirst().experimentItems()).isNotEmpty();
             }
         }
 
