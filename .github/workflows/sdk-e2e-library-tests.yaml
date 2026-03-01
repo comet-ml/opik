@@ -32,6 +32,7 @@ env:
   OPIK_SENTRY_ENABLE: False
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
+  OPIK_URL_OVERRIDE: http://localhost:8080
 
 jobs:
   has_needed_secrets:
@@ -94,7 +95,7 @@ jobs:
         shell: bash
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --build
+          ./opik.sh --backend --port-mapping --build
 
       - name: Check Opik server availability
         shell: bash
