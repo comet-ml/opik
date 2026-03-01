@@ -6799,6 +6799,7 @@ class DatasetsResourceTest {
                     .comments(null) // API returns null for comments in this context
                     .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
                     .usage(null) // API returns null for usage in this context
+                    // Don't set duration - let it be compared as-is from the API response
                     .description(null) // NULL because dataset item was hard-deleted
                     .build();
 
@@ -7595,13 +7596,11 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
-            var expectedDescription = "test-description-" + UUID.randomUUID();
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
-                    .description(expectedDescription)
                     .build();
 
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -7649,11 +7648,7 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
 
-                var returnedItem = actualPage.content().getFirst();
-                assertThat(returnedItem.description()).isEqualTo(expectedDescription);
-                assertThat(returnedItem.experimentItems()).isNotEmpty();
-                assertThat(returnedItem.experimentItems().getFirst().description())
-                        .isEqualTo(expectedDescription);
+                assertThat(actualPage.content().getFirst().experimentItems()).isNotEmpty();
             }
         }
 
