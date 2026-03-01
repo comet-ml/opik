@@ -7587,11 +7587,13 @@ class DatasetsResourceTest {
                     .build();
             createAndAssert(trace, workspaceName, apiKey);
 
+            var expectedDescription = "test-description-" + UUID.randomUUID();
             var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .datasetId(datasetId)
                     .traceId(trace.id())
                     .spanId(null)
                     .source(DatasetItemSource.TRACE)
+                    .description(expectedDescription)
                     .build();
 
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -7638,6 +7640,12 @@ class DatasetsResourceTest {
 
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
+
+                var returnedItem = actualPage.content().getFirst();
+                assertThat(returnedItem.description()).isEqualTo(expectedDescription);
+                assertThat(returnedItem.experimentItems()).isNotEmpty();
+                assertThat(returnedItem.experimentItems().getFirst().description())
+                        .isEqualTo(expectedDescription);
             }
         }
 
@@ -9572,105 +9580,4 @@ class DatasetsResourceTest {
         }
     }
 
-    @Nested
-    @DisplayName("Experiment items should include dataset item description in compare endpoint")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ExperimentItemDescriptionInCompareTest {
-
-        @Test
-        @DisplayName("Should return description on experiment items sourced from linked dataset item")
-        void findDatasetItemsWithExperimentItems__thenExperimentItemsContainDescription() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-
-            var projectName = UUID.randomUUID().toString();
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            createAndAssert(trace, workspaceName, apiKey);
-
-            var expectedDescription = "test-description-" + UUID.randomUUID();
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .description(expectedDescription)
-                    .build();
-            var datasetItemBatch = DatasetItemBatch.builder()
-                    .datasetId(datasetId)
-                    .items(List.of(datasetItem))
-                    .build();
-            putAndAssert(datasetItemBatch, workspaceName, apiKey);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentId)
-                    .datasetItemId(datasetItem.id())
-                    .traceId(trace.id())
-                    .build();
-            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
-
-            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
-                    datasetId, List.of(experimentId), apiKey, workspaceName);
-
-            assertThat(result.content()).hasSize(1);
-
-            var returnedDatasetItem = result.content().getFirst();
-            assertThat(returnedDatasetItem.description()).isEqualTo(expectedDescription);
-
-            var returnedExperimentItems = returnedDatasetItem.experimentItems();
-            assertThat(returnedExperimentItems).hasSize(1);
-            assertThat(returnedExperimentItems.getFirst().description()).isEqualTo(expectedDescription);
-        }
-
-        @Test
-        @DisplayName("Should return null description on experiment items when dataset item has no description")
-        void findDatasetItemsWithExperimentItems__whenNoDescription__thenExperimentItemsHaveNullDescription() {
-            var workspaceName = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-            var workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dataset = factory.manufacturePojo(Dataset.class);
-            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
-
-            var projectName = UUID.randomUUID().toString();
-            var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            createAndAssert(trace, workspaceName, apiKey);
-
-            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .description(null)
-                    .build();
-            var datasetItemBatch = DatasetItemBatch.builder()
-                    .datasetId(datasetId)
-                    .items(List.of(datasetItem))
-                    .build();
-            putAndAssert(datasetItemBatch, workspaceName, apiKey);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(experimentId)
-                    .datasetItemId(datasetItem.id())
-                    .traceId(trace.id())
-                    .build();
-            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
-
-            var result = datasetResourceClient.getDatasetItemsWithExperimentItems(
-                    datasetId, List.of(experimentId), apiKey, workspaceName);
-
-            assertThat(result.content()).hasSize(1);
-
-            var returnedExperimentItems = result.content().getFirst().experimentItems();
-            assertThat(returnedExperimentItems).hasSize(1);
-            assertThat(returnedExperimentItems.getFirst().description()).isNull();
-        }
-    }
 }
