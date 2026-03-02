@@ -16,7 +16,7 @@ import {
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { Experiment } from "@/types/datasets";
 import { Optimization } from "@/types/optimizations";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { toString } from "@/lib/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
@@ -116,7 +116,7 @@ export const useCompareOptimizationsColumns = ({
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
+        cell: TimeCell as never,
       },
       {
         id: "created_by",

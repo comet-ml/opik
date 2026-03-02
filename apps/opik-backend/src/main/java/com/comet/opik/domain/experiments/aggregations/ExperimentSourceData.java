@@ -32,8 +32,8 @@ public class ExperimentSourceData {
             BigDecimal duration,
             String input,
             String output,
-            String inputTruncated,
-            String outputTruncated,
+            String inputSlim,
+            String outputSlim,
             VisibilityMode visibilityMode) {
     }
 

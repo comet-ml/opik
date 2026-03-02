@@ -1184,34 +1184,38 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
-                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """
+            + TagOperations.tagUpdateFragment("src.tags")
+            + """
+                        as tags,
+                        <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                        <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
+                        src.item_created_at,
+                        now64(9) as item_last_updated_at,
+                        src.item_created_by,
+                        :userName as item_last_updated_by,
+                        now64(9) as created_at,
+                        now64(9) as last_updated_at,
+                        :userName as created_by,
+                        :userName as last_updated_by,
+                        src.workspace_id
+                    FROM (
+                        SELECT *
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND dataset_version_id = :baseVersionId
+                        <if(item_ids)>
+                        AND dataset_item_id IN :itemIds
+                        <endif>
+                        <if(dataset_item_filters)>
+                        AND <dataset_item_filters>
+                        <endif>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY dataset_item_id
+                    ) AS src
+                    SETTINGS short_circuit_function_evaluation = 'force_enable'
+                    """;
 
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
             INSERT INTO dataset_item_versions (
@@ -2526,12 +2530,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     template.add("description", true);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    template.add("tags", true);
-                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
-                        template.add("merge_tags", true);
-                    }
-                }
+
+                TagOperations.configureTagTemplate(template, batchUpdate.update(),
+                        Boolean.TRUE.equals(batchUpdate.mergeTags()));
+
                 if (batchUpdate.update().evaluators() != null) {
                     template.add("evaluators", true);
                 }
@@ -2586,9 +2588,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     statement.bind("description", batchUpdate.update().description());
                 }
-                if (batchUpdate.update().tags() != null) {
-                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
-                }
+
+                TagOperations.bindTagParams(statement, batchUpdate.update());
+
                 if (batchUpdate.update().evaluators() != null) {
                     statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
                 }
@@ -2967,11 +2969,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)));
+                    .flatMap(result -> result
+                            .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)));
         });
     }
 
-    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row) {
+    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
         // Map data field - stored as Map<String, String> in ClickHouse
         Map<String, com.fasterxml.jackson.databind.JsonNode> data = Optional.ofNullable(row.get("data", Map.class))
                 .filter(m -> !m.isEmpty())
@@ -2988,6 +2991,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
+                .description(DatasetItemResultMapper.getDescription(row, rowMetadata))
                 .source(Optional.ofNullable(row.get("source", String.class))
                         .map(com.comet.opik.api.DatasetItemSource::fromString)
                         .orElse(null))
@@ -3003,6 +3007,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .map(java.util.Arrays::asList)
                         .map(Set::copyOf)
                         .orElse(null))
+                .evaluators(DatasetItemResultMapper.getEvaluators(row, rowMetadata))
+                .executionPolicy(DatasetItemResultMapper.getExecutionPolicy(row, rowMetadata))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -3071,7 +3077,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("workspace_id", workspaceId);
 
                 return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)))
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {

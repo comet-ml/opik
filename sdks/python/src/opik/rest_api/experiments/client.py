@@ -18,6 +18,7 @@ from ..types.experiment_score_write import ExperimentScoreWrite
 from ..types.experiment_update import ExperimentUpdate
 from ..types.experiment_update_status import ExperimentUpdateStatus
 from ..types.experiment_update_type import ExperimentUpdateType
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
@@ -178,6 +179,7 @@ class ExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -202,6 +204,8 @@ class ExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -236,6 +240,7 @@ class ExperimentsClient:
             metadata=metadata,
             tags=tags,
             type=type,
+            evaluation_method=evaluation_method,
             optimization_id=optimization_id,
             status=status,
             experiment_scores=experiment_scores,
@@ -378,7 +383,7 @@ class ExperimentsClient:
 
     def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -391,7 +396,7 @@ class ExperimentsClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples
@@ -571,6 +576,8 @@ class ExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -588,6 +595,13 @@ class ExperimentsClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -614,6 +628,8 @@ class ExperimentsClient:
             name=name,
             metadata=metadata,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             type=type,
             status=status,
             experiment_scores=experiment_scores,
@@ -876,6 +892,7 @@ class AsyncExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -900,6 +917,8 @@ class AsyncExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -937,6 +956,7 @@ class AsyncExperimentsClient:
             metadata=metadata,
             tags=tags,
             type=type,
+            evaluation_method=evaluation_method,
             optimization_id=optimization_id,
             status=status,
             experiment_scores=experiment_scores,
@@ -1091,7 +1111,7 @@ class AsyncExperimentsClient:
 
     async def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -1104,7 +1124,7 @@ class AsyncExperimentsClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples
@@ -1299,6 +1319,8 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonNode] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentUpdateType] = OMIT,
         status: typing.Optional[ExperimentUpdateStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScore]] = OMIT,
@@ -1316,6 +1338,13 @@ class AsyncExperimentsClient:
         metadata : typing.Optional[JsonNode]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         type : typing.Optional[ExperimentUpdateType]
 
@@ -1345,6 +1374,8 @@ class AsyncExperimentsClient:
             name=name,
             metadata=metadata,
             tags=tags,
+            tags_to_add=tags_to_add,
+            tags_to_remove=tags_to_remove,
             type=type,
             status=status,
             experiment_scores=experiment_scores,

@@ -3,6 +3,17 @@
 # isort: skip_file
 
 from .types import (
+    AgentBlueprintHistory,
+    AgentBlueprintHistoryType,
+    AgentBlueprintPublic,
+    AgentBlueprintPublicType,
+    AgentBlueprintWrite,
+    AgentBlueprintWriteType,
+    AgentConfigEnv,
+    AgentConfigValuePublic,
+    AgentConfigValuePublicType,
+    AgentConfigValueWrite,
+    AgentConfigValueWriteType,
     AggregationData,
     Alert,
     AlertAlertType,
@@ -112,6 +123,7 @@ from .types import (
     BatchDeleteByProject,
     BiInformation,
     BiInformationResponse,
+    BlueprintPageHistory,
     BooleanFeedbackDefinition,
     BooleanFeedbackDefinitionCreate,
     BooleanFeedbackDefinitionPublic,
@@ -207,7 +219,9 @@ from .types import (
     ErrorMessage,
     ErrorMessageDetail,
     ErrorMessageDetailed,
+    ErrorMessageHistory,
     ErrorMessagePublic,
+    ErrorMessageWrite,
     EvaluatorItem,
     EvaluatorItemCompare,
     EvaluatorItemCompareType,
@@ -275,6 +289,7 @@ from .types import (
     FeedbackScoreExperimentItemBulkWriteView,
     FeedbackScoreExperimentItemBulkWriteViewSource,
     FeedbackScoreNames,
+    FeedbackScoreNamesPublic,
     FeedbackScorePublic,
     FeedbackScorePublicSource,
     FeedbackScoreSource,
@@ -423,6 +438,7 @@ from .types import (
     Result,
     ResultsNumberPublic,
     ScoreName,
+    ScoreNamePublic,
     ServiceTogglesConfig,
     Span,
     SpanBatch,
@@ -553,6 +569,7 @@ from .errors import (
     UnprocessableEntityError,
 )
 from . import (
+    agent_configs,
     alerts,
     annotation_queues,
     attachments,
@@ -587,7 +604,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
+from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility, FindDatasetsRequestType
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
@@ -608,6 +625,17 @@ from .spans import (
 )
 
 __all__ = [
+    "AgentBlueprintHistory",
+    "AgentBlueprintHistoryType",
+    "AgentBlueprintPublic",
+    "AgentBlueprintPublicType",
+    "AgentBlueprintWrite",
+    "AgentBlueprintWriteType",
+    "AgentConfigEnv",
+    "AgentConfigValuePublic",
+    "AgentConfigValuePublicType",
+    "AgentConfigValueWrite",
+    "AgentConfigValueWriteType",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -721,6 +749,7 @@ __all__ = [
     "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
+    "BlueprintPageHistory",
     "BooleanFeedbackDefinition",
     "BooleanFeedbackDefinitionCreate",
     "BooleanFeedbackDefinitionPublic",
@@ -822,7 +851,9 @@ __all__ = [
     "ErrorMessage",
     "ErrorMessageDetail",
     "ErrorMessageDetailed",
+    "ErrorMessageHistory",
     "ErrorMessagePublic",
+    "ErrorMessageWrite",
     "EvaluatorItem",
     "EvaluatorItemCompare",
     "EvaluatorItemCompareType",
@@ -892,6 +923,7 @@ __all__ = [
     "FeedbackScoreExperimentItemBulkWriteView",
     "FeedbackScoreExperimentItemBulkWriteViewSource",
     "FeedbackScoreNames",
+    "FeedbackScoreNamesPublic",
     "FeedbackScorePublic",
     "FeedbackScorePublicSource",
     "FeedbackScoreSource",
@@ -902,6 +934,7 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FindDatasetsRequestType",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
     "ForbiddenError",
@@ -1059,6 +1092,7 @@ __all__ = [
     "Result",
     "ResultsNumberPublic",
     "ScoreName",
+    "ScoreNamePublic",
     "ServiceTogglesConfig",
     "ServiceUnavailableError",
     "Span",
@@ -1181,6 +1215,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "agent_configs",
     "alerts",
     "annotation_queues",
     "attachments",

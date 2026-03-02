@@ -1,13 +1,10 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 
 const useUserPermission = (config?: { enabled?: boolean }) => {
   const configEnabled = config?.enabled ?? true;
@@ -20,7 +17,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
-  const { data: userPermissions } = useUserPermissions(
+  const isEnabled = configEnabled && !isAdmin;
+  const { data: userPermissions, isPending } = useUserPermissions(
     {
       organizationId: currentOrganization?.id || "",
       userName: userName || "",
@@ -28,7 +26,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     {
       refetchOnMount: true,
       // there is no need in permissions, if a user is admin
-      enabled: configEnabled && !isAdmin,
+      enabled: isEnabled,
     },
   );
 
@@ -44,11 +42,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const isWorkspaceOwner = useMemo(
     () =>
       isAdmin ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.MANAGEMENT,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.MANAGEMENT,
       ),
     [workspacePermissions, isAdmin],
   );
@@ -56,16 +52,72 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const canInviteMembers = useMemo(
     () =>
       isWorkspaceOwner ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.INVITE_USERS,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.INVITE_USERS,
       ),
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  return { canInviteMembers, isWorkspaceOwner };
+  const checkNullablePermission = useCallback(
+    (permissionName: ManagementPermissionsNames) => {
+      if (isWorkspaceOwner) return true;
+
+      const permissionValue = getUserPermissionValue(
+        workspacePermissions,
+        permissionName,
+      );
+
+      // should default to true if the permission is not found
+      return permissionValue !== false;
+    },
+    [workspacePermissions, isWorkspaceOwner],
+  );
+
+  const canViewExperiments = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canViewDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canDeleteProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeleteAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ANNOTATION_QUEUE_DELETE,
+      ),
+    [checkNullablePermission],
+  );
+
+  const canDeleteTraces = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeletePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_DELETE),
+    [checkNullablePermission],
+  );
+
+  return {
+    canInviteMembers,
+    isWorkspaceOwner,
+    canViewExperiments,
+    canViewDashboards,
+    canDeleteProjects,
+    canDeleteAnnotationQueues,
+    canDeleteTraces,
+    canDeletePrompts,
+    isPending: isEnabled && isPending,
+  };
 };
 
 export default useUserPermission;

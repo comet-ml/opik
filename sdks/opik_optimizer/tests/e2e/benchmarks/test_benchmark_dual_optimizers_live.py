@@ -7,9 +7,9 @@ import opik_optimizer
 import pytest
 from opik.evaluation.metrics.heuristics.equals import Equals
 
-from benchmarks.core import benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from benchmarks.local import runner as local_runner
+from benchmarks.packages import registry as benchmark_config
+from benchmarks.core.types import TaskSpec
+from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message, user_message
 from ._benchmark_test_helpers import InlineExecutor
 
@@ -117,9 +117,9 @@ def test_dual_optimizer_run_live(
     _skip_without_openai()
     _patch_benchmark_config(monkeypatch)
     _patch_dataset_loader(monkeypatch)
-    monkeypatch.setattr(local_runner, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
 
-    runner = local_runner.BenchmarkRunner(
+    runner = local_engine.BenchmarkRunner(
         max_workers=1,
         seed=42,
         test_mode=True,
@@ -127,14 +127,14 @@ def test_dual_optimizer_run_live(
     )
 
     tasks = [
-        BenchmarkTaskSpec(
+        TaskSpec(
             dataset_name="tiny_test",
             optimizer_name="few_shot",
             model_name="openai/gpt-5-nano",
             test_mode=True,
             optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
         ),
-        BenchmarkTaskSpec(
+        TaskSpec(
             dataset_name="tiny_test",
             optimizer_name="evolutionary_optimizer",
             model_name="openai/gpt-5-nano",

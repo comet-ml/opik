@@ -61,13 +61,13 @@ export class ThreadsPage {
     }
   }
 
-  async openThreadContent(threadId: string): Promise<void> {
-    // Click on the row containing the thread ID (not the ID cell itself, which copies to clipboard)
-    await this.page
+  async openThreadByFirstMessage(firstMessage: string): Promise<void> {
+    const row = this.page
       .getByRole('row')
-      .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
-      .click();
-    // Wait for thread panel to be visible
+      .filter({ hasText: firstMessage })
+      .first();
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.click();
     await this.threadContainer.waitFor({ state: 'visible' });
   }
 
@@ -89,6 +89,19 @@ export class ThreadsPage {
     await this.threadTableDeleteButton.click();
     await this.page.waitForTimeout(500);
     await this.threadDeletePopupDeleteButton.click();
+  }
+
+  async deleteThreadByFirstMessage(firstMessage: string): Promise<void> {
+    const row = this.page
+      .getByRole('row')
+      .filter({ hasText: firstMessage })
+      .first();
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.getByLabel('Select row').click();
+    await this.threadTableDeleteButton.click();
+    await this.page.waitForTimeout(500);
+    await this.threadDeletePopupDeleteButton.click();
+    await expect(row).not.toBeVisible({ timeout: 10000 });
   }
 
   async checkThreadIsDeleted(threadId: string): Promise<void> {

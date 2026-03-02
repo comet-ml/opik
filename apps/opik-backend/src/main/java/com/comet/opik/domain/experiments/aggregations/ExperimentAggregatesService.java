@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 
+import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
+
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
@@ -71,12 +73,12 @@ public class ExperimentAggregatesService {
      * @param batchSize the number of experiment items to process per batch
      * @return Mono that completes when all aggregations are populated
      */
-    public Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
+    private Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
 
         // First, populate experiment-level aggregates
         return Mono.deferContextual(ctx -> {
 
-            String workspaceId = ctx.get("workspaceId");
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             log.info("Starting aggregation population for experiment: '{}' in workspace: '{}', batchSize: '{}'",
                     experimentId, workspaceId, batchSize);
@@ -86,7 +88,7 @@ public class ExperimentAggregatesService {
                             "Experiment-level aggregates populated for experiment: '{}'", experimentId))
                     .then(Mono.defer(() ->
             // Then, populate experiment item aggregates in batches using cursor pagination
-            populateExperimentItemsInBatches(experimentId, null, 0L, batchSize)))
+            populateExperimentItemsInBatches(experimentId, batchSize)))
                     .doOnSuccess(v -> log.info(
                             "All aggregations populated successfully for experiment: '{}' in workspace: '{}'",
                             experimentId, workspaceId))
@@ -97,46 +99,35 @@ public class ExperimentAggregatesService {
     }
 
     /**
-     * Recursively populate experiment item aggregates in batches using cursor pagination.
+     * Populate experiment item aggregates in batches using cursor pagination with {@code Mono.expand()}.
      *
      * @param experimentId the experiment ID
-     * @param cursor the current cursor (null for first batch)
-     * @param totalProcessed the total number of items processed so far
      * @param batchSize the number of items to process per batch
      * @return Mono that completes when all batches are processed
      */
-    private Mono<Void> populateExperimentItemsInBatches(
-            UUID experimentId,
-            UUID cursor,
-            Long totalProcessed,
-            int batchSize) {
-
-        return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, cursor, batchSize)
-                .flatMap(result -> {
-                    var newTotal = totalProcessed + result.processedCount();
-
-                    log.info("Processed '{}' experiment items in this batch, total: '{}' for experiment: '{}'",
-                            result.processedCount(), newTotal, experimentId);
-
-                    // If we have a cursor, there might be more items to process
-                    if (result.lastCursor() != null) {
-                        log.debug("Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
-                                result.lastCursor(), experimentId);
-
-                        // Recursive call for next batch using the returned cursor
-                        return populateExperimentItemsInBatches(experimentId, result.lastCursor(), newTotal, batchSize);
-                    } else {
-                        // No more items to process
-                        log.info("Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
-                                newTotal, experimentId);
-                        return Mono.<Void>empty();
+    private Mono<Void> populateExperimentItemsInBatches(UUID experimentId, int batchSize) {
+        return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, null, batchSize)
+                .expand(result -> {
+                    log.info("Processed '{}' experiment items in this batch for experiment: '{}'",
+                            result.processedCount(), experimentId);
+                    if (result.lastCursor() == null) {
+                        return Mono.empty();
                     }
-                });
+                    log.debug("Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
+                            result.lastCursor(), experimentId);
+                    return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, result.lastCursor(),
+                            batchSize);
+                })
+                .map(BatchResult::processedCount)
+                .reduce(0L, Long::sum)
+                .doOnSuccess(total -> log.info(
+                        "Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
+                        total, experimentId))
+                .then();
     }
 
     /**
      * Query experiment_aggregates table directly and construct Experiment from stored aggregated values.
-     * Used for testing and verification that aggregated data matches expected values.
      *
      * @param experimentId the experiment ID to query
      * @return Mono containing the Experiment constructed from aggregates table, or empty if not found

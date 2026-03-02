@@ -35,7 +35,7 @@ const CommitsActionsPanel: React.FunctionComponent<
         open={open === 2}
         setOpen={setOpen}
       />
-      <TooltipWrapper content="Add version tags">
+      <TooltipWrapper content="Manage version tags">
         <Button
           variant="outline"
           size="icon-sm"

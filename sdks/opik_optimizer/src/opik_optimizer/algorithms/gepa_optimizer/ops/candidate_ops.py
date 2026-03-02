@@ -6,6 +6,10 @@ from typing import Any
 
 from ....utils.candidate import unique_ordered_by_key
 from ....api_objects.types import rebuild_content_with_new_text
+from ....utils.toolcalling.core import segment_updates
+
+TOOL_COMPONENT_PREFIX = segment_updates.TOOL_COMPONENT_PREFIX
+TOOL_PARAM_COMPONENT_PREFIX = segment_updates.TOOL_PARAM_COMPONENT_PREFIX
 
 
 # TODO: Promote to a shared optimizer candidate helper once GEPA selection is generalized.
@@ -15,6 +19,8 @@ def build_seed_candidate(
     *,
     optimizable_prompts: dict[str, Any],
     allowed_roles: set[str] | None = None,
+    tool_names: list[str] | None = None,
+    enable_tools: bool = False,
 ) -> dict[str, str]:
     seed_candidate: dict[str, str] = {}
     for prompt_name, prompt_obj in optimizable_prompts.items():
@@ -33,6 +39,15 @@ def build_seed_candidate(
                 ]
                 content = " ".join(text_parts)
             seed_candidate[component_key] = str(content)
+        if enable_tools:
+            # Include tool description components when tool optimization is enabled.
+            seed_candidate.update(
+                segment_updates.build_tool_component_seed(
+                    prompt_name=prompt_name,
+                    prompt=prompt_obj,
+                    tool_names=tool_names,
+                )
+            )
     return seed_candidate
 
 
@@ -131,6 +146,12 @@ def rebuild_prompts_from_candidate(
 
         new_prompt = prompt_obj.copy()
         new_prompt.set_messages(new_messages)
+        new_prompt = segment_updates.apply_tool_updates_from_candidate(
+            candidate=candidate,
+            prompt=new_prompt,
+            tool_component_prefix=f"{prompt_name}{TOOL_COMPONENT_PREFIX}",
+            tool_param_component_prefix=f"{prompt_name}{TOOL_PARAM_COMPONENT_PREFIX}",
+        )
         rebuilt[prompt_name] = new_prompt
     return rebuilt
 
@@ -146,6 +167,8 @@ def count_disallowed_candidate_components(
         return sum(1 for key in candidate.keys() if key)
     count = 0
     for key in candidate.keys():
+        if TOOL_COMPONENT_PREFIX in key or TOOL_PARAM_COMPONENT_PREFIX in key:
+            continue
         parts = key.rsplit("_", 2)
         if len(parts) != 3:
             continue
