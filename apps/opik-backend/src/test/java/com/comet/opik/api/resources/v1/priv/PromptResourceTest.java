@@ -4317,8 +4317,9 @@ class PromptResourceTest {
             Prompt result = promptResourceClient.getPromptByCommit(
                     version.commit(), apiKey, workspaceName);
 
-            // promptId is not exposed by Prompt.View.Detail on PromptVersion
-            var expectedVersion = version.toBuilder().promptId(null).build();
+            // promptId is not exposed by Prompt.View.Detail on PromptVersion;
+            // templateStructure is not included in the by-commit JSON payload
+            var expectedVersion = version.toBuilder().promptId(null).templateStructure(null).build();
             // fetch the prompt via its own endpoint (same view: Prompt.View.Detail), then
             // strip latestVersion since by-commit intentionally omits it
             var expectedPrompt = promptResourceClient.getPrompt(promptId, apiKey, workspaceName)
