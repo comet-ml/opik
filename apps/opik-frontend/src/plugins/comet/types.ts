@@ -66,6 +66,7 @@ export enum ManagementPermissionsNames {
   PROJECT_DELETE = "project_delete",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
+  PROMPT_DELETE = "prompt_delete",
 }
 
 export interface UserPermission {
