@@ -762,40 +762,36 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private Mono<TraceAggregations> getTraceAggregations(UUID experimentId, UUID projectId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_TRACE_AGGREGATIONS,
-                    "getTraceAggregations", workspaceId, experimentId.toString());
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId);
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapTraceAggregations(row)));
-        }).singleOrEmpty());
+        return queryExperimentAggregation(
+                GET_TRACE_AGGREGATIONS, "getTraceAggregations", experimentId, projectId,
+                this::mapTraceAggregations);
     }
 
     private Mono<SpanAggregations> getSpanAggregations(UUID experimentId, UUID projectId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_SPAN_AGGREGATIONS,
-                    "getSpanAggregations", workspaceId, experimentId.toString());
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId);
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapSpanAggregations(row)));
-        }).singleOrEmpty());
+        return queryExperimentAggregation(
+                GET_SPAN_AGGREGATIONS, "getSpanAggregations", experimentId, projectId,
+                this::mapSpanAggregations);
     }
 
-    private Mono<FeedbackScoreAggregations> getFeedbackScoreAggregations(UUID experimentId,
-            UUID projectId) {
+    private Mono<FeedbackScoreAggregations> getFeedbackScoreAggregations(UUID experimentId, UUID projectId) {
+        return queryExperimentAggregation(
+                GET_FEEDBACK_SCORE_AGGREGATIONS, "getFeedbackScoreAggregations", experimentId, projectId,
+                this::mapFeedbackScoreAggregations);
+    }
+
+    /**
+     * Executes a single-row aggregation query scoped to a workspace, experiment, and project.
+     * Handles the repeated context-aware execution, parameter binding, and singleOrEmpty pattern
+     * shared by getTraceAggregations, getSpanAggregations, and getFeedbackScoreAggregations.
+     */
+    private <T> Mono<T> queryExperimentAggregation(
+            String query,
+            String logName,
+            UUID experimentId,
+            UUID projectId,
+            Function<Row, T> rowMapper) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_FEEDBACK_SCORE_AGGREGATIONS,
-                    "getFeedbackScoreAggregations", workspaceId, experimentId.toString());
+            var template = getSTWithLogComment(query, logName, workspaceId, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -803,7 +799,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("project_id", projectId);
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapFeedbackScoreAggregations(row)));
+                    .flatMap(result -> result.map((row, metadata) -> rowMapper.apply(row)));
         }).singleOrEmpty());
     }
 
