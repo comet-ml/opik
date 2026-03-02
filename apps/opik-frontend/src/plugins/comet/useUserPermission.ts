@@ -74,18 +74,20 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const canViewExperiments = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_VIEW),
+  const canViewDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_VIEW),
     [checkNullablePermission],
+  );
+
+  const canViewExperiments = useMemo(
+    () =>
+      canViewDatasets &&
+      checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_VIEW),
+    [canViewDatasets, checkNullablePermission],
   );
 
   const canViewDashboards = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_VIEW),
-    [checkNullablePermission],
-  );
-
-  const canViewDatasets = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.DATASET_VIEW),
     [checkNullablePermission],
   );
 
