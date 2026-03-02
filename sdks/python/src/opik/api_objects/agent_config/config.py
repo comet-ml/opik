@@ -26,6 +26,17 @@ class AgentConfig:
     def project_name(self) -> str:
         return self._project_name
 
+    @staticmethod
+    def _resolve_fields_with_values(
+        parameters: typing.Optional[typing.Dict[str, typing.Any]],
+        fields_with_values: typing.Optional[
+            typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]
+        ],
+    ) -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]:
+        if fields_with_values is not None:
+            return fields_with_values
+        return {k: (type(v), v) for k, v in (parameters or {}).items()}
+
     def _build_blueprint_payload(
         self,
         fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
@@ -127,10 +138,9 @@ class AgentConfig:
             field_types: Mapping of prefixed field key to Python type used
                 when fetching back the created blueprint.
         """
-        if fields_with_values is None:
-            fields_with_values = {
-                k: (type(v), v) for k, v in (parameters or {}).items()
-            }
+        fields_with_values = self._resolve_fields_with_values(
+            parameters, fields_with_values
+        )
         blueprint_id = id_helpers.generate_id()
         payload = self._build_blueprint_payload(
             fields_with_values, description, id=blueprint_id
@@ -181,10 +191,9 @@ class AgentConfig:
                 mapping, bypassing type inference.
             description: Human-readable description stored with the mask.
         """
-        if fields_with_values is None:
-            fields_with_values = {
-                k: (type(v), v) for k, v in (parameters or {}).items()
-            }
+        fields_with_values = self._resolve_fields_with_values(
+            parameters, fields_with_values
+        )
         mask_id = id_helpers.generate_id()
         payload = self._build_blueprint_payload(
             fields_with_values, description, id=mask_id, config_type="mask"
