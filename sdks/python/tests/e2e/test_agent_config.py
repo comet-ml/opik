@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import field
-from typing import Dict, List
+from typing import Annotated, Dict, List
 
 import pytest
 import opik
@@ -335,3 +335,33 @@ def test_agent_config__multiple_mask_updates__each_produce_distinct_mask_id__hap
     assert fetched_a.id == fetched_b.id
     assert fetched_a["temperature"] == 0.1
     assert fetched_b["temperature"] == 0.9
+
+
+def test_agent_config_decorator__annotated_descriptions__sent_to_backend(
+    opik_client: opik.Opik,
+    project_name: str,
+):
+    @opik.agent_config(project=project_name)
+    class AnnotatedConfig:
+        model: Annotated[str, "The LLM model identifier"] = "gpt-4o"
+        temperature: Annotated[float, "Sampling temperature"] = 0.7
+        max_tokens: int = 512
+        use_tools: Annotated[bool, "Whether to enable tool use"] = True
+
+    AnnotatedConfig()
+
+    agent_config = opik_client.get_agent_config(project_name=project_name)
+    bp = agent_config.get_blueprint()
+    assert bp is not None
+
+    raw_values = {v.key: v for v in bp._raw.values}
+
+    assert raw_values["AnnotatedConfig.model"].description == "The LLM model identifier"
+    assert (
+        raw_values["AnnotatedConfig.temperature"].description == "Sampling temperature"
+    )
+    assert raw_values["AnnotatedConfig.max_tokens"].description is None
+    assert (
+        raw_values["AnnotatedConfig.use_tools"].description
+        == "Whether to enable tool use"
+    )

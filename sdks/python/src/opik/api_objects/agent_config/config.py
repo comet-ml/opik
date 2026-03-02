@@ -30,22 +30,24 @@ class AgentConfig:
     def _resolve_fields_with_values(
         parameters: typing.Optional[typing.Dict[str, typing.Any]],
         fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]
+            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
         ],
-    ) -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]:
+    ) -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]:
         if fields_with_values is not None:
             return fields_with_values
-        return {k: (type(v), v) for k, v in (parameters or {}).items()}
+        return {k: (type(v), v, None) for k, v in (parameters or {}).items()}
 
     def _build_blueprint_payload(
         self,
-        fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]],
+        fields_with_values: typing.Dict[
+            str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]
+        ],
         description: typing.Optional[str],
         id: typing.Optional[str] = None,
         config_type: str = "blueprint",
     ) -> AgentBlueprintWrite:
         backend_values = []
-        for field_name, (py_type, value) in fields_with_values.items():
+        for field_name, (py_type, value, field_desc) in fields_with_values.items():
             if (
                 type_helpers.is_prompt_type(py_type)
                 or type_helpers.is_prompt_version_type(py_type)
@@ -56,6 +58,7 @@ class AgentConfig:
                     key=field_name,
                     type=type_helpers.python_type_to_backend_type(py_type),
                     value=type_helpers.python_value_to_backend_value(value, py_type),
+                    description=field_desc,
                 )
             )
         return AgentBlueprintWrite(
@@ -118,7 +121,7 @@ class AgentConfig:
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
         fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]
+            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
         ] = None,
         description: typing.Optional[str] = None,
         field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
@@ -175,7 +178,7 @@ class AgentConfig:
         self,
         parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
         fields_with_values: typing.Optional[
-            typing.Dict[str, typing.Tuple[typing.Any, typing.Any]]
+            typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]
         ] = None,
         description: typing.Optional[str] = None,
     ) -> str:

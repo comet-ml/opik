@@ -15,10 +15,15 @@ logger = logging.getLogger(__name__)
 _MISSING = object()
 
 
+class ConfigField(typing.NamedTuple):
+    prefixed_key: str
+    py_type: typing.Any
+    description: typing.Optional[str]
+
+
 # Extra keys injected by our decorator
 class AgentConfigInstance(typing.Protocol):
-    __opik_field_map__: typing.Dict[str, str]  # local_name → prefixed_key
-    __opik_field_types__: typing.Dict[str, typing.Any]  # prefixed_key → type
+    __opik_fields__: typing.Dict[str, ConfigField]  # local_name → ConfigField
     __opik_mask_id__: typing.Optional[str]
     __opik_env__: typing.Optional[str]
     __opik_description__: typing.Optional[str]
@@ -27,7 +32,7 @@ class AgentConfigInstance(typing.Protocol):
 
 
 # Attribute name references derived from the protocol — avoids magic strings at call sites.
-# e.g. _F.__opik_field_map__ == "__opik_field_map__"
+# e.g. _F.__opik_fields__ == "__opik_fields__"
 _F = type(
     "_F",
     (),
@@ -81,12 +86,15 @@ def agent_config_decorator(
         supported_fields = type_helpers.extract_dataclass_fields(cls)
         class_prefix = name or cls.__name__
 
-        prefixed_field_types: typing.Dict[str, typing.Any] = {
-            f"{class_prefix}.{f_name}": f_type for f_name, f_type, _ in supported_fields
+        fields: typing.Dict[str, ConfigField] = {
+            f_name: ConfigField(
+                prefixed_key=f"{class_prefix}.{f_name}",
+                py_type=f_type,
+                description=desc,
+            )
+            for f_name, f_type, _, desc in supported_fields
         }
-        field_map: typing.Dict[str, str] = {
-            f_name: f"{class_prefix}.{f_name}" for f_name, _, _ in supported_fields
-        }
+        prefixed_field_types = {cf.prefixed_key: cf.py_type for cf in fields.values()}
 
         original_init = cls.__init__
 
@@ -108,8 +116,7 @@ def agent_config_decorator(
                 agent_config=agent_config,
             )
 
-            object.__setattr__(self, _F.__opik_field_map__, field_map)
-            object.__setattr__(self, _F.__opik_field_types__, prefixed_field_types)
+            object.__setattr__(self, _F.__opik_fields__, fields)
             object.__setattr__(self, _F.__opik_mask_id__, mask_id)
             object.__setattr__(self, _F.__opik_env__, env)
             object.__setattr__(self, _F.__opik_description__, description)
@@ -122,7 +129,7 @@ def agent_config_decorator(
         original_getattribute = cls.__getattribute__
 
         def new_getattribute(self: typing.Any, attr: str) -> typing.Any:
-            if attr.startswith("_") or attr not in field_map:
+            if attr.startswith("_") or attr not in fields:
                 return original_getattribute(self, attr)
 
             instance: AgentConfigInstance = self
@@ -132,7 +139,7 @@ def agent_config_decorator(
                 return masked
 
             instance_cache = get_cached_config(instance)
-            prefixed_key = instance.__opik_field_map__[attr]
+            prefixed_key = instance.__opik_fields__[attr].prefixed_key
             value = instance_cache.values.get(prefixed_key, _MISSING)
             _inject_trace_metadata(
                 instance, attr, value=value, shared_cache=instance_cache
@@ -207,9 +214,12 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         return
 
     shared_cache = get_cached_config(instance)
-    instance_field_types = instance.__opik_field_types__
+    instance_fields = instance.__opik_fields__
+    prefixed_field_types = {
+        cf.prefixed_key: cf.py_type for cf in instance_fields.values()
+    }
 
-    extra_keys = set(instance_field_types.keys()) - set(shared_cache.values.keys())
+    extra_keys = set(prefixed_field_types.keys()) - set(shared_cache.values.keys())
     # If no difference with cache - no need to do any extra fetches
     if not extra_keys:
         return
@@ -220,24 +230,23 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     existing = agent_cfg.get_blueprint(
         env=environment,
         mask_id=mask_id,
-        field_types=instance_field_types,
+        field_types=prefixed_field_types,
     )
 
     pinned = environment is not None or mask_id is not None
 
     if existing:
-        extra_keys = set(instance_field_types) - set(existing.values)
+        extra_keys = set(prefixed_field_types) - set(existing.values)
         # No need to update the pinned version
         if pinned or not extra_keys:
             shared_cache.update(existing)
             return
 
     # Create new version if no blueprint exists or keys need updating
-    field_map = instance.__opik_field_map__
     local_keys = (
-        field_map.keys()
+        instance_fields.keys()
         if existing is None
-        else {k for k, v in field_map.items() if v in extra_keys}
+        else {k for k, cf in instance_fields.items() if cf.prefixed_key in extra_keys}
     )
     new_blueprint = _create_blueprint(
         instance, agent_cfg, local_keys, instance.__opik_description__, shared_cache
@@ -265,12 +274,13 @@ def _create_blueprint(
         cache: Shared cache whose ``all_field_types`` is used for
             deserialisation of the returned blueprint.
     """
-    fields_with_values: typing.Dict[str, typing.Tuple[typing.Any, typing.Any]] = {}
+    fields_with_values: typing.Dict[
+        str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]
+    ] = {}
     for local_name in local_keys:
-        prefixed_key = instance.__opik_field_map__[local_name]
-        f_type = instance.__opik_field_types__[prefixed_key]
+        cf = instance.__opik_fields__[local_name]
         value = object.__getattribute__(instance, local_name)
-        fields_with_values[prefixed_key] = (f_type, value)
+        fields_with_values[cf.prefixed_key] = (cf.py_type, value, cf.description)
 
     bp = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
@@ -297,7 +307,7 @@ def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
         if agent_cfg is None:
             return _MISSING
 
-        prefixed_key = instance.__opik_field_map__[attr]
+        prefixed_key = instance.__opik_fields__[attr].prefixed_key
 
         base_cache = get_cached_config(instance)
         mask_cache = cache.get_shared_cache(
@@ -342,7 +352,7 @@ def _inject_trace_metadata(
         resolved_cache = (
             shared_cache if shared_cache is not None else get_cached_config(instance)
         )
-        prefixed_key = instance.__opik_field_map__[attr]
+        prefixed_key = instance.__opik_fields__[attr].prefixed_key
 
         if value is not _MISSING:
             values = {prefixed_key: value}

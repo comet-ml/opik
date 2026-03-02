@@ -1,6 +1,6 @@
 import dataclasses
 import time
-from typing import Callable
+from typing import Annotated, Callable
 from unittest import mock
 
 import pytest
@@ -953,3 +953,61 @@ class TestConfigDecoratorContextMask:
 
         call_kwargs = mock_backend.agent_configs.get_latest_blueprint.call_args[1]
         assert call_kwargs.get("mask_id") == "mask-ctx"
+
+
+class TestConfigDecoratorAnnotatedDescriptions:
+    def test_annotated_field__description_sent_to_backend(self, mock_backend):
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            model: Annotated[str, "The LLM model to use"] = "gpt-4o"
+
+        MyConfig()
+
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert values_by_key["MyConfig.model"].description == "The LLM model to use"
+
+    def test_mixed_fields__descriptions_per_field(self, mock_backend):
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            model: Annotated[str, "LLM model"] = "gpt-4o"
+            temperature: float = 0.7
+
+        MyConfig()
+
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert values_by_key["MyConfig.model"].description == "LLM model"
+        assert values_by_key["MyConfig.temperature"].description is None
+
+    def test_annotated_non_str_metadata__no_description(self, mock_backend):
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            tokens: Annotated[int, 42] = 512
+
+        MyConfig()
+
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert values_by_key["MyConfig.tokens"].description is None
+
+    def test_annotated_fields__base_type_and_value_unchanged(self, mock_backend):
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temperature: Annotated[float, "Sampling temp"] = 0.9
+
+        MyConfig(temperature=0.5)
+
+        call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
+        blueprint = call_kwargs["blueprint"]
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert values_by_key["MyConfig.temperature"].value == "0.5"
+        assert values_by_key["MyConfig.temperature"].type == "float"
+        assert values_by_key["MyConfig.temperature"].description == "Sampling temp"

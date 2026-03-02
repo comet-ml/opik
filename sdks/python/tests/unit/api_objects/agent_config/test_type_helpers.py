@@ -1,6 +1,6 @@
 import dataclasses
 import json
-from typing import List, Dict, Callable
+from typing import Annotated, List, Dict, Callable
 from unittest import mock
 
 import pytest
@@ -468,3 +468,77 @@ class TestExtractDataclassFields:
 
         fields = type_helpers.extract_dataclass_fields(WithBase)
         assert fields[0][0] == "p"
+
+
+class TestExtractDataclassFieldsAnnotated:
+    def test_annotated_str__description_extracted(self):
+        @dataclasses.dataclass
+        class Cfg:
+            model: Annotated[str, "The LLM model name"] = "gpt-4o"
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        assert len(fields) == 1
+        name, py_type, default, desc = fields[0]
+        assert name == "model"
+        assert py_type is str
+        assert default == "gpt-4o"
+        assert desc == "The LLM model name"
+
+    def test_annotated_float__description_extracted(self):
+        @dataclasses.dataclass
+        class Cfg:
+            temperature: Annotated[float, "Sampling temperature"] = 0.7
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        name, py_type, default, desc = fields[0]
+        assert py_type is float
+        assert desc == "Sampling temperature"
+
+    def test_annotated_multiple_metadata__first_str_used(self):
+        @dataclasses.dataclass
+        class Cfg:
+            tokens: Annotated[int, 42, "Max tokens to generate"] = 512
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        _, _, _, desc = fields[0]
+        assert desc == "Max tokens to generate"
+
+    def test_annotated_no_str_metadata__description_is_none(self):
+        @dataclasses.dataclass
+        class Cfg:
+            tokens: Annotated[int, 42] = 512
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        _, _, _, desc = fields[0]
+        assert desc is None
+
+    def test_plain_type__description_is_none(self):
+        @dataclasses.dataclass
+        class Cfg:
+            tokens: int = 512
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        _, _, _, desc = fields[0]
+        assert desc is None
+
+    def test_mixed_annotated_and_plain__descriptions_per_field(self):
+        @dataclasses.dataclass
+        class Cfg:
+            model: Annotated[str, "Model name"] = "gpt-4o"
+            temperature: float = 0.7
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        by_name = {f[0]: f[3] for f in fields}
+        assert by_name["model"] == "Model name"
+        assert by_name["temperature"] is None
+
+    def test_annotated_unsupported_base_type__field_filtered_out(self):
+        @dataclasses.dataclass
+        class Cfg:
+            model: Annotated[str, "valid"] = "gpt-4o"
+            callback: Annotated[object, "not supported"] = None  # type: ignore
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        names = [f[0] for f in fields]
+        assert "model" in names
+        assert "callback" not in names

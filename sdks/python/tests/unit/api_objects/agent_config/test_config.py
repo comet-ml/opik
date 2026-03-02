@@ -202,8 +202,8 @@ class TestAgentConfigCreateBlueprint:
 
         result = agent_config.create_blueprint(
             fields_with_values={
-                "temperature": (float, 0.6),
-                "name": (str, "agent"),
+                "temperature": (float, 0.6, None),
+                "name": (str, "agent", None),
             }
         )
 
@@ -222,7 +222,7 @@ class TestAgentConfigCreateBlueprint:
             _make_raw_blueprint()
         )
 
-        agent_config.create_blueprint(fields_with_values={"flag": (bool, False)})
+        agent_config.create_blueprint(fields_with_values={"flag": (bool, False, None)})
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
@@ -237,7 +237,7 @@ class TestAgentConfigCreateBlueprint:
             _make_raw_blueprint()
         )
 
-        agent_config.create_blueprint(fields_with_values={"temp": (float, 0.5)})
+        agent_config.create_blueprint(fields_with_values={"temp": (float, 0.5, None)})
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
@@ -269,7 +269,7 @@ class TestAgentConfigCreateBlueprint:
         )
 
         result = agent_config.create_blueprint(
-            fields_with_values={"temp": (float, 0.6)}
+            fields_with_values={"temp": (float, 0.6, None)}
         )
 
         assert isinstance(result, Blueprint)
@@ -294,7 +294,7 @@ class TestAgentConfigCreateMask:
     def test_create_mask__happy_path__calls_backend_with_mask_type(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3)})
+        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
@@ -303,7 +303,7 @@ class TestAgentConfigCreateMask:
 
     def test_create_mask__returns_mask_id(self, agent_config, mock_rest_client):
         result = agent_config.create_mask(
-            fields_with_values={"temperature": (float, 0.3)}
+            fields_with_values={"temperature": (float, 0.3, None)}
         )
 
         assert isinstance(result, str)
@@ -312,7 +312,7 @@ class TestAgentConfigCreateMask:
     def test_create_mask__sends_under_blueprint_key(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3)})
+        agent_config.create_mask(fields_with_values={"temperature": (float, 0.3, None)})
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert "blueprint" in call_kwargs
@@ -329,7 +329,7 @@ class TestAgentConfigCreateMask:
         self, agent_config, mock_rest_client
     ):
         agent_config.create_mask(
-            fields_with_values={"temperature": (float, 0.3)},
+            fields_with_values={"temperature": (float, 0.3, None)},
             description="variant-A",
         )
 
@@ -339,7 +339,7 @@ class TestAgentConfigCreateMask:
     def test_create_mask__with_project_name__passes_project_to_backend(
         self, agent_config, mock_rest_client
     ):
-        agent_config.create_mask(fields_with_values={"temp": (float, 0.5)})
+        agent_config.create_mask(fields_with_values={"temp": (float, 0.5, None)})
 
         call_kwargs = mock_rest_client.agent_configs.create_agent_config.call_args[1]
         assert call_kwargs["project_name"] == "my-project"
