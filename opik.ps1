@@ -255,6 +255,7 @@ function Test-ContainersStatus {
     $allOk = $true
 
     $containers = Get-Containers
+
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
@@ -422,6 +423,7 @@ function Start-MissingContainers {
     $allRunning = $true
 
     $containers = Get-Containers
+
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
         $resolvedStatus = if ($status) { $status } else { 'not found' }
@@ -440,6 +442,7 @@ function Start-MissingContainers {
 
     $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "up", "-d"
+
     if ($BUILD_MODE -eq "true") {
         $dockerArgs += "--build"
     }
