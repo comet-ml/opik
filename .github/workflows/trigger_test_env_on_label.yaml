@@ -14,7 +14,7 @@ permissions:
 jobs:
 
   other-labels:
-    if: github.event.label.name != 'test-environment'
+    if: github.event_name == 'pull_request' && github.event.label.name != 'test-environment'
     runs-on: ubuntu-latest
     steps:
       - name: Skip
@@ -22,7 +22,7 @@ jobs:
           echo "Skipping deployment of test environment for this PR"
 
   start:
-    if: github.event.label.name == 'test-environment'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get-tag.outputs.version }}
@@ -74,7 +74,7 @@ jobs:
             });
 
   build-apps:
-    if: github.event.label.name == 'test-environment'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     needs:
       - start
     uses: ./.github/workflows/build_apps.yml
@@ -87,7 +87,7 @@ jobs:
       ref: ${{ github.event.pull_request.head.ref }}
 
   trigger-deploy-base-version:
-    if: github.event.label.name == 'test-environment'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     needs:
       - start
     runs-on: ubuntu-latest
@@ -132,7 +132,7 @@ jobs:
             });
 
   trigger-deploy-new-version:
-    if: github.event.label.name == 'test-environment'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
     needs:
       - build-apps
       - trigger-deploy-base-version
