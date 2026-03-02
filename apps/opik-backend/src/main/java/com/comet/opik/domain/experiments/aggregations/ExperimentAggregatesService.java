@@ -33,15 +33,18 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -153,25 +156,11 @@ public class ExperimentAggregatesService {
                 criteria.datasetId());
 
         return Mono.deferContextual(ctx -> {
-
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            final UUID versionId;
-
-            if (StringUtils.isNotBlank(criteria.versionHashOrTag())) {
-                versionId = versionService.resolveVersionId(workspaceId, criteria.datasetId(),
-                        criteria.versionHashOrTag());
-            } else {
-                Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(),
-                        workspaceId);
-                if (latestVersion.isEmpty()) {
-                    log.warn("No versions found for dataset: '{}', workspace: '{}'", criteria.datasetId(), workspaceId);
-                    return Mono.just(0L);
-                } else {
-                    versionId = latestVersion.get().id();
-                }
-            }
-
-            return experimentAggregatesDAO.countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId);
+            return resolveVersionIdForCriteria(criteria, workspaceId)
+                    .map(versionId -> experimentAggregatesDAO
+                            .countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId))
+                    .orElse(Mono.just(0L));
         });
     }
 
@@ -191,26 +180,11 @@ public class ExperimentAggregatesService {
                 criteria.datasetId());
 
         return Mono.deferContextual(ctx -> {
-
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            final UUID versionId;
-
-            if (StringUtils.isNotBlank(criteria.versionHashOrTag())) {
-                versionId = versionService.resolveVersionId(workspaceId, criteria.datasetId(),
-                        criteria.versionHashOrTag());
-            } else {
-                Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(),
-                        workspaceId);
-                if (latestVersion.isEmpty()) {
-                    log.warn("No versions found for dataset: '{}', workspace: '{}'", criteria.datasetId(), workspaceId);
-                    return Mono.just(new DatasetItem.DatasetItemPage(List.of(), page, size, 0, Set.of(), List.of()));
-                } else {
-                    versionId = latestVersion.get().id();
-                }
-            }
-
-            return experimentAggregatesDAO.getDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId, page,
-                    size);
+            return resolveVersionIdForCriteria(criteria, workspaceId)
+                    .map(versionId -> experimentAggregatesDAO
+                            .getDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId, page, size))
+                    .orElse(Mono.just(new DatasetItem.DatasetItemPage(List.of(), page, size, 0, Set.of(), List.of())));
         });
     }
 
@@ -271,38 +245,62 @@ public class ExperimentAggregatesService {
         Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
         Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
 
-        var datasetMap = Mono.fromCallable(() -> getDatasetMap(datasetService.findByIds(datasetIds, workspaceId)))
-                .subscribeOn(Schedulers.boundedElastic());
+        Mono<Map<UUID, Dataset>> datasetsMono = loadEntityMap(
+                () -> datasetService.findByIds(datasetIds, workspaceId),
+                this::getDatasetMap);
 
-        var projectMap = Mono.fromCallable(() -> getProjectMap(projectService.findByIds(workspaceId, projectIds)))
-                .subscribeOn(Schedulers.boundedElastic());
+        Mono<Map<UUID, Project>> projectsMono = loadEntityMap(
+                () -> projectService.findByIds(workspaceId, projectIds),
+                this::getProjectMap);
 
-        return Mono.zip(datasetMap, projectMap)
-                .map(result -> ExperimentGroupEnrichInfoHolder.builder()
-                        .datasetMap(result.getT1())
-                        .projectMap(result.getT2())
+        return Mono.zip(datasetsMono, projectsMono)
+                .map(tuple -> ExperimentGroupEnrichInfoHolder.builder()
+                        .datasetMap(tuple.getT1())
+                        .projectMap(tuple.getT2())
                         .build());
+    }
+
+    private <T, R> Mono<Map<UUID, R>> loadEntityMap(
+            Callable<List<T>> serviceCall,
+            Function<List<T>, Map<UUID, R>> mapper) {
+        return Mono.fromCallable(serviceCall)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(mapper);
     }
 
     private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
             String targetField) {
-        int targetIndex = -1;
-        for (int i = 0; i < groups.size(); i++) {
-            if (groups.get(i).field().equals(targetField)) {
-                targetIndex = i;
-                break;
-            }
-        }
+        int nestingIdx = groups.stream()
+                .filter(g -> targetField.equals(g.field()))
+                .findFirst()
+                .map(groups::indexOf)
+                .orElse(-1);
 
-        if (targetIndex == -1) {
+        if (nestingIdx == -1) {
             return Set.of();
         }
 
-        final int index = targetIndex;
         return allGroupValues.stream()
-                .filter(values -> values.size() > index && values.get(index) != null)
-                .map(values -> UUID.fromString(values.get(index)))
+                .map(groupValues -> groupValues.get(nestingIdx))
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .filter(s -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(s))
+                .map(UUID::fromString)
                 .collect(Collectors.toSet());
+    }
+
+    private Optional<UUID> resolveVersionIdForCriteria(DatasetItemSearchCriteria criteria, String workspaceId) {
+        if (StringUtils.isNotBlank(criteria.versionHashOrTag())) {
+            return Optional.of(
+                    versionService.resolveVersionId(workspaceId, criteria.datasetId(), criteria.versionHashOrTag()));
+        }
+
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
+        if (latestVersion.isEmpty()) {
+            log.warn("No versions found for dataset: '{}', workspace: '{}'", criteria.datasetId(), workspaceId);
+        }
+        return latestVersion.map(DatasetVersion::id);
     }
 
     private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {

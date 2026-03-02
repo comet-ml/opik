@@ -866,7 +866,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
                         AND ea.dataset_id = div.dataset_id
-                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :versionId)
+                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :dataset_id
                     <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
@@ -883,7 +883,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
             <if(experiment_item_filters)>AND <experiment_item_filters><endif>
             <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND length(mapKeys(eia.feedback_scores)) = 0<endif>
+            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
@@ -923,7 +923,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
                         AND ea.dataset_id = div.dataset_id
-                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :versionId)
+                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :dataset_id
                     <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
@@ -1001,7 +1001,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
             <if(experiment_item_filters)>AND <experiment_item_filters><endif>
             <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND length(mapKeys(eia.feedback_scores)) = 0<endif>
+            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
@@ -1558,7 +1558,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                     .map(VisibilityMode::getValue)
                                     .orElse(VisibilityMode.DEFAULT.getValue()))
                     .bind("created_at" + i, item.createdAt().toString())
-                    .bind("last_updated_at" + i, Instant.now().toString())
+                    .bind("last_updated_at" + i, item.lastUpdatedAt().toString())
                     .bind("created_by" + i, item.createdBy())
                     .bind("last_updated_by" + i, item.lastUpdatedBy());
 
@@ -2147,6 +2147,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
 
             Optional.ofNullable(criteria.filters())
+                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY))
+                    .ifPresent(f -> template.add("feedback_scores_empty_filters", f));
+
+            Optional.ofNullable(criteria.filters())
                     .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
                     .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
 
@@ -2160,7 +2165,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             var statement = connection.createStatement(renderedSql)
                     .bind("workspace_id", workspaceId)
                     .bind("dataset_id", criteria.datasetId().toString())
-                    .bind("versionId", versionId.toString());
+                    .bind("version_id", versionId.toString());
 
             if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
                 statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
@@ -2169,6 +2174,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             if (CollectionUtils.isNotEmpty(criteria.filters())) {
                 filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
                 filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
+                filterQueryBuilder.bind(statement, criteria.filters(),
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
                 filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
             }
 
@@ -2220,6 +2227,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
 
             Optional.ofNullable(criteria.filters())
+                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY))
+                    .ifPresent(f -> template.add("feedback_scores_empty_filters", f));
+
+            Optional.ofNullable(criteria.filters())
                     .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
                     .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
 
@@ -2241,7 +2253,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         var statement = connection.createStatement(renderedQuery)
                                 .bind("workspace_id", workspaceId)
                                 .bind("dataset_id", criteria.datasetId().toString())
-                                .bind("versionId", versionId.toString())
+                                .bind("version_id", versionId.toString())
                                 .bind("limit", size)
                                 .bind("offset", (page - 1) * size);
 
@@ -2253,6 +2265,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                             filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
                             filterQueryBuilder.bind(statement, criteria.filters(),
                                     FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
+                            filterQueryBuilder.bind(statement, criteria.filters(),
+                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
                             filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
                         }
 
