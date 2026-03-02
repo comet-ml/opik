@@ -60,7 +60,10 @@ import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
 import { useExperimentsTableConfig } from "@/components/pages-shared/experiments/useExperimentsTableConfig";
-import { useExperimentsGroupsAndFilters } from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
+import {
+  FILTER_AND_GROUP_COLUMNS,
+  useExperimentsGroupsAndFilters,
+} from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/components/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
@@ -361,12 +364,11 @@ const ExperimentsPage: React.FC = () => {
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
 
-  const { groups, setGroups, filterAndGroupColumns, filtersAndGroupsConfig } =
+  const { groups, setGroups, filtersAndGroupsConfig } =
     useExperimentsGroupsAndFilters({
       storageKeyPrefix: STORAGE_KEY_PREFIX,
       sortedColumns,
       filters,
-      setFilters,
     });
 
   const expandingConfig = useExpandingConfig({
@@ -679,14 +681,14 @@ const ExperimentsPage: React.FC = () => {
             dimension="sm"
           ></SearchInput>
           <FiltersButton
-            columns={filterAndGroupColumns}
+            columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
             layout="icon"
           />
           <GroupsButton
-            columns={filterAndGroupColumns}
+            columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}

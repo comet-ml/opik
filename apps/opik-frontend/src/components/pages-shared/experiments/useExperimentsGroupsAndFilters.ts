@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { JsonParam } from "use-query-params";
 import { ColumnSort } from "@tanstack/react-table";
 
@@ -16,7 +16,32 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
-import { usePermissions } from "@/contexts/PermissionsContext";
+
+export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
+  {
+    id: COLUMN_PROJECT_ID,
+    label: "Project",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Configuration",
+    type: COLUMN_TYPE.dictionary,
+  },
+];
 
 const DEFAULT_GROUPS: Groups = [];
 
@@ -25,7 +50,6 @@ export type UseExperimentsGroupsAndFiltersProps = {
   sortedColumns: ColumnSort[];
   filters: Filters;
   promptId?: string;
-  setFilters: (filters: Filters) => void;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -33,7 +57,6 @@ export const useExperimentsGroupsAndFilters = ({
   sortedColumns,
   filters,
   promptId,
-  setFilters,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -41,43 +64,6 @@ export const useExperimentsGroupsAndFilters = ({
     defaultValue: DEFAULT_GROUPS,
     queryParamConfig: JsonParam,
   });
-
-  const {
-    permissions: { canViewDatasets },
-  } = usePermissions();
-
-  const filterAndGroupColumns: ColumnData<GroupedExperiment>[] = useMemo(
-    () => [
-      {
-        id: COLUMN_PROJECT_ID,
-        label: "Project",
-        type: COLUMN_TYPE.string,
-        disposable: true,
-      },
-      ...(canViewDatasets
-        ? [
-            {
-              id: COLUMN_DATASET_ID,
-              label: "Dataset",
-              type: COLUMN_TYPE.string,
-              disposable: true,
-            },
-          ]
-        : []),
-      {
-        id: "tags",
-        label: "Tags",
-        type: COLUMN_TYPE.list,
-        iconType: "tags",
-      },
-      {
-        id: COLUMN_METADATA_ID,
-        label: "Configuration",
-        type: COLUMN_TYPE.dictionary,
-      },
-    ],
-    [canViewDatasets],
-  );
 
   const filtersAndGroupsConfig = useMemo(
     () => ({
@@ -115,17 +101,9 @@ export const useExperimentsGroupsAndFilters = ({
     [filters, sortedColumns, promptId],
   );
 
-  useEffect(() => {
-    if (!canViewDatasets) {
-      setGroups(groups.filter((g) => g.field !== COLUMN_DATASET_ID));
-      setFilters(filters.filter((f) => f.field !== COLUMN_DATASET_ID));
-    }
-  }, [canViewDatasets, groups, filters, setGroups, setFilters]);
-
   return {
     groups,
     setGroups,
-    filterAndGroupColumns,
     filtersAndGroupsConfig,
   };
 };
