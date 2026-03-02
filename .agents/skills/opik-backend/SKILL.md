@@ -10,6 +10,23 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 - **DI**: Guice modules, constructor injection with `@Inject`
 - **Databases**: MySQL (metadata, transactional) + ClickHouse (analytics, append-only)
 
+## Naming Conventions
+
+### Always Use Plural Names
+- **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
+- **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
+- **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
+
+```java
+// ✅ GOOD
+@Path("/v1/private/traces")
+public class TracesResource { }
+
+// ❌ BAD - singular names
+@Path("/v1/private/trace")
+public class TraceResource { }
+```
+
 ## Critical Gotchas
 
 ### StringTemplate Memory Leak
