@@ -115,6 +115,7 @@ class EvaluationSuite:
         Each item dict has keys:
         - "id": the dataset item ID (str)
         - "data": the test case data (dict)
+        - "description": optional item description (str or None)
         - "evaluators": list of LLMJudge instances (or empty list)
         - "execution_policy": ExecutionPolicyItem or None
 
@@ -146,6 +147,7 @@ class EvaluationSuite:
                 {
                     "id": item.id,
                     "data": item.get_content(),
+                    "description": item.description,
                     "evaluators": evaluator_objects,
                     "execution_policy": item.execution_policy,
                 }
@@ -228,6 +230,8 @@ class EvaluationSuite:
         self,
         data: Dict[str, Any],
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
+        *,
+        description: Optional[str] = None,
         execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
     ) -> None:
         """
@@ -239,6 +243,7 @@ class EvaluationSuite:
                 Example: {"user_input": "How do I get a refund?", "user_tier": "premium"}
             evaluators: Item-specific LLMJudge evaluators. If provided, these are
                 used in addition to suite-level evaluators.
+            description: Optional description of this test case.
             execution_policy: Item-specific execution policy override.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
 
@@ -248,6 +253,7 @@ class EvaluationSuite:
         Example:
             >>> suite.add_item(
             ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
+            ...     description="Test refund request from premium user",
             ...     evaluators=[
             ...         LLMJudge(assertions=["Response is polite"]),
             ...     ]
@@ -280,6 +286,7 @@ class EvaluationSuite:
 
         ds_item = dataset_item.DatasetItem(
             id=item_id,
+            description=description,
             evaluators=evaluator_items,
             execution_policy=execution_policy_item,
             **data,

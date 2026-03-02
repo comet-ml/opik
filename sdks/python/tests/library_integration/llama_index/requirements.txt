@@ -1,3 +1,2 @@
 llama-index
-llama-index-agent-openai
 llama-index-llms-openai
