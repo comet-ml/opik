@@ -44,6 +44,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: Prompt) => p.id;
 
@@ -207,6 +208,10 @@ const PromptsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
+  const {
+    permissions: { canDeletePrompts },
+  } = usePermissions();
+
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -355,8 +360,12 @@ const PromptsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <PromptsActionsPanel prompts={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeletePrompts && (
+            <>
+              <PromptsActionsPanel prompts={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
