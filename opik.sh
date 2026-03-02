@@ -295,7 +295,6 @@ check_containers_status() {
   check_docker_status
 
   local containers=("${CONTAINERS[@]}")
-
   for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
     health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
@@ -363,7 +362,6 @@ start_missing_containers() {
   all_running=true
 
   local containers=("${CONTAINERS[@]}")
-
   for container in "${containers[@]}"; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
 
