@@ -33,7 +33,8 @@ Opik le ayuda a crear, probar y optimizar aplicaciones de IA generativa que func
     <a href="https://chat.comet.com"><b>Comunidad Slack</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>Registro de cambios</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentación</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentación</b></a> •
+<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
