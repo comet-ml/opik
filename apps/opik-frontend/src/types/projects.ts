@@ -24,6 +24,7 @@ export type ProjectErrorCount = {
 export interface ProjectStatistic {
   project_id?: string;
   usage?: UsageData;
+  usage_sum?: UsageData;
   feedback_scores?: AggregatedFeedbackScore[];
   total_estimated_cost_sum?: number;
   duration?: AggregatedDuration;
