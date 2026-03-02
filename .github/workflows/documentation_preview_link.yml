@@ -15,7 +15,7 @@ jobs:
               uses: actions/checkout@v4
                 
             - name: Install Fern
-              run: npm install -g fern-api@0.64.26
+              run: npm install -g fern-api@4.0.1
 
             - name: Generate preview URL
               id: generate-docs
