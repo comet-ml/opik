@@ -33,8 +33,7 @@ O Opik ajuda você a construir, testar e otimizar aplicações de IA generativa 
     <a href="https://chat.comet.com"><b>Comunidade Slack</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>Changelog</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentação</b></a> •
-<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentação</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
@@ -238,6 +237,7 @@ A maneira mais fácil de registrar traces é usar uma de nossas integrações di
 | OpenAI (Python)       | Registra traces para chamadas LLM da OpenAI                            | [Documentação](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |
 | OpenAI (JS/TS)        | Registra traces para chamadas da OpenAI em JavaScript/TypeScript       | [Documentação](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik)         |
 | OpenAI Agents         | Registra traces para chamadas do SDK OpenAI Agents                     | [Documentação](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik)                 |
+| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | OpenRouter            | Registra traces para chamadas LLM do OpenRouter                         | [Documentação](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik)                       |
 | OpenTelemetry         | Registra traces para chamadas compatíveis com OpenTelemetry            | [Documentação](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik)             |
 | OpenWebUI             | Registra traces para conversas no OpenWebUI                            | [Documentação](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik)                         |
