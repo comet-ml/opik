@@ -50,6 +50,7 @@ describe("Opik client batching", () => {
   let createTracesSpy: MockInstance<typeof client.api.traces.createTraces>;
   let updateTracesSpy: MockInstance<typeof client.api.traces.updateTrace>;
   let loggerErrorSpy: MockInstance<typeof logger.error>;
+  let loggerInfoSpy: MockInstance<typeof logger.info>;
 
   beforeEach(() => {
     client = new Opik({
@@ -73,6 +74,7 @@ describe("Opik client batching", () => {
       .mockImplementation(mockAPIFunction);
 
     loggerErrorSpy = vi.spyOn(logger, "error");
+    loggerInfoSpy = vi.spyOn(logger, "info");
 
     vi.useFakeTimers();
   });
@@ -85,6 +87,7 @@ describe("Opik client batching", () => {
     updateSpansSpy.mockRestore();
     updateTracesSpy.mockRestore();
     loggerErrorSpy.mockRestore();
+    loggerInfoSpy.mockRestore();
   });
 
   it("basic create and update with flush flow - merge entity locally", async () => {
@@ -143,9 +146,10 @@ describe("Opik client batching", () => {
     await client.flush();
 
     expect(createTracesSpy).toHaveBeenCalledTimes(1);
-    expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
-    expect(loggerErrorSpy.mock.calls[0].flat().toString()).toContain(
-      errorMessage
+    expect(loggerErrorSpy).toHaveBeenCalled();
+    expect(loggerErrorSpy.mock.calls.flat().toString()).toContain(errorMessage);
+    expect(loggerInfoSpy).not.toHaveBeenCalledWith(
+      "Successfully flushed all data to Opik"
     );
   });
 
