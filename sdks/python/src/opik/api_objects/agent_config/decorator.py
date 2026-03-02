@@ -200,7 +200,7 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     cache = get_cached_config(instance)
     instance_field_types = instance.__opik_field_types__
 
-    extra_keys = set(instance_field_types) - set(cache.values.keys())
+    extra_keys = set(instance_field_types.keys()) - set(cache.values.keys())
     # If no difference with cache - no need to do any extra fetches
     if not extra_keys:
         return
