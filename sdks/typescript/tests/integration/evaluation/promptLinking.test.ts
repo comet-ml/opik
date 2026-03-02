@@ -6,6 +6,7 @@ import { ExperimentConfigError } from "@/errors/experiment";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import {
   createQADataset,
@@ -13,7 +14,7 @@ import {
   cleanupPrompts,
 } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
   let client: Opik;

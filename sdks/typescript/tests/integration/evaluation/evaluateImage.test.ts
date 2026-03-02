@@ -6,6 +6,7 @@ import { Contains } from "@/evaluation/metrics/heuristics/Contains";
 import {
   getIntegrationTestStatus,
   shouldRunIntegrationTests,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { cleanupDatasets, cleanupPrompts } from "./helpers/testData";
 import type { EvaluationTestResult } from "@/evaluation/types";
@@ -177,7 +178,7 @@ function validateTestResult(testResult: EvaluationTestResult) {
   expect(Array.isArray(testResult.scoreResults)).toBe(true);
 }
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 /**
  * Main Test Suite: Comprehensive multimodal evaluation testing
