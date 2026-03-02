@@ -239,7 +239,7 @@ def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     )
     # Tag new blueprint with the env
     if not existing and env_val is not None and bp.id is not None:
-        agent_cfg.tag_bluepring_with_env(env=env_val, blueprint_id=bp.id)
+        agent_cfg.tag_blueprint_with_env(env=env_val, blueprint_id=bp.id)
     cache.update(bp)
 
 

@@ -146,7 +146,7 @@ class AgentConfig:
             rest_client_=self._rest_client,
         )
 
-    def tag_bluepring_with_env(self, env: str, blueprint_id: str) -> None:
+    def tag_blueprint_with_env(self, env: str, blueprint_id: str) -> None:
         """Associate a blueprint with an environment name.
 
         Args:
