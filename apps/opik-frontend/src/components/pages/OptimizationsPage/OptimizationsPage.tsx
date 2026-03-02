@@ -415,13 +415,15 @@ const OptimizationsPage: React.FunctionComponent = () => {
               className="w-[320px]"
               dimension="sm"
             ></SearchInput>
-            <FiltersButton
-              columns={FILTER_COLUMNS}
-              config={filtersConfig as never}
-              filters={filters}
-              onChange={setFilters}
-              layout="icon"
-            />
+            {canViewDatasets && (
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                config={filtersConfig as never}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            )}
           </div>
           <div className="flex items-center gap-2">
             <OptimizationsActionsPanel optimizations={selectedRows} />
