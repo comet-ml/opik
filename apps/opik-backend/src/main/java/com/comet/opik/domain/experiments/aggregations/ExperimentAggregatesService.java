@@ -105,6 +105,7 @@ public class ExperimentAggregatesService {
     }
 
     public Mono<Long> countTotal(@NonNull ExperimentSearchCriteria criteria, @NonNull Set<UUID> targetProjectIds) {
+        log.info("Counting experiments from aggregates by '{}'", criteria);
         return experimentAggregatesDAO.countTotal(criteria, targetProjectIds);
     }
 }

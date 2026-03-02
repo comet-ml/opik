@@ -155,16 +155,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_PROJECT_ID = """
             WITH experiment_trace_items AS (
-                SELECT
-                    DISTINCT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
             )
             SELECT DISTINCT project_id
             FROM traces FINAL
-            INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
             WHERE workspace_id = :workspace_id
+            AND id IN (SELECT trace_id FROM experiment_trace_items)
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -176,7 +177,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String GET_TRACE_AGGREGATIONS = """
             WITH experiment_trace_items AS (
                 SELECT DISTINCT trace_id
-                FROM experiment_items FINAL
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             ), traces_data AS (
@@ -217,8 +218,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_SPAN_AGGREGATIONS = """
             WITH experiment_items AS (
-                SELECT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             ), spans_data AS (
@@ -278,10 +279,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_FEEDBACK_SCORE_AGGREGATIONS = """
             WITH experiment_items AS (
-                SELECT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY id
             ), feedback_scores_combined AS (
                 SELECT
                     entity_id,
@@ -1387,7 +1390,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private Flux<? extends Result> countTotalFromAggregates(
             ExperimentSearchCriteria experimentSearchCriteria, io.r2dbc.spi.Connection connection,
             Set<UUID> targetProjectIds) {
-        log.info("Counting experiments from aggregates by '{}'", experimentSearchCriteria);
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = buildCountTemplate(experimentSearchCriteria, workspaceId, targetProjectIds);
 
