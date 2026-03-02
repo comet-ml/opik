@@ -124,8 +124,10 @@ def agent_config_decorator(
                 _inject_trace_metadata(instance, attr, value=masked)
                 return masked
 
-            value = _get_base_value(instance, attr)
-            _inject_trace_metadata(instance, attr, value=value)
+            cache = get_cached_config(instance)
+            prefixed_key = instance.__opik_field_map__[attr]
+            value = cache.values.get(prefixed_key, _MISSING)
+            _inject_trace_metadata(instance, attr, value=value, cache=cache)
             return value if value is not _MISSING else original_getattribute(self, attr)
 
         cls.__getattribute__ = new_getattribute  # type: ignore[assignment]
@@ -182,13 +184,6 @@ def _init_cache_entry(
         _ensure_refresh_thread_started()
 
     return shared_cache
-
-
-def _get_base_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
-    """Return the cached blueprint value for ``attr``, or ``_MISSING``."""
-    cache = get_cached_config(instance)
-    prefixed_key = instance.__opik_field_map__[attr]
-    return cache.values.get(prefixed_key, _MISSING)
 
 
 def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
@@ -318,7 +313,11 @@ def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
 
 
 def _inject_trace_metadata(
-    instance: AgentConfigInstance, attr: str, value: typing.Any = _MISSING
+    instance: AgentConfigInstance,
+    attr: str,
+    value: typing.Any = _MISSING,
+    *,
+    cache: typing.Optional[SharedConfigCache] = None,
 ) -> None:
     """Attach the accessed config value to the active trace's metadata.
 
@@ -331,7 +330,7 @@ def _inject_trace_metadata(
             when ``_MISSING``.
     """
     try:
-        cache = get_cached_config(instance)
+        cache = cache if cache is not None else get_cached_config(instance)
         prefixed_key = instance.__opik_field_map__[attr]
 
         if value is not _MISSING:
