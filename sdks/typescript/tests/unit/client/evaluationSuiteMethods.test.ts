@@ -35,6 +35,7 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
 
 vi.mock("@/evaluation/suite_evaluators/validators", () => ({
   validateEvaluators: vi.fn(),
+  validateExecutionPolicy: vi.fn(),
 }));
 
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
@@ -125,7 +126,7 @@ describe("EvaluationSuite static methods", () => {
                 type: "llm_judge",
               }),
             ],
-            executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+            execution_policy: { runs_per_item: 3, pass_threshold: 2 },
           }),
         })
       );

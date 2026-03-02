@@ -579,6 +579,7 @@ export class OpikClient {
     optimizationId,
     datasetVersionId,
     evaluationMethod,
+    tags,
   }: {
     datasetName: string;
     name?: string;
@@ -588,6 +589,7 @@ export class OpikClient {
     optimizationId?: string;
     datasetVersionId?: string;
     evaluationMethod?: string;
+    tags?: string[];
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -602,7 +604,7 @@ export class OpikClient {
     );
 
     const id = generateId();
-    const experiment = new Experiment({ id, name, datasetName, prompts }, this);
+    const experiment = new Experiment({ id, name, datasetName, prompts, tags }, this);
 
     try {
       await this.api.experiments.createExperiment({
@@ -614,6 +616,7 @@ export class OpikClient {
         type,
         optimizationId,
         datasetVersionId,
+        tags,
         // TODO: pass evaluationMethod here once Fern-generated ExperimentWrite includes the field
       });
 

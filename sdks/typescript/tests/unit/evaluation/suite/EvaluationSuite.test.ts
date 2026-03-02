@@ -465,15 +465,16 @@ describe("EvaluationSuite", () => {
         "suite-level evaluators"
       );
       expect(applyChangesSpy).toHaveBeenCalledWith("suite-ds-id", {
+        override: false,
         body: {
-          baseVersion: "version-1",
+          base_version: "version-1",
           evaluators: [
             expect.objectContaining({
               name: "correctness-judge",
               type: "llm_judge",
             }),
           ],
-          executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+          execution_policy: { runs_per_item: 3, pass_threshold: 2 },
         },
       });
     });

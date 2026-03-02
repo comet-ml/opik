@@ -38,6 +38,9 @@ export interface EvaluateSuiteOptions<T = Record<string, unknown>> {
 
   /** Optional Opik client instance */
   client?: OpikClient;
+
+  /** Optional list of tags to associate with the experiment */
+  tags?: string[];
 }
 
 /**
@@ -97,6 +100,7 @@ export async function evaluateSuite<T = Record<string, unknown>>(
     prompts: options.prompts,
     datasetVersionId: versionInfo?.id,
     evaluationMethod: "evaluation_suite",
+    tags: options.tags,
   });
 
   try {

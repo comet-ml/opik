@@ -177,7 +177,7 @@ describe("PromptVersion", () => {
 
     it("should return age for old dates", () => {
       const oneMonthAgo = new Date();
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 45);
 
       const version = new PromptVersion({
         versionId: "version-123",
