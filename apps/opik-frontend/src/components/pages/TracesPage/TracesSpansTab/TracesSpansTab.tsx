@@ -1225,7 +1225,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder={`Search ${type}...`}
             className="w-[320px]"
             dimension="sm"
-            active={!isPlaceholderData && !!trimmedSearch}
           />
           <FiltersButton
             columns={filtersColumnData}
