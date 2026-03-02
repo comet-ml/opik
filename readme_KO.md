@@ -32,7 +32,8 @@ Opik은 프로토타입부터 프로덕션까지, 더 나은 생성형 AI 애플
     <a href="https://chat.comet.com"><b>Slack 커뮤니티</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>Changelog</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>문서</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>문서</b></a> •
+<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
