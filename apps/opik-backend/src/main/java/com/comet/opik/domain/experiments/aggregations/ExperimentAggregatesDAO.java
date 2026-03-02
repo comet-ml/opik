@@ -25,6 +25,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
@@ -628,6 +629,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(experiment_scores_filters)> AND <experiment_scores_filters> <endif>
             <if(experiment_scores_empty_filters)> AND <experiment_scores_empty_filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
+            <if(has_target_projects)> AND project_id IN :target_project_ids <endif>
             <if(project_deleted)> AND (has(ep.project_ids, '') OR empty(ep.project_ids)) <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1402,8 +1404,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
-            // Bind target project IDs (from separate query to reduce table scans)
-            if (targetProjectIds != null && !targetProjectIds.isEmpty()) {
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                 statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
             }
 
@@ -1438,8 +1439,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .filter(experimentIds -> experimentIds != null && !experimentIds.isEmpty())
                 .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
 
-        // Add target project IDs flag to template (from separate query to reduce table scans)
-        if (targetProjectIds != null && !targetProjectIds.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(targetProjectIds)) {
             template.add("has_target_projects", true);
         }
 
