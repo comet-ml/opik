@@ -57,7 +57,7 @@
     "README.md"
   ],
   "peerDependencies": {
-    "@langchain/core": "^0.3.78",
+    "@langchain/core": "^0.3.78 || ^1.0.0",
     "opik": "^1.8.75"
   },
   "devDependencies": {
