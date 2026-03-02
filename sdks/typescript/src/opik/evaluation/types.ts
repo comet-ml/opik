@@ -43,6 +43,9 @@ export type EvaluationScoreResult = {
 
   /** Whether the scoring failed */
   scoringFailed?: boolean;
+
+  /** Optional category name for grouping scores (e.g., "suite_assertion") */
+  categoryName?: string;
 };
 
 /**
@@ -71,4 +74,10 @@ export type EvaluationTestResult = {
 
   /** Results from all metrics for this test case */
   scoreResults: EvaluationScoreResult[];
+
+  /** Run index (0, 1, 2...) for multi-run evaluation suites */
+  trialId?: number;
+
+  /** Resolved per-item execution policy (set by engine in suite mode). */
+  resolvedExecutionPolicy?: { runsPerItem: number; passThreshold: number };
 };

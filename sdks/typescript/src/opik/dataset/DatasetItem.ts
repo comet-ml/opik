@@ -1,6 +1,8 @@
 import { DatasetItemWriteSource } from "@/rest_api/api";
 import { JsonNode } from "@/rest_api/api/types/JsonNode";
 import { DatasetItemWrite } from "@/rest_api/api/types/DatasetItemWrite";
+import { EvaluatorItemWrite } from "@/rest_api/api/types/EvaluatorItemWrite";
+import { ExecutionPolicyWrite } from "@/rest_api/api/types/ExecutionPolicyWrite";
 import { generateId } from "@/utils/generateId";
 import stringify from "fast-json-stable-stringify";
 import { initHashApi } from "@/utils/hash";
@@ -20,6 +22,8 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
   public readonly traceId?: string;
   public readonly spanId?: string;
   public readonly source: DatasetItemWriteSource;
+  public readonly evaluators?: EvaluatorItemWrite[];
+  public readonly executionPolicy?: ExecutionPolicyWrite;
   private readonly data: T;
 
   constructor(
@@ -28,14 +32,18 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
       traceId?: string;
       spanId?: string;
       source?: DatasetItemWriteSource;
+      evaluators?: EvaluatorItemWrite[];
+      executionPolicy?: ExecutionPolicyWrite;
     } & T
   ) {
-    const { id, traceId, spanId, source, ...rest } = params;
+    const { id, traceId, spanId, source, evaluators, executionPolicy, ...rest } = params;
 
     this.id = id || generateId();
     this.traceId = traceId;
     this.spanId = spanId;
     this.source = source || DatasetItemWriteSource.Sdk;
+    this.evaluators = evaluators;
+    this.executionPolicy = executionPolicy;
     this.data = { ...rest } as T;
   }
 
@@ -83,6 +91,8 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
       spanId: this.spanId,
       source: this.source,
       data: this.getContent(),
+      ...(this.evaluators && { evaluators: this.evaluators }),
+      ...(this.executionPolicy && { executionPolicy: this.executionPolicy }),
     };
   }
 
@@ -100,6 +110,8 @@ export class DatasetItem<T extends DatasetItemData = DatasetItemData> {
       traceId: model.traceId,
       spanId: model.spanId,
       source: model.source,
+      ...(model.evaluators && { evaluators: model.evaluators }),
+      ...(model.executionPolicy && { executionPolicy: model.executionPolicy }),
       ...(model.data as T),
     });
   }
