@@ -22,6 +22,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
@@ -39,6 +40,10 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   const isDatasetExportEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_EXPORT_ENABLED,
   );
+
+  const {
+    permissions: { canDeleteDatasets },
+  } = usePermissions();
 
   const deleteDatasetHandler = useCallback(() => {
     deleteDataset({
@@ -121,17 +126,21 @@ export const DatasetRowActionsCell: React.FunctionComponent<
               Download
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-            variant="destructive"
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {canDeleteDatasets && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(1);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>
