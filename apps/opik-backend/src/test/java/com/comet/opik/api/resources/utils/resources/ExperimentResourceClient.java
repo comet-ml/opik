@@ -77,7 +77,10 @@ public class ExperimentResourceClient {
                 .usage(null)
                 .projectId(null)
                 .datasetVersionId(null)
-                .datasetVersionSummary(null);
+                .datasetVersionSummary(null)
+                .passRate(null)
+                .passedCount(null)
+                .totalCount(null);
     }
 
     public List<Experiment> generateExperimentList() {
