@@ -5,9 +5,9 @@ import typing
 from opik import exceptions, opik_context
 from opik.api_objects import opik_client
 from . import type_helpers
-from .blueprint import Blueprint
-from .cache import SharedConfigCache, get_shared_cache, _ensure_refresh_thread_started
-from .config import AgentConfig
+from . import blueprint
+from . import cache
+from . import config
 from .context import get_active_config_mask
 
 logger = logging.getLogger(__name__)
@@ -22,13 +22,20 @@ class AgentConfigInstance(typing.Protocol):
     __opik_mask_id__: typing.Optional[str]
     __opik_env__: typing.Optional[str]
     __opik_description__: typing.Optional[str]
-    __opik_agent_config__: typing.Optional[AgentConfig]
+    __opik_agent_config__: typing.Optional[config.AgentConfig]
     __opik_project__: str
 
 
 # Attribute name references derived from the protocol — avoids magic strings at call sites.
 # e.g. _F.__opik_field_map__ == "__opik_field_map__"
-_F = type("_F", (), {k: k for k in typing.get_type_hints(AgentConfigInstance)})()
+_F = type(
+    "_F",
+    (),
+    {
+        k: k
+        for k in typing.get_type_hints(AgentConfigInstance, localns={"config": config})
+    },
+)()
 
 
 def agent_config_decorator(
@@ -89,7 +96,7 @@ def agent_config_decorator(
             client = opik_client.get_client_cached()
 
             resolved_project = project or client.project_name
-            agent_cfg = AgentConfig(
+            agent_cfg = config.AgentConfig(
                 project_name=resolved_project,
                 rest_client_=client.rest_client,
             )
@@ -124,10 +131,12 @@ def agent_config_decorator(
                 _inject_trace_metadata(instance, attr, value=masked)
                 return masked
 
-            cache = get_cached_config(instance)
+            instance_cache = get_cached_config(instance)
             prefixed_key = instance.__opik_field_map__[attr]
-            value = cache.values.get(prefixed_key, _MISSING)
-            _inject_trace_metadata(instance, attr, value=value, cache=cache)
+            value = instance_cache.values.get(prefixed_key, _MISSING)
+            _inject_trace_metadata(
+                instance, attr, value=value, shared_cache=instance_cache
+            )
             return value if value is not _MISSING else original_getattribute(self, attr)
 
         cls.__getattribute__ = new_getattribute  # type: ignore[assignment]
@@ -139,9 +148,9 @@ def agent_config_decorator(
     return wrap(cls)
 
 
-def get_cached_config(instance: AgentConfigInstance) -> SharedConfigCache:
+def get_cached_config(instance: AgentConfigInstance) -> cache.SharedConfigCache:
     """Helper method to create a key from the current instance and fetch it from the cache"""
-    return get_shared_cache(
+    return cache.get_shared_cache(
         instance.__opik_project__,
         instance.__opik_env__,
         instance.__opik_mask_id__,
@@ -153,8 +162,8 @@ def _init_cache_entry(
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
     prefixed_field_types: typing.Dict[str, typing.Any],
-    agent_cfg: typing.Optional[AgentConfig] = None,
-) -> SharedConfigCache:
+    agent_cfg: typing.Optional[config.AgentConfig] = None,
+) -> cache.SharedConfigCache:
     """Initialise (or return the existing) shared cache entry for a config key.
 
     Registers the given field types and, when ``agent_cfg`` is provided and no
@@ -168,12 +177,12 @@ def _init_cache_entry(
         prefixed_field_types: Mapping of prefixed field key to Python type.
         agent_cfg: ``AgentConfig`` instance used to build the refresh callback.
     """
-    shared_cache = get_shared_cache(resolved_project, env, mask_id)
+    shared_cache = cache.get_shared_cache(resolved_project, env, mask_id)
     shared_cache.register_fields(prefixed_field_types)
 
     if agent_cfg is not None and mask_id is None:
 
-        def _refresh() -> typing.Optional["Blueprint"]:
+        def _refresh() -> typing.Optional[blueprint.Blueprint]:
             return agent_cfg.get_blueprint(
                 env=env,
                 mask_id=mask_id,
@@ -181,7 +190,7 @@ def _init_cache_entry(
             )
 
         shared_cache.set_refresh_callback(_refresh)
-        _ensure_refresh_thread_started()
+        cache._ensure_refresh_thread_started()
 
     return shared_cache
 
@@ -197,10 +206,10 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     if agent_cfg is None:
         return
 
-    cache = get_cached_config(instance)
+    shared_cache = get_cached_config(instance)
     instance_field_types = instance.__opik_field_types__
 
-    extra_keys = set(instance_field_types.keys()) - set(cache.values.keys())
+    extra_keys = set(instance_field_types.keys()) - set(shared_cache.values.keys())
     # If no difference with cache - no need to do any extra fetches
     if not extra_keys:
         return
@@ -220,7 +229,7 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         extra_keys = set(instance_field_types) - set(existing.values)
         # No need to update the pinned version
         if pinned or not extra_keys:
-            cache.update(existing)
+            shared_cache.update(existing)
             return
 
     # Create new version if no blueprint exists or keys need updating
@@ -231,21 +240,21 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         else {k for k, v in field_map.items() if v in extra_keys}
     )
     bp = _create_blueprint(
-        instance, agent_cfg, local_keys, instance.__opik_description__, cache
+        instance, agent_cfg, local_keys, instance.__opik_description__, shared_cache
     )
     # Tag new blueprint with the env
     if not existing and env_val is not None and bp.id is not None:
         agent_cfg.tag_blueprint_with_env(env=env_val, blueprint_id=bp.id)
-    cache.update(bp)
+    shared_cache.update(bp)
 
 
 def _create_blueprint(
     instance: AgentConfigInstance,
-    agent_cfg: AgentConfig,
+    agent_cfg: config.AgentConfig,
     local_keys: typing.Iterable[str],
     description: typing.Optional[str],
-    cache: SharedConfigCache,
-) -> Blueprint:
+    shared_cache: cache.SharedConfigCache,
+) -> blueprint.Blueprint:
     """Create a new blueprint from the instance's current field values.
 
     Args:
@@ -266,7 +275,7 @@ def _create_blueprint(
     bp = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
         description=description,
-        field_types=cache.all_field_types,
+        field_types=shared_cache.all_field_types,
     )
     return bp
 
@@ -291,7 +300,7 @@ def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
         prefixed_key = instance.__opik_field_map__[attr]
 
         base_cache = get_cached_config(instance)
-        mask_cache = get_shared_cache(
+        mask_cache = cache.get_shared_cache(
             instance.__opik_project__, instance.__opik_env__, context_mask
         )
         mask_cache.register_fields(base_cache.all_field_types)
@@ -317,7 +326,7 @@ def _inject_trace_metadata(
     attr: str,
     value: typing.Any = _MISSING,
     *,
-    cache: typing.Optional[SharedConfigCache] = None,
+    shared_cache: typing.Optional[cache.SharedConfigCache] = None,
 ) -> None:
     """Attach the accessed config value to the active trace's metadata.
 
@@ -330,19 +339,21 @@ def _inject_trace_metadata(
             when ``_MISSING``.
     """
     try:
-        cache = cache if cache is not None else get_cached_config(instance)
+        resolved_cache = (
+            shared_cache if shared_cache is not None else get_cached_config(instance)
+        )
         prefixed_key = instance.__opik_field_map__[attr]
 
         if value is not _MISSING:
             values = {prefixed_key: value}
-        elif prefixed_key in cache.values:
-            values = {prefixed_key: cache.values[prefixed_key]}
+        elif prefixed_key in resolved_cache.values:
+            values = {prefixed_key: resolved_cache.values[prefixed_key]}
         else:
             values = {}
 
         config_metadata = {
             "agent_configuration": {
-                "blueprint_id": cache.blueprint_id,
+                "blueprint_id": resolved_cache.blueprint_id,
                 "values": values,
             }
         }
