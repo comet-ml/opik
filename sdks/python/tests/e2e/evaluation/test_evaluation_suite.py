@@ -645,11 +645,23 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
         execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
 
-    suite.add_item(data={"input": {"question": "What is the capital of France?"}})
-    suite.add_item(data={"input": {"question": "What is the capital of Germany?"}})
+    suite.add_item(
+        data={"input": {"question": "What is the capital of France?"}},
+        description="Geography: France capital",
+    )
+    suite.add_item(
+        data={"input": {"question": "What is the capital of Germany?"}},
+        description="Geography: Germany capital",
+    )
 
     # 2. Retrieve from backend (simulates a fresh client loading existing suite)
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
+
+    # Verify item descriptions survived the round-trip
+    retrieved_items = retrieved_suite.get_items()
+    retrieved_descriptions = {i["description"] for i in retrieved_items}
+    assert "Geography: France capital" in retrieved_descriptions
+    assert "Geography: Germany capital" in retrieved_descriptions
 
     # 3. Run the retrieved suite — evaluators/execution_policy come from BE
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -691,12 +703,24 @@ def test_evaluation_suite__delete_items__items_removed(
         description="Test delete items",
     )
 
-    suite.add_item(data={"input": {"question": "Question 1"}})
-    suite.add_item(data={"input": {"question": "Question 2"}})
+    suite.add_item(
+        data={"input": {"question": "Question 1"}},
+        description="First question",
+    )
+    suite.add_item(
+        data={"input": {"question": "Question 2"}},
+        description="Second question",
+    )
     suite.add_item(data={"input": {"question": "Question 3"}})
 
     items = suite.get_items()
     assert len(items) == 3
+
+    # Verify descriptions are present before deletion
+    descriptions = {i["description"] for i in items}
+    assert "First question" in descriptions
+    assert "Second question" in descriptions
+    assert None in descriptions
 
     item_id_to_delete = items[0]["id"]
 
@@ -772,11 +796,12 @@ def test_evaluation_suite__get_execution_policy__default_when_not_set(
     assert policy["pass_threshold"] == 1
 
 
-def test_evaluation_suite__get_items__returns_items_with_evaluators(
+def test_evaluation_suite__get_items__returns_items_with_evaluators_and_description(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
-    Test that get_items() returns items with evaluators as LLMJudge instances.
+    Test that get_items() returns items with evaluators as LLMJudge instances
+    and preserves item descriptions through the round-trip.
     """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
@@ -785,6 +810,7 @@ def test_evaluation_suite__get_items__returns_items_with_evaluators(
 
     suite.add_item(
         data={"input": {"question": "What is 2 + 2?"}},
+        description="Math addition test case",
         evaluators=[LLMJudge(name="item_judge", assertions=["Response is correct"])],
     )
     suite.add_item(
@@ -794,6 +820,7 @@ def test_evaluation_suite__get_items__returns_items_with_evaluators(
     items = suite.get_items()
     assert len(items) == 2
     assert all("id" in item for item in items)
+    assert all("description" in item for item in items)
 
     items_with_evaluators = [i for i in items if len(i["evaluators"]) > 0]
     items_without_evaluators = [i for i in items if len(i["evaluators"]) == 0]
@@ -804,6 +831,10 @@ def test_evaluation_suite__get_items__returns_items_with_evaluators(
     item_evaluators = items_with_evaluators[0]["evaluators"]
     assert len(item_evaluators) == 1
     assert isinstance(item_evaluators[0], LLMJudge)
+
+    # Verify description round-trip
+    assert items_with_evaluators[0]["description"] == "Math addition test case"
+    assert items_without_evaluators[0]["description"] is None
 
 
 def test_evaluation_suite__update__changes_evaluators_and_policy(
