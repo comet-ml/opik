@@ -2,7 +2,7 @@ import dataclasses
 import logging
 import typing
 
-from opik import context_storage
+from opik import exceptions, opik_context
 from opik.api_objects import opik_client
 from . import type_helpers
 from .blueprint import Blueprint
@@ -331,10 +331,6 @@ def _inject_trace_metadata(
             when ``_MISSING``.
     """
     try:
-        trace_data = context_storage.get_trace_data()
-        if trace_data is None:
-            return
-
         cache = get_cached_config(instance)
         prefixed_key = instance.__opik_field_map__[attr]
 
@@ -352,6 +348,9 @@ def _inject_trace_metadata(
             }
         }
 
-        trace_data.update(metadata=config_metadata)
+        opik_context.update_current_trace(metadata=config_metadata)
+    except exceptions.OpikException:
+        # Happens when there's no trace in the context
+        pass
     except Exception:
         logger.debug("Failed to inject config metadata into trace", exc_info=True)

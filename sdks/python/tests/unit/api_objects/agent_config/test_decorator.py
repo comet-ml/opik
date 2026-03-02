@@ -303,10 +303,8 @@ class TestConfigDecoratorMaskAndEnv:
 class TestConfigDecoratorTraceMetadata:
     def test_field_access_inside_trace__injects_metadata(self, mock_backend):
         with mock.patch(
-            "opik.api_objects.agent_config.decorator.context_storage"
-        ) as mock_cs:
-            mock_trace_data = mock.Mock()
-            mock_cs.get_trace_data.return_value = mock_trace_data
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
 
             @agent_config_decorator
             @dataclasses.dataclass
@@ -316,8 +314,8 @@ class TestConfigDecoratorTraceMetadata:
             instance = MyConfig()
             _ = instance.temp
 
-            mock_trace_data.update.assert_called()
-            call_kwargs = mock_trace_data.update.call_args[1]
+            mock_update.assert_called()
+            call_kwargs = mock_update.call_args[1]
             assert "agent_configuration" in call_kwargs["metadata"]
             config = call_kwargs["metadata"]["agent_configuration"]
             assert "blueprint_id" in config
@@ -338,9 +336,9 @@ class TestConfigDecoratorTraceMetadata:
         )
 
         with mock.patch(
-            "opik.api_objects.agent_config.decorator.context_storage"
-        ) as mock_cs:
-            mock_cs.get_trace_data.return_value = trace_data
+            "opik.opik_context.context_storage.get_trace_data",
+            return_value=trace_data,
+        ):
 
             @agent_config_decorator
             @dataclasses.dataclass
@@ -370,10 +368,12 @@ class TestConfigDecoratorTraceMetadata:
             )
 
     def test_field_access_outside_trace__no_injection(self, mock_backend):
+        from opik import exceptions as opik_exceptions
+
         with mock.patch(
-            "opik.api_objects.agent_config.decorator.context_storage"
-        ) as mock_cs:
-            mock_cs.get_trace_data.return_value = None
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace",
+            side_effect=opik_exceptions.OpikException("no trace"),
+        ):
 
             @agent_config_decorator
             @dataclasses.dataclass
