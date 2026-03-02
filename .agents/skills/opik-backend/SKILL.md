@@ -12,8 +12,9 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 
 ## Naming Conventions
 
-### Plural Names (Resources, URLs, DB Tables)
+### Plural Names (Resources, Tests, URLs, DB Tables)
 - **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
+- **Resource test classes**: `TracesResourceTest`, `SpansResourceTest`, `DatasetsResourceTest` (not `TraceResourceTest`)
 - **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
 - **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
 
@@ -29,6 +30,12 @@ public class TracesResource { }
 // ✅ GOOD - DAO and Service use singular
 public class TraceDAO { }
 public class TraceService { }
+
+// ✅ GOOD - test classes match plural resource name
+public class TracesResourceTest { }
+
+// ❌ BAD - singular test class
+public class TraceResourceTest { }
 
 // ❌ BAD - singular resource/URL
 @Path("/v1/private/trace")
