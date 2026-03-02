@@ -223,6 +223,7 @@ class RawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -247,6 +248,8 @@ class RawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -280,6 +283,7 @@ class RawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
@@ -1258,6 +1262,7 @@ class AsyncRawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -1282,6 +1287,8 @@ class AsyncRawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -1315,6 +1322,7 @@ class AsyncRawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(

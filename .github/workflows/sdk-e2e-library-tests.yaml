@@ -20,16 +20,19 @@ on:
     pull_request:
         paths:
           - 'sdks/python/**'
+          - '.github/workflows/sdk-e2e-library-tests.yaml'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/python/**'
+          - '.github/workflows/sdk-e2e-library-tests.yaml'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: True  # unlike other workflows, here we need it for tests
   OPIK_SENTRY_ENABLE: False
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
+  OPIK_URL_OVERRIDE: http://localhost:8080
 
 jobs:
   has_needed_secrets:
@@ -92,7 +95,7 @@ jobs:
         shell: bash
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --build
+          ./opik.sh --backend --port-mapping --build
 
       - name: Check Opik server availability
         shell: bash
