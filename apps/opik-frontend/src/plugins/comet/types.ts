@@ -64,6 +64,7 @@ export enum ManagementPermissionsNames {
   EXPERIMENT_VIEW = "experiment_view",
   DASHBOARD_VIEW = "dashboard_view",
   PROJECT_DELETE = "project_delete",
+  ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
   PROMPT_DELETE = "prompt_delete",
 }
