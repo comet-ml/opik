@@ -1,7 +1,7 @@
 import { usePermissions } from "@/contexts/PermissionsContext";
 import NoAccessPageGuard from "@/components/layout/NoAccessPageGuard/NoAccessPageGuard";
 
-const ExperimentsPageGuard = () => {
+const DatasetsPageGuard = () => {
   const {
     permissions: { canViewDatasets },
   } = usePermissions();
@@ -11,4 +11,4 @@ const ExperimentsPageGuard = () => {
   );
 };
 
-export default ExperimentsPageGuard;
+export default DatasetsPageGuard;
