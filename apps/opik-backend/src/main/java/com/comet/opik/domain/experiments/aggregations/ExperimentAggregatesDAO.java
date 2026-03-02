@@ -17,6 +17,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
+import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
@@ -28,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -1396,8 +1398,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private Flux<? extends Result> countTotalFromAggregates(
-            ExperimentSearchCriteria experimentSearchCriteria, io.r2dbc.spi.Connection connection,
-            Set<UUID> targetProjectIds) {
+            ExperimentSearchCriteria experimentSearchCriteria, Connection connection, Set<UUID> targetProjectIds) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = buildCountTemplate(experimentSearchCriteria, workspaceId, targetProjectIds);
 
@@ -1413,7 +1414,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         });
     }
 
-    private org.stringtemplate.v4.ST buildCountTemplate(ExperimentSearchCriteria criteria, String workspaceId,
+    private ST buildCountTemplate(ExperimentSearchCriteria criteria, String workspaceId,
             Set<UUID> targetProjectIds) {
         var template = getSTWithLogComment(FIND_COUNT_FROM_AGGREGATES, "count_experiments_from_aggregates",
                 workspaceId, "");

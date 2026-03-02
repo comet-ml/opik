@@ -2083,6 +2083,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 batchGroupId,
                 workspaceId,
                 userName))
+                .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(RetryUtils.handleOnDeadLocks())
                 .doOnSuccess(version -> {
                     if (baseVersionId == null) {
