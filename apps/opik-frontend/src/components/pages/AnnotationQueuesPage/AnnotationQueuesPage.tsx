@@ -53,6 +53,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import useAppStore from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -242,6 +243,9 @@ export const AnnotationQueuesPage: React.FC = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const {
+    permissions: { canDeleteAnnotationQueues },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -448,8 +452,12 @@ export const AnnotationQueuesPage: React.FC = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <AnnotationQueuesActionsPanel queues={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteAnnotationQueues && (
+            <>
+              <AnnotationQueuesActionsPanel queues={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
