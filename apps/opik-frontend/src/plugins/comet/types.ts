@@ -67,6 +67,7 @@ export enum ManagementPermissionsNames {
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
   PROMPT_DELETE = "prompt_delete",
+  DATASET_DELETE = "dataset_delete",
 }
 
 export interface UserPermission {
