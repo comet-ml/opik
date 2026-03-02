@@ -22,6 +22,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.StatsUtils;
@@ -105,6 +106,7 @@ class OptimizationsResourceTest {
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
 
     private final WireMockUtils.WireMockRuntime wireMock;
     private final TestDropwizardAppExtensionUtils.AppContextConfig contextConfig;
@@ -113,7 +115,9 @@ class OptimizationsResourceTest {
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
+
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
 
         wireMock = WireMockUtils.startWireMock();
 
@@ -122,6 +126,7 @@ class OptimizationsResourceTest {
 
         MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
         MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
 
         contextConfig = TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                 .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
@@ -130,6 +135,8 @@ class OptimizationsResourceTest {
                 .redisUrl(REDIS.getRedisURI())
                 .authCacheTtlInSeconds(null)
                 .mockEventBus(Mockito.mock(EventBus.class))
+                .minioUrl(minioUrl)
+                .isMinIO(true)
                 .build();
 
         APP = newTestDropwizardAppExtension(contextConfig);
