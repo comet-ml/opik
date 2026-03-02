@@ -119,23 +119,28 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
     supportsPercentiles &&
     percentileStatistic?.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE;
 
-  // Calculate sum if needed: sum = count * avg
+  // Get sum value from backend stats
   let sumValue: number | null = null;
-  if (shouldDisplaySum && columnsStatistic && statistic?.value) {
-    const countStat = find(
-      columnsStatistic,
-      (s) =>
-        s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
-        (s.name === "trace_count" ||
-          s.name === "span_count" ||
-          s.name === "thread_count"),
-    );
-    if (countStat) {
-      sumValue = Number(countStat.value) * statistic.value;
+  if (shouldDisplaySum && columnsStatistic) {
+    // Map column key to its corresponding sum stat name
+    const sumStatName = statisticKey.startsWith("usage.")
+      ? statisticKey.replace("usage.", "usage_sum.")
+      : statisticKey === "total_estimated_cost"
+        ? "total_estimated_cost_sum"
+        : null;
 
-      // Round token counts to whole numbers (tokens are discrete units)
-      if (statisticKey && statisticKey.includes("tokens")) {
-        sumValue = Math.round(sumValue);
+    if (sumStatName) {
+      const sumStat = find(
+        columnsStatistic,
+        (s) =>
+          s.name === sumStatName && s.type === STATISTIC_AGGREGATION_TYPE.AVG,
+      );
+      if (sumStat) {
+        sumValue = Number(sumStat.value);
+
+        if (statisticKey.includes("tokens")) {
+          sumValue = Math.round(sumValue);
+        }
       }
     }
   }
