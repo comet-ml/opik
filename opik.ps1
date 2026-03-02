@@ -448,12 +448,13 @@ function Start-MissingContainers {
 
     if ($env:SKIP_PYTHON_BACKEND -eq "true") {
         $env:PYTHON_BACKEND_PULL_POLICY = "never"
-        $dockerArgs = Get-DockerComposeCommand
-        $dockerArgs += "up", "-d"
         if ($BUILD_MODE -eq "true") {
-            $dockerArgs += "--build"
+            $buildArgs = Get-DockerComposeCommand
+            $buildArgs += "build", "backend"
+            docker @buildArgs | Where-Object { $_.Trim() -ne '' }
         }
-        $dockerArgs += "--scale", "python-backend=0"
+        $dockerArgs = Get-DockerComposeCommand
+        $dockerArgs += "up", "-d", "--scale", "python-backend=0"
     } else {
         $dockerArgs = Get-DockerComposeCommand
         $dockerArgs += "up", "-d"
