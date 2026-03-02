@@ -636,6 +636,7 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     then run it. Verifies that suite-level config survives the round-trip.
     """
     suite_assertion = "The response correctly identifies Paris as the capital of France"
+    item_assertion = "Response is correct"
 
     # 1. Create suite with evaluators + execution_policy
     suite = opik_client.create_evaluation_suite(
@@ -647,6 +648,7 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
 
     suite.add_item(
         data={"input": {"question": "What is the capital of France?"}},
+        evaluators=[LLMJudge(name="item_judge", assertions=[item_assertion])],
         description="Geography: France capital",
     )
     suite.add_item(
@@ -662,6 +664,11 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     retrieved_descriptions = {i["description"] for i in retrieved_items}
     assert "Geography: France capital" in retrieved_descriptions
     assert "Geography: Germany capital" in retrieved_descriptions
+
+    # Verify item-level evaluators survived the round-trip
+    items_with_evaluators = [i for i in retrieved_items if len(i["evaluators"]) > 0]
+    assert len(items_with_evaluators) == 1
+    assert isinstance(items_with_evaluators[0]["evaluators"][0], LLMJudge)
 
     # 3. Run the retrieved suite — evaluators/execution_policy come from BE
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -683,8 +690,8 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
         suite_result=suite_result,
         items_total=2,
         experiment_items_count=4,  # 2 items * 2 runs
-        total_feedback_scores=4,  # 1 assertion * 4 experiment items
-        expected_score_names={suite_assertion},
+        total_feedback_scores=6,  # France: 2 runs × 2 assertions + Germany: 2 runs × 1 assertion
+        expected_score_names={suite_assertion, item_assertion},
     )
 
     for item_result in suite_result.item_results.values():
@@ -794,47 +801,6 @@ def test_evaluation_suite__get_execution_policy__default_when_not_set(
     policy = suite.get_execution_policy()
     assert policy["runs_per_item"] == 1
     assert policy["pass_threshold"] == 1
-
-
-def test_evaluation_suite__get_items__returns_items_with_evaluators_and_description(
-    opik_client: opik.Opik, dataset_name: str
-):
-    """
-    Test that get_items() returns items with evaluators as LLMJudge instances
-    and preserves item descriptions through the round-trip.
-    """
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test get_items",
-    )
-
-    suite.add_item(
-        data={"input": {"question": "What is 2 + 2?"}},
-        description="Math addition test case",
-        evaluators=[LLMJudge(name="item_judge", assertions=["Response is correct"])],
-    )
-    suite.add_item(
-        data={"input": {"question": "What is 3 + 3?"}},
-    )
-
-    items = suite.get_items()
-    assert len(items) == 2
-    assert all("id" in item for item in items)
-    assert all("description" in item for item in items)
-
-    items_with_evaluators = [i for i in items if len(i["evaluators"]) > 0]
-    items_without_evaluators = [i for i in items if len(i["evaluators"]) == 0]
-
-    assert len(items_with_evaluators) == 1
-    assert len(items_without_evaluators) == 1
-
-    item_evaluators = items_with_evaluators[0]["evaluators"]
-    assert len(item_evaluators) == 1
-    assert isinstance(item_evaluators[0], LLMJudge)
-
-    # Verify description round-trip
-    assert items_with_evaluators[0]["description"] == "Math addition test case"
-    assert items_without_evaluators[0]["description"] is None
 
 
 def test_evaluation_suite__update__changes_evaluators_and_policy(
