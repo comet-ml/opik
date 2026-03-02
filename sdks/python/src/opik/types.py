@@ -114,6 +114,15 @@ class BatchFeedbackScoreDict(TypedDict):
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
 
+    error: NotRequired[int]
+    """Error flag encoded as 0/1 for evaluator failures."""
+
+    error_reason: NotRequired[Optional[str]]
+    """Optional error message when ``error`` is 1."""
+
+    metadata: NotRequired[Optional[dict[str, object]]]
+    """Optional structured metadata attached to the feedback score."""
+
 
 class ErrorInfoDict(TypedDict):
     """
