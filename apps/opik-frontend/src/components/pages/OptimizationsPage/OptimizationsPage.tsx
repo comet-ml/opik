@@ -7,12 +7,7 @@ import React, {
 } from "react";
 import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
-import {
-  ColumnPinningState,
-  GroupingState,
-  Row,
-  RowSelectionState,
-} from "@tanstack/react-table";
+import { GroupingState, Row, RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
@@ -22,7 +17,6 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import isObject from "lodash/isObject";
-
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -55,9 +49,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import useGroupedOptimizationsList, {
-  GroupedOptimization,
-} from "@/hooks/useGroupedOptimizationsList";
+import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   generateActionsColumDef,
@@ -68,8 +60,7 @@ import {
   getSharedShiftCheckboxClickHandler,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
-import { checkIsGroupRowType } from "@/lib/groups";
-import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/groups";
+import { GROUPING_COLUMN } from "@/constants/groups";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
 import {
   getOptimizerLabel,
@@ -80,6 +71,8 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useOptimizationsView } from "@/hooks/useOptimizationsView";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -90,7 +83,7 @@ export const GROUPING_CONFIG = {
   grouping: [GROUPING_COLUMN] as GroupingState,
 };
 
-export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
+export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: COLUMN_ID_ID,
     label: "ID",
@@ -147,7 +140,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
   },
 ];
 
-export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
+export const FILTER_COLUMNS = [
   {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
@@ -155,11 +148,6 @@ export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
     disposable: true,
   },
 ];
-
-export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_NAME_ID, GROUPING_COLUMN],
-  right: [],
-};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "status",
@@ -178,6 +166,47 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "created_by",
 ];
 
+const checkboxClickHandler = getSharedShiftCheckboxClickHandler();
+
+const nameColumn = generateDataRowCellDef(
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.optimization,
+      getSearch: (data: Optimization) => ({
+        optimizations: [data.id],
+      }),
+    },
+    headerCheckbox: true,
+    size: 200,
+  },
+  checkboxClickHandler,
+);
+
+const groupingColumn = generateGroupedRowCellDef<GroupedOptimization, unknown>(
+  {
+    id: GROUPING_COLUMN,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
+  },
+  checkboxClickHandler,
+);
+
+const actionsColumn = generateActionsColumDef({
+  cell: OptimizationRowActionsCell,
+});
+
 const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -186,6 +215,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const isOptimizationStudioEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
+
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -209,12 +242,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { checkboxClickHandler } = useMemo(() => {
-    return {
-      checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
-    };
-  }, []);
-
   const datasetId = useMemo(
     () =>
       filters.find((f: Filter) => f.field === COLUMN_DATASET_ID)?.value || "",
@@ -237,21 +264,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [],
   );
 
-  const { data, isPending, isPlaceholderData, isFetching, refetch } =
-    useGroupedOptimizationsList({
-      workspaceName,
-      groupLimit,
-      datasetId: datasetId!,
-      search: search!,
-      page: page!,
-      size: DEFAULT_GROUPS_PER_PAGE,
-      polling: true,
-    });
-
-  const optimizations = useMemo(() => data?.content ?? [], [data?.content]);
-
-  const groupIds = useMemo(() => data?.groupIds ?? [], [data?.groupIds]);
-  const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? "There are no optimizations yet\n" +
@@ -278,59 +290,42 @@ const OptimizationsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
-  const selectedRows: Array<GroupedOptimization> = useMemo(() => {
-    return optimizations.filter(
-      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
-    );
-  }, [rowSelection, optimizations]);
+  const {
+    optimizations,
+    groupIds,
+    total,
+    selectedRows,
+    isPending,
+    isPlaceholderData,
+    isFetching,
+    refetch,
+    columnPinning,
+    pageSize,
+  } = useOptimizationsView({
+    workspaceName,
+    datasetId,
+    search: search || "",
+    page: page || 1,
+    groupLimit,
+    rowSelection,
+  });
+
+  const defaultColumns = useMemo(
+    () =>
+      convertColumnDataToColumn(DEFAULT_COLUMNS, {
+        columnsOrder,
+        selectedColumns,
+      }),
+    [columnsOrder, selectedColumns],
+  );
 
   const columns = useMemo(() => {
-    return [
-      generateDataRowCellDef<GroupedOptimization>(
-        {
-          id: COLUMN_NAME_ID,
-          label: "Name",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.optimization,
-            getSearch: (data: Optimization) => ({
-              optimizations: [data.id],
-            }),
-          },
-          headerCheckbox: true,
-          size: 200,
-        },
-        checkboxClickHandler,
-      ),
-      generateGroupedRowCellDef<GroupedOptimization, unknown>(
-        {
-          id: GROUPING_COLUMN,
-          label: "Dataset",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "dataset_name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.dataset,
-          },
-        },
-        checkboxClickHandler,
-      ),
-      ...convertColumnDataToColumn<GroupedOptimization, GroupedOptimization>(
-        DEFAULT_COLUMNS,
-        {
-          columnsOrder,
-          selectedColumns,
-        },
-      ),
-      generateActionsColumDef({
-        cell: OptimizationRowActionsCell,
-      }),
-    ];
-  }, [checkboxClickHandler, columnsOrder, selectedColumns]);
+    if (canViewDatasets) {
+      return [nameColumn, groupingColumn, ...defaultColumns, actionsColumn];
+    }
+
+    return [nameColumn, ...defaultColumns, actionsColumn];
+  }, [canViewDatasets, defaultColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -342,7 +337,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const handleRowClick = useCallback(
-    (row: GroupedOptimization) => {
+    (row: Optimization | GroupedOptimization) => {
       navigate({
         to: "/$workspaceName/optimizations/$datasetId/compare",
         params: {
@@ -421,13 +416,15 @@ const OptimizationsPage: React.FunctionComponent = () => {
               className="w-[320px]"
               dimension="sm"
             ></SearchInput>
-            <FiltersButton
-              columns={FILTER_COLUMNS}
-              config={filtersConfig as never}
-              filters={filters}
-              onChange={setFilters}
-              layout="icon"
-            />
+            {canViewDatasets && (
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                config={filtersConfig as never}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            )}
           </div>
           <div className="flex items-center gap-2">
             <OptimizationsActionsPanel optimizations={selectedRows} />
@@ -452,8 +449,8 @@ const OptimizationsPage: React.FunctionComponent = () => {
           </div>
         </div>
         <DataTable
-          columns={columns}
-          data={optimizations}
+          columns={columns as never}
+          data={optimizations as never}
           onRowClick={handleRowClick}
           renderCustomRow={renderCustomRowCallback}
           getIsCustomRow={getIsGroupRow}
@@ -465,7 +462,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           expandingConfig={expandingConfig}
           groupingConfig={GROUPING_CONFIG}
           getRowId={getRowId}
-          columnPinning={DEFAULT_COLUMN_PINNING}
+          columnPinning={columnPinning}
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
@@ -481,7 +478,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           <DataTablePagination
             page={page!}
             pageChange={setPage}
-            size={DEFAULT_GROUPS_PER_PAGE}
+            size={pageSize}
             total={total}
           />
         </div>

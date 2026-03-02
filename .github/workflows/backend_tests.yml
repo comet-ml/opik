@@ -3,45 +3,84 @@ run-name: "Backend Tests on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
   pull_request:
-    paths: 
+    paths:
       - "apps/opik-backend/**"
+      - ".github/workflows/backend_tests.yml"
+      - ".github/scripts/discover-backend-tests.sh"
   push:
-    branches: 
+    branches:
       - 'main'
-    paths: 
+    paths:
       - "apps/opik-backend/**"
+      - ".github/workflows/backend_tests.yml"
+      - ".github/scripts/discover-backend-tests.sh"
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
-    run-backend-tests:
+    # Automatically classify tests as unit/integration and split integration
+    # tests into balanced groups. No manual maintenance when adding new tests.
+    discover-tests:
         runs-on: ubuntu-latest
-        timeout-minutes: 45
-        defaults:
-          run:
-            working-directory: apps/opik-backend/
+        timeout-minutes: 2
+        outputs:
+          matrix: ${{ steps.split.outputs.matrix }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4.1.1
               with:
                 fetch-depth: 1
-    
+                sparse-checkout: |
+                  apps/opik-backend/src/test/java
+                  .github/scripts
+
+            - name: Classify and split tests
+              id: split
+              working-directory: apps/opik-backend
+              run: ../../.github/scripts/discover-backend-tests.sh
+
+    run-backend-tests:
+        needs: discover-tests
+        name: ${{ matrix.name }}
+        runs-on: ubuntu-latest
+        timeout-minutes: ${{ matrix.timeout }}
+        defaults:
+          run:
+            working-directory: apps/opik-backend/
+        strategy:
+          fail-fast: false
+          matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4.1.1
+              with:
+                fetch-depth: 1
+
             - name: Set up JDK 21
               uses: actions/setup-java@v4
               with:
                 java-version: '21'
                 distribution: 'corretto'
                 cache: maven
-    
-            - name: Run Tests for backend
+
+            - name: Run ${{ matrix.name }}
               env:
                 TESTCONTAINERS_REUSE_ENABLE: true
-              run: mvn clean test -Dmaven.test.failure.ignore=true -Dsurefire.rerunFailingTestsCount=3
+              run: >-
+                mvn clean test
+                -Dtest="${{ matrix.tests }}"
+                -Dmaven.test.failure.ignore=true
+                -Dsurefire.rerunFailingTestsCount=3
 
             - name: Publish Test Report
               uses: EnricoMi/publish-unit-test-result-action/linux@v2
               if: always()
               with:
                 action_fail: true
-                check_name: Backend Tests Results
+                check_name: "Backend Tests - ${{ matrix.name }}"
                 files: '**/target/surefire-reports/TEST-*.xml'

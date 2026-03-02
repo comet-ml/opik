@@ -58,6 +58,9 @@ class DatasetItem(pydantic.BaseModel):
     source: str = constants.DATASET_SOURCE_SDK
     """The source of the dataset item. Defaults to DATASET_SOURCE_SDK."""
 
+    description: Optional[str] = None
+    """Optional description of the dataset item."""
+
     evaluators: Optional[List[EvaluatorItem]] = None
     """List of evaluators configured for this dataset item."""
 
@@ -87,6 +90,9 @@ class DatasetItem(pydantic.BaseModel):
 
     def content_hash(self) -> str:
         content = self.get_content()
+
+        if self.description is not None:
+            content["description"] = self.description
 
         if self.evaluators is not None:
             content["evaluators"] = [e.model_dump() for e in self.evaluators]
