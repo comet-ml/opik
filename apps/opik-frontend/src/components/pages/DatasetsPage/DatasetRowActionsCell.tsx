@@ -90,16 +90,18 @@ export const DatasetRowActionsCell: React.FunctionComponent<
         setOpen={setOpen}
         dataset={dataset}
       />
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 1}
-        setOpen={setOpen}
-        onConfirm={deleteDatasetHandler}
-        title="Delete dataset"
-        description="Deleting this dataset will also remove all its items. Any experiments linked to it will be moved to a “Deleted dataset” group. This action can’t be undone. Are you sure you want to continue?"
-        confirmText="Delete dataset"
-        confirmButtonVariant="destructive"
-      />
+      {canDeleteDatasets && (
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 1}
+          setOpen={setOpen}
+          onConfirm={deleteDatasetHandler}
+          title="Delete dataset"
+          description="Deleting this dataset will also remove all its items. Any experiments linked to it will be moved to a “Deleted dataset” group. This action can’t be undone. Are you sure you want to continue?"
+          confirmText="Delete dataset"
+          confirmButtonVariant="destructive"
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="minimal" size="icon" className="-mr-2.5">
