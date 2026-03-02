@@ -32,8 +32,7 @@ Opikは、プロトタイプから本番まで、より良く動作する生成A
     <a href="https://chat.comet.com"><b>Slack コミュニティ</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>変更履歴</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>ドキュメント</b></a> •
-<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>ドキュメント</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
@@ -236,6 +235,7 @@ opik configure
 | **OpenAI (Python)**       | OpenAI LLM 呼び出しのトレースを記録                                         | [ドキュメント](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |
 | **OpenAI (JS/TS)**        | OpenAI JavaScript/TypeScript 呼び出しのトレースを記録                       | [ドキュメント](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik)         |
 | **OpenAI Agents**         | OpenAI Agents SDK 呼び出しのトレースを記録                                  | [ドキュメント](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik)                 |
+| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | **Novita AI**             | Novita AI LLM 呼び出しのトレースを記録                                      | [ドキュメント](https://www.comet.com/docs/opik/integrations/novita-ai?utm_source=opik&utm_medium=github&utm_content=novita_ai_link&utm_campaign=opik)                         |
 | **OpenRouter**            | OpenRouter LLM 呼び出しのトレースを記録                                     | [ドキュメント](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik)                       |
 | **OpenTelemetry**         | OpenTelemetry 対応呼び出しのトレースを記録                                  | [ドキュメント](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik)             |
