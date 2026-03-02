@@ -238,7 +238,7 @@ opik configure
 | ओपनएआई (पायथन) | OpenAI LLM कॉल के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | ओपनएआई (जेएस/टीएस) | OpenAI जावास्क्रिप्ट/टाइपस्क्रिप्ट कॉल के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | ओपनएआई एजेंट | OpenAI एजेंट SDK कॉल के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
-| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
+| OpenClaw | OpenClaw एजेंट रन के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | ओपनराउटर | ओपनराउटर एलएलएम कॉल के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | ओपनटेलीमेट्री | ओपनटेलीमेट्री समर्थित कॉल के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | ओपनवेबयूआई | OpenWebUI वार्तालापों के लिए लॉग ट्रेस | [दस्तावेज़ीकरण](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |
