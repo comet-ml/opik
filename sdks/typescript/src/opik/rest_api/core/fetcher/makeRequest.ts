@@ -24,19 +24,19 @@ export const makeRequest = async (
         signals.push(abortSignal);
     }
     const newSignals = anySignal(signals);
-    const response = await fetchFn(url, {
-        method: method,
-        headers,
-        body: requestBody,
-        signal: newSignals,
-        credentials: withCredentials ? "include" : undefined,
-        // @ts-ignore
-        duplex,
-    });
-
-    if (timeoutAbortId != null) {
-        clearTimeout(timeoutAbortId);
+    try {
+        return await fetchFn(url, {
+            method: method,
+            headers,
+            body: requestBody,
+            signal: newSignals,
+            credentials: withCredentials ? "include" : undefined,
+            // @ts-ignore
+            duplex,
+        });
+    } finally {
+        if (timeoutAbortId != null) {
+            clearTimeout(timeoutAbortId);
+        }
     }
-
-    return response;
 };
