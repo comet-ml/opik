@@ -34,8 +34,7 @@ Opik hilft Ihnen beim Erstellen, Testen und Optimieren generativer KI-Anwendunge
 <a href="https://chat.comet.com"><b>Slack-Community</b></a> •
 <a href="https://x.com/Cometml"><b>Twitter</b></a> •
 <a href="https://www.comet.com/docs/opik/changelog"><b>Änderungsprotokoll</b></a> •
-<a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Dokumentation</b></a> •
-<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
+<a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Dokumentation</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
@@ -241,6 +240,7 @@ Der einfachste Weg, Traces zu protokollieren, ist die Verwendung einer unserer d
 | OpenAI (Python) | Protokollspuren für OpenAI LLM-Aufrufe | [Dokumentation](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | OpenAI (JS/TS) | Protokollspuren für OpenAI JavaScript/TypeScript-Aufrufe | [Dokumentation](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | OpenAI-Agenten | Protokollierungsspuren für OpenAI Agents SDK-Aufrufe | [Dokumentation](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
+| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | OpenRouter | Protokollspuren für OpenRouter LLM-Aufrufe | [Dokumentation](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | OpenTelemetry | Protokollspuren für von OpenTelemetry unterstützte Aufrufe | [Dokumentation](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | OpenWebUI | Protokollspuren für OpenWebUI-Konversationen | [Dokumentation](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |
