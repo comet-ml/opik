@@ -13,6 +13,7 @@ import {
 } from "@/types/dashboard";
 import { WIDGET_TYPES } from "@/lib/dashboard/utils";
 import { Permissions } from "@/types/permissions";
+import { DISABLED_EXPERIMENTS_TOOLTIP } from "@/constants/permissions";
 import ProjectMetricsWidget from "./ProjectMetricsWidget/ProjectMetricsWidget";
 import ProjectMetricsEditor from "./ProjectMetricsWidget/ProjectMetricsEditor";
 import { widgetHelpers as projectMetricsHelpers } from "./ProjectMetricsWidget/helpers";
@@ -28,9 +29,6 @@ import { widgetHelpers as experimentsFeedbackScoresHelpers } from "./Experiments
 import ExperimentsLeaderboardWidget from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidget";
 import ExperimentsLeaderboardWidgetEditor from "./ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor";
 import { widgetHelpers as experimentLeaderboardHelpers } from "./ExperimentsLeaderboardWidget/helpers";
-
-export const DISABLED_EXPERIMENTS_TOOLTIP =
-  "You don't have permission to view experiments";
 
 const EXPERIMENT_WIDGET_TYPES = new Set<WIDGET_TYPE>([
   WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES,

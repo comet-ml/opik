@@ -10,6 +10,7 @@ import {
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/components/layout/ExperimentsPageGuard";
+import DatasetsPageGuard from "@/components/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/components/layout/DashboardsPageGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
@@ -303,6 +304,7 @@ const compareTrialsRoute = createRoute({
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
+  component: DatasetsPageGuard,
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",

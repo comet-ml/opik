@@ -3,7 +3,7 @@ import { SquareDashedMousePointer } from "lucide-react";
 import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import DashboardTemplateCard from "./DashboardTemplateCard";
-import { DISABLED_EXPERIMENTS_TOOLTIP } from "@/components/shared/Dashboard/widgets/widgetRegistry";
+import { DISABLED_EXPERIMENTS_TOOLTIP } from "@/constants/permissions";
 import { TEMPLATE_SCOPE } from "@/types/dashboard";
 
 interface DashboardDialogSelectStepProps {
