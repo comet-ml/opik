@@ -17,15 +17,9 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { VIEW_TYPE } from "@/types/dashboard";
 import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
-import { usePermissions } from "@/contexts/PermissionsContext";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
-  const {
-    permissions: { canViewDatasets },
-  } = usePermissions();
-
-  const initTab = canViewDatasets ? "items" : "config";
-  const [tab = initTab, setTab] = useQueryParam("tab", StringParam, {
+  const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -63,11 +57,9 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         >
           <PageBodyStickyContainer direction="horizontal" limitWidth>
             <TabsList variant="underline">
-              {canViewDatasets && (
-                <TabsTrigger variant="underline" value="items">
-                  Experiment items
-                </TabsTrigger>
-              )}
+              <TabsTrigger variant="underline" value="items">
+                Experiment items
+              </TabsTrigger>
               <TabsTrigger variant="underline" value="config">
                 Configuration
               </TabsTrigger>
@@ -80,14 +72,12 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
-          {canViewDatasets && (
-            <TabsContent value="items">
-              <ExperimentItemsTab
-                experimentsIds={experimentsIds}
-                experiments={memorizedExperiments}
-              />
-            </TabsContent>
-          )}
+          <TabsContent value="items">
+            <ExperimentItemsTab
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+            />
+          </TabsContent>
           <TabsContent value="config">
             <ConfigurationTab
               experimentsIds={experimentsIds}

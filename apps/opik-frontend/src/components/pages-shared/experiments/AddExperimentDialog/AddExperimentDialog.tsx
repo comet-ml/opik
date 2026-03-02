@@ -17,16 +17,8 @@ import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { buildDocsUrl } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
-import { DISABLED_DATASETS_TOOLTIP } from "@/constants/permissions";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -168,6 +160,8 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
   },
 ];
 
+import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
+
 const ALL_EVALUATOR_OPTIONS: MetricOption[] = [
   ...HEURISTICS_MODELS_OPTIONS.map((m) => ({
     ...m,
@@ -191,10 +185,6 @@ const AddExperimentDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const { isPhonePortrait } = useIsPhone();
-
-  const {
-    permissions: { canViewDatasets },
-  } = usePermissions();
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState(initialDatasetName);
@@ -321,7 +311,6 @@ eval_results = evaluate(
     },
     {
       placeholderData: keepPreviousData,
-      enabled: canViewDatasets,
     },
   );
 
@@ -489,32 +478,20 @@ eval_results = evaluate(
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
               <CodeSectionTitle>1. Select dataset</CodeSectionTitle>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <LoadableSelectBox
-                      options={options}
-                      value={datasetName}
-                      placeholder="Select a dataset"
-                      onChange={setDatasetName}
-                      onLoadMore={
-                        total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
-                          ? loadMoreHandler
-                          : undefined
-                      }
-                      isLoading={isLoading}
-                      optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
-                      autoFocus={!isPhonePortrait}
-                      disabled={!canViewDatasets}
-                    />
-                  </div>
-                </TooltipTrigger>
-                {!canViewDatasets && (
-                  <TooltipContent side="top">
-                    {DISABLED_DATASETS_TOOLTIP}
-                  </TooltipContent>
-                )}
-              </Tooltip>
+              <LoadableSelectBox
+                options={options}
+                value={datasetName}
+                placeholder="Select a dataset"
+                onChange={setDatasetName}
+                onLoadMore={
+                  total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
+                    ? loadMoreHandler
+                    : undefined
+                }
+                isLoading={isLoading}
+                optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
+                autoFocus={!isPhonePortrait}
+              />
             </div>
             <InstallOpikSection title={INSTALL_SDK_SECTION_TITLE} />
             {renderExperimentCodeSection()}

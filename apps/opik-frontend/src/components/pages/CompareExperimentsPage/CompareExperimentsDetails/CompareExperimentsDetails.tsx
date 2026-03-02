@@ -25,7 +25,6 @@ import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/View
 import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
-import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -38,10 +37,6 @@ type CompareExperimentsDetailsProps = {
 const CompareExperimentsDetails: React.FunctionComponent<
   CompareExperimentsDetailsProps
 > = ({ experiments, experimentsIds, isPending, view, onViewChange }) => {
-  const {
-    permissions: { canViewDatasets },
-  } = usePermissions();
-
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const isCompare = experimentsIds.length > 1;
@@ -207,15 +202,11 @@ const CompareExperimentsDetails: React.FunctionComponent<
             resource={RESOURCE_TYPE.experiment}
           />
         )}
-        {canViewDatasets && (
-          <NavigationTag
-            id={experiment?.dataset_id}
-            name={
-              experiment?.dataset_name && `Go to ${experiment.dataset_name}`
-            }
-            resource={RESOURCE_TYPE.dataset}
-          />
-        )}
+        <NavigationTag
+          id={experiment?.dataset_id}
+          name={experiment?.dataset_name && `Go to ${experiment.dataset_name}`}
+          resource={RESOURCE_TYPE.dataset}
+        />
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <NavigationTag
