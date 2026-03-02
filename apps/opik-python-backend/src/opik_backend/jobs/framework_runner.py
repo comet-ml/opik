@@ -55,9 +55,9 @@ def main():
         with optimization_lifecycle(status_manager):
             dataset = load_and_validate_dataset(client, config.dataset_name)
 
-            # Get dataset item IDs
-            dataset_items = dataset.get_items()
-            dataset_item_ids = [str(item["id"]) for item in dataset_items]
+            # Collect only IDs; full item dicts are not retained.
+            # SDK's get_items() handles server-side pagination internally.
+            dataset_item_ids = [str(item["id"]) for item in dataset.get_items()]
 
             # Build framework optimization context
             opt_context = OptimizationContext(

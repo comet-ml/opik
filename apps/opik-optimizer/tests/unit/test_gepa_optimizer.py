@@ -973,5 +973,6 @@ class TestGepaOptimizer:
 
 class TestRegistration:
     def test_gepa_optimizer_is_registered(self):
-        from opik_optimizer_framework.optimizers.factory import OptimizerFactory
-        assert "GepaOptimizer" in OptimizerFactory.available()
+        from opik_optimizer_framework.optimizers.factory import create_optimizer
+        optimizer = create_optimizer("GepaOptimizer")
+        assert optimizer is not None

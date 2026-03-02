@@ -5,7 +5,7 @@ from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import LoggingEventEmitter, SdkEventEmitter
-from opik_optimizer_framework.optimizers.factory import OptimizerFactory
+from opik_optimizer_framework.optimizers.factory import create_optimizer
 from opik_optimizer_framework.sampler import sample_split
 from opik_optimizer_framework.types import (
     CandidateConfig,
@@ -15,9 +15,6 @@ from opik_optimizer_framework.types import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Public alias so external code can register custom optimizers.
-register_optimizer = OptimizerFactory.register
 
 
 
@@ -54,7 +51,7 @@ def run_optimization(
         event_emitter=event_emitter,
     )
 
-    optimizer = OptimizerFactory.create(context.optimizer_type)
+    optimizer = create_optimizer(context.optimizer_type)
 
     # Evaluate baseline (original prompt)
     baseline_config = CandidateConfig(

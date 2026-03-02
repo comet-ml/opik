@@ -48,19 +48,22 @@ No base class is needed — the framework uses Python's structural typing (`Prot
 
 ## Step 2: Register in the Factory
 
-Add your optimizer to `_register_builtins()` in `factory.py`:
+Add your optimizer to `_load_registry()` in `factory.py`:
 
 ```python
-def _register_builtins() -> None:
+def _load_registry() -> dict[str, type]:
     from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
     from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
     from opik_optimizer_framework.optimizers.my_optimizer import MyOptimizer
-    OptimizerFactory.register("SimpleOptimizer", SimpleOptimizer)
-    OptimizerFactory.register("GepaOptimizer", GepaOptimizer)
-    OptimizerFactory.register("MyOptimizer", MyOptimizer)
+
+    return {
+        "SimpleOptimizer": SimpleOptimizer,
+        "GepaOptimizer": GepaOptimizer,
+        "MyOptimizer": MyOptimizer,
+    }
 ```
 
-The registered name is what the frontend/API uses in `optimizer_type`.
+The dict key is the `optimizer_type` value that the frontend/API uses.
 
 ## Key Objects Your Optimizer Receives
 
