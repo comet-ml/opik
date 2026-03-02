@@ -159,13 +159,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
             )
             SELECT DISTINCT project_id
-            FROM traces FINAL
+            FROM traces
+            INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
             WHERE workspace_id = :workspace_id
-            AND id IN (SELECT trace_id FROM experiment_trace_items)
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -283,8 +281,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
-                ORDER BY last_updated_at DESC
-                LIMIT 1 BY id
             ), feedback_scores_combined AS (
                 SELECT
                     entity_id,
