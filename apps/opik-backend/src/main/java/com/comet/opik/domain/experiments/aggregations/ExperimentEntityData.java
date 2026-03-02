@@ -49,6 +49,7 @@ public class ExperimentEntityData {
             String datasetVersionId,
             List<String> tags,
             String type,
+            String evaluationMethod,
             String status,
             Map<String, BigDecimal> experimentScores) {
     }

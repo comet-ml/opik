@@ -1,5 +1,6 @@
 package com.comet.opik.domain.experiments.aggregations;
 
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.ExperimentSearchCriteria;
@@ -103,6 +104,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 metadata,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 optimization_id,
                 dataset_version_id,
@@ -141,6 +143,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 dataset_version_id,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 experiment_scores
             FROM experiments
@@ -369,6 +372,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 dataset_version_id,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 experiment_scores,
                 trace_count,
@@ -399,6 +403,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 :dataset_version_id,
                 :tags,
                 :type,
+                :evaluation_method,
                 :status,
                 mapFromArrays(:experiment_scores_keys, :experiment_scores_values),
                 :trace_count,
@@ -873,6 +878,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("dataset_version_id", ObjectUtils.defaultIfNull(experimentData.datasetVersionId(), ""))
                     .bind("tags", ObjectUtils.defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
                     .bind("type", experimentData.type())
+                    .bind("evaluation_method",
+                            ObjectUtils.defaultIfNull(experimentData.evaluationMethod(),
+                                    EvaluationMethod.UNKNOWN_VALUE))
                     .bind("status", experimentData.status())
                     .bind("experiment_scores_keys", experimentScoresArrays.keys())
                     .bind("experiment_scores_values", experimentScoresArrays.values())
@@ -1083,6 +1091,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .datasetVersionId(row.get("dataset_version_id", String.class))
                 .tags(row.get("tags", List.class))
                 .type(row.get("type", String.class))
+                .evaluationMethod(row.get("evaluation_method", String.class))
                 .status(row.get("status", String.class))
                 .experimentScores(parseExperimentScoresFromString(row.get("experiment_scores", String.class)))
                 .build();
@@ -1222,6 +1231,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         // type is Enum8, read as String and convert to ExperimentType
         ExperimentType type = ExperimentType.fromString(row.get("type", String.class));
 
+        // evaluation_method is Enum, read as String and convert to EvaluationMethod
+        EvaluationMethod evaluationMethod = EvaluationMethod.fromString(row.get("evaluation_method", String.class))
+                .orElse(null);
+
         // status is Enum8, read as String and convert to ExperimentStatus
         ExperimentStatus status = ExperimentStatus.fromString(row.get("status", String.class));
 
@@ -1285,6 +1298,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 metadata,
                 tags,
                 type,
+                evaluationMethod,
                 optimizationId,
                 feedbackScores,
                 null, // comments - not in DB
