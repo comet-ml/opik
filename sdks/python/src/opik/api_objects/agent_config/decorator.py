@@ -96,7 +96,7 @@ def agent_config_decorator(
             client = opik_client.get_client_cached()
 
             resolved_project = project or client.project_name
-            agent_cfg = config.AgentConfig(
+            agent_config = config.AgentConfig(
                 project_name=resolved_project,
                 rest_client_=client.rest_client,
             )
@@ -105,7 +105,7 @@ def agent_config_decorator(
                 env,
                 mask_id,
                 prefixed_field_types,
-                agent_cfg=agent_cfg,
+                agent_config=agent_config,
             )
 
             object.__setattr__(self, _F.__opik_field_map__, field_map)
@@ -113,7 +113,7 @@ def agent_config_decorator(
             object.__setattr__(self, _F.__opik_mask_id__, mask_id)
             object.__setattr__(self, _F.__opik_env__, env)
             object.__setattr__(self, _F.__opik_description__, description)
-            object.__setattr__(self, _F.__opik_agent_config__, agent_cfg)
+            object.__setattr__(self, _F.__opik_agent_config__, agent_config)
             object.__setattr__(self, _F.__opik_project__, resolved_project)
             _resolve_and_cache_blueprint(self)
 
@@ -162,11 +162,11 @@ def _init_cache_entry(
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
     prefixed_field_types: typing.Dict[str, typing.Any],
-    agent_cfg: typing.Optional[config.AgentConfig] = None,
+    agent_config: typing.Optional[config.AgentConfig] = None,
 ) -> cache.SharedConfigCache:
     """Initialise (or return the existing) shared cache entry for a config key.
 
-    Registers the given field types and, when ``agent_cfg`` is provided and no
+    Registers the given field types and, when ``agent_config`` is provided and no
     mask is active, attaches a background-refresh callback so the cache stays
     up to date.
 
@@ -175,15 +175,15 @@ def _init_cache_entry(
         env: Environment name used as part of the cache key.
         mask_id: Mask ID used as part of the cache key.
         prefixed_field_types: Mapping of prefixed field key to Python type.
-        agent_cfg: ``AgentConfig`` instance used to build the refresh callback.
+        agent_config: ``AgentConfig`` instance used to build the refresh callback.
     """
     shared_cache = cache.get_shared_cache(resolved_project, env, mask_id)
     shared_cache.register_fields(prefixed_field_types)
 
-    if agent_cfg is not None and mask_id is None:
+    if agent_config is not None and mask_id is None:
 
         def _refresh() -> typing.Optional[blueprint.Blueprint]:
-            return agent_cfg.get_blueprint(
+            return agent_config.get_blueprint(
                 env=env,
                 mask_id=mask_id,
                 field_types=shared_cache.all_field_types,
@@ -214,16 +214,16 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     if not extra_keys:
         return
 
-    env_val = instance.__opik_env__
-    mask_id_val = instance.__opik_mask_id__
+    environment = instance.__opik_env__
+    mask_id = instance.__opik_mask_id__
 
     existing = agent_cfg.get_blueprint(
-        env=env_val,
-        mask_id=mask_id_val,
+        env=environment,
+        mask_id=mask_id,
         field_types=instance_field_types,
     )
 
-    pinned = env_val is not None or mask_id_val is not None
+    pinned = environment is not None or mask_id is not None
 
     if existing:
         extra_keys = set(instance_field_types) - set(existing.values)
@@ -239,13 +239,13 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         if existing is None
         else {k for k, v in field_map.items() if v in extra_keys}
     )
-    bp = _create_blueprint(
+    new_blueprint = _create_blueprint(
         instance, agent_cfg, local_keys, instance.__opik_description__, shared_cache
     )
     # Tag new blueprint with the env
-    if not existing and env_val is not None and bp.id is not None:
-        agent_cfg.tag_blueprint_with_env(env=env_val, blueprint_id=bp.id)
-    shared_cache.update(bp)
+    if not existing and environment is not None and new_blueprint.id is not None:
+        agent_cfg.tag_blueprint_with_env(env=environment, blueprint_id=new_blueprint.id)
+    shared_cache.update(new_blueprint)
 
 
 def _create_blueprint(
