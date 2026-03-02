@@ -110,6 +110,28 @@ clickhouse:
   replicasCount: 2
 ```
 
+## Configure additional ClickHouse users and profiles
+
+Example of how you can create read-only ClickHouse users with custom settings profiles:
+
+```yaml
+clickhouse:
+  additionalProfiles:
+    - name: readonly_profile
+      settings:
+        readonly: 1
+        max_execution_time: 60
+        max_memory_usage: 10000000000
+        max_rows_to_read: 20000000
+        max_concurrent_queries_for_user: 2
+  additionalUsers:
+    - username: myuser
+      password: my_secure_password
+      profile: readonly_profile
+```
+
+When using Kubernetes secrets for passwords (`adminUser.useSecret.enabled: true`), the password is read from the admin secret using the key `<username>_pass` by default.
+
 ## Use S3 bucket for Opik
 
 ### Using AWS key and secret keys
