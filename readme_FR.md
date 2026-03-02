@@ -34,8 +34,7 @@ Opik vous aide à créer, tester et optimiser des applications d'IA générative
 <a href="https://chat.comet.com"><b>Communauté Slack</b></a> •
 <a href="https://x.com/Cometml"><b>Twitter</b></a> •
 <a href="https://www.comet.com/docs/opik/changelog"><b>Journal des modifications</b></a> •
-<a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a> •
-<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
+<a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
@@ -239,6 +238,7 @@ Le moyen le plus simple d’enregistrer des traces est d’utiliser l’une de n
 | OpenAI (Python) | Consigner les traces des appels OpenAI LLM | [Documentation](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | OpenAI (JS/TS) | Consigner les traces pour les appels OpenAI JavaScript/TypeScript | [Documentation](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | Agents OpenAI | Traces de journaux pour les appels du SDK OpenAI Agents | [Documentation](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
+| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | OuvrirRouter | Consigner les traces des appels OpenRouter LLM | [Documentation](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | OpenTélémétrie | Consigner les traces des appels pris en charge par OpenTelemetry | [Documentation](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | OpenWebUI | Consigner les traces des conversations OpenWebUI | [Documentation](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |
