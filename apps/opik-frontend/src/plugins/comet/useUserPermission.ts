@@ -114,6 +114,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeleteDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_DELETE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -124,6 +129,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteAnnotationQueues,
     canDeleteTraces,
     canDeletePrompts,
+    canDeleteDatasets,
     isPending: isEnabled && isPending,
   };
 };

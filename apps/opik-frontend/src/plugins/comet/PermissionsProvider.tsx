@@ -14,6 +14,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canDeleteAnnotationQueues,
     canDeleteTraces,
     canDeletePrompts,
+    canDeleteDatasets,
     isPending,
   } = useUserPermission();
 
@@ -27,6 +28,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canDeleteAnnotationQueues,
         canDeleteTraces,
         canDeletePrompts,
+        canDeleteDatasets,
       },
       isPending,
     }),
@@ -38,6 +40,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canDeleteAnnotationQueues,
       canDeleteTraces,
       canDeletePrompts,
+      canDeleteDatasets,
       isPending,
     ],
   );
