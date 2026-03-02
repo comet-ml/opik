@@ -33,8 +33,7 @@ Opik le ayuda a crear, probar y optimizar aplicaciones de IA generativa que func
     <a href="https://chat.comet.com"><b>Comunidad Slack</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>Registro de cambios</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentación</b></a> •
-<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentación</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
@@ -238,6 +237,7 @@ La forma más sencilla de registrar seguimientos es utilizar una de nuestras int
 | OpenAI (Python) | Seguimientos de registros para llamadas de OpenAI LLM | [Documentación](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | OpenAI (JS/TS) | Seguimientos de registros para llamadas OpenAI JavaScript/TypeScript | [Documentación](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | Agentes de OpenAI | Seguimientos de registros para llamadas del SDK de agentes OpenAI | [Documentación](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
+| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | Enrutador abierto | Seguimientos de registros para llamadas de OpenRouter LLM | [Documentación](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | OpenTelemetría | Seguimientos de registros para llamadas admitidas por OpenTelemetry | [Documentación](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | Interfaz de usuario web abierta | Seguimientos de registros para conversaciones OpenWebUI | [Documentación](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |
