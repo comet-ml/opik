@@ -10,6 +10,42 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 - **DI**: Guice modules, constructor injection with `@Inject`
 - **Databases**: MySQL (metadata, transactional) + ClickHouse (analytics, append-only)
 
+## Naming Conventions
+
+### Plural Names (Resources, Tests, URLs, DB Tables)
+- **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
+- **Resource test classes**: `TracesResourceTest`, `SpansResourceTest`, `DatasetsResourceTest` (not `TraceResourceTest`)
+- **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
+- **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
+
+### Singular Names (DAO, Service)
+- **DAO classes**: `TraceDAO`, `SpanDAO`, `DatasetDAO` (not `TracesDAO`)
+- **Service classes**: `TraceService`, `SpanService`, `DatasetService` (not `TracesService`)
+
+```java
+// ✅ GOOD
+@Path("/v1/private/traces")
+public class TracesResource { }
+
+// ✅ GOOD - DAO and Service use singular
+public class TraceDAO { }
+public class TraceService { }
+
+// ✅ GOOD - test classes match plural resource name
+public class TracesResourceTest { }
+
+// ❌ BAD - singular test class
+public class TraceResourceTest { }
+
+// ❌ BAD - singular resource/URL
+@Path("/v1/private/trace")
+public class TraceResource { }
+
+// ❌ BAD - plural DAO/Service
+public class TracesDAO { }
+public class TracesService { }
+```
+
 ## Critical Gotchas
 
 ### StringTemplate Memory Leak
