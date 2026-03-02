@@ -4,7 +4,8 @@ max_retries=12
 wait_interval=5
 retries=0
 
-url="http://localhost:5173/api/health-check?name=all&type=ready"
+base_url="${OPIK_URL_OVERRIDE:-http://localhost:5173/api}"
+url="${base_url}/health-check?name=all&type=ready"
 
 while (( retries < max_retries ))
 do

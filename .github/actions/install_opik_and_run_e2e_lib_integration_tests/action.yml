@@ -31,7 +31,6 @@ runs:
         uv pip list
         
         echo "Running tests"
-        export OPIK_URL_OVERRIDE=http://localhost:5173/api
         export OPIK_CONSOLE_LOGGING_LEVEL=DEBUG
         cd ./e2e_library_integration/${{ inputs.library_name }}/
         python -m pytest -vv .
