@@ -1,14 +1,19 @@
-import React, { useState } from "react";
-import { FileText } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { FileText, RotateCcw } from "lucide-react";
 
-import { ConfigHistoryItem, EnrichedBlueprintValue } from "@/types/optimizer-configs";
+import {
+  ConfigHistoryItem,
+  EnrichedBlueprintValue,
+} from "@/types/optimizer-configs";
 import { formatDate } from "@/lib/date";
-import { formatNumericData } from "@/lib/utils";
+import { cn, formatNumericData } from "@/lib/utils";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import Loader from "@/components/shared/Loader/Loader";
 import { Card } from "@/components/ui/card";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import useAgentConfigById from "@/api/optimizer-configs/useAgentConfigById";
 import useAgentConfigEnvsMutation from "@/api/optimizer-configs/useAgentConfigEnvsMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -17,6 +22,7 @@ type ConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
   version: number;
   projectId: string;
+  isLatest: boolean;
 };
 
 const renderValue = (v: EnrichedBlueprintValue) => {
@@ -42,8 +48,12 @@ const renderValue = (v: EnrichedBlueprintValue) => {
         <div className="flex items-center gap-1.5 overflow-hidden">
           <FileText className="size-3.5 shrink-0 text-muted-slate" />
           <div className="flex flex-col overflow-hidden">
-            <span className="comet-body-s truncate">{v.promptName ?? v.value}</span>
-            <span className="comet-body-xs truncate text-muted-slate">{v.value}</span>
+            <span className="comet-body-s truncate">
+              {v.promptName ?? v.value}
+            </span>
+            <span className="comet-body-xs truncate text-muted-slate">
+              {v.value}
+            </span>
           </div>
         </div>
       );
@@ -56,12 +66,47 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
   item,
   version,
   projectId,
+  isLatest,
 }) => {
   const { data: agentConfig, isPending } = useAgentConfigById({
     blueprintId: item.id,
   });
 
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [originalValues, setOriginalValues] = useState<Record<string, string>>(
+    {},
+  );
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+
+  // Initialize original + draft values once when agentConfig loads
+  useEffect(() => {
+    if (agentConfig && Object.keys(originalValues).length === 0) {
+      const initial: Record<string, string> = {};
+      agentConfig.values
+        .filter((v) => v.type !== "Prompt")
+        .forEach((v) => {
+          initial[v.key] = v.value;
+        });
+      setOriginalValues(initial);
+      setDraftValues(initial);
+    }
+  }, [agentConfig, originalValues]);
+
+  // Reset edit mode and local state when switching versions
+  useEffect(() => {
+    setIsEditing(false);
+    setOriginalValues({});
+    setDraftValues({});
+  }, [item.id]);
+
+  const resetField = (key: string) => {
+    setDraftValues((prev) => ({ ...prev, [key]: originalValues[key] }));
+  };
+
+  const hasChanges = Object.keys(draftValues).some(
+    (key) => draftValues[key] !== originalValues[key],
+  );
 
   const { mutate: promoteToProd, isPending: isPromoting } =
     useAgentConfigEnvsMutation();
@@ -86,13 +131,51 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
               <ColoredTag key={tag} label={tag} />
             ))}
           </div>
-          <Button
-            size="sm"
-            onClick={() => setConfirmOpen(true)}
-            disabled={isPromoting}
-          >
-            {isPromoting ? "Promoting..." : "Promote to prod"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {isEditing ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={() => setIsEditing(false)}>
+                  Save
+                </Button>
+              </>
+            ) : (
+              <>
+                {hasChanges && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDraftValues(originalValues)}
+                  >
+                    <RotateCcw className="mr-1.5 size-3.5" />
+                    Reset all
+                  </Button>
+                )}
+                {isLatest && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={isPromoting}
+                >
+                  {isPromoting ? "Promoting..." : "Promote to prod"}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         <p className="comet-body-s text-light-slate">{item.description}</p>
         <p className="comet-body-xs mt-1 text-muted-slate">
@@ -105,20 +188,80 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
           <Loader />
         ) : (
           <div className="flex flex-col gap-3">
-            {(agentConfig?.values ?? []).map((v) => (
-              <Card key={v.key} className="flex flex-col gap-2 p-4">
-                <div className="flex items-center gap-2">
-                  <span className="comet-body-xs text-muted-slate">{v.key}</span>
-                  <Tag size="sm" variant="gray" className="capitalize shrink-0">
-                    {v.type}
-                  </Tag>
-                </div>
-                <div className="overflow-hidden">{renderValue(v)}</div>
-              </Card>
-            ))}
+            {(agentConfig?.values ?? []).map((v) => {
+              const isChanged =
+                v.type !== "Prompt" &&
+                draftValues[v.key] !== undefined &&
+                draftValues[v.key] !== originalValues[v.key];
+              return (
+                <Card
+                  key={v.key}
+                  className={cn(
+                    "flex flex-col gap-2 p-4",
+                    isChanged ? "border-l-2 border-l-amber-400" : "",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="comet-body-xs text-muted-slate">
+                      {v.key}
+                    </span>
+                    <Tag
+                      size="sm"
+                      variant="gray"
+                      className="capitalize shrink-0"
+                    >
+                      {v.type}
+                    </Tag>
+                    {isChanged && (
+                      <button
+                        className="ml-auto flex items-center gap-1 text-xs text-light-slate hover:text-foreground"
+                        onClick={() => resetField(v.key)}
+                        title="Reset to original"
+                      >
+                        <RotateCcw className="size-3" />
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="overflow-hidden">
+                    {isEditing && v.type !== "Prompt" ? (
+                      v.type === "boolean" ? (
+                        <Switch
+                          checked={draftValues[v.key] === "true"}
+                          onCheckedChange={(checked) =>
+                            setDraftValues((prev) => ({
+                              ...prev,
+                              [v.key]: String(checked),
+                            }))
+                          }
+                        />
+                      ) : (
+                        <Input
+                          type={v.type === "number" ? "number" : "text"}
+                          value={draftValues[v.key] ?? ""}
+                          onChange={(e) =>
+                            setDraftValues((prev) => ({
+                              ...prev,
+                              [v.key]: e.target.value,
+                            }))
+                          }
+                        />
+                      )
+                    ) : (
+                      renderValue(
+                        v.type !== "Prompt" && draftValues[v.key] !== undefined
+                          ? { ...v, value: draftValues[v.key] }
+                          : v,
+                      )
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
+
       <ConfirmDialog
         open={confirmOpen}
         setOpen={setConfirmOpen}
