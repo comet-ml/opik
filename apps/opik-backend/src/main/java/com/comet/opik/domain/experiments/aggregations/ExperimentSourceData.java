@@ -19,10 +19,11 @@ public class ExperimentSourceData {
      * @param traceId         The trace ID
      * @param projectId       The project ID
      * @param duration        The trace duration in milliseconds
+     * @param metadata        The trace metadata (JSON)
      * @param input           The trace input
      * @param output          The trace output
-     * @param inputTruncated  The truncated trace input
-     * @param outputTruncated The truncated trace output
+     * @param inputSlim       The truncated trace input
+     * @param outputSlim      The truncated trace output
      * @param visibilityMode  The trace visibility mode
      */
     @Builder
@@ -30,6 +31,7 @@ public class ExperimentSourceData {
             UUID traceId,
             UUID projectId,
             BigDecimal duration,
+            String metadata,
             String input,
             String output,
             String inputSlim,

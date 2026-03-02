@@ -41,7 +41,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
-
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
 
 @Singleton

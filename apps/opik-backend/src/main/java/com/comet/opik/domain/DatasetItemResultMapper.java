@@ -74,6 +74,10 @@ public class DatasetItemResultMapper {
                                 .filter(StringUtils::isNotBlank)
                                 .flatMap(VisibilityMode::fromString)
                                 .orElse(null))
+                        .description(Optional.ofNullable(experimentItem.get(17))
+                                .map(Object::toString)
+                                .filter(StringUtils::isNotBlank)
+                                .orElse(null))
                         .build())
                 .toList();
 
