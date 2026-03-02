@@ -1,10 +1,8 @@
 import React from "react";
-import { Wrench } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tag, TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import { Tag } from "@/components/ui/tag";
 import { ConfigHistoryItem } from "@/types/optimizer-configs";
-import { generateTagVariant } from "@/lib/traces";
 import { getTimeFromNow } from "@/lib/date";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -16,6 +14,32 @@ type ConfigurationHistoryTimelineProps = {
   onSelect: (index: number) => void;
 };
 
+// ─── Timeline connector line layout ──────────────────────────────────────────
+//  Each <li> uses:  py-3 (12 px top/bottom)  ·  px-2 (8 px left)
+//  Circle:          size-4 (16 px)
+//
+//  One connector per gap, rendered inside the upper item.
+//  It starts at the bottom of the current circle and ends exactly at the top
+//  of the next circle by extending 12 px past the li's bottom edge:
+//
+//    CONNECTOR_LEFT   — circle center horizontally
+//                       px-2 (8 px) + size-4 / 2 (8 px) = 16 px  →  left-4
+//
+//    CONNECTOR_TOP    — circle bottom (line start)
+//                       py-3 (12 px) + size-4 (16 px) = 28 px     →  top-7
+//
+//    CONNECTOR_BOTTOM — extends into next item's top padding (line end)
+//                       -py-3 = -12 px                             →  -bottom-3
+//                       lands exactly at the next circle's top edge
+//
+//  Each <li> gets style={{ zIndex: items.length - index }} so earlier items
+//  stack above later ones. This prevents the next item's hover/selected
+//  background from painting over the connector extension.
+// ─────────────────────────────────────────────────────────────────────────────
+const CONNECTOR_LEFT = "left-4";
+const CONNECTOR_TOP = "top-7";
+const CONNECTOR_BOTTOM = "-bottom-3";
+
 const ConfigurationHistoryTimeline: React.FC<
   ConfigurationHistoryTimelineProps
 > = ({ items, total, selectedIndex, onSelect }) => {
@@ -24,23 +48,15 @@ const ConfigurationHistoryTimeline: React.FC<
   }
 
   return (
-    <ul className="px-4 py-4">
+    <ul className="p-4">
       {items.map((item, index) => {
         const isLatest = index === 0;
         const isSelected = index === selectedIndex;
-        const iconColor = isLatest
-          ? TAG_VARIANTS_COLOR_MAP["blue"]
-          : item.tags[0]
-            ? TAG_VARIANTS_COLOR_MAP[
-                generateTagVariant(
-                  item.tags[0],
-                ) as keyof typeof TAG_VARIANTS_COLOR_MAP
-              ]
-            : undefined;
 
         return (
           <li
             key={item.id}
+            style={{ zIndex: items.length - index }}
             className={cn(
               "relative flex cursor-pointer items-start gap-3 rounded px-2 py-3 transition-colors",
               isSelected
@@ -49,43 +65,41 @@ const ConfigurationHistoryTimeline: React.FC<
             )}
             onClick={() => onSelect(index)}
           >
-            {/* Timeline connector line to next item */}
+            {/* Single connector: this circle-bottom → next circle-top */}
             {index < items.length - 1 && (
-              <div className="absolute bottom-0 left-[1.75rem] top-9 w-px bg-border" />
+              <div
+                className={cn(
+                  "absolute w-px",
+                  CONNECTOR_LEFT,
+                  CONNECTOR_TOP,
+                  CONNECTOR_BOTTOM,
+                  isSelected ? "bg-primary" : "bg-border",
+                )}
+              />
             )}
 
-            {/* Circle icon */}
+            {/* Circle */}
             <div
-              className="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border bg-background"
-              style={
-                iconColor
-                  ? {
-                      borderColor: iconColor,
-                      backgroundColor: `color-mix(in srgb, ${iconColor} 15%, var(--background))`,
-                    }
-                  : undefined
-              }
+              className={cn(
+                "relative z-10 flex size-4 shrink-0 items-center justify-center rounded-full bg-background transition-colors",
+                isSelected ? "border border-primary" : "border-2 border-border",
+              )}
             >
-              <Wrench
-                className="size-3"
-                style={iconColor ? { color: iconColor } : undefined}
-              />
+              {isSelected && (
+                <div className="size-1.5 rounded-full bg-primary" />
+              )}
             </div>
 
             {/* Content */}
             <div className="min-w-0 flex-1 pb-1">
               <div className="flex flex-wrap items-center gap-1">
-                <span className="comet-body-s-accented">
-                  v{total - index}
-                </span>
+                <span className="comet-body-s-accented">v{total - index}</span>
                 {isLatest && (
                   <Tag size="sm" variant="blue">
                     latest
                   </Tag>
                 )}
-                {item.tags[0] && (
-                  <ColoredTag label={item.tags[0]} size="sm" />
-                )}
+                {item.tags[0] && <ColoredTag label={item.tags[0]} size="sm" />}
               </div>
               <p className="comet-body-xs mt-0.5 truncate text-light-slate">
                 {item.description}

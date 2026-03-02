@@ -43,17 +43,6 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
 
   return (
     <div className="flex min-h-[400px] gap-0">
-      {/* Left: timeline */}
-      <div className="w-72 shrink-0 border-r">
-        <ConfigurationHistoryTimeline
-          items={allRows}
-          total={total}
-          selectedIndex={selectedIndex}
-          onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
-        />
-      </div>
-
-      {/* Right: detail view */}
       <div className="min-w-0 flex-1">
         {selectedItem ? (
           <ConfigurationDetailView
@@ -67,6 +56,16 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
             Select a version to view its configuration
           </div>
         )}
+      </div>
+
+      <div className="w-72 shrink-0 border-l">
+        <h3>Version history</h3>
+        <ConfigurationHistoryTimeline
+          items={allRows}
+          total={total}
+          selectedIndex={selectedIndex}
+          onSelect={(index) => setSelectedId(allRows[index]?.id ?? undefined)}
+        />
       </div>
     </div>
   );
