@@ -63,6 +63,7 @@ export enum ManagementPermissionsNames {
   INVITE_USERS = "invite_users_to_workspace",
   EXPERIMENT_VIEW = "experiment_view",
   DASHBOARD_VIEW = "dashboard_view",
+  DATASET_VIEW = "dataset_view",
   PROJECT_DELETE = "project_delete",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
