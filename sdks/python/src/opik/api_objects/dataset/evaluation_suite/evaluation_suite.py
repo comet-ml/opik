@@ -229,8 +229,9 @@ class EvaluationSuite:
     def add_item(
         self,
         data: Dict[str, Any],
-        description: Optional[str] = None,
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
+        *,
+        description: Optional[str] = None,
         execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
     ) -> None:
         """
@@ -240,9 +241,9 @@ class EvaluationSuite:
             data: Dictionary containing the test case data. This is passed to
                 the task function and can contain any fields needed.
                 Example: {"user_input": "How do I get a refund?", "user_tier": "premium"}
-            description: Optional description of this test case.
             evaluators: Item-specific LLMJudge evaluators. If provided, these are
                 used in addition to suite-level evaluators.
+            description: Optional description of this test case.
             execution_policy: Item-specific execution policy override.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
 
