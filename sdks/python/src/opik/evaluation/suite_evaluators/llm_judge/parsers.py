@@ -103,6 +103,7 @@ def parse_model_output(
                     name=assertion,
                     value=item.score,
                     reason=item.reason,
+                    category_name="suite_assertion",
                     metadata={"confidence": item.confidence},
                 )
             )
@@ -119,6 +120,7 @@ def parse_model_output(
                     name=assertion,
                     value=0.0,
                     reason=f"Failed to parse model output: {e}",
+                    category_name="suite_assertion",
                     scoring_failed=True,
                     metadata={
                         "raw_output": content,
