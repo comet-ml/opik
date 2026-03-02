@@ -396,8 +396,11 @@ start_missing_containers() {
   local cmd
   cmd=$(get_docker_compose_cmd)
   if [[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]]; then
-    [[ "$BUILD_MODE" == "true" ]] && $cmd build backend
-    $cmd up -d --scale python-backend=0
+    # PYTHON_BACKEND_PULL_POLICY=never prevents docker compose from pulling the image.
+    # --scale python-backend=0 tells docker compose v2 to skip the service entirely,
+    # including skipping its build when --build is passed.
+    export PYTHON_BACKEND_PULL_POLICY=never
+    $cmd up -d ${BUILD_MODE:+--build} --scale python-backend=0
   else
     $cmd up -d ${BUILD_MODE:+--build}
   fi
