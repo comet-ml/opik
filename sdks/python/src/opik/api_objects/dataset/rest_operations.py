@@ -122,6 +122,7 @@ def stream_dataset_items(
                 trace_id=item.trace_id,
                 span_id=item.span_id,
                 source=item.source,
+                description=item.description,
                 evaluators=evaluators,
                 execution_policy=execution_policy,
                 **item.data,
