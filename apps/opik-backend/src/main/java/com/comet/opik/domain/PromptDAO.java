@@ -221,8 +221,7 @@ interface PromptDAO {
                     'created_at', pv.created_at,
                     'created_by', pv.created_by,
                     'last_updated_at', pv.last_updated_at,
-                    'last_updated_by', pv.last_updated_by,
-                    'template_structure', p.template_structure
+                    'last_updated_by', pv.last_updated_by
                 ) AS requested_version
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
