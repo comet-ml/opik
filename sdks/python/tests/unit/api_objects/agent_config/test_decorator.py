@@ -8,7 +8,7 @@ import pytest
 from opik.api_objects.agent_config.cache import SharedConfigCache
 from opik.api_objects.agent_config.decorator import (
     agent_config_decorator,
-    _get_cached_config,
+    get_cached_config,
 )
 from opik.api_objects.prompt.base_prompt import BasePrompt
 from opik.api_objects.prompt.text.prompt import Prompt
@@ -62,7 +62,7 @@ class TestConfigDecoratorValidation:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = _get_cached_config(instance)
+        cache = get_cached_config(instance)
         assert cache._ttl_seconds == 300
 
 
@@ -399,8 +399,8 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache_m = _get_cached_config(m)
-        cache_p = _get_cached_config(p)
+        cache_m = get_cached_config(m)
+        cache_p = get_cached_config(p)
         assert cache_m is cache_p
 
     def test_two_classes__keys_are_prefixed_with_class_name(self, mock_backend):
@@ -517,7 +517,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache = _get_cached_config(m)
+        cache = get_cached_config(m)
         assert "ModelConfig.temp" in cache.values
         assert "PromptConfig.template" in cache.values
         assert m.temp == 0.5
@@ -544,7 +544,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         _p = PromptConfig()
 
-        cache: SharedConfigCache = _get_cached_config(m)
+        cache: SharedConfigCache = get_cached_config(m)
 
         mock_backend.set_blueprint_values(
             [
@@ -582,7 +582,7 @@ class TestConfigDecoratorMultiClass:
         m = ModelConfig()
         p = PromptConfig()
 
-        cache: SharedConfigCache = _get_cached_config(m)
+        cache: SharedConfigCache = get_cached_config(m)
 
         mock_backend.set_blueprint_values(
             [
@@ -611,8 +611,8 @@ class TestConfigDecoratorMultiClass:
         a = ConfigA()
         b = ConfigB()
 
-        cache_a = _get_cached_config(a)
-        cache_b = _get_cached_config(b)
+        cache_a = get_cached_config(a)
+        cache_b = get_cached_config(b)
         assert cache_a is not cache_b
 
     def test_custom_name__uses_name_as_prefix(self, mock_backend):
@@ -638,7 +638,7 @@ class TestConfigDecoratorTTLEnvVar:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = _get_cached_config(instance)
+        cache = get_cached_config(instance)
         assert cache._ttl_seconds == 300
 
     def test_env_var_overrides_ttl(self, mock_backend, monkeypatch):
@@ -654,7 +654,7 @@ class TestConfigDecoratorTTLEnvVar:
             temp: float = 0.8
 
         instance = MyConfig()
-        cache = _get_cached_config(instance)
+        cache = get_cached_config(instance)
         assert cache._ttl_seconds == 60
 
 

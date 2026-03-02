@@ -93,7 +93,7 @@ def agent_config_decorator(
                 project_name=resolved_project,
                 rest_client_=client.rest_client,
             )
-            init_cache_entry(
+            _init_cache_entry(
                 resolved_project,
                 env,
                 mask_id,
@@ -108,7 +108,7 @@ def agent_config_decorator(
             object.__setattr__(self, _F.__opik_description__, description)
             object.__setattr__(self, _F.__opik_agent_config__, agent_cfg)
             object.__setattr__(self, _F.__opik_project__, resolved_project)
-            resolve_and_cache_blueprint(self)
+            _resolve_and_cache_blueprint(self)
 
         cls.__init__ = new_init  # type: ignore[assignment]
 
@@ -119,13 +119,13 @@ def agent_config_decorator(
                 return original_getattribute(self, attr)
 
             instance: AgentConfigInstance = self
-            masked = get_masked_value(instance, attr)
+            masked = _get_masked_value(instance, attr)
             if masked is not _MISSING:
-                inject_trace_metadata(instance, attr, value=masked)
+                _inject_trace_metadata(instance, attr, value=masked)
                 return masked
 
-            value = get_base_value(instance, attr)
-            inject_trace_metadata(instance, attr, value=value)
+            value = _get_base_value(instance, attr)
+            _inject_trace_metadata(instance, attr, value=value)
             return value if value is not _MISSING else original_getattribute(self, attr)
 
         cls.__getattribute__ = new_getattribute  # type: ignore[assignment]
@@ -137,7 +137,8 @@ def agent_config_decorator(
     return wrap(cls)
 
 
-def _get_cached_config(instance: AgentConfigInstance) -> SharedConfigCache:
+def get_cached_config(instance: AgentConfigInstance) -> SharedConfigCache:
+    """Helper method to create a key from the current instance and fetch it from the cache"""
     return get_shared_cache(
         instance.__opik_project__,
         instance.__opik_env__,
@@ -145,7 +146,7 @@ def _get_cached_config(instance: AgentConfigInstance) -> SharedConfigCache:
     )
 
 
-def init_cache_entry(
+def _init_cache_entry(
     resolved_project: str,
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
@@ -183,14 +184,14 @@ def init_cache_entry(
     return shared_cache
 
 
-def get_base_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
+def _get_base_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
     """Return the cached blueprint value for ``attr``, or ``_MISSING``."""
-    cache = _get_cached_config(instance)
+    cache = get_cached_config(instance)
     prefixed_key = instance.__opik_field_map__[attr]
     return cache.values.get(prefixed_key, _MISSING)
 
 
-def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
+def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     """Fetch the remote blueprint and populate the shared cache.
 
     If the remote blueprint already contains all local fields, only the cache
@@ -201,7 +202,7 @@ def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     if agent_cfg is None:
         return
 
-    cache = _get_cached_config(instance)
+    cache = get_cached_config(instance)
     instance_field_types = instance.__opik_field_types__
 
     extra_keys = set(instance_field_types) - set(cache.values)
@@ -234,7 +235,7 @@ def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         if existing is None
         else {k for k, v in field_map.items() if v in extra_keys}
     )
-    bp = create_blueprint(
+    bp = _create_blueprint(
         instance, agent_cfg, local_keys, instance.__opik_description__, cache
     )
     # Tag new blueprint with the env
@@ -243,7 +244,7 @@ def resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
     cache.update(bp)
 
 
-def create_blueprint(
+def _create_blueprint(
     instance: AgentConfigInstance,
     agent_cfg: AgentConfig,
     local_keys: typing.Iterable[str],
@@ -275,7 +276,7 @@ def create_blueprint(
     return bp
 
 
-def get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
+def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
     """Return the mask-overridden value for ``attr``, or ``_MISSING``.
 
     Checks the active context mask (set via ``opik_config_mask`` context var).
@@ -294,7 +295,7 @@ def get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
 
         prefixed_key = instance.__opik_field_map__[attr]
 
-        base_cache = _get_cached_config(instance)
+        base_cache = get_cached_config(instance)
         mask_cache = get_shared_cache(
             instance.__opik_project__, instance.__opik_env__, context_mask
         )
@@ -316,7 +317,7 @@ def get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
     return _MISSING
 
 
-def inject_trace_metadata(
+def _inject_trace_metadata(
     instance: AgentConfigInstance, attr: str, value: typing.Any = _MISSING
 ) -> None:
     """Attach the accessed config value to the active trace's metadata.
@@ -334,7 +335,7 @@ def inject_trace_metadata(
         if trace_data is None:
             return
 
-        cache = _get_cached_config(instance)
+        cache = get_cached_config(instance)
         prefixed_key = instance.__opik_field_map__[attr]
 
         if value is not _MISSING:
