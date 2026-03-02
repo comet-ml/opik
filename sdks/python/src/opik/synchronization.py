@@ -29,7 +29,7 @@ def wait_for_done(
 
 def until(
     function: Callable[[], bool],
-    sleep: float = 0.5,
+    sleep: float = 0.1,
     max_try_seconds: float = 10,
     allow_errors: bool = False,
 ) -> bool:
