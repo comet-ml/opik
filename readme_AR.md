@@ -238,7 +238,7 @@ opik configure
 | أوبن إيه آي (بيثون) | تسجيل التتبعات لمكالمات OpenAI LLM | [التوثيق](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | OpenAI (JS/TS) | تسجيل التتبعات لاستدعاءات OpenAI JavaScript/TypeScript | [التوثيق](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | وكلاء OpenAI | تسجيل التتبعات لمكالمات OpenAI Agents SDK | [التوثيق](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
-| OpenClaw              | Log traces for OpenClaw agent runs                  | [Documentation](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
+| OpenClaw | تسجيل التتبعات لتشغيلات وكلاء OpenClaw | [التوثيق](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | اوبن راوتر | تسجيل التتبعات لمكالمات OpenRouter LLM | [التوثيق](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | القياس عن بعد مفتوح | تسجيل التتبعات للمكالمات المدعومة من OpenTelemetry | [التوثيق](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | واجهة ويب مفتوحة | تسجيل التتبعات لمحادثات OpenWebUI | [التوثيق](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |
