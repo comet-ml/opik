@@ -86,6 +86,7 @@ class TestParseModelOutput:
         assert results[0].value is True
         assert results[0].reason == "The response correctly states Paris"
         assert results[0].scoring_failed is False
+        assert results[0].category_name == "suite_assertion"
         assert results[0].metadata == {"confidence": 0.95}
 
     def test_parse_model_output__multiple_assertions__returns_results_in_order(self):
@@ -115,12 +116,15 @@ class TestParseModelOutput:
         assert len(results) == 3
         assert results[0].name == "First assertion"
         assert results[0].value is True
+        assert results[0].category_name == "suite_assertion"
         assert results[0].metadata == {"confidence": 0.9}
         assert results[1].name == "Second assertion"
         assert results[1].value is False
+        assert results[1].category_name == "suite_assertion"
         assert results[1].metadata == {"confidence": 0.85}
         assert results[2].name == "Third assertion"
         assert results[2].value is True
+        assert results[2].category_name == "suite_assertion"
         assert results[2].metadata == {"confidence": 0.7}
 
     def test_parse_model_output__invalid_json__returns_failed_results(self):
@@ -133,6 +137,7 @@ class TestParseModelOutput:
         assert results[0].name == "Response is accurate"
         assert results[0].value == 0.0
         assert results[0].scoring_failed is True
+        assert results[0].category_name == "suite_assertion"
         assert "Failed to parse model output" in results[0].reason
         assert results[0].metadata["raw_output"] == content
 
@@ -153,6 +158,7 @@ class TestParseModelOutput:
         assert len(results) == 2
         assert all(r.scoring_failed is True for r in results)
         assert all(r.value == 0.0 for r in results)
+        assert all(r.category_name == "suite_assertion" for r in results)
 
     def test_parse_model_output__missing_required_field__returns_failed_results(self):
         assertions = ["Response is accurate"]
@@ -169,6 +175,7 @@ class TestParseModelOutput:
         assert len(results) == 1
         assert results[0].scoring_failed is True
         assert results[0].value == 0.0
+        assert results[0].category_name == "suite_assertion"
 
     def test_parse_model_output__empty_assertions__returns_empty_list(self):
         assertions: list[str] = []
@@ -200,4 +207,5 @@ class TestParseModelOutput:
             == 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         )
         assert results[0].value is True
+        assert results[0].category_name == "suite_assertion"
         assert results[0].metadata == {"confidence": 0.88}

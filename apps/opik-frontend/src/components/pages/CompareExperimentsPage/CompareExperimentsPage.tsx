@@ -13,7 +13,7 @@ import ExperimentsDashboardsTab from "@/components/pages/CompareExperimentsPage/
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import { isEvalSuiteExperimentType } from "@/lib/experiments";
+import { isEvalSuiteExperiment } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -46,7 +46,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     [experiments],
   );
 
-  const isEvalSuite = isEvalSuiteExperimentType(memorizedExperiments[0]?.type);
+  const isEvalSuite = isEvalSuiteExperiment(memorizedExperiments[0]);
 
   const renderContent = () => {
     if (view === VIEW_TYPE.DETAILS) {

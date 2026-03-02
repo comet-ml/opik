@@ -11,6 +11,7 @@ import {
 import { Span, Trace, Thread } from "@/types/traces";
 import AddToDatasetDialog from "@/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/components/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
@@ -25,10 +26,18 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
 
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const isThread = dataType === "threads";
   const isSpan = dataType === "spans";
-  const showAddToDataset = !isThread;
+  const showAddToDataset = !isThread && canViewDatasets;
   const showAddToQueue = isThread || !isSpan;
+
+  if (!showAddToDataset && !showAddToQueue) {
+    return null;
+  }
 
   return (
     <>

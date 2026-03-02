@@ -95,7 +95,7 @@ const PlaygroundOutputActions = ({
   const createProjectMutation = useProjectCreateMutation();
 
   const {
-    permissions: { canViewExperiments },
+    permissions: { canViewExperiments, canViewDatasets },
   } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
@@ -158,11 +158,16 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
-    workspaceName,
-    page: 1,
-    size: DEFAULT_LOADED_DATASETS,
-  });
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
+    {
+      workspaceName,
+      page: 1,
+      size: DEFAULT_LOADED_DATASETS,
+    },
+    {
+      enabled: canViewDatasets,
+    },
+  );
 
   const datasets = datasetsData?.content || EMPTY_DATASETS;
   // Parse datasetId to extract plain ID (handles both "id" and "id::hash" formats)
@@ -466,59 +471,63 @@ const PlaygroundOutputActions = ({
           </div>
         )}
         <div className="ml-auto flex gap-2">
-          <div className="mt-2.5">
-            <DatasetVersionSelectBox
-              value={datasetId}
-              versionName={versionName}
-              onChange={handleDatasetVersionChange}
-              workspaceName={workspaceName}
-            />
-          </div>
-          {datasetId && (
-            <div className="mt-2.5 flex">
-              <FiltersButton
-                columns={filtersColumnData}
-                filters={filters}
-                onChange={onFiltersChange}
-                layout="icon"
-              />
-            </div>
+          {canViewDatasets && (
+            <>
+              <div className="mt-2.5">
+                <DatasetVersionSelectBox
+                  value={datasetId}
+                  versionName={versionName}
+                  onChange={handleDatasetVersionChange}
+                  workspaceName={workspaceName}
+                />
+              </div>
+              {datasetId && (
+                <div className="mt-2.5 flex">
+                  <FiltersButton
+                    columns={filtersColumnData}
+                    filters={filters}
+                    onChange={onFiltersChange}
+                    layout="icon"
+                  />
+                </div>
+              )}
+              <div className="mt-2.5 flex">
+                <MetricSelector
+                  rules={rules}
+                  selectedRuleIds={selectedRuleIds}
+                  onSelectionChange={setSelectedRuleIds}
+                  datasetId={datasetId}
+                  onCreateRuleClick={handleCreateRuleClick}
+                  workspaceName={workspaceName}
+                />
+              </div>
+              {datasetId && (
+                <div className="mt-2.5 flex h-8 items-center justify-center">
+                  <Separator orientation="vertical" className="mr-2 h-4" />
+                  <DataTablePagination
+                    page={page}
+                    pageChange={onChangePage}
+                    size={size}
+                    sizeChange={onChangeSize}
+                    total={total}
+                    variant="minimal"
+                    itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+                    disabled={isRunning}
+                    isLoadingTotal={isLoadingTotal}
+                  />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </div>
+              )}
+              <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+                <ExplainerIcon
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.what_does_the_evaluation_suite_do_here
+                  ]}
+                />
+                <Separator orientation="vertical" className="mx-2 h-4" />
+              </div>
+            </>
           )}
-          <div className="mt-2.5 flex">
-            <MetricSelector
-              rules={rules}
-              selectedRuleIds={selectedRuleIds}
-              onSelectionChange={setSelectedRuleIds}
-              datasetId={datasetId}
-              onCreateRuleClick={handleCreateRuleClick}
-              workspaceName={workspaceName}
-            />
-          </div>
-          {datasetId && (
-            <div className="mt-2.5 flex h-8 items-center justify-center">
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <DataTablePagination
-                page={page}
-                pageChange={onChangePage}
-                size={size}
-                sizeChange={onChangeSize}
-                total={total}
-                variant="minimal"
-                itemsPerPage={[10, 50, 100, 200, 500, 1000]}
-                disabled={isRunning}
-                isLoadingTotal={isLoadingTotal}
-              />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </div>
-          )}
-          <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[
-                EXPLAINER_ID.what_does_the_evaluation_suite_do_here
-              ]}
-            />
-            <Separator orientation="vertical" className="mx-2 h-4" />
-          </div>
           {renderActionButton()}
         </div>
       </div>

@@ -45,6 +45,7 @@ import {
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EvaluationSuiteRowActionsCell = createDatasetRowActionsCell({
   entityName: "evaluation suite",
@@ -181,6 +182,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const EvaluationSuitesPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+
+  const {
+    permissions: { canDeleteDatasets },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -372,11 +377,15 @@ const EvaluationSuitesPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DatasetActionsPanel
-            datasets={selectedRows}
-            entityName="evaluation suites"
-          />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteDatasets && (
+            <>
+              <DatasetActionsPanel
+                datasets={selectedRows}
+                entityName="evaluation suites"
+              />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

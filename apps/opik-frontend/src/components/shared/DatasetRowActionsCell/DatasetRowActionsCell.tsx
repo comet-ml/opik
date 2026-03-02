@@ -22,6 +22,7 @@ import {
 } from "@/store/DatasetExportStore";
 import { Dataset } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CreateDatasetRowActionsCellConfig = {
   entityName: string;
@@ -56,6 +57,10 @@ export const createDatasetRowActionsCell = ({
     const isDatasetExportEnabled = useIsFeatureEnabled(
       FeatureToggleKeys.DATASET_EXPORT_ENABLED,
     );
+
+    const {
+      permissions: { canDeleteDatasets },
+    } = usePermissions();
 
     const deleteDatasetHandler = useCallback(() => {
       deleteDataset({
@@ -103,16 +108,18 @@ export const createDatasetRowActionsCell = ({
           setOpen={(val: boolean) => setOpen(val)}
           dataset={dataset}
         />
-        <ConfirmDialog
-          key={`delete-${resetKeyRef.current}`}
-          open={open === 1}
-          setOpen={setOpen}
-          onConfirm={deleteDatasetHandler}
-          title={`Delete ${entityName}`}
-          description={`Deleting this ${entityName} will also remove all its items. Any experiments linked to it will be moved to a \u201cDeleted evaluation suite\u201d group. This action can\u2019t be undone. Are you sure you want to continue?`}
-          confirmText={`Delete ${entityName}`}
-          confirmButtonVariant="destructive"
-        />
+        {canDeleteDatasets && (
+          <ConfirmDialog
+            key={`delete-${resetKeyRef.current}`}
+            open={open === 1}
+            setOpen={setOpen}
+            onConfirm={deleteDatasetHandler}
+            title={`Delete ${entityName}`}
+            description={`Deleting this ${entityName} will also remove all its items. Any experiments linked to it will be moved to a \u201cDeleted evaluation suite\u201d group. This action can\u2019t be undone. Are you sure you want to continue?`}
+            confirmText={`Delete ${entityName}`}
+            confirmButtonVariant="destructive"
+          />
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="minimal" size="icon" className="-mr-2.5">
@@ -139,17 +146,21 @@ export const createDatasetRowActionsCell = ({
                 Download
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(1);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-              variant="destructive"
-            >
-              <Trash className="mr-2 size-4" />
-              Delete
-            </DropdownMenuItem>
+            {canDeleteDatasets && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    setOpen(1);
+                    resetKeyRef.current = resetKeyRef.current + 1;
+                  }}
+                  variant="destructive"
+                >
+                  <Trash className="mr-2 size-4" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </CellWrapper>

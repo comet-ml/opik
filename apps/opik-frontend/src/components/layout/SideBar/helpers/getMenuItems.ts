@@ -20,9 +20,11 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 const getMenuItems = ({
   canViewExperiments,
   canViewDashboards,
+  canViewDatasets,
 }: {
   canViewExperiments: boolean;
   canViewDashboards: boolean;
+  canViewDatasets: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -79,14 +81,18 @@ const getMenuItems = ({
               },
             ]
           : []),
-        {
-          id: "evaluation_suites",
-          path: "/$workspaceName/evaluation-suites",
-          type: MENU_ITEM_TYPE.router,
-          icon: ListChecks,
-          label: "Evaluation suites",
-          count: "evaluation_suites",
-        },
+        ...(canViewDatasets
+          ? [
+              {
+                id: "evaluation_suites",
+                path: "/$workspaceName/evaluation-suites",
+                type: MENU_ITEM_TYPE.router,
+                icon: ListChecks,
+                label: "Evaluation suites",
+                count: "evaluation_suites",
+              },
+            ]
+          : []),
         {
           id: "annotation_queues",
           path: "/$workspaceName/annotation-queues",

@@ -125,6 +125,11 @@ export enum EXPERIMENT_TYPE {
   MINI_BATCH = "mini-batch",
 }
 
+export enum EVALUATION_METHOD {
+  DATASET = "dataset",
+  EVALUATION_SUITE = "evaluation_suite",
+}
+
 export interface Experiment {
   id: string;
   dataset_id: string;
@@ -137,6 +142,7 @@ export interface Experiment {
   project_name?: string;
   optimization_id?: string;
   type: EXPERIMENT_TYPE;
+  evaluation_method?: EVALUATION_METHOD;
   status: string;
   metadata?: object;
   name: string;
@@ -157,6 +163,14 @@ export interface Experiment {
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
+}
+
+export interface EvalSuiteExperiment extends Experiment {
+  evaluation_method: EVALUATION_METHOD.EVALUATION_SUITE;
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
+  assertion_aggregations: AssertionAggregation[];
 }
 
 export interface ExperimentItem {

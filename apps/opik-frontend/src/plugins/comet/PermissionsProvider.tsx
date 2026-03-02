@@ -9,7 +9,12 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
   const {
     canViewExperiments,
     canViewDashboards,
+    canViewDatasets,
     canDeleteProjects,
+    canDeleteAnnotationQueues,
+    canDeleteTraces,
+    canDeletePrompts,
+    canDeleteDatasets,
     isPending,
   } = useUserPermission();
 
@@ -18,11 +23,26 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       permissions: {
         canViewExperiments,
         canViewDashboards,
+        canViewDatasets,
         canDeleteProjects,
+        canDeleteAnnotationQueues,
+        canDeleteTraces,
+        canDeletePrompts,
+        canDeleteDatasets,
       },
       isPending,
     }),
-    [canViewExperiments, canViewDashboards, canDeleteProjects, isPending],
+    [
+      canViewExperiments,
+      canViewDashboards,
+      canViewDatasets,
+      canDeleteProjects,
+      canDeleteAnnotationQueues,
+      canDeleteTraces,
+      canDeletePrompts,
+      canDeleteDatasets,
+      isPending,
+    ],
   );
 
   return (
