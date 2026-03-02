@@ -64,6 +64,7 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -115,6 +116,11 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+
+  const {
+    permissions: { canDeleteTraces },
+  } = usePermissions();
+
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
@@ -559,25 +565,31 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                 Export as JSON
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => setPopupOpen(true)}
-              variant="destructive"
-            >
-              <Trash className="mr-2 size-4" />
-              Delete trace
-            </DropdownMenuItem>
+            {canDeleteTraces && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setPopupOpen(true)}
+                  variant="destructive"
+                >
+                  <Trash className="mr-2 size-4" />
+                  Delete trace
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <ConfirmDialog
-          open={popupOpen}
-          setOpen={setPopupOpen}
-          onConfirm={handleTraceDelete}
-          title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
-          confirmText="Delete trace"
-          confirmButtonVariant="destructive"
-        />
+        {canDeleteTraces && (
+          <ConfirmDialog
+            open={popupOpen}
+            setOpen={setPopupOpen}
+            onConfirm={handleTraceDelete}
+            title="Delete trace"
+            description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
+            confirmText="Delete trace"
+            confirmButtonVariant="destructive"
+          />
+        )}
       </div>
     </div>
   );

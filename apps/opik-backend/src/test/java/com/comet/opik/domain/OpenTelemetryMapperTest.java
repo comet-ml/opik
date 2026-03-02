@@ -4,6 +4,8 @@ import com.comet.opik.api.Span;
 import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
 import java.util.List;
@@ -439,5 +441,96 @@ class OpenTelemetryMapperTest {
 
         assertThat(span.metadata().has("hidden_params")).isTrue();
         assertThat(span.input()).isNull();
+    }
+
+    @ParameterizedTest(name = "Test total_tokens computation when missing 'gen_ai.usage.total_tokens' but only have {0} and {1}")
+    @CsvSource({
+            "gen_ai.usage.prompt_tokens,gen_ai.usage.completion_tokens",
+            "gen_ai.usage.input_tokens,gen_ai.usage.output_tokens"
+    })
+    void testTotalTokensComputedWhenMissing(String promptTokensKey, String completionTokensKey) {
+        // PydanticAI sends prompt_tokens and completion_tokens directly but omits total_tokens
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey(promptTokensKey)
+                        .setValue(AnyValue.newBuilder().setIntValue(120))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey(completionTokensKey)
+                        .setValue(AnyValue.newBuilder().setIntValue(80))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.usage()).isNotNull();
+        assertThat(span.usage().get("prompt_tokens")).isEqualTo(120);
+        assertThat(span.usage().get("completion_tokens")).isEqualTo(80);
+        assertThat(span.usage().get("total_tokens")).isEqualTo(200);
+    }
+
+    @ParameterizedTest(name = "Test total_tokens computation the 'gen_ai.usage.total_tokens' is not overwritten when also have {0} and {1}")
+    @CsvSource({
+            "gen_ai.usage.prompt_tokens,gen_ai.usage.completion_tokens",
+            "gen_ai.usage.input_tokens,gen_ai.usage.output_tokens"
+    })
+    void testTotalTokensNotOverwrittenWhenAlreadyPresent(String promptTokensKey, String completionTokensKey) {
+        // When total_tokens is explicitly provided, it must not be overwritten
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey(promptTokensKey)
+                        .setValue(AnyValue.newBuilder().setIntValue(120))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey(completionTokensKey)
+                        .setValue(AnyValue.newBuilder().setIntValue(80))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.total_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(210)) // explicit value differs from sum
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.usage()).isNotNull();
+        assertThat(span.usage().get("total_tokens")).isEqualTo(210); // original value preserved
+    }
+
+    @Test
+    void testTotalTokensNotAddedWhenOnlyOneComponentPresent() {
+        // total_tokens should not be fabricated when only one of the two components is available
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("gen_ai.usage.prompt_tokens")
+                        .setValue(AnyValue.newBuilder().setIntValue(120))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+
+        assertThat(span.usage()).isNotNull();
+        assertThat(span.usage().containsKey("total_tokens")).isFalse();
     }
 }

@@ -89,12 +89,39 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeleteProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeleteAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ANNOTATION_QUEUE_DELETE,
+      ),
+    [checkNullablePermission],
+  );
+
+  const canDeleteTraces = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeletePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_DELETE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
     canViewDashboards,
     canViewDatasets,
+    canDeleteProjects,
+    canDeleteAnnotationQueues,
+    canDeleteTraces,
+    canDeletePrompts,
     isPending: isEnabled && isPending,
   };
 };
