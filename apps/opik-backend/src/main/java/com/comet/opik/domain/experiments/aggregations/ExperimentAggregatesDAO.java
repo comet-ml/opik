@@ -65,7 +65,7 @@ public interface ExperimentAggregatesDAO {
 
     Mono<Experiment> getExperimentFromAggregates(UUID experimentId);
 
-    Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria,
+    Mono<Long> countTotal(@NonNull ExperimentSearchCriteria experimentSearchCriteria,
             Set<UUID> targetProjectIds);
 }
 
@@ -1385,7 +1385,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     @Override
-    public Mono<Long> countTotal(ExperimentSearchCriteria experimentSearchCriteria,
+    public Mono<Long> countTotal(@NonNull ExperimentSearchCriteria experimentSearchCriteria,
             Set<UUID> targetProjectIds) {
         return asyncTemplate.nonTransaction(connection -> countTotalFromAggregates(experimentSearchCriteria, connection,
                 targetProjectIds)
