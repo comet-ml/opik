@@ -4,6 +4,10 @@
 - **MySQL**: `apps/opik-backend/src/main/resources/liquibase/db-app-state/migrations/`
 - **ClickHouse**: `apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/`
 
+## Table Naming
+
+Always use **plural** names for database tables: `traces`, `spans`, `feedback_scores`, `datasets`, `experiments` (not `trace`, `span`, `feedback_score`).
+
 ## Liquibase Format
 
 ```sql
