@@ -35,6 +35,8 @@
 <a href='https://x.com/Cometml'><b>ट्विटर</b></a> •
 <a href='https://www.comet.com/docs/opik/changelog'><b>Changelog</b></a> •
 <a href='https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik'><b>दस्तावेज़ीकरण</b></a>
+•
+<a href='https://www.comet.com/docs/opik/integrations/openclaw'><b>OpenClaw</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
