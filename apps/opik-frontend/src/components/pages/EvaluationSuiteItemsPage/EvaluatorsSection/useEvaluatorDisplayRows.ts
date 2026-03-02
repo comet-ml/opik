@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { BehaviorDisplayRow } from "@/types/evaluation-suites";
+import { EvaluatorDisplayRow } from "@/types/evaluation-suites";
 import { Evaluator } from "@/types/datasets";
 import {
   expandEvaluatorsToRows,
-  applyBehaviorEdits,
+  applyEvaluatorEdits,
   formatEvaluatorConfig,
 } from "@/lib/evaluator-converters";
 
@@ -11,10 +11,10 @@ export { formatEvaluatorConfig as getConfigTooltip };
 
 export function useEvaluatorDisplayRows(
   serverEvaluators: Evaluator[],
-  addedEvaluators: Map<string, BehaviorDisplayRow>,
-  editedEvaluators: Map<string, Partial<BehaviorDisplayRow>>,
+  addedEvaluators: Map<string, EvaluatorDisplayRow>,
+  editedEvaluators: Map<string, Partial<EvaluatorDisplayRow>>,
   deletedEvaluatorIds: Set<string>,
-): BehaviorDisplayRow[] {
+): EvaluatorDisplayRow[] {
   const serverRows = useMemo(
     () => expandEvaluatorsToRows(serverEvaluators),
     [serverEvaluators],
@@ -22,7 +22,7 @@ export function useEvaluatorDisplayRows(
 
   return useMemo(
     () =>
-      applyBehaviorEdits(
+      applyEvaluatorEdits(
         serverRows,
         addedEvaluators,
         editedEvaluators,

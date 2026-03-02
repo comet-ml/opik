@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import React, { useCallback } from "react";
 import { Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,10 @@ interface ExecutionPolicyDropdownProps {
   onChange: (policy: ExecutionPolicy) => void;
 }
 
-function ExecutionPolicyDropdown({
+const ExecutionPolicyDropdown: React.FC<ExecutionPolicyDropdownProps> = ({
   policy,
   onChange,
-}: ExecutionPolicyDropdownProps): React.ReactElement {
+}) => {
   const onRunsCommit = useCallback(
     (runs: number) => {
       onChange({
@@ -114,6 +114,6 @@ function ExecutionPolicyDropdown({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
+};
 
 export default ExecutionPolicyDropdown;

@@ -4,9 +4,9 @@ import {
   useDeletedIds,
   useEditedItems,
   useIsDraftMode,
-  useItemAddedBehaviorsMap,
-  useItemEditedBehaviorsMap,
-  useItemDeletedBehaviorIdsMap,
+  useItemAddedEvaluatorsMap,
+  useItemEditedEvaluatorsMap,
+  useItemDeletedEvaluatorIdsMap,
 } from "@/store/EvaluationSuiteDraftStore";
 import useDatasetItemsList, {
   UseDatasetItemsListParams,
@@ -35,9 +35,9 @@ export const useEvaluationSuiteItemsWithDraft = (
   const draftAddedItems = useAddedItems();
   const draftEditedItems = useEditedItems();
   const draftDeletedIds = useDeletedIds();
-  const itemAddedBehaviors = useItemAddedBehaviorsMap();
-  const itemEditedBehaviors = useItemEditedBehaviorsMap();
-  const itemDeletedBehaviorIds = useItemDeletedBehaviorIdsMap();
+  const itemAddedEvaluators = useItemAddedEvaluatorsMap();
+  const itemEditedEvaluators = useItemEditedEvaluatorsMap();
+  const itemDeletedEvaluatorIds = useItemDeletedEvaluatorIdsMap();
 
   const query = useDatasetItemsList(params, options);
 
@@ -56,7 +56,7 @@ export const useEvaluationSuiteItemsWithDraft = (
       items = apiItems;
     }
 
-    // Mark items with item-level behavior changes as edited
+    // Mark items with item-level evaluator changes as edited
     return items.map((item) => {
       if (
         item.draftStatus === DATASET_ITEM_DRAFT_STATUS.added ||
@@ -65,12 +65,12 @@ export const useEvaluationSuiteItemsWithDraft = (
         return item;
       }
 
-      const hasBehaviorChanges =
-        hasNonEmptyInner(itemAddedBehaviors, item.id) ||
-        hasNonEmptyInner(itemEditedBehaviors, item.id) ||
-        hasNonEmptyInner(itemDeletedBehaviorIds, item.id);
+      const hasEvaluatorChanges =
+        hasNonEmptyInner(itemAddedEvaluators, item.id) ||
+        hasNonEmptyInner(itemEditedEvaluators, item.id) ||
+        hasNonEmptyInner(itemDeletedEvaluatorIds, item.id);
 
-      if (hasBehaviorChanges) {
+      if (hasEvaluatorChanges) {
         return { ...item, draftStatus: DATASET_ITEM_DRAFT_STATUS.edited };
       }
 
@@ -82,9 +82,9 @@ export const useEvaluationSuiteItemsWithDraft = (
     draftAddedItems,
     draftEditedItems,
     draftDeletedIds,
-    itemAddedBehaviors,
-    itemEditedBehaviors,
-    itemDeletedBehaviorIds,
+    itemAddedEvaluators,
+    itemEditedEvaluators,
+    itemDeletedEvaluatorIds,
   ]);
 
   return {

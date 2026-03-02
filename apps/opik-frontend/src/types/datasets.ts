@@ -6,7 +6,7 @@ import {
   UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
-import { ExecutionPolicy } from "./evaluation-suites";
+import { ExperimentItemStatus, ExecutionPolicy } from "./evaluation-suites";
 
 export interface Dataset {
   id: string;
@@ -174,7 +174,7 @@ export interface ExperimentItem {
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
-  status?: "passed" | "failed" | "skipped";
+  status?: ExperimentItemStatus;
   assertion_results?: AssertionResult[];
 }
 

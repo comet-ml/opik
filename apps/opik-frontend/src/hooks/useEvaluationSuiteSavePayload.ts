@@ -9,7 +9,7 @@ import {
   DATASET_TYPE,
   Evaluator,
 } from "@/types/datasets";
-import { BehaviorDisplayRow } from "@/types/evaluation-suites";
+import { EvaluatorDisplayRow } from "@/types/evaluation-suites";
 import { UseDatasetItemsListResponse } from "@/api/datasets/useDatasetItemsList";
 
 interface BuildPayloadOptions {
@@ -79,19 +79,19 @@ export function useEvaluationSuiteSavePayload(suiteId: string) {
         // Reconstruct suite-level evaluators
         evaluators = reconstructEvaluators(
           versionEvaluators,
-          state.addedBehaviors,
-          state.editedBehaviors,
-          state.deletedBehaviorIds,
+          state.addedEvaluators,
+          state.editedEvaluators,
+          state.deletedEvaluatorIds,
         );
 
-        // Collect all itemIds that have item-level behavior changes
+        // Collect all itemIds that have item-level evaluator changes
         const itemIdsWithChanges = new Set<string>();
-        const behaviorMaps = [
-          state.itemAddedBehaviors,
-          state.itemEditedBehaviors,
-          state.itemDeletedBehaviorIds,
+        const evaluatorMaps = [
+          state.itemAddedEvaluators,
+          state.itemEditedEvaluators,
+          state.itemDeletedEvaluatorIds,
         ];
-        for (const map of behaviorMaps) {
+        for (const map of evaluatorMaps) {
           for (const [itemId, inner] of map) {
             if (inner.size > 0) {
               itemIdsWithChanges.add(itemId);
@@ -99,18 +99,18 @@ export function useEvaluationSuiteSavePayload(suiteId: string) {
           }
         }
 
-        // For each item with behavior changes, reconstruct its evaluators
+        // For each item with evaluator changes, reconstruct its evaluators
         for (const itemId of itemIdsWithChanges) {
           const cachedItem = findItemInCache(queryClient, suiteId, itemId);
           const originalItemEvaluators = cachedItem?.evaluators ?? [];
           const itemAdded =
-            state.itemAddedBehaviors.get(itemId) ??
-            new Map<string, BehaviorDisplayRow>();
+            state.itemAddedEvaluators.get(itemId) ??
+            new Map<string, EvaluatorDisplayRow>();
           const itemEdited =
-            state.itemEditedBehaviors.get(itemId) ??
-            new Map<string, Partial<BehaviorDisplayRow>>();
+            state.itemEditedEvaluators.get(itemId) ??
+            new Map<string, Partial<EvaluatorDisplayRow>>();
           const itemDeleted =
-            state.itemDeletedBehaviorIds.get(itemId) ?? new Set<string>();
+            state.itemDeletedEvaluatorIds.get(itemId) ?? new Set<string>();
 
           const itemEvaluators = reconstructEvaluators(
             originalItemEvaluators,

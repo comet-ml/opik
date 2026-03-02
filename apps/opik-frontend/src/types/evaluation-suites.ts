@@ -4,13 +4,6 @@ export enum ExperimentItemStatus {
   SKIPPED = "skipped",
 }
 
-export interface BehaviorResult {
-  behavior_name: string;
-  passed: boolean;
-  pass_score?: number;
-  reason?: string;
-}
-
 export interface ExecutionPolicy {
   runs_per_item: number;
   pass_threshold: number;
@@ -56,7 +49,7 @@ export interface LLMJudgeConfig {
 
 export type MetricConfig = StringMatchConfig | ThresholdConfig | LLMJudgeConfig;
 
-export interface BehaviorDisplayRow {
+export interface EvaluatorDisplayRow {
   id: string;
   evaluatorId?: string;
   name: string;

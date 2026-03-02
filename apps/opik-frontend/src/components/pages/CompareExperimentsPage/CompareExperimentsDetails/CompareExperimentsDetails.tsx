@@ -28,6 +28,20 @@ import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 
+function hasPassRate(
+  e: Experiment | undefined,
+): e is Experiment & {
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
+} {
+  return (
+    isNumber(e?.pass_rate) &&
+    isNumber(e?.passed_count) &&
+    isNumber(e?.total_count)
+  );
+}
+
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
@@ -74,12 +88,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     experiments,
   });
 
-  const allHavePassRate = experiments.every(
-    (e) =>
-      isNumber(e.pass_rate) &&
-      isNumber(e.passed_count) &&
-      isNumber(e.total_count),
-  );
+  const allHavePassRate = experiments.every(hasPassRate);
 
   const experimentTracesSearch = useMemo(
     () => ({
@@ -146,11 +155,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
       );
     }
 
-    if (
-      isNumber(experiment?.pass_rate) &&
-      isNumber(experiment?.passed_count) &&
-      isNumber(experiment?.total_count)
-    ) {
+    if (hasPassRate(experiment)) {
       return (
         <div className="flex h-11 items-center gap-2">
           <span className="comet-body-s-accented">

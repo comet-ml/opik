@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
@@ -21,7 +21,7 @@ function serializeData(data: Record<string, unknown> | undefined): string {
   return data ? JSON.stringify(data, null, 2) : "{}";
 }
 
-function ItemContextSection() {
+const ItemContextSection: React.FC = () => {
   const { datasetItem, handleFieldChange } =
     useDatasetItemEditorAutosaveContext();
 
@@ -102,6 +102,6 @@ function ItemContextSection() {
       )}
     </div>
   );
-}
+};
 
 export default ItemContextSection;

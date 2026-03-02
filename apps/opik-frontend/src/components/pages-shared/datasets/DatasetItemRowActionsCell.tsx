@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MoreHorizontal, Trash } from "lucide-react";
 
@@ -15,9 +15,9 @@ import { useDeleteItem } from "@/store/EvaluationSuiteDraftStore";
 import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
 
-export const DatasetItemRowActionsCell = (
-  context: CellContext<DatasetItem, unknown>,
-) => {
+export const DatasetItemRowActionsCell: React.FC<
+  CellContext<DatasetItem, unknown>
+> = (context) => {
   const datasetItem = context.row.original;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [dontAskAgain] = useDatasetItemDeletePreference();

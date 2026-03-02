@@ -1,3 +1,4 @@
+import React from "react";
 import { CellContext, ColumnMeta, TableMeta } from "@tanstack/react-table";
 import { DatasetItem, Evaluator } from "@/types/datasets";
 import {
@@ -7,18 +8,18 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useItemAddedBehaviors,
-  useItemEditedBehaviors,
-  useItemDeletedBehaviorIds,
+  useItemAddedEvaluators,
+  useItemEditedEvaluators,
+  useItemDeletedEvaluatorIds,
 } from "@/store/EvaluationSuiteDraftStore";
-import { useEvaluatorDisplayRows } from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/useEvaluatorDisplayRows";
+import { useEvaluatorDisplayRows } from "@/components/pages/EvaluationSuiteItemsPage/EvaluatorsSection/useEvaluatorDisplayRows";
 import {
   getMetricIcon,
   formatEvaluatorConfig,
   getSectionLabel,
 } from "@/lib/evaluator-converters";
 import {
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
   MetricType,
   LLMJudgeConfig,
 } from "@/types/evaluation-suites";
@@ -27,7 +28,9 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 const EMPTY_EVALUATORS: Evaluator[] = [];
 const MAX_VISIBLE_ASSERTIONS = 3;
 
-function EvaluatorTooltipEntry({ row }: { row: BehaviorDisplayRow }) {
+const EvaluatorTooltipEntry: React.FC<{ row: EvaluatorDisplayRow }> = ({
+  row,
+}) => {
   const Icon = getMetricIcon(row.type);
   const isLLMJudge = row.type === MetricType.LLM_AS_JUDGE;
   const assertions = isLLMJudge
@@ -82,30 +85,30 @@ function EvaluatorTooltipEntry({ row }: { row: BehaviorDisplayRow }) {
       </div>
     </div>
   );
-}
+};
 
-interface BehaviorsCountCellInnerProps {
+interface EvaluatorsCountCellInnerProps {
   itemId: string;
   item: DatasetItem;
   metadata: ColumnMeta<DatasetItem, unknown> | undefined;
   tableMetadata: TableMeta<DatasetItem> | undefined;
 }
 
-function BehaviorsCountCellInner({
+const EvaluatorsCountCellInner: React.FC<EvaluatorsCountCellInnerProps> = ({
   itemId,
   item,
   metadata,
   tableMetadata,
-}: BehaviorsCountCellInnerProps) {
-  const addedBehaviors = useItemAddedBehaviors(itemId);
-  const editedBehaviors = useItemEditedBehaviors(itemId);
-  const deletedBehaviorIds = useItemDeletedBehaviorIds(itemId);
+}) => {
+  const addedEvaluators = useItemAddedEvaluators(itemId);
+  const editedEvaluators = useItemEditedEvaluators(itemId);
+  const deletedEvaluatorIds = useItemDeletedEvaluatorIds(itemId);
 
   const displayRows = useEvaluatorDisplayRows(
     item.evaluators ?? EMPTY_EVALUATORS,
-    addedBehaviors,
-    editedBehaviors,
-    deletedBehaviorIds,
+    addedEvaluators,
+    editedEvaluators,
+    deletedEvaluatorIds,
   );
 
   const count = displayRows.length;
@@ -150,19 +153,19 @@ function BehaviorsCountCellInner({
       </Tooltip>
     </CellWrapper>
   );
-}
+};
 
-export function BehaviorsCountCell(
-  context: CellContext<DatasetItem, unknown>,
-): React.ReactElement {
+export const EvaluatorsCountCell: React.FC<
+  CellContext<DatasetItem, unknown>
+> = (context) => {
   const item = context.row.original;
 
   return (
-    <BehaviorsCountCellInner
+    <EvaluatorsCountCellInner
       itemId={item.id}
       item={item}
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     />
   );
-}
+};

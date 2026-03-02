@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import { DatasetItem } from "@/types/datasets";
-import { BehaviorDisplayRow, ExecutionPolicy } from "@/types/evaluation-suites";
+import { EvaluatorDisplayRow, ExecutionPolicy } from "@/types/evaluation-suites";
 
 interface EvaluationSuiteDraftState {
   addedItems: Map<string, DatasetItem>;
@@ -9,15 +9,15 @@ interface EvaluationSuiteDraftState {
   deletedIds: Set<string>;
   isAllItemsSelected: boolean;
 
-  addedBehaviors: Map<string, BehaviorDisplayRow>;
-  editedBehaviors: Map<string, Partial<BehaviorDisplayRow>>;
-  deletedBehaviorIds: Set<string>;
+  addedEvaluators: Map<string, EvaluatorDisplayRow>;
+  editedEvaluators: Map<string, Partial<EvaluatorDisplayRow>>;
+  deletedEvaluatorIds: Set<string>;
 
   executionPolicy: ExecutionPolicy | null;
 
-  itemAddedBehaviors: Map<string, Map<string, BehaviorDisplayRow>>;
-  itemEditedBehaviors: Map<string, Map<string, Partial<BehaviorDisplayRow>>>;
-  itemDeletedBehaviorIds: Map<string, Set<string>>;
+  itemAddedEvaluators: Map<string, Map<string, EvaluatorDisplayRow>>;
+  itemEditedEvaluators: Map<string, Map<string, Partial<EvaluatorDisplayRow>>>;
+  itemDeletedEvaluatorIds: Map<string, Set<string>>;
 
   addItem: (item: Omit<DatasetItem, "id">) => void;
   bulkAddItems: (items: Omit<DatasetItem, "id">[]) => void;
@@ -26,21 +26,21 @@ interface EvaluationSuiteDraftState {
   bulkDeleteItems: (ids: string[]) => void;
   bulkEditItems: (ids: string[], changes: Partial<DatasetItem>) => void;
   setIsAllItemsSelected: (value: boolean) => void;
-  addBehavior: (behavior: Omit<BehaviorDisplayRow, "id">) => string;
-  editBehavior: (id: string, changes: Partial<BehaviorDisplayRow>) => void;
-  deleteBehavior: (id: string) => void;
+  addEvaluator: (evaluator: Omit<EvaluatorDisplayRow, "id">) => string;
+  editEvaluator: (id: string, changes: Partial<EvaluatorDisplayRow>) => void;
+  deleteEvaluator: (id: string) => void;
   setExecutionPolicy: (policy: ExecutionPolicy) => void;
 
-  addItemBehavior: (
+  addItemEvaluator: (
     itemId: string,
-    behavior: Omit<BehaviorDisplayRow, "id">,
+    evaluator: Omit<EvaluatorDisplayRow, "id">,
   ) => string;
-  editItemBehavior: (
+  editItemEvaluator: (
     itemId: string,
-    behaviorId: string,
-    changes: Partial<BehaviorDisplayRow>,
+    evaluatorId: string,
+    changes: Partial<EvaluatorDisplayRow>,
   ) => void;
-  deleteItemBehavior: (itemId: string, behaviorId: string) => void;
+  deleteItemEvaluator: (itemId: string, evaluatorId: string) => void;
 
   clearDraft: () => void;
 }
@@ -51,16 +51,16 @@ function createInitialState() {
     editedItems: new Map<string, Partial<DatasetItem>>(),
     deletedIds: new Set<string>(),
     isAllItemsSelected: false,
-    addedBehaviors: new Map<string, BehaviorDisplayRow>(),
-    editedBehaviors: new Map<string, Partial<BehaviorDisplayRow>>(),
-    deletedBehaviorIds: new Set<string>(),
+    addedEvaluators: new Map<string, EvaluatorDisplayRow>(),
+    editedEvaluators: new Map<string, Partial<EvaluatorDisplayRow>>(),
+    deletedEvaluatorIds: new Set<string>(),
     executionPolicy: null as ExecutionPolicy | null,
-    itemAddedBehaviors: new Map<string, Map<string, BehaviorDisplayRow>>(),
-    itemEditedBehaviors: new Map<
+    itemAddedEvaluators: new Map<string, Map<string, EvaluatorDisplayRow>>(),
+    itemEditedEvaluators: new Map<
       string,
-      Map<string, Partial<BehaviorDisplayRow>>
+      Map<string, Partial<EvaluatorDisplayRow>>
     >(),
-    itemDeletedBehaviorIds: new Map<string, Set<string>>(),
+    itemDeletedEvaluatorIds: new Map<string, Set<string>>(),
   };
 }
 
@@ -83,9 +83,9 @@ function hasNonEmptyEntries(map: Map<string, { size: number }>): boolean {
 
 function hasItemLevelChanges(state: EvaluationSuiteDraftState): boolean {
   return (
-    hasNonEmptyEntries(state.itemAddedBehaviors) ||
-    hasNonEmptyEntries(state.itemEditedBehaviors) ||
-    hasNonEmptyEntries(state.itemDeletedBehaviorIds)
+    hasNonEmptyEntries(state.itemAddedEvaluators) ||
+    hasNonEmptyEntries(state.itemEditedEvaluators) ||
+    hasNonEmptyEntries(state.itemDeletedEvaluatorIds)
   );
 }
 
@@ -193,115 +193,115 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
       set({ isAllItemsSelected: value });
     },
 
-    addBehavior: (behavior) => {
+    addEvaluator: (evaluator) => {
       const id = uuidv4();
       set((state) => {
-        const next = new Map(state.addedBehaviors);
-        next.set(id, { ...behavior, id, isNew: true });
-        return { addedBehaviors: next };
+        const next = new Map(state.addedEvaluators);
+        next.set(id, { ...evaluator, id, isNew: true });
+        return { addedEvaluators: next };
       });
       return id;
     },
 
-    editBehavior: (id, changes) => {
+    editEvaluator: (id, changes) => {
       set((state) => {
-        if (state.addedBehaviors.has(id)) {
-          const next = new Map(state.addedBehaviors);
+        if (state.addedEvaluators.has(id)) {
+          const next = new Map(state.addedEvaluators);
           const existing = next.get(id)!;
           next.set(id, { ...existing, ...changes });
-          return { addedBehaviors: next };
+          return { addedEvaluators: next };
         }
-        const next = new Map(state.editedBehaviors);
+        const next = new Map(state.editedEvaluators);
         const existing = next.get(id) || {};
         next.set(id, { ...existing, ...changes, isEdited: true });
-        return { editedBehaviors: next };
+        return { editedEvaluators: next };
       });
     },
 
-    deleteBehavior: (id) => {
+    deleteEvaluator: (id) => {
       set((state) => {
-        if (state.addedBehaviors.has(id)) {
-          const next = new Map(state.addedBehaviors);
+        if (state.addedEvaluators.has(id)) {
+          const next = new Map(state.addedEvaluators);
           next.delete(id);
-          return { addedBehaviors: next };
+          return { addedEvaluators: next };
         }
-        const nextEdited = new Map(state.editedBehaviors);
+        const nextEdited = new Map(state.editedEvaluators);
         nextEdited.delete(id);
-        const nextDeleted = new Set(state.deletedBehaviorIds);
+        const nextDeleted = new Set(state.deletedEvaluatorIds);
         nextDeleted.add(id);
         return {
-          editedBehaviors: nextEdited,
-          deletedBehaviorIds: nextDeleted,
+          editedEvaluators: nextEdited,
+          deletedEvaluatorIds: nextDeleted,
         };
       });
     },
 
     setExecutionPolicy: (policy) => set({ executionPolicy: policy }),
 
-    addItemBehavior: (itemId, behavior) => {
+    addItemEvaluator: (itemId, evaluator) => {
       const id = uuidv4();
       set((state) => {
         const { outerClone, inner } = cloneNestedMap(
-          state.itemAddedBehaviors,
+          state.itemAddedEvaluators,
           itemId,
         );
-        inner.set(id, { ...behavior, id, isNew: true });
-        return { itemAddedBehaviors: outerClone };
+        inner.set(id, { ...evaluator, id, isNew: true });
+        return { itemAddedEvaluators: outerClone };
       });
       return id;
     },
 
-    editItemBehavior: (itemId, behaviorId, changes) => {
+    editItemEvaluator: (itemId, evaluatorId, changes) => {
       set((state) => {
-        const addedInner = state.itemAddedBehaviors.get(itemId);
-        if (addedInner?.has(behaviorId)) {
+        const addedInner = state.itemAddedEvaluators.get(itemId);
+        if (addedInner?.has(evaluatorId)) {
           const { outerClone, inner } = cloneNestedMap(
-            state.itemAddedBehaviors,
+            state.itemAddedEvaluators,
             itemId,
           );
-          const existing = inner.get(behaviorId)!;
-          inner.set(behaviorId, { ...existing, ...changes });
-          return { itemAddedBehaviors: outerClone };
+          const existing = inner.get(evaluatorId)!;
+          inner.set(evaluatorId, { ...existing, ...changes });
+          return { itemAddedEvaluators: outerClone };
         }
 
         const { outerClone, inner } = cloneNestedMap(
-          state.itemEditedBehaviors,
+          state.itemEditedEvaluators,
           itemId,
         );
-        const existing = inner.get(behaviorId) || {};
-        inner.set(behaviorId, { ...existing, ...changes, isEdited: true });
-        return { itemEditedBehaviors: outerClone };
+        const existing = inner.get(evaluatorId) || {};
+        inner.set(evaluatorId, { ...existing, ...changes, isEdited: true });
+        return { itemEditedEvaluators: outerClone };
       });
     },
 
-    deleteItemBehavior: (itemId, behaviorId) => {
+    deleteItemEvaluator: (itemId, evaluatorId) => {
       set((state) => {
-        const addedInner = state.itemAddedBehaviors.get(itemId);
-        if (addedInner?.has(behaviorId)) {
+        const addedInner = state.itemAddedEvaluators.get(itemId);
+        if (addedInner?.has(evaluatorId)) {
           const { outerClone, inner } = cloneNestedMap(
-            state.itemAddedBehaviors,
+            state.itemAddedEvaluators,
             itemId,
           );
-          inner.delete(behaviorId);
-          return { itemAddedBehaviors: outerClone };
+          inner.delete(evaluatorId);
+          return { itemAddedEvaluators: outerClone };
         }
 
         const { outerClone: editedOuter, inner: editedInner } = cloneNestedMap(
-          state.itemEditedBehaviors,
+          state.itemEditedEvaluators,
           itemId,
         );
-        editedInner.delete(behaviorId);
+        editedInner.delete(evaluatorId);
 
-        const deletedOuter = new Map(state.itemDeletedBehaviorIds);
+        const deletedOuter = new Map(state.itemDeletedEvaluatorIds);
         const deletedInner = new Set<string>(
           deletedOuter.get(itemId) ?? new Set<string>(),
         );
-        deletedInner.add(behaviorId);
+        deletedInner.add(evaluatorId);
         deletedOuter.set(itemId, deletedInner);
 
         return {
-          itemEditedBehaviors: editedOuter,
-          itemDeletedBehaviorIds: deletedOuter,
+          itemEditedEvaluators: editedOuter,
+          itemDeletedEvaluatorIds: deletedOuter,
         };
       });
     },
@@ -319,17 +319,17 @@ export const selectIsDraftMode = (state: EvaluationSuiteDraftState) =>
   state.editedItems.size > 0 ||
   state.deletedIds.size > 0;
 
-export const selectHasBehaviorChanges = (
+export const selectHasEvaluatorChanges = (
   state: EvaluationSuiteDraftState,
 ): boolean =>
-  state.addedBehaviors.size > 0 ||
-  state.editedBehaviors.size > 0 ||
-  state.deletedBehaviorIds.size > 0 ||
+  state.addedEvaluators.size > 0 ||
+  state.editedEvaluators.size > 0 ||
+  state.deletedEvaluatorIds.size > 0 ||
   state.executionPolicy !== null ||
   hasItemLevelChanges(state);
 
 export const selectHasDraft = (state: EvaluationSuiteDraftState): boolean =>
-  selectIsDraftMode(state) || selectHasBehaviorChanges(state);
+  selectIsDraftMode(state) || selectHasEvaluatorChanges(state);
 
 // Item CRUD hooks
 
@@ -367,58 +367,58 @@ export const useIsAllItemsSelected = () =>
 export const useSetIsAllItemsSelected = () =>
   useEvaluationSuiteDraftStore((state) => state.setIsAllItemsSelected);
 
-// Suite-level behavior hooks
+// Suite-level evaluator hooks
 
-export const useAddBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.addBehavior);
-export const useEditBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.editBehavior);
-export const useDeleteBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.deleteBehavior);
+export const useAddEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.addEvaluator);
+export const useEditEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.editEvaluator);
+export const useDeleteEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.deleteEvaluator);
 export const useSetExecutionPolicy = () =>
   useEvaluationSuiteDraftStore((state) => state.setExecutionPolicy);
-export const useBehaviorsExecutionPolicy = () =>
+export const useEvaluatorsExecutionPolicy = () =>
   useEvaluationSuiteDraftStore((state) => state.executionPolicy);
-export const useAddedBehaviors = () =>
-  useEvaluationSuiteDraftStore((state) => state.addedBehaviors);
-export const useEditedBehaviors = () =>
-  useEvaluationSuiteDraftStore((state) => state.editedBehaviors);
-export const useDeletedBehaviorIds = () =>
-  useEvaluationSuiteDraftStore((state) => state.deletedBehaviorIds);
-export const useHasBehaviorChanges = () =>
-  useEvaluationSuiteDraftStore(selectHasBehaviorChanges);
+export const useAddedEvaluators = () =>
+  useEvaluationSuiteDraftStore((state) => state.addedEvaluators);
+export const useEditedEvaluators = () =>
+  useEvaluationSuiteDraftStore((state) => state.editedEvaluators);
+export const useDeletedEvaluatorIds = () =>
+  useEvaluationSuiteDraftStore((state) => state.deletedEvaluatorIds);
+export const useHasEvaluatorChanges = () =>
+  useEvaluationSuiteDraftStore(selectHasEvaluatorChanges);
 
-// Item-level behavior hooks
+// Item-level evaluator hooks
 
-const EMPTY_MAP = new Map<string, BehaviorDisplayRow>();
-const EMPTY_PARTIAL_MAP = new Map<string, Partial<BehaviorDisplayRow>>();
+const EMPTY_MAP = new Map<string, EvaluatorDisplayRow>();
+const EMPTY_PARTIAL_MAP = new Map<string, Partial<EvaluatorDisplayRow>>();
 const EMPTY_SET = new Set<string>();
 
-export const useItemAddedBehaviors = (itemId: string) =>
+export const useItemAddedEvaluators = (itemId: string) =>
   useEvaluationSuiteDraftStore(
-    (state) => state.itemAddedBehaviors.get(itemId) ?? EMPTY_MAP,
+    (state) => state.itemAddedEvaluators.get(itemId) ?? EMPTY_MAP,
   );
-export const useItemEditedBehaviors = (itemId: string) =>
+export const useItemEditedEvaluators = (itemId: string) =>
   useEvaluationSuiteDraftStore(
-    (state) => state.itemEditedBehaviors.get(itemId) ?? EMPTY_PARTIAL_MAP,
+    (state) => state.itemEditedEvaluators.get(itemId) ?? EMPTY_PARTIAL_MAP,
   );
-export const useItemDeletedBehaviorIds = (itemId: string) =>
+export const useItemDeletedEvaluatorIds = (itemId: string) =>
   useEvaluationSuiteDraftStore(
-    (state) => state.itemDeletedBehaviorIds.get(itemId) ?? EMPTY_SET,
+    (state) => state.itemDeletedEvaluatorIds.get(itemId) ?? EMPTY_SET,
   );
 
-export const useAddItemBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.addItemBehavior);
-export const useEditItemBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.editItemBehavior);
-export const useDeleteItemBehavior = () =>
-  useEvaluationSuiteDraftStore((state) => state.deleteItemBehavior);
+export const useAddItemEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.addItemEvaluator);
+export const useEditItemEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.editItemEvaluator);
+export const useDeleteItemEvaluator = () =>
+  useEvaluationSuiteDraftStore((state) => state.deleteItemEvaluator);
 
-export const useItemAddedBehaviorsMap = () =>
-  useEvaluationSuiteDraftStore((state) => state.itemAddedBehaviors);
-export const useItemEditedBehaviorsMap = () =>
-  useEvaluationSuiteDraftStore((state) => state.itemEditedBehaviors);
-export const useItemDeletedBehaviorIdsMap = () =>
-  useEvaluationSuiteDraftStore((state) => state.itemDeletedBehaviorIds);
+export const useItemAddedEvaluatorsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemAddedEvaluators);
+export const useItemEditedEvaluatorsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemEditedEvaluators);
+export const useItemDeletedEvaluatorIdsMap = () =>
+  useEvaluationSuiteDraftStore((state) => state.itemDeletedEvaluatorIds);
 
 export default useEvaluationSuiteDraftStore;

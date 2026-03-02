@@ -1,17 +1,10 @@
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import BehaviorsBreakdownTooltip from "./BehaviorsBreakdownTooltip";
-import { ExperimentsCompare } from "@/types/datasets";
-import {
-  ExperimentItemStatus,
-  BehaviorResult,
-} from "@/types/evaluation-suites";
-
-interface ExperimentItemWithStatus {
-  status?: ExperimentItemStatus;
-  behavior_results?: BehaviorResult[];
-}
+import AssertionsBreakdownTooltip from "./AssertionsBreakdownTooltip";
+import { AssertionResult, ExperimentsCompare } from "@/types/datasets";
+import { ExperimentItemStatus } from "@/types/evaluation-suites";
 
 const STATUS_DISPLAY: Record<
   ExperimentItemStatus,
@@ -25,38 +18,44 @@ const STATUS_DISPLAY: Record<
   },
 };
 
-function getStatusFromExperimentItems(row: ExperimentsCompare): {
+type StatusInfo = {
   status: ExperimentItemStatus | undefined;
-  behaviorsByRun: BehaviorResult[][];
+  assertionsByRun: AssertionResult[][];
   passedCount: number;
   totalCount: number;
-} {
-  const items = row.experiment_items as unknown as ExperimentItemWithStatus[];
+};
+
+function getStatusFromExperimentItems(row: ExperimentsCompare): StatusInfo {
+  const items = row.experiment_items;
   if (!items?.length) {
     return {
       status: undefined,
-      behaviorsByRun: [],
+      assertionsByRun: [],
       passedCount: 0,
       totalCount: 0,
     };
   }
 
-  const behaviorsByRun = items.map((item) => item.behavior_results ?? []);
+  const assertionsByRun = items.map(
+    (item) => item.assertion_results ?? [],
+  );
   const passedCount = items.filter(
     (item) => item.status === ExperimentItemStatus.PASSED,
   ).length;
 
   return {
     status: items[0].status,
-    behaviorsByRun,
+    assertionsByRun,
     passedCount,
     totalCount: items.length,
   };
 }
 
-const PassedCell = (context: CellContext<ExperimentsCompare, unknown>) => {
+const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
+  context,
+) => {
   const row = context.row.original;
-  const { status, behaviorsByRun, passedCount, totalCount } =
+  const { status, assertionsByRun, passedCount, totalCount } =
     getStatusFromExperimentItems(row);
 
   const isMultiRun = totalCount > 1;
@@ -67,14 +66,14 @@ const PassedCell = (context: CellContext<ExperimentsCompare, unknown>) => {
       tableMetadata={context.table.options.meta}
     >
       {status ? (
-        <BehaviorsBreakdownTooltip behaviorsByRun={behaviorsByRun}>
+        <AssertionsBreakdownTooltip assertionsByRun={assertionsByRun}>
           <span
             className={`comet-body-s-accented cursor-default ${STATUS_DISPLAY[status].color}`}
           >
             {STATUS_DISPLAY[status].label}
             {isMultiRun && ` (${passedCount}/${totalCount})`}
           </span>
-        </BehaviorsBreakdownTooltip>
+        </AssertionsBreakdownTooltip>
       ) : (
         <span className="text-muted-slate">{"\u2014"}</span>
       )}

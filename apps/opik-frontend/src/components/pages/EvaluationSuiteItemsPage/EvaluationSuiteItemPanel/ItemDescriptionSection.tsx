@@ -1,4 +1,4 @@
-import { useCallback, type ChangeEvent } from "react";
+import React, { useCallback, type ChangeEvent } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { useDatasetItemEditorAutosaveContext } from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditorAutosaveContext";
 import { useEditItem } from "@/store/EvaluationSuiteDraftStore";
@@ -9,7 +9,9 @@ interface ItemDescriptionSectionProps {
   itemId: string;
 }
 
-function ItemDescriptionSection({ itemId }: ItemDescriptionSectionProps) {
+const ItemDescriptionSection: React.FC<ItemDescriptionSectionProps> = ({
+  itemId,
+}) => {
   const { datasetItem } = useDatasetItemEditorAutosaveContext();
   const editItem = useEditItem();
 
@@ -34,6 +36,6 @@ function ItemDescriptionSection({ itemId }: ItemDescriptionSectionProps) {
       />
     </div>
   );
-}
+};
 
 export default ItemDescriptionSection;

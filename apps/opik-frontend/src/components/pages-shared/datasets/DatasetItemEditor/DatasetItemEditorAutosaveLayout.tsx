@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Copy, MoreHorizontal, Share, Trash, Loader2 } from "lucide-react";
+import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/components/ui/button";
@@ -71,39 +71,11 @@ const DatasetItemEditorActionsPanel: React.FC<
   );
 };
 
-const AutosaveIndicator: React.FC<{
-  isAutoSaving: boolean;
-  lastSavedAt: Date | null;
-  hasError: boolean;
-}> = ({ isAutoSaving, lastSavedAt, hasError }) => {
-  if (hasError) {
-    return <div className="text-xs text-destructive">Failed to save</div>;
-  }
-
-  if (isAutoSaving) {
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="size-3 animate-spin" />
-        <span>Saving...</span>
-      </div>
-    );
-  }
-
-  if (lastSavedAt) {
-    return <div className="text-xs text-muted-foreground">Saved</div>;
-  }
-
-  return null;
-};
-
 const DatasetItemEditorAutosaveLayout: React.FC<
   DatasetItemEditorAutosaveLayoutProps
 > = ({ datasetItemId, isOpen, onClose }) => {
   const {
     isPending,
-    isAutoSaving,
-    lastSavedAt,
-    hasError,
     handleFieldChange,
     handleDelete,
     tags,
@@ -113,8 +85,6 @@ const DatasetItemEditorAutosaveLayout: React.FC<
     formId,
     horizontalNavigation,
     datasetItem,
-    flushPendingSave,
-    resetSaveState,
   } = useDatasetItemEditorAutosaveContext();
 
   const { toast } = useToast();
@@ -145,10 +115,8 @@ const DatasetItemEditorAutosaveLayout: React.FC<
   }, [handleDelete, onClose]);
 
   const handleClose = useCallback(() => {
-    flushPendingSave();
-    resetSaveState();
     onClose();
-  }, [flushPendingSave, resetSaveState, onClose]);
+  }, [onClose]);
 
   return (
     <ResizableSidePanel
@@ -173,21 +141,14 @@ const DatasetItemEditorAutosaveLayout: React.FC<
       ) : (
         <div className="relative size-full overflow-y-auto">
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
-            <div className="flex items-center justify-between gap-2">
-              <TooltipWrapper content={datasetItemId}>
-                <div className="comet-body-accented">
-                  Dataset item{" "}
-                  <span className="comet-body-s text-muted-slate">
-                    {truncateId(datasetItemId)}
-                  </span>
-                </div>
-              </TooltipWrapper>
-              <AutosaveIndicator
-                isAutoSaving={isAutoSaving}
-                lastSavedAt={lastSavedAt}
-                hasError={hasError}
-              />
-            </div>
+            <TooltipWrapper content={datasetItemId}>
+              <div className="comet-body-accented">
+                Dataset item{" "}
+                <span className="comet-body-s text-muted-slate">
+                  {truncateId(datasetItemId)}
+                </span>
+              </div>
+            </TooltipWrapper>
             <TagListRenderer
               tags={tags}
               onAddTag={handleAddTag}

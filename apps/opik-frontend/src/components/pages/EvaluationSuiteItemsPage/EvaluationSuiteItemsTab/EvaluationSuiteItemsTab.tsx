@@ -41,7 +41,7 @@ import {
 } from "@/types/shared";
 import EvaluationSuiteItemPanel from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemPanel/EvaluationSuiteItemPanel";
 import DatasetItemEditor from "@/components/pages-shared/datasets/DatasetItemEditor/DatasetItemEditor";
-import { BehaviorsCountCell } from "./BehaviorsCountCell";
+import { EvaluatorsCountCell } from "./EvaluatorsCountCell";
 import { ExecutionPolicyCell } from "./ExecutionPolicyCell";
 import DatasetItemsActionsPanel from "@/components/pages-shared/datasets/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages-shared/datasets/DatasetItemRowActionsCell";
@@ -424,7 +424,7 @@ function EvaluationSuiteItemsTab({
           id: "expected_behaviors",
           label: "Evaluators",
           type: COLUMN_TYPE.string,
-          cell: BehaviorsCountCell as never,
+          cell: EvaluatorsCountCell as never,
         },
         {
           id: "execution_policy",

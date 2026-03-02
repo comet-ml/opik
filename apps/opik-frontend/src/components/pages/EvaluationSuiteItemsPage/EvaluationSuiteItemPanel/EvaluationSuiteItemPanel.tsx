@@ -24,7 +24,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ItemDescriptionSection from "./ItemDescriptionSection";
 import ItemExecutionPolicySection from "./ItemExecutionPolicySection";
-import ItemBehaviorsSection from "./ItemBehaviorsSection";
+import ItemEvaluatorsSection from "./ItemEvaluatorsSection";
 import ItemContextSection from "./ItemContextSection";
 
 interface EvaluationSuiteItemPanelProps {
@@ -52,20 +52,20 @@ interface EvaluationSuiteItemPanelLayoutProps {
   savedItemPolicy?: ExecutionPolicy;
 }
 
-function EvaluationSuiteItemPanelLayout({
+const EvaluationSuiteItemPanelLayout: React.FC<
+  EvaluationSuiteItemPanelLayoutProps
+> = ({
   datasetItemId,
   isOpen,
   onClose,
   itemEvaluators,
   suitePolicy,
   savedItemPolicy,
-}: EvaluationSuiteItemPanelLayoutProps): React.ReactElement {
+}) => {
   const {
     isPending,
     handleDelete,
     horizontalNavigation,
-    flushPendingSave,
-    resetSaveState,
   } = useDatasetItemEditorAutosaveContext();
 
   const { toast } = useToast();
@@ -85,10 +85,8 @@ function EvaluationSuiteItemPanelLayout({
   }, [handleDelete, onClose]);
 
   const handleClose = useCallback(() => {
-    flushPendingSave();
-    resetSaveState();
     onClose();
-  }, [flushPendingSave, resetSaveState, onClose]);
+  }, [onClose]);
 
   const headerContent = useMemo(
     () => (
@@ -157,7 +155,7 @@ function EvaluationSuiteItemPanelLayout({
               suitePolicy={suitePolicy}
               savedItemPolicy={savedItemPolicy}
             />
-            <ItemBehaviorsSection
+            <ItemEvaluatorsSection
               itemId={datasetItemId}
               itemEvaluators={itemEvaluators}
             />
@@ -166,9 +164,9 @@ function EvaluationSuiteItemPanelLayout({
       )}
     </ResizableSidePanel>
   );
-}
+};
 
-function EvaluationSuiteItemPanel({
+const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
   datasetItemId,
   datasetId,
   columns,
@@ -177,7 +175,7 @@ function EvaluationSuiteItemPanel({
   rows,
   setActiveRowId,
   suitePolicy = DEFAULT_EXECUTION_POLICY,
-}: EvaluationSuiteItemPanelProps): React.ReactElement {
+}) => {
   const activeRow = useMemo(
     () => rows.find((r) => r.id === datasetItemId),
     [rows, datasetItemId],
@@ -204,6 +202,6 @@ function EvaluationSuiteItemPanel({
       />
     </DatasetItemEditorAutosaveProvider>
   );
-}
+};
 
 export default EvaluationSuiteItemPanel;

@@ -15,18 +15,11 @@ interface DatasetItemEditorAutosaveContextValue {
   tags: string[];
   datasetId: string;
 
-  // Autosave state
-  isAutoSaving: boolean;
-  lastSavedAt: Date | null;
-  hasError: boolean;
-
   // Methods
   handleFieldChange: (data: Record<string, unknown>) => void;
   handleAddTag: (tag: string) => void;
   handleDeleteTag: (tag: string) => void;
   handleDelete: (onSuccess: () => void) => void;
-  flushPendingSave: () => void;
-  resetSaveState: () => void;
 
   // Form
   formId: string;
@@ -52,14 +45,16 @@ interface DatasetItemEditorAutosaveProviderProps {
   children: React.ReactNode;
 }
 
-export function DatasetItemEditorAutosaveProvider({
+export const DatasetItemEditorAutosaveProvider: React.FC<
+  DatasetItemEditorAutosaveProviderProps
+> = ({
   datasetItemId,
   datasetId,
   columns,
   rows = [],
   setActiveRowId = () => {},
   children,
-}: DatasetItemEditorAutosaveProviderProps): React.ReactElement {
+}) => {
   // Fetch dataset item data and parse fields
   const { fields, datasetItem, isPending } = useDatasetItemData({
     datasetItemId,
@@ -74,13 +69,6 @@ export function DatasetItemEditorAutosaveProvider({
   // Draft store actions
   const editItem = useEditItem();
   const deleteItem = useDeleteItem();
-
-  // Draft mode doesn't use autosave — provide no-op defaults
-  const isAutoSaving = false;
-  const lastSavedAt = null;
-  const hasError = false;
-  const flushPendingSave = useCallback(() => {}, []);
-  const resetSaveState = useCallback(() => {}, []);
 
   // Tag handlers - use draft store
   const handleAddTag = useCallback(
@@ -117,7 +105,7 @@ export function DatasetItemEditorAutosaveProvider({
     [deleteItem, datasetItemId],
   );
 
-  // Navigation - draft mode has no unsaved changes to confirm or flush
+  // Navigation - draft mode has no unsaved changes to confirm
   const { horizontalNavigation } = useDatasetItemNavigation({
     activeRowId: datasetItemId || "",
     rows,
@@ -132,15 +120,10 @@ export function DatasetItemEditorAutosaveProvider({
       isPending,
       tags,
       datasetId,
-      isAutoSaving,
-      lastSavedAt,
-      hasError,
       handleFieldChange,
       handleAddTag,
       handleDeleteTag,
       handleDelete,
-      flushPendingSave,
-      resetSaveState,
       formId,
       horizontalNavigation,
     }),
@@ -150,15 +133,10 @@ export function DatasetItemEditorAutosaveProvider({
       isPending,
       tags,
       datasetId,
-      isAutoSaving,
-      lastSavedAt,
-      hasError,
       handleFieldChange,
       handleAddTag,
       handleDeleteTag,
       handleDelete,
-      flushPendingSave,
-      resetSaveState,
       formId,
       horizontalNavigation,
     ],
@@ -169,14 +147,15 @@ export function DatasetItemEditorAutosaveProvider({
       {children}
     </DatasetItemEditorAutosaveContext.Provider>
   );
-}
+};
 
-export function useDatasetItemEditorAutosaveContext(): DatasetItemEditorAutosaveContextValue {
-  const context = useContext(DatasetItemEditorAutosaveContext);
-  if (!context) {
-    throw new Error(
-      "useDatasetItemEditorAutosaveContext must be used within DatasetItemEditorAutosaveProvider",
-    );
-  }
-  return context;
-}
+export const useDatasetItemEditorAutosaveContext =
+  (): DatasetItemEditorAutosaveContextValue => {
+    const context = useContext(DatasetItemEditorAutosaveContext);
+    if (!context) {
+      throw new Error(
+        "useDatasetItemEditorAutosaveContext must be used within DatasetItemEditorAutosaveProvider",
+      );
+    }
+    return context;
+  };

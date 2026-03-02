@@ -462,6 +462,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
         onDatasetCreated={(dataset) => {
           setSelectedDataset(dataset);
         }}
+        hideUpload={true}
       />
     </>
   );

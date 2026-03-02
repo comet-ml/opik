@@ -22,8 +22,8 @@ import { Tag } from "@/components/ui/tag";
 import { DatasetItem } from "@/types/datasets";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-type SampleData = Record<string, unknown>;
+import { extractOpikMetadata } from "@/lib/dataset-item-utils";
+import { OPIK_GENERATION_MODEL_FIELD } from "@/constants/datasets";
 
 function DiversityTag({ score }: { score: number }): React.ReactElement {
   if (score > 80) {
@@ -52,20 +52,14 @@ function ExpandedSampleContent({
 }: {
   sample: DatasetItem;
 }): React.ReactElement {
-  const data = sample.data as SampleData;
-  const description = data._opik_description;
-  const assertions = data._opik_evaluator_assertions;
-
-  const validAssertions = Array.isArray(assertions)
-    ? assertions.filter(
-        (a): a is string => typeof a === "string" && a.trim().length > 0,
-      )
-    : [];
+  const { description, assertions: validAssertions } = extractOpikMetadata(
+    sample.data as Record<string, unknown>,
+  );
 
   return (
     <div className="border-t bg-muted/10 p-3">
       <SyntaxHighlighter data={sample.data} />
-      {typeof description === "string" && (
+      {description !== undefined && (
         <div className="mt-3 rounded-md border bg-background p-2">
           <div className="text-xs font-medium text-muted-foreground">
             Description
@@ -131,7 +125,7 @@ const GeneratedSamplesDialog: React.FunctionComponent<
       Object.entries(sample.data).forEach(([key, value]) => {
         // Skip metadata fields from diversity calculation
         if (key.startsWith("_")) {
-          if (key === "_generation_model" && !generationModel) {
+          if (key === OPIK_GENERATION_MODEL_FIELD && !generationModel) {
             generationModel = String(value);
           }
           return;

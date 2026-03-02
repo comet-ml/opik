@@ -4,9 +4,10 @@ import {
   LLMJudgeConfig,
   MetricType,
   MetricConfig,
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
   StringMatchConfig,
   ThresholdConfig,
+  METRIC_TYPE_LABELS,
 } from "@/types/evaluation-suites";
 import { Evaluator } from "@/types/datasets";
 
@@ -155,12 +156,20 @@ export function getSectionLabel(type: MetricType): string {
 
 const VALID_METRIC_TYPES = new Set<string>(Object.values(MetricType));
 
+function isValidMetricType(type: string): type is MetricType {
+  return VALID_METRIC_TYPES.has(type);
+}
+
+function getServerEvaluatorId(evaluator: Evaluator): string {
+  return `server_${evaluator.name}_${evaluator.type}`;
+}
+
 export function expandEvaluatorsToRows(
   evaluators: Evaluator[],
-): BehaviorDisplayRow[] {
+): EvaluatorDisplayRow[] {
   return evaluators
     .filter((evaluator) => {
-      if (!VALID_METRIC_TYPES.has(evaluator.type)) {
+      if (!isValidMetricType(evaluator.type)) {
         console.warn(
           `Unknown evaluator type "${evaluator.type}" for "${evaluator.name}", skipping`,
         );
@@ -168,21 +177,24 @@ export function expandEvaluatorsToRows(
       }
       return true;
     })
-    .map((evaluator) => ({
-      id: `server_${evaluator.name}_${evaluator.type}`,
-      evaluatorId: `server_${evaluator.name}_${evaluator.type}`,
-      name: evaluator.name,
-      type: evaluator.type as MetricType,
-      config: parseBEEvaluatorConfig(evaluator.type, evaluator.config),
-    }));
+    .map((evaluator) => {
+      const id = getServerEvaluatorId(evaluator);
+      return {
+        id,
+        evaluatorId: id,
+        name: evaluator.name,
+        type: evaluator.type as MetricType,
+        config: parseBEEvaluatorConfig(evaluator.type, evaluator.config),
+      };
+    });
 }
 
-export function applyBehaviorEdits(
-  originalRows: BehaviorDisplayRow[],
-  added: Map<string, BehaviorDisplayRow>,
-  edited: Map<string, Partial<BehaviorDisplayRow>>,
+export function applyEvaluatorEdits(
+  originalRows: EvaluatorDisplayRow[],
+  added: Map<string, EvaluatorDisplayRow>,
+  edited: Map<string, Partial<EvaluatorDisplayRow>>,
   deleted: Set<string>,
-): BehaviorDisplayRow[] {
+): EvaluatorDisplayRow[] {
   const surviving = originalRows
     .filter((row) => !deleted.has(row.id))
     .map((row) => {
@@ -193,18 +205,30 @@ export function applyBehaviorEdits(
   return [...surviving, ...added.values()];
 }
 
+export function formatEvaluatorsForExport(
+  evaluators: Evaluator[],
+): Array<Record<string, unknown>> {
+  return evaluators
+    .filter((e) => isValidMetricType(e.type))
+    .map((e) => ({
+      name: e.name,
+      type: METRIC_TYPE_LABELS[e.type as MetricType],
+      ...parseBEEvaluatorConfig(e.type, e.config),
+    }));
+}
+
 // --- Serialization boundary: reconstruct Evaluator[] from draft state ---
 
 export function reconstructEvaluators(
   originalEvaluators: Evaluator[],
-  added: Map<string, BehaviorDisplayRow>,
-  edited: Map<string, Partial<BehaviorDisplayRow>>,
+  added: Map<string, EvaluatorDisplayRow>,
+  edited: Map<string, Partial<EvaluatorDisplayRow>>,
   deleted: Set<string>,
 ): Evaluator[] {
   const surviving: Evaluator[] = originalEvaluators
     .map((evaluator) => ({
       evaluator,
-      id: `server_${evaluator.name}_${evaluator.type}`,
+      id: getServerEvaluatorId(evaluator),
     }))
     .filter(({ id }) => !deleted.has(id))
     .map(({ evaluator, id }) => {

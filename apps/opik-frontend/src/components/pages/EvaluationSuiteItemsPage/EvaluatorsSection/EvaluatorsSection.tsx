@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Trash } from "lucide-react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
@@ -14,21 +14,21 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, ROW_HEIGHT } from "@/types/shared";
 import {
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
   DEFAULT_EXECUTION_POLICY,
   ExecutionPolicy,
 } from "@/types/evaluation-suites";
 import { Evaluator } from "@/types/datasets";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import {
-  useAddBehavior,
-  useEditBehavior,
-  useDeleteBehavior,
-  useAddedBehaviors,
-  useEditedBehaviors,
-  useDeletedBehaviorIds,
+  useAddEvaluator,
+  useEditEvaluator,
+  useDeleteEvaluator,
+  useAddedEvaluators,
+  useEditedEvaluators,
+  useDeletedEvaluatorIds,
   useSetExecutionPolicy,
-  useBehaviorsExecutionPolicy,
+  useEvaluatorsExecutionPolicy,
 } from "@/store/EvaluationSuiteDraftStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import EvaluatorActionsCell from "./EvaluatorActionsCell";
@@ -47,24 +47,24 @@ const COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-function EvaluatorsSection({
+const EvaluatorsSection: React.FC<EvaluatorsSectionProps> = ({
   serverEvaluators,
   serverExecutionPolicy,
-}: EvaluatorsSectionProps) {
+}) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvaluator, setEditingEvaluator] =
-    useState<BehaviorDisplayRow>();
+    useState<EvaluatorDisplayRow>();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  const addEvaluator = useAddBehavior();
-  const editEvaluator = useEditBehavior();
-  const deleteEvaluator = useDeleteBehavior();
-  const addedEvaluators = useAddedBehaviors();
-  const editedEvaluators = useEditedBehaviors();
-  const deletedEvaluatorIds = useDeletedBehaviorIds();
+  const addEvaluator = useAddEvaluator();
+  const editEvaluator = useEditEvaluator();
+  const deleteEvaluator = useDeleteEvaluator();
+  const addedEvaluators = useAddedEvaluators();
+  const editedEvaluators = useEditedEvaluators();
+  const deletedEvaluatorIds = useDeletedEvaluatorIds();
   const setExecutionPolicy = useSetExecutionPolicy();
-  const draftPolicy = useBehaviorsExecutionPolicy();
+  const draftPolicy = useEvaluatorsExecutionPolicy();
 
   const displayRows = useEvaluatorDisplayRows(
     serverEvaluators,
@@ -77,7 +77,7 @@ function EvaluatorsSection({
     draftPolicy ?? serverExecutionPolicy ?? DEFAULT_EXECUTION_POLICY;
 
   const handleEditSubmit = useCallback(
-    (evaluator: Omit<BehaviorDisplayRow, "id">) => {
+    (evaluator: Omit<EvaluatorDisplayRow, "id">) => {
       if (editingEvaluator) {
         editEvaluator(editingEvaluator.id, evaluator);
       }
@@ -90,7 +90,7 @@ function EvaluatorsSection({
     setDialogOpen(true);
   }, []);
 
-  const openEditDialog = useCallback((row: BehaviorDisplayRow) => {
+  const openEditDialog = useCallback((row: EvaluatorDisplayRow) => {
     setEditingEvaluator(row);
     setDialogOpen(true);
   }, []);
@@ -107,8 +107,8 @@ function EvaluatorsSection({
 
   const columns = useMemo(
     () => [
-      generateSelectColumDef<BehaviorDisplayRow>(),
-      ...convertColumnDataToColumn<BehaviorDisplayRow, BehaviorDisplayRow>(
+      generateSelectColumDef<EvaluatorDisplayRow>(),
+      ...convertColumnDataToColumn<EvaluatorDisplayRow, EvaluatorDisplayRow>(
         EVALUATOR_COLUMNS,
         {},
       ),
@@ -188,6 +188,6 @@ function EvaluatorsSection({
       />
     </div>
   );
-}
+};
 
 export default EvaluatorsSection;

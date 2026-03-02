@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/evaluation-suites";
@@ -15,11 +15,11 @@ interface ItemExecutionPolicySectionProps {
   savedItemPolicy?: ExecutionPolicy;
 }
 
-function ItemExecutionPolicySection({
+const ItemExecutionPolicySection: React.FC<ItemExecutionPolicySectionProps> = ({
   itemId,
   suitePolicy,
   savedItemPolicy,
-}: ItemExecutionPolicySectionProps) {
+}) => {
   const editedItem = useEditedDatasetItemById(itemId);
   const editItem = useEditItem();
   const lastOverrideRef = useRef<ExecutionPolicy | undefined>(undefined);
@@ -161,6 +161,6 @@ function ItemExecutionPolicySection({
       </div>
     </div>
   );
-}
+};
 
 export default ItemExecutionPolicySection;

@@ -1,16 +1,17 @@
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Separator } from "@/components/ui/separator";
 import {
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
   LLMJudgeConfig,
   MetricType,
 } from "@/types/evaluation-suites";
 
-function ExpectedBehaviorCell(
-  context: CellContext<BehaviorDisplayRow, unknown>,
-): React.ReactElement | null {
+const ExpectedBehaviorCell: React.FC<
+  CellContext<EvaluatorDisplayRow, unknown>
+> = (context) => {
   const row = context.row.original;
 
   if (row.type !== MetricType.LLM_AS_JUDGE) return null;
@@ -47,6 +48,6 @@ function ExpectedBehaviorCell(
       </TooltipWrapper>
     </CellWrapper>
   );
-}
+};
 
 export default ExpectedBehaviorCell;

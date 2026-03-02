@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,7 +29,7 @@ import {
 import {
   MetricType,
   LLMJudgeConfig,
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
 } from "@/types/evaluation-suites";
 
 function createSchema(existingNames: string[]) {
@@ -65,18 +65,18 @@ const DEFAULT_FORM_VALUES: EvaluatorFormType = {
 interface AddEditEvaluatorDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
-  evaluator?: BehaviorDisplayRow;
-  onSubmit: (evaluator: Omit<BehaviorDisplayRow, "id">) => void;
+  evaluator?: EvaluatorDisplayRow;
+  onSubmit: (evaluator: Omit<EvaluatorDisplayRow, "id">) => void;
   existingNames?: string[];
 }
 
-function AddEditEvaluatorDialog({
+const AddEditEvaluatorDialog: React.FC<AddEditEvaluatorDialogProps> = ({
   open,
   setOpen,
   evaluator,
   onSubmit,
   existingNames = [],
-}: AddEditEvaluatorDialogProps) {
+}) => {
   const isEdit = Boolean(evaluator);
   const lastAppendedIndexRef = useRef<number | null>(null);
   const textareaRefsMap = useRef<Map<number, HTMLTextAreaElement>>(new Map());
@@ -265,6 +265,6 @@ function AddEditEvaluatorDialog({
       </DialogContent>
     </Dialog>
   );
-}
+};
 
 export default AddEditEvaluatorDialog;

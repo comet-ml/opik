@@ -1,26 +1,26 @@
-import { useCallback, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Pencil, Plus, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import {
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
   LLMJudgeConfig,
   MetricType,
   METRIC_TYPE_LABELS,
 } from "@/types/evaluation-suites";
 import { Evaluator } from "@/types/datasets";
 import {
-  useItemAddedBehaviors,
-  useItemEditedBehaviors,
-  useItemDeletedBehaviorIds,
-  useAddItemBehavior,
-  useEditItemBehavior,
-  useDeleteItemBehavior,
+  useItemAddedEvaluators,
+  useItemEditedEvaluators,
+  useItemDeletedEvaluatorIds,
+  useAddItemEvaluator,
+  useEditItemEvaluator,
+  useDeleteItemEvaluator,
 } from "@/store/EvaluationSuiteDraftStore";
-import AddEditEvaluatorDialog from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/AddEditEvaluatorDialog";
-import { useEvaluatorDisplayRows } from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/useEvaluatorDisplayRows";
+import AddEditEvaluatorDialog from "@/components/pages/EvaluationSuiteItemsPage/EvaluatorsSection/AddEditEvaluatorDialog";
+import { useEvaluatorDisplayRows } from "@/components/pages/EvaluationSuiteItemsPage/EvaluatorsSection/useEvaluatorDisplayRows";
 import {
   formatEvaluatorConfig,
   getMetricIcon,
@@ -31,12 +31,12 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 const EMPTY_EVALUATORS: Evaluator[] = [];
 const MAX_VISIBLE_ASSERTIONS = 3;
 
-function getConfigSummary(row: BehaviorDisplayRow): string | null {
+function getConfigSummary(row: EvaluatorDisplayRow): string | null {
   const summary = formatEvaluatorConfig(row.type, row.config);
   return summary || null;
 }
 
-function getDraftBorderClass(row: BehaviorDisplayRow): string {
+function getDraftBorderClass(row: EvaluatorDisplayRow): string {
   if (row.isNew) return "border-l-2 border-l-green-500";
   if (row.isEdited) return "border-l-2 border-l-amber-500";
   return "";
@@ -46,7 +46,7 @@ interface AssertionsListProps {
   assertions: string[];
 }
 
-function AssertionsList({ assertions }: AssertionsListProps) {
+const AssertionsList: React.FC<AssertionsListProps> = ({ assertions }) => {
   if (!assertions.length) return null;
 
   const visible = assertions.slice(0, MAX_VISIBLE_ASSERTIONS);
@@ -70,15 +70,19 @@ function AssertionsList({ assertions }: AssertionsListProps) {
       )}
     </div>
   );
-}
+};
 
 interface EvaluatorCardProps {
-  row: BehaviorDisplayRow;
-  onEdit: (row: BehaviorDisplayRow) => void;
+  row: EvaluatorDisplayRow;
+  onEdit: (row: EvaluatorDisplayRow) => void;
   onDelete: (id: string) => void;
 }
 
-function EvaluatorCard({ row, onEdit, onDelete }: EvaluatorCardProps) {
+const EvaluatorCard: React.FC<EvaluatorCardProps> = ({
+  row,
+  onEdit,
+  onDelete,
+}) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const configSummary = getConfigSummary(row);
   const isLLMJudge = row.type === MetricType.LLM_AS_JUDGE;
@@ -154,27 +158,27 @@ function EvaluatorCard({ row, onEdit, onDelete }: EvaluatorCardProps) {
       />
     </>
   );
-}
+};
 
-interface ItemBehaviorsSectionProps {
+interface ItemEvaluatorsSectionProps {
   itemId: string;
   itemEvaluators?: Evaluator[];
 }
 
-function ItemBehaviorsSection({
+const ItemEvaluatorsSection: React.FC<ItemEvaluatorsSectionProps> = ({
   itemId,
   itemEvaluators = EMPTY_EVALUATORS,
-}: ItemBehaviorsSectionProps) {
+}) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvaluator, setEditingEvaluator] =
-    useState<BehaviorDisplayRow>();
+    useState<EvaluatorDisplayRow>();
 
-  const addItemEvaluator = useAddItemBehavior();
-  const editItemEvaluator = useEditItemBehavior();
-  const deleteItemEvaluator = useDeleteItemBehavior();
-  const itemAddedEvaluators = useItemAddedBehaviors(itemId);
-  const itemEditedEvaluators = useItemEditedBehaviors(itemId);
-  const itemDeletedEvaluatorIds = useItemDeletedBehaviorIds(itemId);
+  const addItemEvaluator = useAddItemEvaluator();
+  const editItemEvaluator = useEditItemEvaluator();
+  const deleteItemEvaluator = useDeleteItemEvaluator();
+  const itemAddedEvaluators = useItemAddedEvaluators(itemId);
+  const itemEditedEvaluators = useItemEditedEvaluators(itemId);
+  const itemDeletedEvaluatorIds = useItemDeletedEvaluatorIds(itemId);
 
   const itemDisplayRows = useEvaluatorDisplayRows(
     itemEvaluators,
@@ -184,14 +188,14 @@ function ItemBehaviorsSection({
   );
 
   const handleAddSubmit = useCallback(
-    (evaluator: Omit<BehaviorDisplayRow, "id">) => {
+    (evaluator: Omit<EvaluatorDisplayRow, "id">) => {
       addItemEvaluator(itemId, evaluator);
     },
     [itemId, addItemEvaluator],
   );
 
   const handleEditSubmit = useCallback(
-    (evaluator: Omit<BehaviorDisplayRow, "id">) => {
+    (evaluator: Omit<EvaluatorDisplayRow, "id">) => {
       if (editingEvaluator) {
         editItemEvaluator(itemId, editingEvaluator.id, evaluator);
       }
@@ -204,7 +208,7 @@ function ItemBehaviorsSection({
     setDialogOpen(true);
   }, []);
 
-  const openEditDialog = useCallback((row: BehaviorDisplayRow) => {
+  const openEditDialog = useCallback((row: EvaluatorDisplayRow) => {
     setEditingEvaluator(row);
     setDialogOpen(true);
   }, []);
@@ -247,6 +251,6 @@ function ItemBehaviorsSection({
       />
     </div>
   );
-}
+};
 
-export default ItemBehaviorsSection;
+export default ItemEvaluatorsSection;

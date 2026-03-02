@@ -13,13 +13,9 @@ import NoData from "@/components/shared/NoData/NoData";
 import { Button } from "@/components/ui/button";
 import { DatasetItem, ExperimentItem } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
-import {
-  BehaviorResult,
-  ExperimentItemStatus,
-} from "@/types/evaluation-suites";
 import { traceExist, traceVisible } from "@/lib/traces";
 import PassFailBadge from "./PassFailBadge";
-import BehaviorsResultsTable from "./BehaviorsResultsTable";
+import AssertionResultsTable from "./AssertionResultsTable";
 import MultiRunTabs from "./MultiRunTabs";
 
 type ExperimentItemContentProps = {
@@ -28,9 +24,11 @@ type ExperimentItemContentProps = {
   openTrace: OnChangeFn<string>;
 };
 
-const ExperimentItemContent: React.FunctionComponent<
-  ExperimentItemContentProps
-> = ({ data, experimentItems, openTrace }) => {
+export const ExperimentItemContent: React.FC<ExperimentItemContentProps> = ({
+  data,
+  experimentItems,
+  openTrace,
+}) => {
   const sortedItems = useMemo(
     () => sortBy(experimentItems, "created_at"),
     [experimentItems],
@@ -38,15 +36,13 @@ const ExperimentItemContent: React.FunctionComponent<
 
   const aggregateStatus = useMemo(() => {
     if (sortedItems.length === 0) return undefined;
-    const itemRecord = sortedItems[0] as unknown as Record<string, unknown>;
-    return itemRecord.status as ExperimentItemStatus | undefined;
+    return sortedItems[0].status;
   }, [sortedItems]);
 
   const renderRunContent = (item: ExperimentItem, idx: number) => {
     const isTraceExist = traceExist(item);
     const isTraceVisible = traceVisible(item);
-    const itemRecord = item as unknown as Record<string, unknown>;
-    const behaviors = (itemRecord.behavior_results ?? []) as BehaviorResult[];
+    const assertions = item.assertion_results ?? [];
 
     const onTraceClick = (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -84,15 +80,15 @@ const ExperimentItemContent: React.FunctionComponent<
                   </TooltipWrapper>
                 )}
               </div>
-              {item.output ? (
+              {item.output && (
                 <SyntaxHighlighter
                   data={item.output}
                   prettifyConfig={{ fieldType: "output" }}
                   preserveKey={`eval-suite-sidebar-output-${idx}`}
                 />
-              ) : null}
+              )}
             </div>
-            <BehaviorsResultsTable behaviors={behaviors} />
+            <AssertionResultsTable assertions={assertions} />
           </>
         )}
       </div>

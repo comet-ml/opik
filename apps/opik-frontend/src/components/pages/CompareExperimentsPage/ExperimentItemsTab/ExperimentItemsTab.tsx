@@ -86,33 +86,37 @@ const COLUMN_PASSED_ID = "passed";
 const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 
-export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
-  {
-    id: COLUMN_ID_ID,
-    label: "ID (Evaluation suite item)",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_DURATION_ID,
-    label: "Duration",
-    type: COLUMN_TYPE.duration,
-  },
-  {
-    id: COLUMN_COMMENTS_ID,
-    label: "Comments",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "output",
-    label: "Evaluation task",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
-    type: COLUMN_TYPE.numberDictionary,
-  },
-];
+function getFilterColumns(
+  isEvalSuite: boolean,
+): ColumnData<ExperimentsCompare>[] {
+  return [
+    {
+      id: COLUMN_ID_ID,
+      label: isEvalSuite ? "ID (Evaluation suite item)" : "Dataset item ID",
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: COLUMN_DURATION_ID,
+      label: "Duration",
+      type: COLUMN_TYPE.duration,
+    },
+    {
+      id: COLUMN_COMMENTS_ID,
+      label: "Comments",
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: "output",
+      label: "Evaluation task",
+      type: COLUMN_TYPE.string,
+    },
+    {
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      label: "Feedback scores",
+      type: COLUMN_TYPE.numberDictionary,
+    },
+  ];
+}
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: [COLUMN_SELECT_ID],
@@ -396,7 +400,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       }),
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
-        label: "ID (Evaluation suite item)",
+        label: isEvalSuite
+          ? "ID (Evaluation suite item)"
+          : "Dataset item ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
@@ -411,7 +417,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: "Evaluation suite",
+            header: isEvalSuite ? "Evaluation suite" : "Dataset",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -544,23 +550,18 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...sortBy(dynamicDatasetColumns, "label").map(
         ({ id, label, columnType }) => ({
           id,
-          label: `${label} (Evaluation suite)`,
+          label: `${label} (${isEvalSuite ? "Evaluation suite" : "Dataset"})`,
           type: columnType,
         }),
       ),
-      {
-        id: COLUMN_ID_ID,
-        label: "Dataset item ID",
-        type: COLUMN_TYPE.string,
-      },
       ...sortBy(dynamicOutputColumns, "label").map(({ id, label }) => ({
         id,
         label: `${label} (Output)`,
         type: COLUMN_TYPE.string,
       })),
-      ...FILTER_COLUMNS,
+      ...getFilterColumns(!!isEvalSuite),
     ];
-  }, [dynamicDatasetColumns, dynamicOutputColumns]);
+  }, [dynamicDatasetColumns, dynamicOutputColumns, isEvalSuite]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -664,7 +665,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           <SearchInput
             searchText={search!}
             setSearchText={setSearch}
-            placeholder="Search evaluation suite items"
+            placeholder={
+              isEvalSuite
+                ? "Search evaluation suite items"
+                : "Search dataset items"
+            }
             className="w-[320px]"
             dimension="sm"
           />

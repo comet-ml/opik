@@ -8,7 +8,7 @@ import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesM
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import EvaluationSuiteItemsTab from "@/components/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsTab/EvaluationSuiteItemsTab";
-import EvaluatorsSection from "@/components/pages/EvaluationSuiteItemsPage/BehaviorsSection/EvaluatorsSection";
+import EvaluatorsSection from "@/components/pages/EvaluationSuiteItemsPage/EvaluatorsSection/EvaluatorsSection";
 import AddVersionDialog from "@/components/pages-shared/datasets/VersionHistoryTab/AddVersionDialog";
 import VersionHistoryTab from "@/components/pages-shared/datasets/VersionHistoryTab/VersionHistoryTab";
 import OverrideVersionDialog from "@/components/pages-shared/datasets/OverrideVersionDialog";

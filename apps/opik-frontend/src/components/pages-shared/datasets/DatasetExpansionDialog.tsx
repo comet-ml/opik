@@ -41,6 +41,10 @@ import {
   Evaluator,
 } from "@/types/datasets";
 import { parseLLMJudgeBEConfig } from "@/lib/evaluator-converters";
+import {
+  OPIK_DESCRIPTION_FIELD,
+  OPIK_EVALUATOR_ASSERTIONS_FIELD,
+} from "@/constants/datasets";
 
 const DATASET_EXPANSION_PROGRESS_MESSAGES = [
   "Initializing AI generation...",
@@ -189,7 +193,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     }
 
     if (isEvaluationSuite) {
-      prompt += `\nEVALUATION SUITE METADATA:\nFor each generated sample, include these two additional fields in the JSON object:\n- "_opik_description": A brief (1-2 sentence) description of what this specific test case evaluates\n- "_opik_evaluator_assertions": An array of 1-3 natural language assertion strings that an LLM judge should verify for this specific item's expected output\n`;
+      prompt += `\nEVALUATION SUITE METADATA:\nFor each generated sample, include these two additional fields in the JSON object:\n- "${OPIK_DESCRIPTION_FIELD}": A brief (1-2 sentence) description of what this specific test case evaluates\n- "${OPIK_EVALUATOR_ASSERTIONS_FIELD}": An array of 1-3 natural language assertion strings that an LLM judge should verify for this specific item's expected output\n`;
 
       const suiteAssertions = (suiteEvaluators ?? [])
         .filter((e) => e.type === "llm_judge")

@@ -1,15 +1,16 @@
+import React from "react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import {
   METRIC_TYPE_LABELS,
-  BehaviorDisplayRow,
+  EvaluatorDisplayRow,
 } from "@/types/evaluation-suites";
 import { getConfigTooltip } from "./useEvaluatorDisplayRows";
 
-function MetricTypeCell(
-  context: CellContext<BehaviorDisplayRow, unknown>,
-): React.ReactElement {
+const MetricTypeCell: React.FC<CellContext<EvaluatorDisplayRow, unknown>> = (
+  context,
+) => {
   const row = context.row.original;
 
   return (
@@ -22,6 +23,6 @@ function MetricTypeCell(
       </TooltipWrapper>
     </CellWrapper>
   );
-}
+};
 
 export default MetricTypeCell;

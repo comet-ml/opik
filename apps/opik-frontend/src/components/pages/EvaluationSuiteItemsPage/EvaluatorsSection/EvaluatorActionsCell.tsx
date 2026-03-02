@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,16 +11,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import { BehaviorDisplayRow } from "@/types/evaluation-suites";
+import { EvaluatorDisplayRow } from "@/types/evaluation-suites";
 
 interface CustomMeta {
-  onEdit: (row: BehaviorDisplayRow) => void;
+  onEdit: (row: EvaluatorDisplayRow) => void;
   onDelete: (id: string) => void;
 }
 
-function EvaluatorActionsCell(
-  context: CellContext<BehaviorDisplayRow, unknown>,
-): React.ReactElement {
+const EvaluatorActionsCell: React.FC<
+  CellContext<EvaluatorDisplayRow, unknown>
+> = (context) => {
   const resetKeyRef = useRef(0);
   const { custom } = context.column.columnDef.meta ?? {};
   const { onEdit, onDelete } = (custom ?? {}) as CustomMeta;
@@ -76,6 +76,6 @@ function EvaluatorActionsCell(
       </DropdownMenu>
     </CellWrapper>
   );
-}
+};
 
 export default EvaluatorActionsCell;
