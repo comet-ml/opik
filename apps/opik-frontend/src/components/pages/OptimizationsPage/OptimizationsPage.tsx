@@ -149,7 +149,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
 export const FILTER_COLUMNS: ColumnData<GroupedOptimization>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -307,7 +307,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
       generateGroupedRowCellDef<GroupedOptimization, unknown>(
         {
           id: GROUPING_COLUMN,
-          label: "Dataset",
+          label: "Evaluation suite",
           type: COLUMN_TYPE.string,
           cell: ResourceCell as never,
           customMeta: {

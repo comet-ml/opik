@@ -1,4 +1,16 @@
+import { EXPERIMENT_TYPE } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+
+const EVAL_SUITE_EXPERIMENT_TYPES: ReadonlySet<EXPERIMENT_TYPE> = new Set([
+  EXPERIMENT_TYPE.TRIAL,
+  EXPERIMENT_TYPE.MINI_BATCH,
+]);
+
+export function isEvalSuiteExperimentType(
+  type: EXPERIMENT_TYPE | undefined,
+): boolean {
+  return type !== undefined && EVAL_SUITE_EXPERIMENT_TYPES.has(type);
+}
 
 export const calculateLineHeight = (
   height: ROW_HEIGHT,
