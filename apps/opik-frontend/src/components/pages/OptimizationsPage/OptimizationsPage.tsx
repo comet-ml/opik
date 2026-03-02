@@ -15,40 +15,62 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import get from "lodash/get";
+import isObject from "lodash/isObject";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import FeedbackScoreTagCell from "@/components/shared/DataTableCells/FeedbackScoreTagCell";
+import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
-import { COLUMN_DATASET_ID, COLUMN_ID_ID, COLUMN_TYPE } from "@/types/shared";
+import { toString } from "@/lib/utils";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import { getFeedbackScore } from "@/lib/feedback-scores";
+import {
+  COLUMN_DATASET_ID,
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  COLUMN_TYPE,
+  ColumnData,
+} from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
+import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import OptimizationsActionsPanel from "@/components/pages/OptimizationsPage/OptimizationsActionsPanel/OptimizationsActionsPanel";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
+import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
+  generateActionsColumDef,
+  generateGroupedRowCellDef,
+  generateDataRowCellDef,
   getIsGroupRow,
   getRowId,
+  getSharedShiftCheckboxClickHandler,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
 import { GROUPING_COLUMN } from "@/constants/groups";
+import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
+import { getOptimizerLabel } from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import {
-  DEFAULT_COLUMNS,
-  useOptimizationsView,
-} from "@/hooks/useOptimizationsView";
-import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
+import { useOptimizationsView } from "@/hooks/useOptimizationsView";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
@@ -58,6 +80,64 @@ export const GROUPING_CONFIG = {
   groupedColumnMode: false as const,
   grouping: [GROUPING_COLUMN] as GroupingState,
 };
+
+export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+  },
+  {
+    id: "created_at",
+    label: "Created",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+  },
+  {
+    id: "created_by",
+    label: "Created by",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "num_trials",
+    label: "Trial count",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "optimizer",
+    label: "Optimizer",
+    type: COLUMN_TYPE.string,
+    size: 200,
+    accessorFn: (row) => {
+      const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
+      if (metadataVal) {
+        return isObject(metadataVal)
+          ? JSON.stringify(metadataVal, null, 2)
+          : toString(metadataVal);
+      }
+
+      const studioVal = row.studio_config?.optimizer?.type;
+      return studioVal ? getOptimizerLabel(studioVal) : "-";
+    },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
+  },
+  {
+    id: "objective_name",
+    label: "Best score",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: (row) =>
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+    cell: FeedbackScoreTagCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
+  },
+  {
+    id: "status",
+    label: "Status",
+    type: COLUMN_TYPE.string,
+    cell: OptimizationStatusCell as never,
+  },
+];
 
 export const FILTER_COLUMNS = [
   {
@@ -85,6 +165,47 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "created_by",
 ];
 
+const checkboxClickHandler = getSharedShiftCheckboxClickHandler();
+
+const nameColumn = generateDataRowCellDef(
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.optimization,
+      getSearch: (data: Optimization) => ({
+        optimizations: [data.id],
+      }),
+    },
+    headerCheckbox: true,
+    size: 200,
+  },
+  checkboxClickHandler,
+);
+
+const groupingColumn = generateGroupedRowCellDef<GroupedOptimization, unknown>(
+  {
+    id: GROUPING_COLUMN,
+    label: "Dataset",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.dataset,
+    },
+  },
+  checkboxClickHandler,
+);
+
+const actionsColumn = generateActionsColumDef({
+  cell: OptimizationRowActionsCell,
+});
+
 const OptimizationsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -93,6 +214,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const isOptimizationStudioEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
+
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
@@ -173,7 +298,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
     isPlaceholderData,
     isFetching,
     refetch,
-    columns,
     columnPinning,
     pageSize,
   } = useOptimizationsView({
@@ -182,10 +306,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
     search: search || "",
     page: page || 1,
     groupLimit,
-    columnsOrder,
-    selectedColumns,
     rowSelection,
   });
+
+  const defaultColumns = useMemo(
+    () =>
+      convertColumnDataToColumn(DEFAULT_COLUMNS, {
+        columnsOrder,
+        selectedColumns,
+      }),
+    [columnsOrder, selectedColumns],
+  );
+
+  const columns = useMemo(() => {
+    if (canViewDatasets) {
+      return [nameColumn, groupingColumn, ...defaultColumns, actionsColumn];
+    }
+
+    return [nameColumn, ...defaultColumns, actionsColumn];
+  }, [canViewDatasets, defaultColumns]);
 
   const resizeConfig = useMemo(
     () => ({
