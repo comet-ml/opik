@@ -1,0 +1,90 @@
+---
+description: Install and configure the OpenClaw community plugin to export LLM,
+  tool, and agent traces to Opik.
+headline: OpenClaw | Opik Documentation
+og:description: Connect OpenClaw to Opik with the @opik/opik-openclaw plugin.
+og:site_name: Opik Documentation
+og:title: OpenClaw Integration - Opik
+title: Observability for OpenClaw with Opik
+---
+
+[OpenClaw](https://github.com/openclaw/openclaw) can send trace data to Opik through the community plugin package `@opik/opik-openclaw`.
+
+This integration captures:
+
+- LLM spans (`llm_input`, `llm_output`)
+- Tool spans (`before_tool_call`, `after_tool_call`)
+- Agent-level run metadata (`agent_end`, usage/cost diagnostics)
+
+## Prerequisites
+
+- OpenClaw with plugin support enabled.
+- Opik project/workspace details (for cloud or enterprise deployments).
+
+## Install the plugin
+
+```bash
+openclaw plugins install @opik/opik-openclaw
+openclaw plugins enable opik
+```
+
+## Configure the plugin
+
+### Interactive setup
+
+```bash
+openclaw opik configure
+```
+
+This command validates your Opik URL, validates API key access (when required), and writes plugin-scoped config.
+
+### Manual config
+
+Add this to your OpenClaw config:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "opik": {
+        "enabled": true,
+        "config": {
+          "enabled": true,
+          "apiUrl": "https://www.comet.com/opik/api",
+          "apiKey": "your-api-key",
+          "projectName": "openclaw",
+          "workspaceName": "default",
+          "tags": ["openclaw"]
+        }
+      }
+    }
+  }
+}
+```
+
+Environment variable fallbacks are also supported:
+
+- `OPIK_API_KEY`
+- `OPIK_URL_OVERRIDE`
+- `OPIK_PROJECT_NAME`
+- `OPIK_WORKSPACE`
+
+## Validate setup
+
+1. Check plugin config:
+
+```bash
+openclaw opik status
+```
+
+2. Restart or run your OpenClaw gateway process.
+3. Send a message through OpenClaw.
+4. Verify traces appear in the configured Opik project.
+
+## Known limitation
+
+Some OpenClaw embedded execution paths currently emit `after_tool_call` without a `sessionKey`. The plugin uses a best-effort fallback (single active trace or most recent active session), which can mis-correlate tool spans when multiple sessions run concurrently.
+
+## Next step
+
+For OTEL-native pipelines, see [OpenTelemetry integration](/docs/opik/integrations/opentelemetry).
