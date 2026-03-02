@@ -53,7 +53,7 @@ class TestOrchestrator:
         mock_experiment_result.experiment_name = "trial-1"
 
         with (
-            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm,
             patch("opik_optimizer_framework.tasks.litellm"),
             patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
             patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,
@@ -137,7 +137,7 @@ class TestOrchestrator:
         client.get_dataset.return_value = MagicMock()
 
         with (
-            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm,
             patch("opik_optimizer_framework.tasks.litellm"),
             patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
             patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,
@@ -179,7 +179,7 @@ class TestOrchestrator:
         mock_experiment_result.experiment_name = "baseline"
 
         with (
-            patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm,
+            patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm,
             patch("opik_optimizer_framework.tasks.litellm"),
             patch("opik_optimizer_framework.experiment_executor.opik") as mock_opik,
             patch("opik_optimizer_framework.experiment_executor.evaluate_optimization_suite_trial") as mock_eval_suite,

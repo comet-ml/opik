@@ -12,6 +12,7 @@ from opik_optimizer_framework.types import (
     CandidateConfig,
     OptimizationContext,
     OptimizationState,
+    TrialResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class SimpleOptimizer:
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
+        baseline_trial: "TrialResult | None" = None,
     ) -> None:
         num_steps = context.optimizer_parameters.get("num_steps", 2)
         candidates_per_step = context.optimizer_parameters.get(
@@ -62,13 +64,10 @@ class SimpleOptimizer:
                 candidates_per_step[-1]
             ] * (num_steps - len(candidates_per_step))
 
-        state.total_steps = num_steps
+        for step in range(num_steps):
+            event_emitter.on_step_started(step, num_steps)
 
-        for step_index in range(num_steps):
-            event_emitter.on_step_started(step_index, num_steps)
-            state.step_index = step_index
-
-            if step_index == 0:
+            if step == 0:
                 base_messages = context.prompt_messages
                 parent_ids: list[str] = []
             else:
@@ -83,14 +82,10 @@ class SimpleOptimizer:
             self._run_step(
                 context=context,
                 base_messages=base_messages,
-                count=candidates_per_step[step_index],
-                step_index=step_index,
+                count=candidates_per_step[step],
                 parent_ids=parent_ids,
                 training_set=training_set,
-                validation_set=validation_set,
                 evaluation_adapter=evaluation_adapter,
-                state=state,
-                event_emitter=event_emitter,
             )
 
     def _run_step(
@@ -98,13 +93,9 @@ class SimpleOptimizer:
         context: OptimizationContext,
         base_messages: list[dict[str, str]],
         count: int,
-        step_index: int,
         parent_ids: list[str],
         training_set: list[str],
-        validation_set: list[str],
         evaluation_adapter: EvaluationAdapter,
-        state: OptimizationState,
-        event_emitter: EventEmitter,
     ) -> None:
         completed = 0
         max_attempts = count * 3
@@ -130,13 +121,11 @@ class SimpleOptimizer:
             trial = evaluation_adapter.evaluate(
                 config=config,
                 dataset_item_ids=training_set,
-                step_index=step_index,
                 parent_candidate_ids=parent_ids,
             )
 
             if trial is not None:
                 completed += 1
-                event_emitter.on_progress(step_index, completed, count)
 
     def _generate_candidate(
         self,

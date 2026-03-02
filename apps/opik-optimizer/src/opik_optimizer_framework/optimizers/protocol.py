@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from opik_optimizer_framework.types import (
         OptimizationContext,
         OptimizationState,
+        TrialResult,
     )
 
 
@@ -20,4 +21,5 @@ class OptimizerProtocol(Protocol):
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
+        baseline_trial: TrialResult | None = None,
     ) -> None: ...

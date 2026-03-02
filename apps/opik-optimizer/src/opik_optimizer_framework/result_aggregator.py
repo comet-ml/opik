@@ -6,11 +6,9 @@ from opik_optimizer_framework.types import OptimizationState, TrialResult
 def record_trial(state: OptimizationState, trial: TrialResult) -> None:
     """Record a completed trial into optimization state.
 
-    Updates the best trial if this one has a higher score, and adds
-    the config hash to seen_hashes for deduplication.
+    Updates the best trial if this one has a higher score.
     """
     state.trials.append(trial)
-    state.seen_hashes.add(trial.config_hash)
 
     if state.best_trial is None or trial.score > state.best_trial.score:
         state.best_trial = trial

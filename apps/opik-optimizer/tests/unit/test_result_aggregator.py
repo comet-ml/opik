@@ -42,12 +42,6 @@ class TestResultAggregator:
         record_trial(state, t3)
         assert state.best_trial is t2
 
-    def test_record_trial_adds_hash_to_seen(self):
-        state = OptimizationState()
-        trial = _make_trial("c1", 0.8, "unique_hash")
-        record_trial(state, trial)
-        assert "unique_hash" in state.seen_hashes
-
     def test_get_best_empty_state(self):
         state = OptimizationState()
         assert get_best(state) is None

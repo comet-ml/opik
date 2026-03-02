@@ -11,6 +11,7 @@ def materialize_candidate(
     config: CandidateConfig,
     step_index: int,
     parent_candidate_ids: list[str] | None = None,
+    candidate_id: str | None = None,
 ) -> Candidate:
     """Create a Candidate with a generated UUID and computed config hash.
 
@@ -21,7 +22,7 @@ def materialize_candidate(
     config_hash = canonical_config_hash(config_dict)
 
     return Candidate(
-        candidate_id=str(uuid.uuid4()),
+        candidate_id=candidate_id or str(uuid.uuid4()),
         config=config,
         config_hash=config_hash,
         step_index=step_index,

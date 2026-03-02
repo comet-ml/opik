@@ -769,8 +769,9 @@ class OptimizationsResourceTest {
                     .studioConfig(studioConfig)
                     .build();
 
-            // Get initial queue size
-            String queueKey = "rq:queue:" + Queue.OPTIMIZER_CLOUD.toString();
+            // Get initial queue size (PODAM generates a random optimizer type which is not a legacy type,
+            // so resolveQueue routes to OPTIMIZER_FRAMEWORK)
+            String queueKey = "rq:queue:" + Queue.OPTIMIZER_FRAMEWORK.toString();
             RQueueReactive<String> queue = redisClient.getQueue(queueKey, StringCodec.INSTANCE);
             Integer initialSize = queue.size().block();
             assertThat(initialSize).isNotNull();

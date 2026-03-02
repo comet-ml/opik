@@ -5,6 +5,7 @@ from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import LoggingEventEmitter, SdkEventEmitter
+from opik_optimizer_framework.optimizers.factory import OptimizerFactory
 from opik_optimizer_framework.sampler import sample_split
 from opik_optimizer_framework.types import (
     CandidateConfig,
@@ -15,20 +16,9 @@ from opik_optimizer_framework.types import (
 
 logger = logging.getLogger(__name__)
 
-OPTIMIZER_REGISTRY: dict[str, type] = {}
+# Public alias so external code can register custom optimizers.
+register_optimizer = OptimizerFactory.register
 
-
-def register_optimizer(name: str, optimizer_class: type) -> None:
-    """Register an optimizer implementation by name."""
-    OPTIMIZER_REGISTRY[name] = optimizer_class
-
-
-def _register_builtins() -> None:
-    from opik_optimizer_framework.optimizer.simple_optimizer import SimpleOptimizer
-    register_optimizer("SimpleOptimizer", SimpleOptimizer)
-
-
-_register_builtins()
 
 
 def run_optimization(
@@ -37,14 +27,9 @@ def run_optimization(
     dataset_item_ids: list[str],
     seed: int = 42,
 ) -> OptimizationResult:
-    """Main entry point for running an optimization.
-
-    Fetches dataset items, runs sampler, initializes all components,
-    calls the optimizer, and returns the result.
-    """
+    """Main entry point for running an optimization."""
     logger.info("Starting optimization %s", context.optimization_id)
 
-    # Sample train/validation split
     split = sample_split(dataset_item_ids, seed=seed)
     logger.info(
         "Split: %d train, %d validation",
@@ -52,16 +37,13 @@ def run_optimization(
         len(split.validation_item_ids),
     )
 
-    # Initialize state
     state = OptimizationState()
 
-    # Initialize event emitter
     if client is not None:
         event_emitter = SdkEventEmitter(client, context.optimization_id)
     else:
         event_emitter = LoggingEventEmitter()
 
-    # Initialize evaluation adapter
     adapter = EvaluationAdapter(
         client=client,
         dataset_name=context.dataset_name,
@@ -72,15 +54,7 @@ def run_optimization(
         event_emitter=event_emitter,
     )
 
-    # Resolve optimizer
-    optimizer_cls = OPTIMIZER_REGISTRY.get(context.optimizer_type)
-    if optimizer_cls is None:
-        available = ", ".join(sorted(OPTIMIZER_REGISTRY.keys()))
-        raise ValueError(
-            f"Unknown optimizer type: {context.optimizer_type!r}. "
-            f"Available: [{available}]"
-        )
-    optimizer = optimizer_cls()
+    optimizer = OptimizerFactory.create(context.optimizer_type)
 
     # Evaluate baseline (original prompt)
     baseline_config = CandidateConfig(
@@ -91,7 +65,7 @@ def run_optimization(
     baseline_trial = adapter.evaluate(
         config=baseline_config,
         dataset_item_ids=dataset_item_ids,
-        step_index=-1,
+        eval_purpose="baseline",
     )
     initial_score = baseline_trial.score if baseline_trial else 0.0
     logger.info("Baseline score: %.4f", initial_score)
@@ -105,6 +79,7 @@ def run_optimization(
             evaluation_adapter=adapter,
             state=state,
             event_emitter=event_emitter,
+            baseline_trial=baseline_trial,
         )
 
         best = state.best_trial

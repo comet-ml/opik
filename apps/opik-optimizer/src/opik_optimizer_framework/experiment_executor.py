@@ -21,10 +21,45 @@ def run_experiment(
     optimization_id: str,
     metric_type: str,
     metric_parameters: dict[str, Any],
+    batch_index: int | None = None,
+    num_items: int | None = None,
+    capture_traces: bool | None = None,
+    eval_purpose: str | None = None,
 ) -> TrialResult:
-    """Execute an experiment for a candidate using the evaluation suite's evaluators.
+    """Execute an experiment, returning only the TrialResult."""
+    trial, _ = run_experiment_with_details(
+        client=client,
+        candidate=candidate,
+        dataset_name=dataset_name,
+        dataset_item_ids=dataset_item_ids,
+        optimization_id=optimization_id,
+        metric_type=metric_type,
+        metric_parameters=metric_parameters,
+        batch_index=batch_index,
+        num_items=num_items,
+        capture_traces=capture_traces,
+        eval_purpose=eval_purpose,
+    )
+    return trial
 
-    Returns a TrialResult with the experiment's aggregate score.
+
+def run_experiment_with_details(
+    client: object,
+    candidate: Candidate,
+    dataset_name: str,
+    dataset_item_ids: list[str],
+    optimization_id: str,
+    metric_type: str,
+    metric_parameters: dict[str, Any],
+    batch_index: int | None = None,
+    num_items: int | None = None,
+    capture_traces: bool | None = None,
+    eval_purpose: str | None = None,
+) -> tuple[TrialResult, Any]:
+    """Execute an experiment and return both the TrialResult and the raw EvaluationResult.
+
+    The raw result contains per-item test_results with score_results that
+    include ``reason`` fields from LLM judge assertions.
     """
     assert isinstance(client, opik.Opik)
 
@@ -37,8 +72,17 @@ def run_experiment(
         "dataset": dataset_name,
         "candidate_id": candidate.candidate_id,
         "step_index": candidate.step_index,
+        "parent_candidate_ids": candidate.parent_candidate_ids,
         "configuration": dataclasses.asdict(candidate.config),
     }
+    if batch_index is not None:
+        experiment_config["batch_index"] = batch_index
+    if num_items is not None:
+        experiment_config["num_items"] = num_items
+    if capture_traces is not None:
+        experiment_config["capture_traces"] = capture_traces
+    if eval_purpose is not None:
+        experiment_config["eval_purpose"] = eval_purpose
 
     result = evaluate_optimization_suite_trial(
         optimization_id=optimization_id,
@@ -54,7 +98,7 @@ def run_experiment(
 
     _log_experiment_score(client, result.experiment_id, metric_type, score)
 
-    return TrialResult(
+    trial = TrialResult(
         candidate_id=candidate.candidate_id,
         step_index=candidate.step_index,
         score=score,
@@ -65,6 +109,7 @@ def run_experiment(
         prompt_messages=candidate.config.prompt_messages,
         parent_candidate_ids=candidate.parent_candidate_ids,
     )
+    return trial, result
 
 
 def _log_experiment_score(

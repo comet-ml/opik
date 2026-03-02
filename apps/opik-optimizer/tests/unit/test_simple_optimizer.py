@@ -2,7 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from opik_optimizer_framework.event_emitter import LoggingEventEmitter
-from opik_optimizer_framework.optimizer.simple_optimizer import SimpleOptimizer
+from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
 from opik_optimizer_framework.types import (
     CandidateConfig,
     OptimizationState,
@@ -29,15 +29,13 @@ class TestSimpleOptimizer:
         state = OptimizationState()
         emitter = LoggingEventEmitter()
 
-        call_count = {"step0": 0, "step1": 0}
+        call_count = {"total": 0}
 
-        def mock_evaluate(config, dataset_item_ids, step_index, parent_candidate_ids=None):
-            key = f"step{step_index}"
-            call_count[key] += 1
-            trial = _make_trial(f"c-{step_index}-{call_count[key]}", 0.5 + call_count[key] * 0.1, step_index)
-            # Simulate the adapter recording the trial
+        def mock_evaluate(config, dataset_item_ids, parent_candidate_ids=None):
+            call_count["total"] += 1
+            trial = _make_trial(f"c-{call_count['total']}", 0.5 + call_count["total"] * 0.1)
             state.trials.append(trial)
-            state.seen_hashes.add(trial.config_hash)
+
             if state.best_trial is None or trial.score > state.best_trial.score:
                 state.best_trial = trial
             return trial
@@ -54,7 +52,7 @@ class TestSimpleOptimizer:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = improved_messages
 
-        with patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm:
+        with patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
@@ -65,8 +63,7 @@ class TestSimpleOptimizer:
                 event_emitter=emitter,
             )
 
-        assert call_count["step0"] == 3
-        assert call_count["step1"] == 2
+        assert call_count["total"] == 5  # 3 from step1 + 2 from step2
         assert len(state.trials) == 5
         assert state.best_trial is not None
 
@@ -75,26 +72,28 @@ class TestSimpleOptimizer:
         state = OptimizationState()
         emitter = LoggingEventEmitter()
 
-        step1_best_id = None
+        best_after_step1_id = None
         step2_parent_ids = []
 
         call_count = {"total": 0}
 
-        def mock_evaluate(config, dataset_item_ids, step_index, parent_candidate_ids=None):
-            nonlocal step1_best_id, step2_parent_ids
+        def mock_evaluate(config, dataset_item_ids, parent_candidate_ids=None):
+            nonlocal best_after_step1_id, step2_parent_ids
             call_count["total"] += 1
             score = 0.9 if call_count["total"] == 2 else 0.5
-            trial = _make_trial(f"c-{call_count['total']}", score, step_index)
+            trial = _make_trial(f"c-{call_count['total']}", score)
 
             state.trials.append(trial)
-            state.seen_hashes.add(trial.config_hash)
+
             if state.best_trial is None or trial.score > state.best_trial.score:
                 state.best_trial = trial
 
-            if step_index == 0 and score == 0.9:
-                step1_best_id = trial.candidate_id
-            if step_index == 1:
-                step2_parent_ids = parent_candidate_ids or []
+            # After step 1 (first 3 calls), record best
+            if call_count["total"] == 3:
+                best_after_step1_id = state.best_trial.candidate_id
+            # Step 2 calls have parent_candidate_ids set
+            if parent_candidate_ids:
+                step2_parent_ids = parent_candidate_ids
 
             return trial
 
@@ -108,7 +107,7 @@ class TestSimpleOptimizer:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = improved_messages
 
-        with patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm:
+        with patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
@@ -119,8 +118,8 @@ class TestSimpleOptimizer:
                 event_emitter=emitter,
             )
 
-        assert step1_best_id is not None
-        assert step2_parent_ids == [step1_best_id]
+        assert best_after_step1_id is not None
+        assert step2_parent_ids == [best_after_step1_id]
 
     def test_retries_on_dedup_rejection(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
@@ -129,14 +128,13 @@ class TestSimpleOptimizer:
 
         call_count = {"total": 0}
 
-        def mock_evaluate(config, dataset_item_ids, step_index, parent_candidate_ids=None):
+        def mock_evaluate(config, dataset_item_ids, parent_candidate_ids=None):
             call_count["total"] += 1
-            # Return None on first call (simulating rejection), then succeed
             if call_count["total"] == 1:
                 return None
-            trial = _make_trial(f"c-{call_count['total']}", 0.7, step_index)
+            trial = _make_trial(f"c-{call_count['total']}", 0.7)
             state.trials.append(trial)
-            state.seen_hashes.add(trial.config_hash)
+
             if state.best_trial is None or trial.score > state.best_trial.score:
                 state.best_trial = trial
             return trial
@@ -149,7 +147,7 @@ class TestSimpleOptimizer:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = improved_messages
 
-        with patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm:
+        with patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
@@ -172,7 +170,7 @@ class TestSimpleOptimizer:
         adapter = MagicMock()
         adapter.evaluate = MagicMock(return_value=None)
 
-        with patch("opik_optimizer_framework.optimizer.simple_optimizer.litellm") as mock_litellm:
+        with patch("opik_optimizer_framework.optimizers.simple_optimizer.litellm") as mock_litellm:
             mock_litellm.completion.side_effect = Exception("LLM error")
             optimizer.run(
                 context=sample_optimization_context,

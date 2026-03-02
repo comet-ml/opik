@@ -62,7 +62,6 @@ class OptimizationState:
     total_steps: int = 2
     trials: list[TrialResult] = field(default_factory=list)
     best_trial: TrialResult | None = None
-    seen_hashes: set[str] = field(default_factory=set)
     error: str | None = None
 
 

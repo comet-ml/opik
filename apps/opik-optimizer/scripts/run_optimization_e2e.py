@@ -156,16 +156,24 @@ def main():
 
     # 3. Create the optimization record (status is set to "running" automatically)
     logger.info("Creating optimization record")
+    optimizer_type = "GepaOptimizer"
     optimization = client.create_optimization(
         dataset_name=SUITE_NAME,
         objective_name=OBJECTIVE_NAME,
         name=OPTIMIZATION_NAME,
-        metadata={"optimizer": "SimpleOptimizer"},
+        metadata={"optimizer": optimizer_type},
     )
     optimization_id = optimization.id
     logger.info("Optimization created: %s", optimization_id)
 
     # 4. Run the framework — evaluators come from the suite itself
+    optimizer_parameters = {
+        "max_candidates": 4,
+        "reflection_minibatch_size": 2,
+        "candidate_selection_strategy": "pareto",
+        "seed": 42,
+    }
+
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
@@ -174,11 +182,11 @@ def main():
         model_parameters={"temperature": 0.7, "max_tokens": 256},
         metric_type=OBJECTIVE_NAME,
         metric_parameters={},
-        optimizer_type="SimpleOptimizer",
-        optimizer_parameters={"num_steps": 3, "candidates_per_step": [1, 1, 1]},
+        optimizer_type=optimizer_type,
+        optimizer_parameters=optimizer_parameters,
     )
 
-    logger.info("Starting optimization (optimizer_type=SimpleOptimizer, model=%s)", MODEL)
+    logger.info("Starting optimization (optimizer_type=%s, model=%s)", optimizer_type, MODEL)
     try:
         result = run_optimization(
             context=context,
@@ -208,6 +216,14 @@ def main():
         print(f"    Prompt        :")
         for msg in result.best_trial.prompt_messages:
             print(f"      [{msg['role']}] {msg['content'][:80]}...")
+
+    print(f"\n  Optimization trajectory:")
+    for trial in result.all_trials:
+        parents = trial.parent_candidate_ids or []
+        print(
+            f"    step={trial.step_index:2d}  score={trial.score:.4f}  "
+            f"candidate={trial.candidate_id[:8]}  parents={[p[:8] for p in parents]}"
+        )
 
     print(f"\n  View in UI: {OPIK_URL or 'https://www.comet.com/opik'}")
     print("=" * 60)

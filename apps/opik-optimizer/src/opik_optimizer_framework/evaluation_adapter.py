@@ -6,7 +6,7 @@ from typing import Any
 from opik_optimizer_framework.candidate_materializer import materialize_candidate
 from opik_optimizer_framework.candidate_validator import validate_candidate
 from opik_optimizer_framework.event_emitter import EventEmitter
-from opik_optimizer_framework.experiment_executor import run_experiment
+from opik_optimizer_framework.experiment_executor import run_experiment_with_details
 from opik_optimizer_framework.result_aggregator import record_trial
 from opik_optimizer_framework.types import (
     CandidateConfig,
@@ -20,8 +20,7 @@ logger = logging.getLogger(__name__)
 class EvaluationAdapter:
     """Optimizer-facing boundary for evaluating candidates.
 
-    Accepts a CandidateConfig + dataset item IDs, runs validation,
-    materialization, experiment execution, and result aggregation.
+    Tracks trial count internally so optimizers don't need to manage step_index.
     """
 
     def __init__(
@@ -41,27 +40,71 @@ class EvaluationAdapter:
         self._metric_parameters = metric_parameters
         self._state = state
         self._event_emitter = event_emitter
+        self._trial_count = 0
+        self._next_step_index = 0
+        self._candidate_step_index: dict[str, int] = {}
+
+    @property
+    def trial_count(self) -> int:
+        """Number of trials evaluated so far (read-only)."""
+        return self._trial_count
 
     def evaluate(
         self,
         config: CandidateConfig,
         dataset_item_ids: list[str],
-        step_index: int,
         parent_candidate_ids: list[str] | None = None,
+        eval_purpose: str | None = None,
     ) -> TrialResult | None:
         """Evaluate a single candidate. Returns TrialResult or None if rejected."""
+        trial, _ = self.evaluate_with_details(
+            config=config,
+            dataset_item_ids=dataset_item_ids,
+            parent_candidate_ids=parent_candidate_ids,
+            eval_purpose=eval_purpose,
+        )
+        return trial
+
+    def evaluate_with_details(
+        self,
+        config: CandidateConfig,
+        dataset_item_ids: list[str],
+        parent_candidate_ids: list[str] | None = None,
+        candidate_id: str | None = None,
+        batch_index: int | None = None,
+        num_items: int | None = None,
+        capture_traces: bool | None = None,
+        eval_purpose: str | None = None,
+    ) -> tuple[TrialResult | None, Any]:
+        """Evaluate a candidate and return both the TrialResult and the raw EvaluationResult.
+
+        The raw result contains per-item test_results with ScoreResult objects
+        that include ``reason`` fields from LLM judge assertions. Returns
+        ``(None, None)`` if the candidate is rejected.
+        """
         valid, reason = validate_candidate(config, self._state)
         if not valid:
             logger.warning("Candidate rejected: %s", reason)
-            return None
+            return None, None
+
+        # step_index increments only when the candidate changes.
+        # If candidate_id is provided and already mapped, reuse its step.
+        if candidate_id is not None and candidate_id in self._candidate_step_index:
+            step_index = self._candidate_step_index[candidate_id]
+        else:
+            step_index = self._next_step_index
+            self._next_step_index += 1
+
+        self._trial_count += 1
 
         candidate = materialize_candidate(
             config,
             step_index=step_index,
             parent_candidate_ids=parent_candidate_ids,
+            candidate_id=candidate_id,
         )
 
-        trial = run_experiment(
+        trial, raw_result = run_experiment_with_details(
             client=self._client,
             candidate=candidate,
             dataset_name=self._dataset_name,
@@ -69,7 +112,15 @@ class EvaluationAdapter:
             optimization_id=self._optimization_id,
             metric_type=self._metric_type,
             metric_parameters=self._metric_parameters,
+            batch_index=batch_index,
+            num_items=num_items,
+            capture_traces=capture_traces,
+            eval_purpose=eval_purpose,
         )
+
+        # Register candidate_id → step_index after trial so re-evals reuse the step.
+        if trial is not None and trial.candidate_id not in self._candidate_step_index:
+            self._candidate_step_index[trial.candidate_id] = step_index
 
         previous_best = self._state.best_trial
         record_trial(self._state, trial)
@@ -78,4 +129,4 @@ class EvaluationAdapter:
         if self._state.best_trial is trial and self._state.best_trial is not previous_best:
             self._event_emitter.on_best_candidate_changed(trial)
 
-        return trial
+        return trial, raw_result
