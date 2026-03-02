@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import useGroupedOptimizationsList from "@/hooks/useGroupedOptimizationsList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID } from "@/types/shared";
 import { Optimization } from "@/types/optimizations";
-import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import { DEFAULT_GROUPS_PER_PAGE, GROUPING_COLUMN } from "@/constants/groups";
 import { checkIsGroupRowType } from "@/lib/groups";
 
@@ -71,7 +71,7 @@ export const useOptimizationsView = ({
   } = useOptimizationsList(
     {
       workspaceName,
-      datasetId: datasetId || "",
+      datasetId: "",
       search: search || "",
       page,
       size: DEFAULT_PAGE_SIZE,
