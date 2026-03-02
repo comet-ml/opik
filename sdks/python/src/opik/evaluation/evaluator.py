@@ -357,6 +357,7 @@ def evaluate_suite(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
+        evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
     )
