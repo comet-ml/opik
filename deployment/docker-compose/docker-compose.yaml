@@ -215,7 +215,7 @@ services:
     # change to 'build' when developing python-backend
     pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-always}
     profiles:
-      - backend
+      - ${PYTHON_BACKEND_PROFILE:-backend}
       - opik
       - local-be-fe
       - local-be

@@ -446,21 +446,10 @@ function Start-MissingContainers {
 
     Initialize-BuildxBake
 
-    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
-        $env:PYTHON_BACKEND_PULL_POLICY = "never"
-        if ($BUILD_MODE -eq "true") {
-            $buildArgs = Get-DockerComposeCommand
-            $buildArgs += "build", "backend"
-            docker @buildArgs | Where-Object { $_.Trim() -ne '' }
-        }
-        $dockerArgs = Get-DockerComposeCommand
-        $dockerArgs += "up", "-d", "--scale", "python-backend=0"
-    } else {
-        $dockerArgs = Get-DockerComposeCommand
-        $dockerArgs += "up", "-d"
-        if ($BUILD_MODE -eq "true") {
-            $dockerArgs += "--build"
-        }
+    $dockerArgs = Get-DockerComposeCommand
+    $dockerArgs += "up", "-d"
+    if ($BUILD_MODE -eq "true") {
+        $dockerArgs += "--build"
     }
 
     docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
@@ -864,6 +853,10 @@ if ($PROFILE_COUNT -gt 1) {
     Write-Host "   • .\opik.ps1                (full Opik suite - default)"
     exit 1
 }
+
+# When SKIP_PYTHON_BACKEND=true, override the python-backend profile so docker compose never
+# considers it in scope — no build, no pull, no start.
+if ($env:SKIP_PYTHON_BACKEND -eq "true") { $env:PYTHON_BACKEND_PROFILE = "python-backend-disabled" }
 
 # Get the first remaining option
 $option = if ($options.Count -gt 0) { $options[0] } else { '' }

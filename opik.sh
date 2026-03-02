@@ -395,15 +395,7 @@ start_missing_containers() {
 
   local cmd
   cmd=$(get_docker_compose_cmd)
-  if [[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]]; then
-    export PYTHON_BACKEND_PULL_POLICY=never
-    # Build only the Java backend explicitly; running `up --build` with `--scale python-backend=0`
-    # still triggers the python-backend Dockerfile in some docker compose versions.
-    [[ "$BUILD_MODE" == "true" ]] && $cmd build backend
-    $cmd up -d --scale python-backend=0
-  else
-    $cmd up -d ${BUILD_MODE:+--build}
-  fi
+  $cmd up -d ${BUILD_MODE:+--build}
 
   echo "⏳ Waiting for all containers to be running and healthy..."
   max_retries=60
@@ -805,6 +797,10 @@ if [[ $PROFILE_COUNT -gt 1 ]]; then
   echo "   • ./opik.sh                (full Opik suite - default)"
   exit 1
 fi
+
+# When SKIP_PYTHON_BACKEND=true, override the python-backend profile so docker compose never
+# considers it in scope — no build, no pull, no start.
+[[ "${SKIP_PYTHON_BACKEND:-false}" == "true" ]] && export PYTHON_BACKEND_PROFILE=python-backend-disabled
 
 # Set containers based on the selected profile
 set_containers_for_profile
