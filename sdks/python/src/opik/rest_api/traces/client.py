@@ -10,6 +10,7 @@ from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -881,7 +882,7 @@ class TracesClient:
 
     def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -894,7 +895,7 @@ class TracesClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples
@@ -908,7 +909,7 @@ class TracesClient:
 
     def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Trace Threads Feedback Score names
 
@@ -921,7 +922,7 @@ class TracesClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Find Trace Threads Feedback Score names
 
         Examples
@@ -2511,7 +2512,7 @@ class AsyncTracesClient:
 
     async def find_feedback_score_names2(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
 
@@ -2524,7 +2525,7 @@ class AsyncTracesClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Feedback Scores resource
 
         Examples
@@ -2543,7 +2544,7 @@ class AsyncTracesClient:
 
     async def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> typing.List[str]:
+    ) -> FeedbackScoreNamesPublic:
         """
         Find Trace Threads Feedback Score names
 
@@ -2556,7 +2557,7 @@ class AsyncTracesClient:
 
         Returns
         -------
-        typing.List[str]
+        FeedbackScoreNamesPublic
             Find Trace Threads Feedback Score names
 
         Examples

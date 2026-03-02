@@ -26,7 +26,7 @@ test.describe('Threads (Conversations) Tests', () => {
       await test.step('Verify thread content and message order for each thread', async () => {
         const threadsPage = new ThreadsPage(page);
         for (const thread of threadConfigs) {
-          await threadsPage.openThreadContent(thread.thread_id);
+          await threadsPage.openThreadByFirstMessage(thread.inputs[0]);
 
           for (let i = 0; i < thread.inputs.length; i++) {
             await threadsPage.checkMessageInThread(thread.inputs[i], false);
@@ -133,12 +133,8 @@ This test ensures threads can be properly deleted via the UI.`
       await test.step('Delete threads via UI and verify removal', async () => {
         const threadsPage = new ThreadsPage(page);
         for (let i = 0; i < 2; i++) {
-          const threadId = threadConfigs[i].thread_id;
-          await threadsPage.searchForThread(threadId);
-          await threadsPage.deleteThreadFromTable();
-          await threadsPage.checkThreadIsDeleted(threadId);
-
-          await page.getByTestId('search-input').clear();
+          const firstMessage = threadConfigs[i].inputs[0];
+          await threadsPage.deleteThreadByFirstMessage(firstMessage);
           await page.waitForTimeout(500);
         }
       });

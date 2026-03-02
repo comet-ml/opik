@@ -35,8 +35,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
-import { useDateFormat } from "@/hooks/useDateFormat";
-import DateFormatDropdown from "@/components/shared/DateFormatDropdown/DateFormatDropdown";
 import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -60,7 +58,6 @@ const UserMenu = () => {
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
-  const [dateFormat, setDateFormat] = useDateFormat();
   const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const hideUpgradeButton = matches.some(
@@ -380,10 +377,6 @@ const UserMenu = () => {
               </DropdownMenuPortal>
             </DropdownMenuSub>
           </DropdownMenuGroup>
-          <DateFormatDropdown
-            dateFormat={dateFormat}
-            setDateFormat={setDateFormat}
-          />
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {

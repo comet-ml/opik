@@ -9,8 +9,7 @@ The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizin
 
 - **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
 - **Multiple Algorithms**: Support for various optimization strategies including evolutionary, few-shot, meta-prompt, and GEPA
-- **MCP Support**: Built-in support for Model Context Protocol tool calling
-- **Cursor/OpenAI MCP Interop**: Supports OpenAI-style MCP entries directly and Cursor `mcpServers` via conversion helpers
+- **MCP Support**: Built-in support for Model Context Protocol tool calling and optimization
 - **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 - **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 - **Backward Compatibility**: All original parameters preserved through kwargs extraction
@@ -100,19 +99,19 @@ FewShotBayesianOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
-<ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of threads for parallel evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="min_examples" type="int" optional={true} default="2" />
+<ParamField path="max_examples" type="int" optional={true} default="8" />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="enable_columnar_selection" type="bool" optional={true} default="True">Toggle column-aware example grouping (categorical Optuna params)</ParamField>
+<ParamField path="enable_columnar_selection" type="bool" optional={true} default="True" />
 <ParamField path="enable_diversity" type="bool" optional={true} default="True" />
-<ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True">Enable Optuna's multivariate TPE sampler (default: True)</ParamField>
-<ParamField path="enable_optuna_pruning" type="bool" optional={true} default="True">Enable Optuna pruner for early stopping (default: True)</ParamField>
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
+<ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True" />
+<ParamField path="enable_optuna_pruning" type="bool" optional={true} default="True" />
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -377,6 +376,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -394,7 +407,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -417,7 +431,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -688,15 +703,15 @@ GepaOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for the optimization algorithm</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Accepted for API parity, but ignored (GEPA does not expose prompt hooks).</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 
 ### Methods
 #### begin_round
@@ -959,6 +974,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -976,7 +1005,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -999,7 +1029,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -1275,18 +1306,18 @@ MetaPromptOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning/generation calls</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="prompts_per_round" type="int" optional={true} default="4">Number of candidate prompts to generate per optimization round</ParamField>
-<ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context learning when reasoning</ParamField>
-<ParamField path="num_task_examples" type="int" optional={true} default="5">Number of dataset examples to show in task context (default: 10)</ParamField>
-<ParamField path="task_context_columns" type="list[str] | None" optional={true}>Specific dataset columns to include in context (None = all input columns)</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for prompt evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="prompts_per_round" type="int" optional={true} default="4" />
+<ParamField path="enable_context" type="bool" optional={true} default="True" />
+<ParamField path="num_task_examples" type="int" optional={true} default="5" />
+<ParamField path="task_context_columns" type="list[str] | None" optional={true} />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="use_hall_of_fame" type="bool" optional={true} default="True">Enable Hall of Fame pattern extraction and re-injection</ParamField>
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
+<ParamField path="use_hall_of_fame" type="bool" optional={true} default="True" />
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -1551,6 +1582,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -1568,7 +1613,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -1591,7 +1637,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -1874,25 +1921,25 @@ EvolutionaryOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal operations (mutations, crossover, etc.)</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="population_size" type="int" optional={true} default="30">Number of prompts in the population</ParamField>
-<ParamField path="num_generations" type="int" optional={true} default="15">Number of generations to run</ParamField>
-<ParamField path="mutation_rate" type="float" optional={true} default="0.2">Mutation rate for genetic operations</ParamField>
-<ParamField path="crossover_rate" type="float" optional={true} default="0.8">Crossover rate for genetic operations</ParamField>
-<ParamField path="tournament_size" type="int" optional={true} default="4">Tournament size for selection</ParamField>
-<ParamField path="elitism_size" type="int" optional={true} default="3">Number of elite prompts to preserve across generations</ParamField>
-<ParamField path="adaptive_mutation" type="bool" optional={true} default="True">Whether to use adaptive mutation that adjusts based on population diversity</ParamField>
-<ParamField path="enable_moo" type="bool" optional={true} default="True">Whether to enable multi-objective optimization (optimizes metric and prompt length)</ParamField>
-<ParamField path="enable_llm_crossover" type="bool" optional={true} default="True">Whether to enable LLM-based crossover operations</ParamField>
-<ParamField path="enable_semantic_crossover" type="bool" optional={true} default="False">Whether to use semantic crossover before standard LLM crossover</ParamField>
-<ParamField path="output_style_guidance" type="str | None" optional={true}>Optional guidance for output style in generated prompts</ParamField>
-<ParamField path="infer_output_style" type="bool" optional={true} default="False">Whether to automatically infer output style from the dataset</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of threads for parallel evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="population_size" type="int" optional={true} default="30" />
+<ParamField path="num_generations" type="int" optional={true} default="15" />
+<ParamField path="mutation_rate" type="float" optional={true} default="0.2" />
+<ParamField path="crossover_rate" type="float" optional={true} default="0.8" />
+<ParamField path="tournament_size" type="int" optional={true} default="4" />
+<ParamField path="elitism_size" type="int" optional={true} default="3" />
+<ParamField path="adaptive_mutation" type="bool" optional={true} default="True" />
+<ParamField path="enable_moo" type="bool" optional={true} default="True" />
+<ParamField path="enable_llm_crossover" type="bool" optional={true} default="True" />
+<ParamField path="enable_semantic_crossover" type="bool" optional={true} default="False" />
+<ParamField path="output_style_guidance" type="str | None" optional={true} />
+<ParamField path="infer_output_style" type="bool" optional={true} default="False" />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to customize internal prompts.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -2157,6 +2204,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -2174,7 +2235,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -2197,7 +2259,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -2473,18 +2536,18 @@ HierarchicalReflectiveOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for the optimization algorithm (reasoning and analysis)</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="reasoning_model" type="str | None" optional={true} />
 <ParamField path="reasoning_model_parameters" type="dict[str, typing.Any] | None" optional={true} />
-<ParamField path="max_parallel_batches" type="int" optional={true} default="5">Maximum number of batches to process concurrently during hierarchical root cause analysis</ParamField>
-<ParamField path="batch_size" type="int" optional={true} default="25">Number of test cases per batch for root cause analysis</ParamField>
-<ParamField path="convergence_threshold" type="float" optional={true} default="0.01">Stop if relative improvement is below this threshold</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="max_parallel_batches" type="int" optional={true} default="5" />
+<ParamField path="batch_size" type="int" optional={true} default="25" />
+<ParamField path="convergence_threshold" type="float" optional={true} default="0.01" />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
-<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true}>Optional dict or callable to override/customize prompt templates. If a dict, keys should match DEFAULT_PROMPTS keys. If a callable, receives the PromptLibrary instance for in-place modification.</ParamField>
+<ParamField path="prompt_overrides" type="dict[str, str] | collections.abc.Callable[[opik_optimizer.utils.prompt_library.PromptLibrary], None] | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
 
@@ -2749,6 +2812,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -2766,7 +2843,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -2789,7 +2867,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -3062,14 +3141,14 @@ ParameterOptimizer(
 
 **Parameters:**
 
-<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name (used for metadata, not for optimization calls)</ParamField>
-<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
-<ParamField path="default_n_trials" type="int" optional={true} default="20">Default number of optimization trials to run</ParamField>
-<ParamField path="local_search_ratio" type="float" optional={true} default="0.3">Ratio of trials to dedicate to local search refinement (0.0-1.0)</ParamField>
-<ParamField path="local_search_scale" type="float" optional={true} default="0.2">Scale factor for narrowing search space during local search</ParamField>
-<ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for evaluation</ParamField>
-<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
-<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
+<ParamField path="default_n_trials" type="int" optional={true} default="20" />
+<ParamField path="local_search_ratio" type="float" optional={true} default="0.3" />
+<ParamField path="local_search_scale" type="float" optional={true} default="0.2" />
+<ParamField path="n_threads" type="int" optional={true} default="12" />
+<ParamField path="verbose" type="int" optional={true} default="1" />
+<ParamField path="seed" type="int" optional={true} default="42" />
 <ParamField path="name" type="str | None" optional={true} />
 <ParamField path="skip_perfect_score" type="bool" optional={true} default="True" />
 <ParamField path="perfect_score" type="float" optional={true} default="0.95" />
@@ -3334,6 +3413,20 @@ on_trial(
 <ParamField path="prompts" type="dict" />
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
+
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
 
 #### optimize_parameter
 ```python
@@ -3964,6 +4057,20 @@ on_trial(
 <ParamField path="score" type="float" />
 <ParamField path="prev_best_score" type="float | None" optional={true} />
 
+#### optimize_mcp
+```python
+optimize_mcp(
+    args: Any,
+    kwargs: Any
+)
+```
+
+
+**Parameters:**
+
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
 #### optimize_prompt
 ```python
 optimize_prompt(
@@ -3981,7 +4088,8 @@ optimize_prompt(
     validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     allow_tool_use: bool = True,
-    optimize_prompt: bool | str | list[str] | None = 'system',
+    optimize_prompts: bool | str | list[str] | None = 'system',
+    optimize_tools: bool | dict[str, bool] | None = None,
     args: Any,
     kwargs: Any
 )
@@ -4004,7 +4112,8 @@ optimize_prompt(
 <ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for ranking candidates</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of optimization trials</ParamField>
 <ParamField path="allow_tool_use" type="bool" optional={true} default="True">Whether tools may be executed during evaluation (default True)</ParamField>
-<ParamField path="optimize_prompt" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_prompts" type="bool | str | list[str] | None" optional={true} default="system">Which prompt roles to allow for optimization</ParamField>
+<ParamField path="optimize_tools" type="bool | dict[str, bool] | None" optional={true}>Optional tool optimization selector. Only supported by optimizers that explicitly document tool optimization support.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -4264,8 +4373,8 @@ ChatPrompt(
     system: str | None = None,
     user: str | None = None,
     messages: list[dict[str, typing.Any]] | None = None,
-    tools: list[dict[str, typing.Any]] | None = None,
-    function_map: dict[str, collections.abc.Callable] | None = None,
+    tools: list[dict[str, typing.Any]] | collections.abc.Mapping[str, typing.Any] | None = None,
+    function_map: collections.abc.Mapping[str, collections.abc.Callable[..., typing.Any]] | None = None,
     model: str = 'openai/gpt-5-nano',
     model_parameters: dict[str, typing.Any] | None = None,
     model_kwargs: dict[str, typing.Any] | None = None,
@@ -4280,8 +4389,8 @@ ChatPrompt(
 <ParamField path="system" type="str | None" optional={true}>the system prompt</ParamField>
 <ParamField path="user" type="str | None" optional={true} />
 <ParamField path="messages" type="list[dict[str, typing.Any]] | None" optional={true}>a list of dictionaries with role/content, with a content containing &#123;input-dataset-field&#125;</ParamField>
-<ParamField path="tools" type="list[dict[str, typing.Any]] | None" optional={true} />
-<ParamField path="function_map" type="dict[str, collections.abc.Callable] | None" optional={true} />
+<ParamField path="tools" type="list[dict[str, typing.Any]] | collections.abc.Mapping[str, typing.Any] | None" optional={true} />
+<ParamField path="function_map" type="collections.abc.Mapping[str, collections.abc.Callable[..., typing.Any]] | None" optional={true} />
 <ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano" />
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true} />
 <ParamField path="model_kwargs" type="dict[str, typing.Any] | None" optional={true} />
@@ -4957,3 +5066,4 @@ update(
 **Parameters:**
 
 <ParamField path="overrides" type="dict">Dictionary of key-value pairs to update</ParamField>
+

@@ -128,7 +128,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
 | clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
 | clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -248,6 +248,15 @@ Call opik api on http://localhost:5173/api
 | component.ai-backend.startupProbe.httpGet.path | string | `"/opik-ai/healthz"` |  |
 | component.ai-backend.startupProbe.httpGet.port | int | `8081` |  |
 | component.ai-backend.startupProbe.periodSeconds | int | `10` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -327,6 +336,15 @@ Call opik api on http://localhost:5173/api
 | component.frontend.aiBackendUpstreamConfig.proxy_connect_timeout | int | `90` |  |
 | component.frontend.aiBackendUpstreamConfig.proxy_read_timeout | int | `300` |  |
 | component.frontend.aiBackendUpstreamConfig.proxy_send_timeout | int | `300` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.frontend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.frontend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -398,6 +416,15 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |

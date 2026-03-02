@@ -34,7 +34,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { toString } from "@/lib/utils";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
   COLUMN_DATASET_ID,
@@ -99,7 +99,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedOptimization>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -161,11 +161,20 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "created_at",
-  "num_trials",
-  "optimizer",
-  "objective_name",
   "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "status",
+  "num_trials",
+  "objective_name",
+  "created_at",
+  "optimizer",
+  "created_by",
 ];
 
 const OptimizationsPage: React.FunctionComponent = () => {
@@ -258,7 +267,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

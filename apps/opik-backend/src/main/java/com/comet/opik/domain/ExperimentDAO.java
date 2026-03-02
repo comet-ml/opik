@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Experiment.ExperimentPage;
 import com.comet.opik.api.Experiment.PromptVersionLink;
@@ -161,6 +162,7 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
+                evaluation_method,
                 optimization_id,
                 status,
                 experiment_scores,
@@ -183,6 +185,7 @@ class ExperimentDAO {
                 new.prompt_id,
                 new.prompt_versions,
                 new.type,
+                new.evaluation_method,
                 new.optimization_id,
                 new.status,
                 new.experiment_scores,
@@ -201,6 +204,7 @@ class ExperimentDAO {
                 :prompt_id AS prompt_id,
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
+                :evaluation_method AS evaluation_method,
                 :optimization_id AS optimization_id,
                 :status AS status,
                 :experiment_scores AS experiment_scores,
@@ -485,6 +489,7 @@ class ExperimentDAO {
                 e.prompt_versions as prompt_versions,
                 e.optimization_id as optimization_id,
                 e.type as type,
+                e.evaluation_method as evaluation_method,
                 e.status as status,
                 e.experiment_scores as experiment_scores,
                 e.dataset_version_id as dataset_version_id,
@@ -1147,6 +1152,7 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
+                evaluation_method,
                 optimization_id,
                 status,
                 experiment_scores,
@@ -1167,6 +1173,7 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 <if(type)> :type <else> type <endif> as type,
+                evaluation_method,
                 optimization_id,
                 <if(status)> :status <else> status <endif> as status,
                 <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
@@ -1200,6 +1207,8 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
+                .bind("evaluation_method",
+                        Optional.ofNullable(experiment.evaluationMethod()).orElse(EvaluationMethod.DATASET).getValue())
                 .bind("optimization_id", Optional.ofNullable(experiment.optimizationId())
                         .map(UUID::toString)
                         .orElse(""))
@@ -1345,6 +1354,8 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
+                    .evaluationMethod(
+                            EvaluationMethod.fromString(row.get("evaluation_method", String.class)).orElse(null))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .experimentScores(getExperimentScores(row))
                     .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
