@@ -81,9 +81,13 @@ class TestConfigDecoratorInit:
         mock_backend.agent_configs.create_agent_config.assert_called_once()
         call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
-        keys = [v.key for v in blueprint.values]
-        assert "MyConfig.temp" in keys
-        assert "MyConfig.name" in keys
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert "MyConfig.temp" in values_by_key
+        assert values_by_key["MyConfig.temp"].value == "0.6"
+        assert values_by_key["MyConfig.temp"].type == "float"
+        assert "MyConfig.name" in values_by_key
+        assert values_by_key["MyConfig.name"].value == "custom"
+        assert values_by_key["MyConfig.name"].type == "string"
 
     def test_init__existing_blueprint_with_same_keys__no_create_called(
         self, mock_backend
@@ -143,9 +147,11 @@ class TestConfigDecoratorInit:
         mock_backend.agent_configs.create_agent_config.assert_called_once()
         call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
-        keys = [v.key for v in blueprint.values]
-        assert "MyConfig.max_tokens" in keys
-        assert "MyConfig.temp" not in keys
+        values_by_key = {v.key: v for v in blueprint.values}
+        assert "MyConfig.max_tokens" in values_by_key
+        assert values_by_key["MyConfig.max_tokens"].value == "2000"
+        assert values_by_key["MyConfig.max_tokens"].type == "integer"
+        assert "MyConfig.temp" not in values_by_key
 
     def test_init__existing_blueprint_with_extra_local_keys__merges_values(
         self, mock_backend
