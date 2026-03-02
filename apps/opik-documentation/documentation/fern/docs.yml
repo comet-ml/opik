@@ -947,6 +947,9 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - page: Core API (Pilot)
+            path: docs/reference/python-sdk/core-api.mdx
+            slug: core-api
           - page: REST API Client
             path: docs/reference/python-sdk/rest-api.mdx
             slug: rest-api
