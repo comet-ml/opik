@@ -1592,6 +1592,11 @@ class FindTraceThreadsResourceTest {
                             expectedStats.add(new ProjectStats.AvgValueStat("usage." + entry.getKey(),
                                     avgUsagePerThread));
                         });
+                threadUsage.entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> expectedStats.add(
+                                new ProjectStats.AvgValueStat("usage_sum." + entry.getKey(),
+                                        entry.getValue().doubleValue())));
             }
 
             // Calculate feedback scores - average across threads
