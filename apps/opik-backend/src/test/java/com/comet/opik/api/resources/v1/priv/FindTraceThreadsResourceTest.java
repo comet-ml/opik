@@ -1240,65 +1240,15 @@ class FindTraceThreadsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SearchTraceThreads {
 
-        @Test
-        @DisplayName("When searching by trace input substring, should return only matching threads")
-        void searchThreads__whenSearchByInput__thenReturnMatchingThreads() {
-            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var workspaceId = UUID.randomUUID().toString();
-            var apiKey = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
-            var matchingThreadId = "thread-" + uniqueTerm;
-            var nonMatchingThreadId = "thread-other-" + UUID.randomUUID();
-
-            var matchingInput = com.comet.opik.utils.JsonUtils.getJsonNodeFromString(
-                    "{\"message\": \"find-me-" + uniqueTerm + "\"}");
-
-            var matchingTraces = IntStream.range(0, 2)
-                    .mapToObj(i -> {
-                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-                        return createTrace().toBuilder()
-                                .projectName(projectName)
-                                .threadId(matchingThreadId)
-                                .input(matchingInput)
-                                .endTime(now.plus(i, ChronoUnit.MILLIS))
-                                .startTime(now)
-                                .build();
-                    })
-                    .toList();
-
-            var nonMatchingTraces = IntStream.range(0, 2)
-                    .mapToObj(i -> {
-                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-                        return createTrace().toBuilder()
-                                .projectName(projectName)
-                                .threadId(nonMatchingThreadId)
-                                .endTime(now.plus(i, ChronoUnit.MILLIS))
-                                .startTime(now)
-                                .build();
-                    })
-                    .toList();
-
-            var allTraces = new ArrayList<>(matchingTraces);
-            allTraces.addAll(nonMatchingTraces);
-            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
-
-            var projectId = getProjectId(projectName, workspaceName, apiKey);
-
-            var actualPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
-                    List.of(), List.of(), Map.of("search", uniqueTerm));
-
-            assertThat(actualPage.total()).isEqualTo(1);
-            assertThat(actualPage.content()).hasSize(1);
-            assertThat(actualPage.content().getFirst().id()).isEqualTo(matchingThreadId);
+        private Stream<Arguments> searchFieldProvider() {
+            return Stream.of(
+                    Arguments.of("input"),
+                    Arguments.of("output"));
         }
 
-        @Test
-        @DisplayName("When searching by trace output content, should return only matching threads")
-        void searchThreads__whenSearchByOutput__thenReturnMatchingThreads() {
+        @ParameterizedTest(name = "search by {0}")
+        @MethodSource("searchFieldProvider")
+        void searchThreads__whenSearchByField__thenReturnMatchingThreads(String field) {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1310,19 +1260,23 @@ class FindTraceThreadsResourceTest {
             var matchingThreadId = "thread-" + uniqueTerm;
             var nonMatchingThreadId = "thread-other-" + UUID.randomUUID();
 
-            var matchingOutput = com.comet.opik.utils.JsonUtils.getJsonNodeFromString(
-                    "{\"response\": \"answer-" + uniqueTerm + "\"}");
+            var matchingValue = com.comet.opik.utils.JsonUtils.getJsonNodeFromString(
+                    "{\"content\": \"find-me-" + uniqueTerm + "\"}");
 
             var matchingTraces = IntStream.range(0, 2)
                     .mapToObj(i -> {
                         Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-                        return createTrace().toBuilder()
+                        var builder = createTrace().toBuilder()
                                 .projectName(projectName)
                                 .threadId(matchingThreadId)
-                                .output(matchingOutput)
                                 .endTime(now.plus(i, ChronoUnit.MILLIS))
-                                .startTime(now)
-                                .build();
+                                .startTime(now);
+                        switch (field) {
+                            case "input" -> builder.input(matchingValue);
+                            case "output" -> builder.output(matchingValue);
+                            default -> throw new IllegalArgumentException("Unknown field: " + field);
+                        }
+                        return builder.build();
                     })
                     .toList();
 
