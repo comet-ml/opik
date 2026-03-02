@@ -1,7 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from opik_optimizer_framework.event_emitter import LoggingEventEmitter
+from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
 from opik_optimizer_framework.types import (
     CandidateConfig,
@@ -18,7 +18,6 @@ def _make_trial(candidate_id: str, score: float, step_index: int = 0) -> TrialRe
         metric_scores={"accuracy": score},
         experiment_id=f"exp-{candidate_id}",
         experiment_name=f"trial-{candidate_id}",
-        config_hash=f"hash-{candidate_id}",
         prompt_messages=[{"role": "user", "content": f"prompt-{candidate_id}"}],
     )
 
@@ -27,7 +26,7 @@ class TestSimpleOptimizer:
     def test_produces_correct_candidate_counts(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
 
         call_count = {"total": 0}
 
@@ -70,7 +69,7 @@ class TestSimpleOptimizer:
     def test_step2_uses_best_from_step1(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
 
         best_after_step1_id = None
         step2_parent_ids = []
@@ -124,7 +123,7 @@ class TestSimpleOptimizer:
     def test_retries_on_dedup_rejection(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
 
         call_count = {"total": 0}
 
@@ -165,7 +164,7 @@ class TestSimpleOptimizer:
     def test_handles_llm_failure_gracefully(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
 
         adapter = MagicMock()
         adapter.evaluate = MagicMock(return_value=None)

@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-from opik_optimizer_framework.event_emitter import LoggingEventEmitter, SdkEventEmitter
+from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.factory import create_optimizer
 from opik_optimizer_framework.sampler import sample_split
 from opik_optimizer_framework.types import (
@@ -41,10 +41,7 @@ def run_optimization(
 
     state = OptimizationState()
 
-    if client is not None:
-        event_emitter = SdkEventEmitter(client, context.optimization_id)
-    else:
-        event_emitter = LoggingEventEmitter()
+    event_emitter = EventEmitter(optimization_id=context.optimization_id)
 
     adapter = EvaluationAdapter(
         client=client,

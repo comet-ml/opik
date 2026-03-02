@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from opik_optimizer_framework.event_emitter import LoggingEventEmitter, SdkEventEmitter
+from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import TrialResult
 
 
@@ -12,36 +12,21 @@ def _make_trial() -> TrialResult:
         metric_scores={"accuracy": 0.85},
         experiment_id="exp-1",
         experiment_name="trial-1",
-        config_hash="abc123",
         prompt_messages=[{"role": "user", "content": "test"}],
     )
 
 
-class TestSdkEventEmitter:
-    def test_on_step_started(self):
-        client = MagicMock()
-        emitter = SdkEventEmitter(client, "opt-123")
+class TestEventEmitter:
+    def test_with_optimization_id(self):
+        emitter = EventEmitter(optimization_id="opt-123")
+        trial = _make_trial()
         emitter.on_step_started(0, 2)
-
-    def test_on_trial_completed(self):
-        client = MagicMock()
-        emitter = SdkEventEmitter(client, "opt-123")
-        emitter.on_trial_completed(_make_trial())
-
-    def test_on_best_candidate_changed(self):
-        client = MagicMock()
-        emitter = SdkEventEmitter(client, "opt-123")
-        emitter.on_best_candidate_changed(_make_trial())
-
-    def test_on_progress(self):
-        client = MagicMock()
-        emitter = SdkEventEmitter(client, "opt-123")
+        emitter.on_trial_completed(trial)
+        emitter.on_best_candidate_changed(trial)
         emitter.on_progress(step_index=0, trials_completed=3, total_trials=5)
 
-
-class TestLoggingEventEmitter:
-    def test_all_events(self):
-        emitter = LoggingEventEmitter()
+    def test_without_optimization_id(self):
+        emitter = EventEmitter()
         trial = _make_trial()
         emitter.on_step_started(0, 2)
         emitter.on_trial_completed(trial)
@@ -49,10 +34,10 @@ class TestLoggingEventEmitter:
         emitter.on_progress(0, 1, 5)
 
 
-class TestEventEmitterProtocol:
-    """Verify custom implementations satisfy the protocol."""
+class TestMockEmitter:
+    """Verify a MagicMock can stand in for EventEmitter."""
 
-    def test_mock_emitter_as_protocol(self):
+    def test_mock_emitter(self):
         mock_emitter = MagicMock()
         mock_emitter.on_step_started(0, 2)
         mock_emitter.on_trial_completed(_make_trial())

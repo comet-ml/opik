@@ -15,7 +15,6 @@ def _make_trial(candidate_id: str, score: float) -> TrialResult:
         metric_scores={"accuracy": score},
         experiment_id=f"exp-{candidate_id}",
         experiment_name=f"trial-{candidate_id}",
-        config_hash=f"hash-{candidate_id}",
         prompt_messages=[{"role": "user", "content": "test"}],
     )
 

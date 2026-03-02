@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opik_optimizer_framework.event_emitter import LoggingEventEmitter
+from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.gepa.gepa_adapter import (
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
@@ -56,7 +56,6 @@ def _make_trial(candidate_id, score, step_index=0):
         metric_scores={"accuracy": score},
         experiment_id=f"exp-{candidate_id}",
         experiment_name=f"trial-{candidate_id}",
-        config_hash=f"hash-{candidate_id}",
         prompt_messages=[{"role": "user", "content": f"prompt-{candidate_id}"}],
     )
 
@@ -808,7 +807,7 @@ class TestGepaOptimizer:
     def test_run_calls_gepa_optimize(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
 
         call_count = {"n": 0}
 
@@ -849,7 +848,7 @@ class TestGepaOptimizer:
     def test_callback_passed_to_optimize(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -874,7 +873,7 @@ class TestGepaOptimizer:
     def test_adapter_receives_evaluation_adapter(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -898,7 +897,7 @@ class TestGepaOptimizer:
     def test_gepa_not_installed_raises(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -917,7 +916,7 @@ class TestGepaOptimizer:
     def test_train_val_items_passed_with_full_data(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -957,7 +956,7 @@ class TestGepaOptimizer:
             }
         )
         state = OptimizationState()
-        emitter = LoggingEventEmitter()
+        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()

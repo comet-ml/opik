@@ -16,7 +16,6 @@ class CandidateConfig:
 class Candidate:
     candidate_id: str
     config: CandidateConfig
-    config_hash: str
     step_index: int
     parent_candidate_ids: list[str] = field(default_factory=list)
 
@@ -29,7 +28,6 @@ class TrialResult:
     metric_scores: dict[str, float]
     experiment_id: str | None
     experiment_name: str | None
-    config_hash: str
     prompt_messages: list[dict[str, str]]
     parent_candidate_ids: list[str] = field(default_factory=list)
 

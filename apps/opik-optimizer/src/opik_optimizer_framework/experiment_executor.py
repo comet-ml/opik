@@ -108,7 +108,6 @@ def run_experiment_with_details(
         metric_scores={metric_type: score},
         experiment_id=getattr(result, "experiment_id", None),
         experiment_name=getattr(result, "experiment_name", None),
-        config_hash=candidate.config_hash,
         prompt_messages=candidate.config.prompt_messages,
         parent_candidate_ids=candidate.parent_candidate_ids,
     )

@@ -1,20 +1,13 @@
 import uuid
-from dataclasses import asdict
 
 from opik_optimizer_framework.candidate_materializer import materialize_candidate
 from opik_optimizer_framework.types import CandidateConfig
-from opik_optimizer_framework.util.hashing import canonical_config_hash
 
 
 class TestCandidateMaterializer:
     def test_generates_uuid_candidate_id(self, sample_candidate_config):
         candidate = materialize_candidate(sample_candidate_config, step_index=0)
         uuid.UUID(candidate.candidate_id)
-
-    def test_correct_config_hash(self, sample_candidate_config):
-        candidate = materialize_candidate(sample_candidate_config, step_index=0)
-        expected_hash = canonical_config_hash(asdict(sample_candidate_config))
-        assert candidate.config_hash == expected_hash
 
     def test_preserves_config(self, sample_candidate_config):
         candidate = materialize_candidate(sample_candidate_config, step_index=0)
