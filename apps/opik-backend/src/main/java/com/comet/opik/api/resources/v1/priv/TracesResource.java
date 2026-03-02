@@ -80,6 +80,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 import reactor.core.publisher.Flux;
 
@@ -133,6 +134,7 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude,
+            @QueryParam("search") @Schema(description = "Full-text search across trace fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -163,6 +165,7 @@ public class TracesResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .sortingFields(sortingFields)
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         log.info("Get traces by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
@@ -392,6 +395,7 @@ public class TracesResource {
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across trace fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -403,6 +407,7 @@ public class TracesResource {
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(traceFilters)
+                .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
@@ -608,6 +613,7 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
+            @QueryParam("search") @Schema(description = "Full-text search across thread fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -635,6 +641,7 @@ public class TracesResource {
                 .truncate(truncate)
                 .stripAttachments(stripAttachments)
                 .sortingFields(sortingFields)
+                .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();
@@ -860,6 +867,7 @@ public class TracesResource {
     public Response getThreadStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across thread fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -871,6 +879,7 @@ public class TracesResource {
                 .projectName(projectName)
                 .projectId(projectId)
                 .filters(threadFilters)
+                .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .build();

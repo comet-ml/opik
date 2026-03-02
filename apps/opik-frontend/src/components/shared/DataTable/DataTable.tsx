@@ -69,6 +69,7 @@ declare module "@tanstack/react-table" {
     enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
+    searchText?: string;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -371,11 +372,28 @@ const DataTable = <TData, TValue>({
       );
     }
 
+    const searchText = table.options.meta?.searchText;
+    const isSearchMatch = (() => {
+      if (!searchText) return false;
+      const raw = cell.getValue();
+      const text =
+        typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : "";
+      return text ? text.toLowerCase().includes(searchText) : false;
+    })();
+
     return (
       <TableCell
         key={cell.id}
         data-cell-id={cell.id}
-        style={pinningStyles}
+        style={
+          isSearchMatch
+            ? {
+                ...pinningStyles,
+                backgroundColor:
+                  "color-mix(in srgb, var(--search-highlight) 15%, transparent)",
+              }
+            : pinningStyles
+        }
         className={getCommonPinningClasses({ column: cell.column })}
       >
         {flexRender(cell.column.columnDef.cell, cell.getContext())}
