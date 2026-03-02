@@ -113,7 +113,7 @@ class UnauthorizedMessageTypeRegistry:
             ):
                 return False
 
-            if time.time() - item.last_attempt_at > self.retry_interval_seconds:
+            if time.time() - item.last_attempt_at >= self.retry_interval_seconds:
                 return True
 
             return False
