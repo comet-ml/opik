@@ -41,7 +41,7 @@ public class ExperimentAggregatesService {
      * @param batchSize the number of experiment items to process per batch
      * @return Mono that completes when all aggregations are populated
      */
-    public Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
+    private Mono<Void> populateAggregations(@NonNull UUID experimentId, int batchSize) {
 
         // First, populate experiment-level aggregates
         return Mono.deferContextual(ctx -> {
