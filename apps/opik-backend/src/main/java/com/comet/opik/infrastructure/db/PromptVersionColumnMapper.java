@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,6 +44,9 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
                 .variables(TemplateParseUtils.extractVariables(template, type))
                 .tags(jsonNode.has("tags") && jsonNode.get("tags") != null && !jsonNode.get("tags").isNull()
                         ? JsonUtils.readValue(jsonNode.get("tags").asText(), SetFlatArgumentFactory.TYPE_REFERENCE)
+                        : null)
+                .templateStructure(jsonNode.has("template_structure") && !jsonNode.get("template_structure").isNull()
+                        ? TemplateStructure.fromString(jsonNode.get("template_structure").asText())
                         : null)
                 .createdAt(Instant.from(FORMATTER.parse(jsonNode.get("created_at").asText())))
                 .createdBy(jsonNode.get("created_by").asText())
