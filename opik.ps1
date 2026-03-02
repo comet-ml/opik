@@ -255,9 +255,6 @@ function Test-ContainersStatus {
     $allOk = $true
 
     $containers = Get-Containers
-    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
-        $containers = $containers | Where-Object { $_ -ne "opik-python-backend-1" }
-    }
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -426,9 +423,6 @@ function Start-MissingContainers {
     $allRunning = $true
 
     $containers = Get-Containers
-    if ($env:SKIP_PYTHON_BACKEND -eq "true") {
-        $containers = $containers | Where-Object { $_ -ne "opik-python-backend-1" }
-    }
 
     foreach ($container in $containers) {
         $status = docker inspect -f '{{.State.Status}}' $container 2>$null
@@ -853,10 +847,6 @@ if ($PROFILE_COUNT -gt 1) {
     Write-Host "   • .\opik.ps1                (full Opik suite - default)"
     exit 1
 }
-
-# When SKIP_PYTHON_BACKEND=true, override the python-backend profile so docker compose never
-# considers it in scope — no build, no pull, no start.
-if ($env:SKIP_PYTHON_BACKEND -eq "true") { $env:PYTHON_BACKEND_PROFILE = "python-backend-disabled" }
 
 # Get the first remaining option
 $option = if ($options.Count -gt 0) { $options[0] } else { '' }
