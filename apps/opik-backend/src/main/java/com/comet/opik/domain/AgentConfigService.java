@@ -122,15 +122,40 @@ class AgentConfigServiceImpl implements AgentConfigService {
             String workspaceId,
             String userName) {
 
-        UUID blueprintId = Objects.requireNonNullElseGet(request.blueprint().id(), idGenerator::generateId);
+        UUID blueprintId = createBlueprintSnapshot(
+                dao, workspaceId, projectId, configId,
+                request.blueprint().id(),
+                request.blueprint().type(),
+                request.blueprint().description(),
+                request.blueprint().values(),
+                userName);
+
+        return request.blueprint().toBuilder()
+                .id(blueprintId)
+                .createdBy(userName)
+                .lastUpdatedBy(userName)
+                .build();
+    }
+
+    private UUID createBlueprintSnapshot(
+            AgentConfigDAO dao,
+            String workspaceId,
+            UUID projectId,
+            UUID configId,
+            UUID blueprintId,
+            AgentBlueprint.BlueprintType type,
+            String description,
+            List<AgentConfigValue> values,
+            String userName) {
+
+        blueprintId = Objects.requireNonNullElseGet(blueprintId, idGenerator::generateId);
 
         log.info("Creating blueprint '{}' for config '{}'", blueprintId, configId);
 
-        List<String> keys = request.blueprint().values().stream()
+        List<String> keys = values.stream()
                 .map(AgentConfigValue::key)
                 .toList();
 
-        log.info("Closing values for keys: {}", keys);
         dao.closeValuesForKeys(workspaceId, projectId, blueprintId, keys);
 
         dao.insertBlueprint(
@@ -138,18 +163,14 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 workspaceId,
                 projectId,
                 configId,
-                request.blueprint().type(),
-                request.blueprint().description(),
+                type,
+                description,
                 userName,
                 userName);
 
-        insertValues(dao, request.blueprint().values(), configId, projectId, blueprintId, workspaceId);
+        insertValues(dao, values, configId, projectId, blueprintId, workspaceId);
 
-        return request.blueprint().toBuilder()
-                .id(blueprintId)
-                .createdBy(userName)
-                .lastUpdatedBy(userName)
-                .build();
+        return blueprintId;
     }
 
     private void insertValues(
@@ -477,22 +498,6 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         log.info("Updating blueprint for project '{}', {} values to update", projectId, references.size());
 
-        UUID newBlueprintId = idGenerator.generateId();
-
-        dao.insertBlueprint(
-                newBlueprintId,
-                workspaceId,
-                projectId,
-                configId,
-                AgentBlueprint.BlueprintType.BLUEPRINT,
-                null,
-                userName,
-                userName);
-
-        List<String> keysToUpdate = references.stream()
-                .map(AgentConfigDAO.BlueprintValueReference::configKey)
-                .toList();
-
         List<AgentConfigValue> newValues = references.stream()
                 .map(ref -> AgentConfigValue.builder()
                         .key(ref.configKey())
@@ -501,15 +506,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
                         .build())
                 .toList();
 
-        dao.closeValuesForKeys(workspaceId, projectId, newBlueprintId, keysToUpdate);
-
-        insertValues(
-                dao,
+        UUID newBlueprintId = createBlueprintSnapshot(
+                dao, workspaceId, projectId, configId,
+                null,
+                AgentBlueprint.BlueprintType.BLUEPRINT,
+                null,
                 newValues,
-                configId,
-                projectId,
-                newBlueprintId,
-                workspaceId);
+                userName);
 
         log.info("Created new blueprint '{}' for project '{}' with updated prompt references",
                 newBlueprintId, projectId);
