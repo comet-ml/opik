@@ -24,6 +24,7 @@ import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import PassRateCell from "@/components/shared/DataTableCells/PassRateCell";
 import { transformExperimentScores } from "@/lib/feedback-scores";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -61,6 +62,13 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "trace_count",
       label: "Item count",
       type: COLUMN_TYPE.number,
+    },
+    {
+      id: "pass_rate",
+      label: "Pass rate",
+      type: COLUMN_TYPE.number,
+      accessorFn: (row) => row.pass_rate,
+      cell: PassRateCell as never,
     },
     {
       id: COLUMN_FEEDBACK_SCORES_ID,

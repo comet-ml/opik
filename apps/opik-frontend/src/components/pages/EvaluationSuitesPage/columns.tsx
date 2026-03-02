@@ -8,6 +8,7 @@ export const TYPE_LABELS: Record<string, string> = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
+  "type",
   "description",
   "dataset_items_count",
   "most_recent_experiment_at",

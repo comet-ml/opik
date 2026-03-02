@@ -8,6 +8,7 @@ import ConfigurationTab from "@/components/pages/CompareExperimentsPage/Configur
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
+import ExperimentAssertionsTab from "@/components/pages/CompareExperimentsPage/ExperimentAssertionsTab/ExperimentAssertionsTab";
 import ExperimentsDashboardsTab from "@/components/pages/CompareExperimentsPage/ExperimentsDashboardsTab/ExperimentsDashboardsTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
@@ -90,11 +91,19 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             />
           </TabsContent>
           <TabsContent value="scores">
-            <ExperimentFeedbackScoresTab
-              experimentsIds={experimentsIds}
-              experiments={memorizedExperiments}
-              isPending={isPending}
-            />
+            {isEvalSuite ? (
+              <ExperimentAssertionsTab
+                experimentsIds={experimentsIds}
+                experiments={memorizedExperiments}
+                isPending={isPending}
+              />
+            ) : (
+              <ExperimentFeedbackScoresTab
+                experimentsIds={experimentsIds}
+                experiments={memorizedExperiments}
+                isPending={isPending}
+              />
+            )}
           </TabsContent>
         </Tabs>
       );

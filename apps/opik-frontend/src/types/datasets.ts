@@ -153,6 +153,7 @@ export interface Experiment {
   pass_rate?: number;
   passed_count?: number;
   total_count?: number;
+  assertion_aggregations?: AssertionAggregation[];
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;
@@ -182,6 +183,13 @@ export interface AssertionResult {
   passed: boolean;
   pass_score?: number;
   reason?: string;
+}
+
+export interface AssertionAggregation {
+  name: string;
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
 }
 
 export interface ExperimentsCompare extends DatasetItem {

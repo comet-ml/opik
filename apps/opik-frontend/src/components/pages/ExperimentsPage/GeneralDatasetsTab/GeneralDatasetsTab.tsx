@@ -11,6 +11,7 @@ import {
 } from "use-query-params";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
+import isNumber from "lodash/isNumber";
 import isObject from "lodash/isObject";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -87,6 +88,7 @@ import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersio
 import { EXPERIMENT_TYPE } from "@/types/datasets";
 
 const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
+const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -597,6 +599,9 @@ const GeneralDatasetsTab: React.FC = () => {
         (experiment.experiment_scores ?? []).forEach((s) => {
           scores[s.name] = s.value;
         });
+        if (isNumber(experiment.pass_rate)) {
+          scores[PASS_RATE_LABEL] = experiment.pass_rate;
+        }
 
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,

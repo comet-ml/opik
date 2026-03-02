@@ -27,6 +27,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import PassRateCell from "@/components/shared/DataTableCells/PassRateCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
@@ -84,6 +85,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "trace_count",
   "duration.p50",
   "total_estimated_cost_avg",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
 ];
@@ -100,6 +102,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   COLUMN_COMMENTS_ID,
@@ -297,6 +300,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost_avg",
+        },
+      },
+      {
+        id: "pass_rate",
+        label: "Pass rate",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) => row.pass_rate,
+        cell: PassRateCell as never,
+        aggregatedCell: PassRateCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "pass_rate",
         },
       },
       {

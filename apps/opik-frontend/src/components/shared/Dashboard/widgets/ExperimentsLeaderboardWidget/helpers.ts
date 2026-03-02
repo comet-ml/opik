@@ -15,6 +15,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
+import PassRateCell from "@/components/shared/DataTableCells/PassRateCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -147,12 +148,20 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
   },
+  {
+    id: "pass_rate",
+    label: "Pass rate",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) => row.pass_rate,
+    cell: PassRateCell as never,
+  },
 ];
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
   "created_at",
   "duration.p50",
+  "pass_rate",
 ];
 
 export const getDefaultConfig = () => ({

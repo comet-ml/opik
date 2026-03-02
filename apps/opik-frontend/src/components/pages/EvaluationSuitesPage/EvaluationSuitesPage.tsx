@@ -13,7 +13,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import { Dataset } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditEvaluationSuiteDialog from "@/components/shared/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
 import DatasetActionsPanel from "@/components/shared/DatasetActionsPanel/DatasetActionsPanel";
@@ -67,6 +67,13 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     label: "Name",
     type: COLUMN_TYPE.string,
     cell: TextCell as never,
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) =>
+      TYPE_LABELS[row.type ?? DATASET_TYPE.DATASET] ?? "Dataset",
   },
   {
     id: "id",
@@ -127,6 +134,11 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.category,
   },
   {
     id: "id",
