@@ -50,12 +50,7 @@ from .prompt import client as prompt_client
 from .agent_config.config import AgentConfig
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
-from ..config import (
-    MAX_BATCH_SIZE_MB,
-    OPIK_WORKSPACE_DEFAULT_NAME,
-    OpikConfig,
-    get_from_user_inputs as _get_config_from_user_inputs,
-)
+from .. import config as opik_config
 from .. import (
     datetime_helpers,
     exceptions,
@@ -125,7 +120,7 @@ class Opik:
             None
         """
 
-        config_ = _get_config_from_user_inputs(
+        config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
@@ -149,7 +144,7 @@ class Opik:
         atexit.register(self.end, timeout=self._flush_timeout)
 
     @property
-    def config(self) -> OpikConfig:
+    def config(self) -> opik_config.OpikConfig:
         """
         Returns:
             OpikConfig: Read-only copy of the configuration of the Opik client.
@@ -737,7 +732,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
@@ -787,7 +782,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_trace_feedback_scores_batch_message = (
@@ -1581,7 +1576,7 @@ class Opik:
         """
 
         dereferenced_workspace = self._workspace
-        if dereferenced_workspace == OPIK_WORKSPACE_DEFAULT_NAME:
+        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
             dereferenced_workspace = (
                 self._rest_client.check.get_workspace_name().workspace_name
             )
