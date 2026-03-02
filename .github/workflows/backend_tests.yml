@@ -42,7 +42,7 @@ jobs:
             - name: Classify and split tests
               id: split
               working-directory: apps/opik-backend
-              run: bash ../../.github/scripts/discover-backend-tests.sh
+              run: ../../.github/scripts/discover-backend-tests.sh
 
     run-backend-tests:
         needs: discover-tests

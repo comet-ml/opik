@@ -18,6 +18,8 @@ while IFS= read -r file; do
   fi
 done < <(find "$TEST_DIR" -name "*Test.java" -o -name "*Tests.java" | sort)
 
+echo "Classified ${#unit_files[@]} unit test classes and ${#integration_files[@]} integration test classes"
+
 # Convert file path to Maven class pattern: com.foo.BarTest
 to_class() { echo "$1" | sed "s|^$TEST_DIR/||;s|/|.|g;s|\.java$||"; }
 
@@ -52,6 +54,12 @@ done < <(
   done | sort -rn
 )
 
+echo "Balanced ${#integration_files[@]} integration classes into $NUM_GROUPS groups"
+for ((i=1; i<=NUM_GROUPS; i++)); do
+  count=$(echo "${group_list[$i]}" | tr ',' '\n' | grep -c '.' || true)
+  echo "  Group $i: $count classes (~${group_size[$i]} lines)"
+done
+
 # Build JSON matrix: unit tests + N integration groups
 matrix="{\"include\":["
 matrix+="{\"name\":\"Unit Tests\",\"tests\":\"$unit_list\",\"timeout\":$UNIT_TIMEOUT}"
@@ -60,6 +68,7 @@ for ((i=1; i<=NUM_GROUPS; i++)); do
 done
 matrix+="]}"
 echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+echo "Matrix written to GITHUB_OUTPUT ($(( NUM_GROUPS + 1 )) jobs: 1 unit + $NUM_GROUPS integration)"
 
 # Summary
 echo "### Test Split Summary" >> "$GITHUB_STEP_SUMMARY"
