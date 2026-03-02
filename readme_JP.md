@@ -32,7 +32,8 @@ Opikは、プロトタイプから本番まで、より良く動作する生成A
     <a href="https://chat.comet.com"><b>Slack コミュニティ</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>変更履歴</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>ドキュメント</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>ドキュメント</b></a> •
+<a href="https://www.comet.com/docs/opik/integrations/openclaw"><b>OpenClaw</b></a>
 </p>
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
