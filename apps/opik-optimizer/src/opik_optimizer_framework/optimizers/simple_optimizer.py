@@ -48,8 +48,8 @@ class SimpleOptimizer:
     def run(
         self,
         context: OptimizationContext,
-        training_set: list[str],
-        validation_set: list[str],
+        training_set: list[dict[str, Any]],
+        validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
@@ -84,7 +84,7 @@ class SimpleOptimizer:
                 base_messages=base_messages,
                 count=candidates_per_step[step],
                 parent_ids=parent_ids,
-                training_set=training_set,
+                training_item_ids=[str(item["id"]) for item in training_set],
                 evaluation_adapter=evaluation_adapter,
             )
 
@@ -94,7 +94,7 @@ class SimpleOptimizer:
         base_messages: list[dict[str, str]],
         count: int,
         parent_ids: list[str],
-        training_set: list[str],
+        training_item_ids: list[str],
         evaluation_adapter: EvaluationAdapter,
     ) -> None:
         completed = 0
@@ -120,7 +120,7 @@ class SimpleOptimizer:
 
             trial = evaluation_adapter.evaluate(
                 config=config,
-                dataset_item_ids=training_set,
+                dataset_item_ids=training_item_ids,
                 parent_candidate_ids=parent_ids,
             )
 
@@ -175,6 +175,8 @@ class SimpleOptimizer:
             if not isinstance(msg, dict):
                 return None
             if "role" not in msg or "content" not in msg:
+                return None
+            if not isinstance(msg["role"], str) or not isinstance(msg["content"], str):
                 return None
 
         return messages

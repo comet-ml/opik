@@ -67,7 +67,7 @@ class TestOrchestrator:
             result = run_optimization(
                 context=sample_optimization_context,
                 client=client,
-                dataset_item_ids=item_ids,
+                dataset_items=[{"id": id} for id in item_ids],
             )
 
         assert result is not None
@@ -92,7 +92,7 @@ class TestOrchestrator:
             run_optimization(
                 context=context,
                 client=MagicMock(),
-                dataset_item_ids=[f"item-{i}" for i in range(10)],
+                dataset_items=[{"id": f"item-{i}"} for i in range(10)],
             )
 
     def test_small_dataset(self):
@@ -149,7 +149,7 @@ class TestOrchestrator:
             result = run_optimization(
                 context=context,
                 client=client,
-                dataset_item_ids=["item-a", "item-b"],
+                dataset_items=[{"id": "item-a"}, {"id": "item-b"}],
                 seed=1,
             )
 
@@ -193,7 +193,7 @@ class TestOrchestrator:
             result = run_optimization(
                 context=sample_optimization_context,
                 client=client,
-                dataset_item_ids=item_ids,
+                dataset_items=[{"id": id} for id in item_ids],
             )
             # Only the baseline trial succeeds; optimizer produces nothing
             assert result.initial_score == 1.0

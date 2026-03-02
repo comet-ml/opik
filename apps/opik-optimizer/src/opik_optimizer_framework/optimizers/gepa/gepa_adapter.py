@@ -308,10 +308,11 @@ class FrameworkGEPAAdapter:
 
         Called before GEPA starts so its initial seed evaluation reuses the
         same candidate_id that the orchestrator's baseline eval produced.
+        Re-evaluations of the seed by GEPA will carry the baseline as parent.
         """
         key = _candidate_key(seed_candidate)
         self._known_candidates[key] = baseline_candidate_id
-        self._candidate_parents[baseline_candidate_id] = []
+        self._candidate_parents[baseline_candidate_id] = [baseline_candidate_id]
 
     def _on_new_step(self, step: int) -> None:
         """Called by GEPAProgressCallback on each iteration start."""
@@ -387,15 +388,16 @@ class FrameworkGEPAAdapter:
             self._pending_merge_parent_ids = None
             return ids
 
-        # Use parent_ids from on_evaluation_start if available
+        # Use parent_ids from on_evaluation_start if available and non-empty
         if self._pending_eval_parent_ids is not None:
             framework_ids = []
             for idx in self._pending_eval_parent_ids:
                 fid = self._gepa_idx_to_candidate_id.get(idx)
                 if fid is not None:
                     framework_ids.append(fid)
-            # Return even if empty — GEPA explicitly saying [] means "no parents"
-            return framework_ids
+            if framework_ids:
+                return framework_ids
+            # Empty resolved list — fall through to persistent parents lookup
 
         key = _candidate_key(candidate)
         known_id = self._known_candidates.get(key)
@@ -409,110 +411,45 @@ class FrameworkGEPAAdapter:
             return [self._selected_parent_id]
         return None
 
-    def evaluate(
+    def _determine_eval_purpose(self) -> str:
+        """Determine the evaluation purpose based on current adapter state."""
+        if self._current_step < 0:
+            return "initialization"
+        if self._pending_eval_capture_traces is not None:
+            if self._pending_eval_capture_traces:
+                return "exploration:minibatch"
+            return "exploration:mutation"
+        return "validation"
+
+    def _record_trial_lineage(
+        self,
+        key: str,
+        trial: Any,
+        parent_candidate_ids: list[str] | None,
+    ) -> None:
+        """Update candidate tracking maps after a successful evaluation."""
+        is_new = trial.candidate_id not in self._candidate_parents
+        self._known_candidates[key] = trial.candidate_id
+        if is_new:
+            self._candidate_parents[trial.candidate_id] = (
+                parent_candidate_ids or []
+            )
+        logger.debug(
+            "[adapter.evaluate] result: trial_id=%s score=%.4f "
+            "candidate_id=%s is_new_candidate=%s stored_parents=%s",
+            trial.candidate_id[:8], trial.score,
+            trial.candidate_id[:8], is_new,
+            self._candidate_parents.get(trial.candidate_id, []),
+        )
+
+    def _build_evaluation_batch(
         self,
         batch: list[OpikDataInst],
-        candidate: dict[str, str],
-        capture_traces: bool = False,
+        per_item: dict[str, dict[str, Any]],
+        trial: Any | None,
+        capture_traces: bool,
     ) -> EvaluationBatch:
-        """Evaluate a GEPA candidate against a batch of data instances.
-
-        Delegates to the framework's EvaluationAdapter to get real scores
-        from the evaluation suite (LLM judge assertions, etc.).
-
-        Metadata from on_evaluation_start (if available) takes precedence
-        over the capture_traces argument for experiment_config.
-        """
-        from opik_optimizer_framework.types import CandidateConfig
-
-        key = _candidate_key(candidate)
-        parent_candidate_ids = self._resolve_parent_ids(candidate)
-
-        # Reuse candidate_id for known candidates (re-eval on different subsample)
-        existing_candidate_id = self._known_candidates.get(key)
-
-        # Use capture_traces from on_evaluation_start if available, else from arg
-        effective_capture_traces = (
-            self._pending_eval_capture_traces
-            if self._pending_eval_capture_traces is not None
-            else capture_traces
-        )
-
-        prompt_messages = rebuild_prompt_messages(self._base_messages, candidate)
-
-        dataset_item_ids = [
-            str(inst.opik_item.get("id"))
-            for inst in batch
-            if inst.opik_item.get("id") is not None
-        ]
-
-        config = CandidateConfig(
-            prompt_messages=prompt_messages,
-            model=self._model,
-            model_parameters=self._model_parameters,
-        )
-
-        batch_index = self._current_step if self._current_step >= 0 else None
-
-        if self._current_step < 0:
-            eval_purpose = "initialization"
-        elif self._pending_eval_capture_traces is not None:
-            if self._pending_eval_capture_traces:
-                eval_purpose = "exploration:minibatch"
-            else:
-                eval_purpose = "exploration:mutation"
-        else:
-            eval_purpose = "validation"
-
-        trial_count = getattr(self._evaluation_adapter, "trial_count", "?")
-        logger.debug(
-            "[adapter.evaluate] step_index=%s batch_index=%s num_items=%d "
-            "capture_traces=%s candidate_id=%s parent_ids=%s "
-            "pending_eval_parent_ids=%s pending_eval_capture_traces=%s "
-            "eval_purpose=%s",
-            trial_count, batch_index, len(batch),
-            effective_capture_traces, existing_candidate_id,
-            parent_candidate_ids,
-            self._pending_eval_parent_ids, self._pending_eval_capture_traces,
-            eval_purpose,
-        )
-
-        trial, raw_result = self._evaluation_adapter.evaluate_with_details(
-            config=config,
-            dataset_item_ids=dataset_item_ids,
-            parent_candidate_ids=parent_candidate_ids,
-            candidate_id=existing_candidate_id,
-            batch_index=batch_index,
-            num_items=len(batch),
-            capture_traces=effective_capture_traces,
-            eval_purpose=eval_purpose,
-        )
-
-        # Record mapping for lineage tracking
-        if trial is not None:
-            is_new = trial.candidate_id not in self._candidate_parents
-            self._known_candidates[key] = trial.candidate_id
-            # Store persistent parent relationship for this candidate
-            if is_new:
-                self._candidate_parents[trial.candidate_id] = (
-                    parent_candidate_ids or []
-                )
-            logger.debug(
-                "[adapter.evaluate] result: trial_id=%s score=%.4f "
-                "candidate_id=%s is_new_candidate=%s stored_parents=%s",
-                trial.candidate_id[:8], trial.score,
-                trial.candidate_id[:8], is_new,
-                self._candidate_parents.get(trial.candidate_id, []),
-            )
-
-        # Clear pending eval metadata (consumed)
-        self._pending_eval_parent_ids = None
-        self._pending_eval_capture_traces = None
-        self._pending_eval_candidate_idx = None
-
-        per_item = _extract_per_item_feedback(raw_result)
-        self._last_per_item_feedback = per_item
-
+        """Convert per-item feedback into GEPA's EvaluationBatch format."""
         outputs: list[dict[str, Any]] = []
         scores: list[float] = []
         trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
@@ -546,6 +483,81 @@ class FrameworkGEPAAdapter:
             outputs=outputs,
             scores=scores,
             trajectories=trajectories,
+        )
+
+    def evaluate(
+        self,
+        batch: list[OpikDataInst],
+        candidate: dict[str, str],
+        capture_traces: bool = False,
+    ) -> EvaluationBatch:
+        """Evaluate a GEPA candidate against a batch of data instances.
+
+        Delegates to the framework's EvaluationAdapter to get real scores
+        from the evaluation suite (LLM judge assertions, etc.).
+        """
+        from opik_optimizer_framework.types import CandidateConfig
+
+        key = _candidate_key(candidate)
+        parent_candidate_ids = self._resolve_parent_ids(candidate)
+        existing_candidate_id = self._known_candidates.get(key)
+
+        effective_capture_traces = (
+            self._pending_eval_capture_traces
+            if self._pending_eval_capture_traces is not None
+            else capture_traces
+        )
+
+        prompt_messages = rebuild_prompt_messages(self._base_messages, candidate)
+        dataset_item_ids = [
+            str(inst.opik_item.get("id"))
+            for inst in batch
+            if inst.opik_item.get("id") is not None
+        ]
+
+        config = CandidateConfig(
+            prompt_messages=prompt_messages,
+            model=self._model,
+            model_parameters=self._model_parameters,
+        )
+
+        batch_index = self._current_step if self._current_step >= 0 else None
+        eval_purpose = self._determine_eval_purpose()
+
+        trial_count = getattr(self._evaluation_adapter, "trial_count", "?")
+        logger.debug(
+            "[adapter.evaluate] step_index=%s batch_index=%s num_items=%d "
+            "capture_traces=%s candidate_id=%s parent_ids=%s "
+            "eval_purpose=%s",
+            trial_count, batch_index, len(batch),
+            effective_capture_traces, existing_candidate_id,
+            parent_candidate_ids, eval_purpose,
+        )
+
+        trial, raw_result = self._evaluation_adapter.evaluate_with_details(
+            config=config,
+            dataset_item_ids=dataset_item_ids,
+            parent_candidate_ids=parent_candidate_ids,
+            candidate_id=existing_candidate_id,
+            batch_index=batch_index,
+            num_items=len(batch),
+            capture_traces=effective_capture_traces,
+            eval_purpose=eval_purpose,
+        )
+
+        if trial is not None:
+            self._record_trial_lineage(key, trial, parent_candidate_ids)
+
+        # Clear pending eval metadata (consumed)
+        self._pending_eval_parent_ids = None
+        self._pending_eval_capture_traces = None
+        self._pending_eval_candidate_idx = None
+
+        per_item = _extract_per_item_feedback(raw_result)
+        self._last_per_item_feedback = per_item
+
+        return self._build_evaluation_batch(
+            batch, per_item, trial, capture_traces,
         )
 
     def make_reflective_dataset(

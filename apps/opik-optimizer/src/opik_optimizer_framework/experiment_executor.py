@@ -25,6 +25,7 @@ def run_experiment(
     num_items: int | None = None,
     capture_traces: bool | None = None,
     eval_purpose: str | None = None,
+    task_threads: int = 4,
 ) -> TrialResult:
     """Execute an experiment, returning only the TrialResult."""
     trial, _ = run_experiment_with_details(
@@ -39,6 +40,7 @@ def run_experiment(
         num_items=num_items,
         capture_traces=capture_traces,
         eval_purpose=eval_purpose,
+        task_threads=task_threads,
     )
     return trial
 
@@ -55,6 +57,7 @@ def run_experiment_with_details(
     num_items: int | None = None,
     capture_traces: bool | None = None,
     eval_purpose: str | None = None,
+    task_threads: int = 4,
 ) -> tuple[TrialResult, Any]:
     """Execute an experiment and return both the TrialResult and the raw EvaluationResult.
 
@@ -91,7 +94,7 @@ def run_experiment_with_details(
         client=client,
         dataset_item_ids=dataset_item_ids,
         experiment_config=experiment_config,
-        task_threads=4,
+        task_threads=task_threads,
     )
 
     score = _extract_score(result)

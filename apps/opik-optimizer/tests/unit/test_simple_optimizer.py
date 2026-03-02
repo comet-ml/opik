@@ -56,8 +56,8 @@ class TestSimpleOptimizer:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
-                training_set=["id-1", "id-2"],
-                validation_set=["id-3"],
+                training_set=[{"id": "id-1"}, {"id": "id-2"}],
+                validation_set=[{"id": "id-3"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -111,8 +111,8 @@ class TestSimpleOptimizer:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1"}],
+                validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -151,8 +151,8 @@ class TestSimpleOptimizer:
             mock_litellm.completion.return_value = mock_response
             optimizer.run(
                 context=sample_optimization_context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1"}],
+                validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -174,8 +174,8 @@ class TestSimpleOptimizer:
             mock_litellm.completion.side_effect = Exception("LLM error")
             optimizer.run(
                 context=sample_optimization_context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1"}],
+                validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,

@@ -13,8 +13,7 @@ import json
 import logging
 import os
 import sys
-
-from opik_backend.jobs.runner_common import TERMINAL_WIDTH, setup_runner_environment
+import warnings
 
 # =============================================================================
 # IMPORTANT: Deferred imports pattern
@@ -33,17 +32,46 @@ from opik_backend.jobs.runner_common import TERMINAL_WIDTH, setup_runner_environ
 #
 # Import order:
 #   1. Standard library (json, logging, os, sys) - safe at top
-#   2. setup_runner_environment() - sets env vars, logging, warning filters
+#   2. Set environment variables (COLUMNS, LINES, FORCE_COLOR, TERM)
 #   3. reconfigure_rich_console() - patches Rich's default console
 #   4. opik_optimizer and opik_backend modules - now safe to import
 # =============================================================================
 
-# Must run before importing opik_optimizer (Rich reads env at import time)
-setup_runner_environment()
+# Terminal width for Rich output formatting (configurable via env var)
+# Default to 150 to accommodate Rich panels with nesting prefixes and emojis
+TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "150"))
+
+# Set terminal size for Rich output formatting BEFORE importing Rich
+os.environ["COLUMNS"] = str(TERMINAL_WIDTH)
+os.environ["LINES"] = "50"
+# Force Rich to think it has a terminal
+os.environ["FORCE_COLOR"] = "1"
+os.environ["TERM"] = "xterm-256color"
+
+# Configure logging to stderr for subprocess capture
+# Log level is configurable via env var for debugging (default: INFO)
+LOG_LEVEL = os.environ.get("OPTSTUDIO_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+    force=True,
+)
+
+# Suppress noisy third-party library logs
+logging.getLogger("pyrate_limiter").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
 # Configure opik_optimizer log level separately (default: DEBUG to show optimizer output)
+# This can be set via OPIK_OPTIMIZER_LOG_LEVEL env var (automatically inherited by subprocess)
 OPTIMIZER_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "DEBUG").upper()
 logging.getLogger("opik_optimizer").setLevel(getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG))
+
+# Suppress Pydantic serialization warnings from LiteLLM
+# These occur due to LiteLLM's varying response structures across providers
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 logger = logging.getLogger(__name__)
 logger.debug(f"TERMINAL_WIDTH: {TERMINAL_WIDTH}")

@@ -149,10 +149,8 @@ def main():
         },
     )
 
-    # Get dataset item IDs from the underlying dataset
-    dataset_items = suite.dataset.get_items()
-    dataset_item_ids = [str(item["id"]) for item in dataset_items]
-    logger.info("Suite has %d items", len(dataset_item_ids))
+    dataset_items = list(suite.dataset.get_items())
+    logger.info("Suite has %d items", len(dataset_items))
 
     # 3. Create the optimization record (status is set to "running" automatically)
     logger.info("Creating optimization record")
@@ -191,7 +189,7 @@ def main():
         result = run_optimization(
             context=context,
             client=client,
-            dataset_item_ids=dataset_item_ids,
+            dataset_items=dataset_items,
         )
         _update_optimization_status(client, optimization_id, "completed")
     except Exception:

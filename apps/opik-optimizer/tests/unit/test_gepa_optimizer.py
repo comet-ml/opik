@@ -830,8 +830,8 @@ class TestGepaOptimizer:
             mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
-                training_set=["id-1", "id-2"],
-                validation_set=["id-3"],
+                training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}, {"id": "id-2", "question": "Q2", "answer": "A2"}],
+                validation_set=[{"id": "id-3", "question": "Q3", "answer": "A3"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -858,8 +858,8 @@ class TestGepaOptimizer:
             mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
+                validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -884,8 +884,8 @@ class TestGepaOptimizer:
 
             optimizer.run(
                 context=context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
+                validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -907,14 +907,14 @@ class TestGepaOptimizer:
             with pytest.raises(ImportError, match="gepa"):
                 optimizer.run(
                     context=context,
-                    training_set=["id-1"],
-                    validation_set=["id-2"],
+                    training_set=[{"id": "id-1"}],
+                    validation_set=[{"id": "id-2"}],
                     evaluation_adapter=adapter,
                     state=state,
                     event_emitter=emitter,
                 )
 
-    def test_train_val_items_built_from_ids(self):
+    def test_train_val_items_passed_with_full_data(self):
         context = _make_context()
         state = OptimizationState()
         emitter = LoggingEventEmitter()
@@ -922,12 +922,19 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
+        train = [
+            {"id": "id-1", "question": "Q1", "answer": "A1"},
+            {"id": "id-2", "question": "Q2", "answer": "A2"},
+            {"id": "id-3", "question": "Q3", "answer": "A3"},
+        ]
+        val = [{"id": "id-4", "question": "Q4", "answer": "A4"}]
+
         with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
             mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
-                training_set=["id-1", "id-2", "id-3"],
-                validation_set=["id-4"],
+                training_set=train,
+                validation_set=val,
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,
@@ -936,7 +943,9 @@ class TestGepaOptimizer:
         call_kwargs = mock_gepa.optimize.call_args.kwargs
         assert len(call_kwargs["trainset"]) == 3
         assert len(call_kwargs["valset"]) == 1
-        assert call_kwargs["trainset"][0].opik_item == {"id": "id-1"}
+        assert call_kwargs["trainset"][0].opik_item == train[0]
+        assert call_kwargs["trainset"][0].input_text == "Q1"
+        assert call_kwargs["trainset"][0].answer == "A1"
 
     def test_optimizer_parameters_forwarded(self):
         context = _make_context(
@@ -957,8 +966,8 @@ class TestGepaOptimizer:
             mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
-                training_set=["id-1"],
-                validation_set=["id-2"],
+                training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
+                validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
                 event_emitter=emitter,

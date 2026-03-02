@@ -63,28 +63,25 @@ class LoggingEventEmitter:
     """Simple logging-only event emitter for testing and local development."""
 
     def on_step_started(self, step_index: int, total_steps: int) -> None:
-        msg = f"[EVENT] Step {step_index + 1}/{total_steps} started"
-        print(msg)
-        logger.info(msg)
+        logger.info(
+            "[EVENT] Step %d/%d started", step_index + 1, total_steps,
+        )
 
     def on_trial_completed(self, trial: TrialResult) -> None:
-        msg = (
-            f"[EVENT] Trial completed: candidate={trial.candidate_id} "
-            f"step={trial.step_index} score={trial.score:.4f} "
-            f"parents={trial.parent_candidate_ids or []}"
+        logger.info(
+            "[EVENT] Trial completed: candidate=%s step=%d score=%.4f parents=%s",
+            trial.candidate_id, trial.step_index, trial.score,
+            trial.parent_candidate_ids or [],
         )
-        print(msg)
-        logger.info(msg)
 
     def on_best_candidate_changed(self, trial: TrialResult) -> None:
-        msg = (
-            f"[EVENT] New best: candidate={trial.candidate_id} "
-            f"step={trial.step_index} score={trial.score:.4f}"
+        logger.info(
+            "[EVENT] New best: candidate=%s step=%d score=%.4f",
+            trial.candidate_id, trial.step_index, trial.score,
         )
-        print(msg)
-        logger.info(msg)
 
     def on_progress(self, step_index: int, trials_completed: int, total_trials: int) -> None:
-        msg = f"[EVENT] Progress: step={step_index} trials={trials_completed}/{total_trials}"
-        print(msg)
-        logger.info(msg)
+        logger.info(
+            "[EVENT] Progress: step=%d trials=%d/%d",
+            step_index, trials_completed, total_trials,
+        )

@@ -9,12 +9,43 @@ optimizer_runner.py but routes to the framework's run_optimization().
 
 import json
 import logging
+import os
 import sys
+import warnings
 
-from opik_backend.jobs.runner_common import setup_runner_environment
+# =============================================================================
+# IMPORTANT: Deferred imports pattern
+# =============================================================================
+# This script runs as a subprocess launched by IsolatedSubprocessExecutor.
+# The subprocess does NOT inherit the parent's sys.path, so opik_backend
+# may not be importable at the top level. All opik_backend imports are
+# deferred to inside main() where they're protected by try/except.
+#
+# Only standard library imports are allowed at the top level.
+# =============================================================================
 
-# Must run before importing opik_optimizer_framework (Rich reads env at import time)
-setup_runner_environment()
+# Terminal width for Rich output formatting
+TERMINAL_WIDTH = int(os.environ.get("OPTSTUDIO_LOG_TERM_WIDTH", "150"))
+
+os.environ["COLUMNS"] = str(TERMINAL_WIDTH)
+os.environ["LINES"] = "50"
+os.environ["FORCE_COLOR"] = "1"
+os.environ["TERM"] = "xterm-256color"
+
+LOG_LEVEL = os.environ.get("OPTSTUDIO_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+    force=True,
+)
+
+logging.getLogger("pyrate_limiter").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +86,7 @@ def main():
         with optimization_lifecycle(status_manager):
             dataset = load_and_validate_dataset(client, config.dataset_name)
 
-            # Collect only IDs; full item dicts are not retained.
-            # SDK's get_items() handles server-side pagination internally.
-            dataset_item_ids = [str(item["id"]) for item in dataset.get_items()]
+            dataset_items = list(dataset.get_items())
 
             # Build framework optimization context
             opt_context = OptimizationContext(
@@ -75,7 +104,7 @@ def main():
             result = run_optimization(
                 context=opt_context,
                 client=client,
-                dataset_item_ids=dataset_item_ids,
+                dataset_items=dataset_items,
             )
 
             output = {

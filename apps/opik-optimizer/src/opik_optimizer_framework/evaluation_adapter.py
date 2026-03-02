@@ -41,13 +41,28 @@ class EvaluationAdapter:
         self._state = state
         self._event_emitter = event_emitter
         self._trial_count = 0
-        self._next_step_index = 0
         self._candidate_step_index: dict[str, int] = {}
 
     @property
     def trial_count(self) -> int:
         """Number of trials evaluated so far (read-only)."""
         return self._trial_count
+
+    def _resolve_step_index(self, parent_candidate_ids: list[str] | None) -> int:
+        """Derive step_index from parent lineage: max parent step + 1.
+
+        If no parents are provided or none are tracked, defaults to 0.
+        """
+        if not parent_candidate_ids:
+            return 0
+        parent_steps = [
+            self._candidate_step_index[pid]
+            for pid in parent_candidate_ids
+            if pid in self._candidate_step_index
+        ]
+        if not parent_steps:
+            return 0
+        return max(parent_steps) + 1
 
     def evaluate(
         self,
@@ -87,13 +102,12 @@ class EvaluationAdapter:
             logger.warning("Candidate rejected: %s", reason)
             return None, None
 
-        # step_index increments only when the candidate changes.
-        # If candidate_id is provided and already mapped, reuse its step.
+        # step_index derived from parent lineage: parent's step + 1.
+        # Re-evaluations of the same candidate reuse its step_index.
         if candidate_id is not None and candidate_id in self._candidate_step_index:
             step_index = self._candidate_step_index[candidate_id]
         else:
-            step_index = self._next_step_index
-            self._next_step_index += 1
+            step_index = self._resolve_step_index(parent_candidate_ids)
 
         self._trial_count += 1
 

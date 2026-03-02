@@ -230,7 +230,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
                 FROM experiments_final AS e
                 ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
-                WHERE length(e.experiment_scores) > 2
+                WHERE e.experiment_scores != '' AND e.experiment_scores != '[]'
                   AND length(JSON_VALUE(score, '$.name')) > 0
             ), experiment_scores_agg AS (
                 SELECT

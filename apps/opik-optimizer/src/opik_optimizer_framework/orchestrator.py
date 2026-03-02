@@ -21,11 +21,16 @@ logger = logging.getLogger(__name__)
 def run_optimization(
     context: OptimizationContext,
     client: Any,
-    dataset_item_ids: list[str],
+    dataset_items: list[dict[str, Any]],
     seed: int = 42,
 ) -> OptimizationResult:
     """Main entry point for running an optimization."""
     logger.info("Starting optimization %s", context.optimization_id)
+
+    items_by_id: dict[str, dict[str, Any]] = {
+        str(item["id"]): item for item in dataset_items
+    }
+    dataset_item_ids = list(items_by_id.keys())
 
     split = sample_split(dataset_item_ids, seed=seed)
     logger.info(
@@ -69,10 +74,13 @@ def run_optimization(
 
     # Run optimization
     try:
+        train_items = [items_by_id[id] for id in split.train_item_ids]
+        val_items = [items_by_id[id] for id in split.validation_item_ids]
+
         optimizer.run(
             context=context,
-            training_set=split.train_item_ids,
-            validation_set=split.validation_item_ids,
+            training_set=train_items,
+            validation_set=val_items,
             evaluation_adapter=adapter,
             state=state,
             event_emitter=event_emitter,

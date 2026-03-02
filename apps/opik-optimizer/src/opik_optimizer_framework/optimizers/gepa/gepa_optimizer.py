@@ -40,8 +40,8 @@ class GepaOptimizer:
     def run(
         self,
         context: OptimizationContext,
-        training_set: list[str],
-        validation_set: list[str],
+        training_set: list[dict[str, Any]],
+        validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
@@ -63,13 +63,10 @@ class GepaOptimizer:
 
         seed_candidate = build_seed_candidate(context.prompt_messages)
 
-        train_items = [{"id": item_id} for item_id in training_set]
-        val_items = [{"id": item_id} for item_id in validation_set]
+        input_key, output_key = infer_dataset_keys(training_set)
 
-        input_key, output_key = infer_dataset_keys(train_items)
-
-        train_insts = build_data_insts(train_items, input_key, output_key)
-        val_insts = build_data_insts(val_items, input_key, output_key)
+        train_insts = build_data_insts(training_set, input_key, output_key)
+        val_insts = build_data_insts(validation_set, input_key, output_key)
 
         effective_n_samples = max(len(train_insts), 1)
         max_metric_calls = params.get(
