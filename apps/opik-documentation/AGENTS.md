@@ -5,16 +5,13 @@
 - Follow `../../AGENTS.md` for shared monorepo workflow, PR, and security policy.
 
 ## Project Structure & Module Organization
-`apps/opik-documentation` contains two documentation pipelines:
+`apps/opik-documentation` contains the Fern documentation pipeline:
 
 - `documentation/` (primary Fern docs site)
   - `fern/docs/` for documentation pages and navigation content
   - `docs/cookbook/` for source Jupyter notebooks
   - `static/` and `fern/img/` for assets (use only `fern/img` for new images)
   - `update_cookbooks.sh` to regenerate cookbook markdown from notebooks
-- `python-sdk-docs/` (Python SDK reference docs)
-  - `source/` for `.rst` content
-  - `Makefile` and `requirements.txt` for doc builds
 - `README.md` is present in this folder; follow `documentation/fern/docs/contributing/*` for contribution process details and conventions.
 
 ## Build, Test, and Development Commands
@@ -26,31 +23,29 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
   - Run docs website locally with live reload.
 - `cd documentation && ./update_cookbooks.sh`
   - Regenerates `fern/docs/cookbook/*.mdx` from `docs/cookbook/*.ipynb`.
-- `cd python-sdk-docs && pip install -r requirements.txt`
-  - Install Sphinx tooling for SDK references.
-- `cd python-sdk-docs && make dev`
-  - Serve Python SDK docs at `http://127.0.0.1:8000`.
-- `cd python-sdk-docs && make build`
-  - Generate static HTML into `python-sdk-docs/build/html`.
+- `cd documentation/fern && fern check --warnings`
+  - Validate Fern docs configuration and navigation.
+- `cd documentation/fern && fern docs md generate`
+  - Generate Fern native library markdown/navigation output before preview/deploy.
 
 ## Coding Style & Naming Conventions
 - Write concise, user-oriented docs (avoid internal implementation detail unless needed).
-- Use existing Markdown/MDX style in `documentation/fern/docs/**` and reStructuredText style in `python-sdk-docs/source/**`.
+- Use existing Markdown/MDX style in `documentation/fern/docs/**`.
 - Keep file names descriptive and kebab-case (`quickstart.mdx`, `api-reference.mdx`).
 - Keep 2-space indentation in YAML/JSON snippets and frontmatter.
 - Treat `documentation/fern/docs.yml` (or `docs.yaml` where used) as the routing source of truth; do not infer URL paths from folder layout alone.
 - Store new images under `documentation/fern/img/`.
 
 ### Python SDK Reference Location Rule
-- Default: Python SDK reference docs belong in `python-sdk-docs/source/**` (Sphinx pipeline).
-- Approved exception (migration): Fern native library-generated Python SDK reference pages may live under `documentation/fern/docs/reference/python-sdk/**` when generated via `documentation/fern/docs.yml` `libraries` configuration.
-- While this exception is used, keep Sphinx as the full-reference source of truth unless a PR explicitly migrates additional sections.
+- Python SDK reference docs live under `documentation/fern/docs/reference/python-sdk/**`.
+- Generated Core API pages are produced via `documentation/fern/docs.yml` `libraries` configuration.
+- Migrated legacy SDK narrative content lives under `documentation/fern/docs/reference/python-sdk/sphinx-migrated/**`.
 
 ## Testing Guidelines
 - There is no dedicated automated docs test suite in this directory.
 - Validation is primarily local render verification:
   - run `npm run dev` for Fern pages,
-  - run `make dev` for Sphinx reference docs.
+  - run `fern check --warnings` and `fern docs md generate` in `documentation/fern`.
 - For generated artifacts (cookbooks/SDK docs), verify output in local preview before merging.
 
 ## Agent Contribution Workflow
