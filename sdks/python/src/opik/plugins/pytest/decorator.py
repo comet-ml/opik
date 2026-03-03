@@ -1,14 +1,16 @@
-from typing import Callable, Any, Dict, Tuple
-import os
 import functools
-import logging
 import inspect
+import logging
+import os
+from typing import Any, Callable, Dict, Optional, Tuple
+
 import opik
-import opik.opik_context as opik_context
-from . import test_runs_storage, test_run_content
-from opik.decorator import inspect_helpers
 import opik.config as config
+import opik.opik_context as opik_context
+from opik.decorator import inspect_helpers
 from opik.simulation.episode import EpisodeResult
+
+from . import test_run_content, test_runs_storage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,50 +44,18 @@ def llm_unit(
         if not config_.pytest_experiment_enabled:
             return func
 
-        def _capture_test_run_content(*args: Any, **kwargs: Any) -> None:
-            try:
-                test_trace_data = opik_context.get_current_trace_data()
-                test_span_data = opik_context.get_current_span_data()
-                assert test_trace_data is not None and test_span_data is not None, (
-                    "Must not be None here by design assumption"
-                )
-
-                node_id: str = _get_test_nodeid()
-                test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
-
-                test_run_content_ = _get_test_run_content(
-                    func=func,
-                    args=args,
-                    kwargs=kwargs,
-                    argnames_mapping=argnames_mapping,
-                )
-
-                trace_input = {**test_run_content_.input}
-                trace_input.pop("test_name")  # we don't need it in traces
-                opik_context.update_current_trace(
-                    input=trace_input,
-                    metadata=test_run_content_.metadata,
-                )
-                opik_context.update_current_span(
-                    input=trace_input,
-                    metadata=test_run_content_.metadata,
-                )
-
-                test_runs_storage.TEST_RUNS_TO_TRACE_DATA[node_id] = test_trace_data
-                test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
-            except Exception:
-                LOGGER.error(
-                    "Unexpected exception occured during llm_unit test tracking for test %s",
-                    func.__name__,
-                    exc_info=True,
-                )
-
         if inspect.iscoroutinefunction(func):
 
             @opik.track(capture_input=False)
             @functools.wraps(func)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                _capture_test_run_content(*args, **kwargs)
+                _capture_test_run(
+                    func=func,
+                    args=args,
+                    kwargs=kwargs,
+                    argnames_mapping=argnames_mapping,
+                    context_name="llm_unit",
+                )
                 return await func(*args, **kwargs)
 
         else:
@@ -93,7 +63,13 @@ def llm_unit(
             @opik.track(capture_input=False)
             @functools.wraps(func)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                _capture_test_run_content(*args, **kwargs)
+                _capture_test_run(
+                    func=func,
+                    args=args,
+                    kwargs=kwargs,
+                    argnames_mapping=argnames_mapping,
+                    context_name="llm_unit",
+                )
                 return func(*args, **kwargs)
 
         return wrapper
@@ -128,43 +104,15 @@ def llm_episode(
         signature = inspect.signature(func)
 
         def _capture_test_run_content(*args: Any, **kwargs: Any) -> str:
-            node_id = _get_test_nodeid()
-            try:
-                test_trace_data = opik_context.get_current_trace_data()
-                test_span_data = opik_context.get_current_span_data()
-                assert test_trace_data is not None and test_span_data is not None, (
-                    "Must not be None here by design assumption"
-                )
-
-                test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
-
-                test_run_content_ = _get_test_run_content(
-                    func=func,
-                    args=args,
-                    kwargs=kwargs,
-                    argnames_mapping=argnames_mapping,
-                )
-
-                trace_input = {**test_run_content_.input}
-                trace_input.pop("test_name")  # we don't need it in traces
-                opik_context.update_current_trace(
-                    input=trace_input,
-                    metadata=test_run_content_.metadata,
-                )
-                opik_context.update_current_span(
-                    input=trace_input,
-                    metadata=test_run_content_.metadata,
-                )
-
-                test_runs_storage.TEST_RUNS_TO_TRACE_DATA[node_id] = test_trace_data
-                test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
-            except Exception:
-                LOGGER.error(
-                    "Unexpected exception occured during llm_episode test tracking for test %s",
-                    func.__name__,
-                    exc_info=True,
-                )
-                raise
+            node_id = _capture_test_run(
+                func=func,
+                args=args,
+                kwargs=kwargs,
+                argnames_mapping=argnames_mapping,
+                context_name="llm_episode",
+                raise_on_error=True,
+            )
+            assert node_id is not None, "Node ID is guaranteed when raise_on_error=True"
             return node_id
 
         def _capture_episode_result(
@@ -176,7 +124,12 @@ def llm_episode(
             try:
                 bound_arguments = signature.bind_partial(*args, **kwargs)
                 call_arguments = dict(bound_arguments.arguments)
-            except Exception:
+            except (TypeError, ValueError):
+                LOGGER.debug(
+                    "Failed to bind llm_episode call arguments for %s, falling back to keyword args",
+                    func.__name__,
+                    exc_info=True,
+                )
                 call_arguments = dict(kwargs)
 
             scenario_id_fallback = str(call_arguments.get(scenario_id_key, node_id))
@@ -278,3 +231,53 @@ def _get_test_run_content(
     )
 
     return result
+
+
+def _capture_test_run(
+    func: Callable[[Any], Any],
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+    argnames_mapping: Dict[str, str],
+    context_name: str,
+    raise_on_error: bool = False,
+) -> Optional[str]:
+    try:
+        node_id: str = _get_test_nodeid()
+        test_trace_data = opik_context.get_current_trace_data()
+        test_span_data = opik_context.get_current_span_data()
+        assert test_trace_data is not None and test_span_data is not None, (
+            "Must not be None here by design assumption"
+        )
+
+        test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
+        test_run_content_ = _get_test_run_content(
+            func=func,
+            args=args,
+            kwargs=kwargs,
+            argnames_mapping=argnames_mapping,
+        )
+
+        trace_input = {**test_run_content_.input}
+        trace_input.pop("test_name")  # we don't need it in traces
+        opik_context.update_current_trace(
+            input=trace_input,
+            metadata=test_run_content_.metadata,
+        )
+        opik_context.update_current_span(
+            input=trace_input,
+            metadata=test_run_content_.metadata,
+        )
+
+        test_runs_storage.TEST_RUNS_TO_TRACE_DATA[node_id] = test_trace_data
+        test_runs_storage.TEST_RUNS_CONTENTS[node_id] = test_run_content_
+        return node_id
+    except Exception:
+        LOGGER.error(
+            "Unexpected exception occurred during %s test tracking for test %s",
+            context_name,
+            func.__name__,
+            exc_info=True,
+        )
+        if raise_on_error:
+            raise
+        return None
