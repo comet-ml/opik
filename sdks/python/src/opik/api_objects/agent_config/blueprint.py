@@ -1,6 +1,5 @@
 import copy
 import datetime
-import logging
 import typing
 
 from opik.rest_api import client as rest_client
@@ -9,8 +8,6 @@ from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 from . import type_helpers
-
-logger = logging.getLogger(__name__)
 
 
 def _resolve_prompt_from_version_id(
@@ -86,29 +83,11 @@ def _resolve_prompts(
             continue
 
         if _is_prompt_field(param.key, param.type, field_types):
-            try:
-                values[param.key] = _resolve_prompt_from_version_id(
-                    rest_client_, raw_value
-                )
-            except Exception:
-                logger.debug(
-                    "Failed to resolve prompt version %s",
-                    raw_value,
-                    exc_info=True,
-                )
-                del values[param.key]
+            values[param.key] = _resolve_prompt_from_version_id(rest_client_, raw_value)
         elif _is_prompt_version_field(param.key, param.type, field_types):
-            try:
-                values[param.key] = _resolve_prompt_version_from_version_id(
-                    rest_client_, raw_value
-                )
-            except Exception:
-                logger.debug(
-                    "Failed to resolve prompt version detail %s",
-                    raw_value,
-                    exc_info=True,
-                )
-                del values[param.key]
+            values[param.key] = _resolve_prompt_version_from_version_id(
+                rest_client_, raw_value
+            )
 
 
 def _resolve_values(
