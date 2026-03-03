@@ -119,6 +119,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canDeleteOptimizationRuns = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.OPTIMIZATION_RUN_DELETE,
+      ),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -130,6 +138,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteTraces,
     canDeletePrompts,
     canDeleteDatasets,
+    canDeleteOptimizationRuns,
     isPending: isEnabled && isPending,
   };
 };
