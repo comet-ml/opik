@@ -211,8 +211,13 @@ public class RunnersResource {
                     }
                 })
                 .exceptionally(e -> {
-                    log.error("Error polling next job", e);
-                    asyncResponse.resume(Response.serverError().build());
+                    Throwable cause = e instanceof java.util.concurrent.CompletionException ? e.getCause() : e;
+                    if (cause instanceof WebApplicationException wae) {
+                        asyncResponse.resume(wae);
+                    } else {
+                        log.error("Error polling next job", cause);
+                        asyncResponse.resume(Response.serverError().build());
+                    }
                     return null;
                 });
     }
