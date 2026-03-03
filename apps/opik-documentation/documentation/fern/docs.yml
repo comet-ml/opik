@@ -84,6 +84,15 @@ tabs:
     display-name: Opik University
     icon: fa-regular fa-graduation-cap
     slug: /opik-university
+libraries:
+  opik-python-core:
+    input:
+      git: https://github.com/vincentkoc/opik-python-sdk-fern-source
+      subpath: sdks/python/src/opik
+    output:
+      path: docs/reference/python-sdk/core-api-generated
+    lang: python
+
 navigation:
   - tab: documentation
     layout:
@@ -920,8 +929,9 @@ navigation:
       - section: Python SDK
         slug: python-sdk
         contents:
-          - link: Reference
-            href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - library: opik-python-core
+            title: Core API
+            slug: core-api
           - page: REST API Client
             path: docs/reference/python-sdk/rest-api.mdx
             slug: rest-api
@@ -1041,6 +1051,24 @@ navigation:
             path: docs/opik-university/6_production-monitoring/6.1-production-monitoring-online-evaluation-rules.mdx
             slug: online-evaluation-rules
 redirects:
+  - source: "/docs/opik/python-sdk-reference"
+    destination: "/docs/opik/reference/python-sdk/core-api"
+    permanent: true
+  - source: "/docs/opik/python-sdk-reference/:slug"
+    destination: "/docs/opik/reference/python-sdk/core-api"
+    permanent: true
+  - source: "/docs/opik/python-sdk-reference/:slug/:slug"
+    destination: "/docs/opik/reference/python-sdk/core-api"
+    permanent: true
+  - source: "/docs/opik/python-sdk-reference/:slug/:slug/:slug"
+    destination: "/docs/opik/reference/python-sdk/core-api"
+    permanent: true
+  - source: "/docs/opik/python-sdk-reference/rest_api/:slug"
+    destination: "/docs/opik/reference/python-sdk/rest-api"
+    permanent: true
+  - source: "/docs/opik/python-sdk-reference/rest_api/:slug/:slug"
+    destination: "/docs/opik/reference/python-sdk/rest-api"
+    permanent: true
   - source: "/docs/opik/playground"
     destination: "/docs/opik/prompt_engineering/playground"
     permanent: true
