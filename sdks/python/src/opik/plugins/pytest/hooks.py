@@ -164,14 +164,14 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             client.flush()
     except Exception:
         LOGGER.error(
-            "Unexpected exception occured while trying to log LLM unit tests experiment results",
+            "Unexpected exception occurred while trying to log LLM unit tests experiment results",
             exc_info=True,
         )
         raise
 
 
 @_logging.convert_exception_to_log_message(
-    "Unexpected exception occured while trying to print LLM unit tests summary",
+    "Unexpected exception occurred while trying to print LLM unit tests summary",
     logger=LOGGER,
     exc_info=True,
     logging_level=logging.DEBUG,
