@@ -169,9 +169,12 @@ def run(self, context, training_set, validation_set,
 
 Add tests in `tests/unit/`. Mock `EvaluationAdapter` and `EventEmitter` to test your optimizer's logic without hitting real APIs. See `test_simple_optimizer.py` for patterns.
 
+If your optimizer depends on an optional library (like `gepa`), place tests in `tests/library_integration/<library>/` and guard with `pytest.importorskip("<library>")` at the top of the file so the unit suite stays fast and dependency-free.
+
 Run tests:
 
 ```bash
 cd apps/opik-optimizer
-python -m pytest tests/unit/ -v
+python -m pytest tests/unit/ -v                       # fast, no optional deps
+python -m pytest tests/library_integration/ -v         # requires optional deps
 ```

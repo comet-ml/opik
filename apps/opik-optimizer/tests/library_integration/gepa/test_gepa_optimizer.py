@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("gepa")
+
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.gepa.gepa_adapter import (
     FrameworkGEPAAdapter,
