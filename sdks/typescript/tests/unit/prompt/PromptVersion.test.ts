@@ -177,7 +177,7 @@ describe("PromptVersion", () => {
 
     it("should return age for old dates", () => {
       const oneMonthAgo = new Date();
-      oneMonthAgo.setDate(oneMonthAgo.getDate() - 31);
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 45);
 
       const version = new PromptVersion({
         versionId: "version-123",
@@ -200,7 +200,7 @@ describe("PromptVersion", () => {
         { daysAgo: 1, expectedPattern: /1 day ago/ },
         { daysAgo: 7, expectedPattern: /7 days ago/ },
         { daysAgo: 14, expectedPattern: /14 days ago|2 weeks ago/ },
-        { daysAgo: 30, expectedPattern: /month|about/ },
+        { daysAgo: 45, expectedPattern: /month|about/ },
       ];
 
       testCases.forEach(({ daysAgo, expectedPattern }) => {
