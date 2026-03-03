@@ -2319,7 +2319,27 @@ class DatasetsResourceTest {
                                     .operator(Operator.LESS_THAN)
                                     .value(Instant.now().toString())
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets));
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // TYPE field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() == datasets.getFirst().type())
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() != datasets.getFirst().type())
+                                    .toList()));
         }
 
         @Test
@@ -3058,6 +3078,49 @@ class DatasetsResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
             findAndAssertPage(actualEntity, 1, 1, 1, List.of(evaluationSuite));
+        }
+
+        @ParameterizedTest
+        @MethodSource("filterByType")
+        @DisplayName("when filtering by type via generic filters, then return only datasets of that type")
+        void getDatasets__whenFilteringByTypeViaGenericFilters__thenReturnOnlyMatchingType(DatasetType filterType,
+                String queryValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+
+            var typeFilter = DatasetFilter.builder()
+                    .field(DatasetField.TYPE)
+                    .operator(Operator.EQUAL)
+                    .value(queryValue)
+                    .build();
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .queryParam("filters", toURLEncodedQueryParam(List.of(typeFilter)))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
         }
     }
 

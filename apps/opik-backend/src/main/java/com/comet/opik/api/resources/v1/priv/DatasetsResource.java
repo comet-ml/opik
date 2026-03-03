@@ -147,7 +147,7 @@ public class DatasetsResource {
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
-            @QueryParam("type") @Schema(description = "Filter datasets by type (dataset or evaluation_suite)") DatasetType type,
+            @QueryParam("type") @Schema(description = "Filter datasets by type (dataset or evaluation_suite). Deprecated: use generic filters with field 'type' instead.", deprecated = true) DatasetType type,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
