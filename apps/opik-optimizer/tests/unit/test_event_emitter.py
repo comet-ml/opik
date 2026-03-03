@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 
 from opik_optimizer_framework.event_emitter import EventEmitter
@@ -17,21 +18,35 @@ def _make_trial() -> TrialResult:
 
 
 class TestEventEmitter:
-    def test_with_optimization_id(self):
+    def test_with_optimization_id(self, caplog):
         emitter = EventEmitter(optimization_id="opt-123")
         trial = _make_trial()
-        emitter.on_step_started(0)
-        emitter.on_trial_completed(trial)
-        emitter.on_best_candidate_changed(trial)
-        emitter.on_progress(step_index=0, trials_completed=3, total_trials=5)
 
-    def test_without_optimization_id(self):
+        with caplog.at_level(logging.INFO, logger="opik_optimizer_framework.event_emitter"):
+            emitter.on_step_started(0)
+            emitter.on_trial_completed(trial)
+            emitter.on_best_candidate_changed(trial)
+            emitter.on_progress(step_index=0, trials_completed=3, total_trials=5)
+
+        assert "Step 0 started (optimization=opt-123)" in caplog.text
+        assert "Trial completed: candidate=c1 step=0 score=0.8500" in caplog.text
+        assert "opt-123" in caplog.text
+        assert "New best candidate: c1 step=0 score=0.8500" in caplog.text
+        assert "Progress: step=0 trials=3/5" in caplog.text
+
+    def test_without_optimization_id(self, caplog):
         emitter = EventEmitter()
         trial = _make_trial()
-        emitter.on_step_started(0)
-        emitter.on_trial_completed(trial)
-        emitter.on_best_candidate_changed(trial)
-        emitter.on_progress(0, 1, 5)
+
+        with caplog.at_level(logging.INFO, logger="opik_optimizer_framework.event_emitter"):
+            emitter.on_step_started(0)
+            emitter.on_trial_completed(trial)
+            emitter.on_best_candidate_changed(trial)
+            emitter.on_progress(0, 1, 5)
+
+        assert "Step 0 started (optimization=None)" in caplog.text
+        assert "Trial completed: candidate=c1" in caplog.text
+        assert "Progress: step=0 trials=1/5" in caplog.text
 
 
 class TestMockEmitter:
