@@ -281,7 +281,7 @@ class TestBlueprintPromptResolution:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="promptcommit", value="ver-pv-111"
+                    key="version", type="prompt_commit", value="ver-pv-111"
                 ),
             ]
         )
@@ -304,7 +304,7 @@ class TestBlueprintPromptResolution:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="promptcommit", value="ver-pv-bad"
+                    key="version", type="prompt_commit", value="ver-pv-bad"
                 ),
             ]
         )
@@ -414,11 +414,11 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
 
         assert bp["messages"] is fake_chat_prompt
 
-    def test_promptcommit_type__resolves_to_prompt_version_detail(self):
+    def test_prompt_commit_type__resolves_to_prompt_version_detail(self):
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="promptcommit", value="ver-pv-111"
+                    key="version", type="prompt_commit", value="ver-pv-111"
                 ),
             ]
         )

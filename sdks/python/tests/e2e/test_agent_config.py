@@ -1,3 +1,4 @@
+import dataclasses
 import uuid
 from dataclasses import field
 from typing import Annotated, Dict, List, Optional
@@ -6,8 +7,10 @@ import pytest
 import opik
 from opik.api_objects.agent_config.cache import _registry
 from opik.api_objects.agent_config.decorator import get_cached_config
+from opik.api_objects.prompt.text.prompt import Prompt
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_config_env import AgentConfigEnv
+from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 
 
 def _unique_project_name() -> str:
@@ -365,3 +368,53 @@ def test_agent_config_decorator__annotated_descriptions__sent_to_backend(
         raw_values["AnnotatedConfig.use_tools"].description
         == "Whether to enable tool use"
     )
+
+
+def test_agent_config_decorator__prompt_tracks_latest_version__prompt_version_stays_pinned(
+    opik_client: opik.Opik,
+    project_name: str,
+):
+    """Prompt and PromptVersionDetail fields both resolve to the version stored in the
+    blueprint.  Creating a new prompt version does not automatically update a Prompt
+    field because the backend currently stores a specific version_id rather than a
+    prompt_id pointer — see the TODO assert below."""
+    prompt_name = f"e2e-prompt-{uuid.uuid4().hex[:8]}"
+
+    # Create v1 of the prompt
+    prompt_v1 = opik_client.create_prompt(name=prompt_name, prompt="Hello v1")
+    version_id_v1 = prompt_v1.version_id
+    version_detail_v1 = opik_client.rest_client.prompts.get_prompt_version_by_id(
+        version_id_v1
+    )
+
+    # Register a config that holds both field types pinned to v1
+    @opik.agent_config(project=project_name)
+    @dataclasses.dataclass
+    class PromptConfig:
+        system_prompt: Prompt = dataclasses.field(default_factory=lambda: prompt_v1)
+        pinned_version: PromptVersionDetail = dataclasses.field(
+            default_factory=lambda: version_detail_v1
+        )
+
+    instance = PromptConfig()
+    assert instance.system_prompt.version_id == version_id_v1
+    assert instance.pinned_version.id == version_id_v1
+
+    # Create v2 of the same prompt — this is a new version on the backend
+    prompt_v2 = opik_client.create_prompt(name=prompt_name, prompt="Hello v2")
+    version_id_v2 = prompt_v2.version_id
+    assert version_id_v2 != version_id_v1
+
+    # Clear cache to force a fresh fetch
+    _registry.clear()
+
+    instance2 = PromptConfig()
+
+    # TODO: Once the backend supports resolving a Prompt field to the latest version of
+    # the prompt by prompt_id (rather than the specific version_id stored in the
+    # blueprint), this assert should change to version_id_v2. For now the blueprint still
+    # holds version_id_v1 so the Prompt field resolves to that same version.
+    assert instance2.system_prompt.version_id == version_id_v1
+
+    # PromptVersionDetail field stays pinned to the specific commit it was registered with
+    assert instance2.pinned_version.id == version_id_v1

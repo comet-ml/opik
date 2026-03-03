@@ -827,7 +827,7 @@ class TestConfigDecoratorPromptFields:
         call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
         param = next(v for v in blueprint.values if v.key == "MyConfig.version")
-        assert param.type == "promptcommit"
+        assert param.type == "prompt_commit"
         assert param.value == "ver-pv-abc"
 
     def test_existing_blueprint_prompt_version_field__resolves_to_prompt_version_detail(
@@ -837,7 +837,7 @@ class TestConfigDecoratorPromptFields:
             [
                 mock.Mock(
                     key="MyConfig.version",
-                    type="promptcommit",
+                    type="prompt_commit",
                     value="ver-pv-backend",
                 )
             ]
@@ -866,7 +866,7 @@ class TestConfigDecoratorPromptFields:
             [
                 mock.Mock(
                     key="MyConfig.version",
-                    type="promptcommit",
+                    type="prompt_commit",
                     value="ver-pv-bad",
                 )
             ]

@@ -71,7 +71,7 @@ def python_type_to_backend_type(py_type: typing.Any) -> str:
     if is_prompt_type(py_type):
         return "prompt"
     if is_prompt_version_type(py_type):
-        return "promptcommit"
+        return "prompt_commit"
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return "string"

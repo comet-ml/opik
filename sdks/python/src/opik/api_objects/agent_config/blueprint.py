@@ -71,7 +71,7 @@ def _is_prompt_version_field(
 ) -> bool:
     if field_types and key in field_types:
         return type_helpers.is_prompt_version_type(field_types[key])
-    return backend_type == "promptcommit"
+    return backend_type == "prompt_commit"
 
 
 def _resolve_prompts(

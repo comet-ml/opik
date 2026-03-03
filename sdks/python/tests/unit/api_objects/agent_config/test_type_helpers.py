@@ -92,8 +92,8 @@ class TestBackendTypeToPythonType:
 
     @pytest.mark.parametrize(
         "backend_type",
-        ["prompt", "promptcommit", "unknown", ""],
-        ids=["prompt", "promptcommit", "unknown", "empty"],
+        ["prompt", "prompt_commit", "unknown", ""],
+        ids=["prompt", "prompt_commit", "unknown", "empty"],
     )
     def test_non_primitive_types__returns_none(self, backend_type):
         assert type_helpers.backend_type_to_python_type(backend_type) is None
@@ -201,10 +201,10 @@ class TestPythonTypeToBackendType:
     def test_prompt_types__return_prompt(self, py_type):
         assert type_helpers.python_type_to_backend_type(py_type) == "prompt"
 
-    def test_prompt_version_type__returns_promptcommit(self):
+    def test_prompt_version_type__returns_prompt_commit(self):
         assert (
             type_helpers.python_type_to_backend_type(PromptVersionDetail)
-            == "promptcommit"
+            == "prompt_commit"
         )
 
 
