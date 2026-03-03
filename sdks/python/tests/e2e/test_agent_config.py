@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import field
-from typing import Annotated, Dict, List
+from typing import Annotated, Dict, List, Optional
 
 import pytest
 import opik
@@ -43,7 +43,7 @@ def test_agent_config_decorator__all_primitive_and_collection_types__happyflow(
     @opik.agent_config(project=project_name)
     class AllTypesConfig:
         temperature: float = 0.7
-        max_tokens: int = 512
+        max_tokens: Optional[int] = None
         model_name: str = "gpt-4"
         use_tools: bool = True
         stop_sequences: List[str] = field(default_factory=lambda: ["<|end|>", "\n\n"])
@@ -55,7 +55,7 @@ def test_agent_config_decorator__all_primitive_and_collection_types__happyflow(
 
     assert isinstance(instance.temperature, float)
     assert instance.temperature == pytest.approx(0.7)
-    assert instance.max_tokens == 512
+    assert instance.max_tokens is None
     assert instance.model_name == "gpt-4"
     assert instance.use_tools is True
     assert instance.stop_sequences == ["<|end|>", "\n\n"]

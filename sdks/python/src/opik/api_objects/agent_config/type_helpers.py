@@ -23,6 +23,15 @@ def backend_type_to_python_type(backend_type: str) -> typing.Optional[type]:
     return _BACKEND_TO_PYTHON_TYPE.get(backend_type)
 
 
+def unwrap_optional(py_type: typing.Any) -> typing.Optional[typing.Any]:
+    """Return the inner type of Optional[T] (i.e. Union[T, None]), or None if not Optional."""
+    if typing.get_origin(py_type) is typing.Union:
+        args = [a for a in typing.get_args(py_type) if a is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return None
+
+
 def is_prompt_type(py_type: typing.Any) -> bool:
     return isinstance(py_type, type) and issubclass(py_type, BasePrompt)
 
@@ -32,6 +41,9 @@ def is_prompt_version_type(py_type: typing.Any) -> bool:
 
 
 def is_supported_type(py_type: typing.Any) -> bool:
+    inner = unwrap_optional(py_type)
+    if inner is not None:
+        return is_supported_type(inner)
     if py_type in SUPPORTED_PRIMITIVE_TYPES:
         return True
     if is_prompt_type(py_type):
@@ -51,6 +63,9 @@ def is_supported_type(py_type: typing.Any) -> bool:
 
 
 def python_type_to_backend_type(py_type: typing.Any) -> str:
+    inner = unwrap_optional(py_type)
+    if inner is not None:
+        return python_type_to_backend_type(inner)
     if py_type in _PYTHON_TO_BACKEND_TYPE:
         return _PYTHON_TO_BACKEND_TYPE[py_type]
     if is_prompt_type(py_type):
@@ -135,6 +150,9 @@ def extract_dataclass_fields(
             description = next((a for a in args[1:] if isinstance(a, str)), None)
         else:
             py_type = raw_hint
+        inner = unwrap_optional(py_type)
+        if inner is not None:
+            py_type = inner
         if not is_supported_type(py_type):
             continue
         if f.default is not dataclasses.MISSING:

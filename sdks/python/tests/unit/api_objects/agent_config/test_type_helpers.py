@@ -1,6 +1,6 @@
 import dataclasses
 import json
-from typing import Annotated, List, Dict, Callable
+from typing import Annotated, List, Dict, Callable, Optional
 from unittest import mock
 
 import pytest
@@ -541,4 +541,100 @@ class TestExtractDataclassFieldsAnnotated:
         fields = type_helpers.extract_dataclass_fields(Cfg)
         names = [f[0] for f in fields]
         assert "model" in names
+        assert "callback" not in names
+
+
+class TestUnwrapOptional:
+    @pytest.mark.parametrize(
+        "py_type, expected",
+        [
+            (Optional[str], str),
+            (Optional[int], int),
+            (Optional[float], float),
+            (Optional[bool], bool),
+        ],
+        ids=["Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]"],
+    )
+    def test_optional_primitives__returns_inner_type(self, py_type, expected):
+        assert type_helpers.unwrap_optional(py_type) is expected
+
+    @pytest.mark.parametrize(
+        "py_type",
+        [str, int, float, bool, List[str], Dict[str, int]],
+        ids=["str", "int", "float", "bool", "List[str]", "Dict[str,int]"],
+    )
+    def test_non_optional__returns_none(self, py_type):
+        assert type_helpers.unwrap_optional(py_type) is None
+
+    def test_union_with_multiple_types__returns_none(self):
+        # Union[str, int] is not Optional so must not be unwrapped
+        import typing
+
+        assert type_helpers.unwrap_optional(typing.Union[str, int]) is None
+
+
+class TestIsSupportedTypeOptional:
+    @pytest.mark.parametrize(
+        "py_type",
+        [Optional[str], Optional[int], Optional[float], Optional[bool]],
+        ids=["Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]"],
+    )
+    def test_optional_primitives__returns_true(self, py_type):
+        assert type_helpers.is_supported_type(py_type) is True
+
+    def test_optional_unsupported__returns_false(self):
+        assert type_helpers.is_supported_type(Optional[object]) is False
+
+    def test_union_with_multiple_types__returns_false(self):
+        import typing
+
+        assert type_helpers.is_supported_type(typing.Union[str, int]) is False
+
+
+class TestPythonTypeToBackendTypeOptional:
+    @pytest.mark.parametrize(
+        "py_type, expected",
+        [
+            (Optional[str], "string"),
+            (Optional[int], "integer"),
+            (Optional[float], "float"),
+            (Optional[bool], "boolean"),
+        ],
+        ids=["Optional[str]", "Optional[int]", "Optional[float]", "Optional[bool]"],
+    )
+    def test_optional_primitives__returns_inner_backend_type(self, py_type, expected):
+        assert type_helpers.python_type_to_backend_type(py_type) == expected
+
+
+class TestExtractDataclassFieldsOptional:
+    def test_optional_field__included_with_unwrapped_type(self):
+        @dataclasses.dataclass
+        class Cfg:
+            name: Optional[str] = None
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        assert len(fields) == 1
+        _, py_type, _, _ = fields[0]
+        assert py_type is str
+
+    def test_optional_and_plain_field__both_included(self):
+        @dataclasses.dataclass
+        class Cfg:
+            temp: float = 0.7
+            name: Optional[str] = None
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        by_name = {f[0]: f[1] for f in fields}
+        assert by_name["temp"] is float
+        assert by_name["name"] is str
+
+    def test_optional_unsupported__field_filtered_out(self):
+        @dataclasses.dataclass
+        class Cfg:
+            temp: float = 0.7
+            callback: Optional[object] = None  # type: ignore
+
+        fields = type_helpers.extract_dataclass_fields(Cfg)
+        names = [f[0] for f in fields]
+        assert "temp" in names
         assert "callback" not in names

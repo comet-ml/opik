@@ -35,7 +35,13 @@ class AgentConfig:
     ) -> typing.Dict[str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]]:
         if fields_with_values is not None:
             return fields_with_values
-        return {k: (type(v), v, None) for k, v in (parameters or {}).items()}
+        # None values have no runtime type to infer, and python_type_to_backend_type
+        # raises TypeError on NoneType, so exclude them here.
+        return {
+            k: (type(v), v, None)
+            for k, v in (parameters or {}).items()
+            if v is not None
+        }
 
     def _build_blueprint_payload(
         self,
@@ -48,10 +54,7 @@ class AgentConfig:
     ) -> AgentBlueprintWrite:
         backend_values = []
         for field_name, (py_type, value, field_desc) in fields_with_values.items():
-            if (
-                type_helpers.is_prompt_type(py_type)
-                or type_helpers.is_prompt_version_type(py_type)
-            ) and value is None:
+            if value is None:
                 continue
             backend_values.append(
                 AgentConfigValueWrite(
