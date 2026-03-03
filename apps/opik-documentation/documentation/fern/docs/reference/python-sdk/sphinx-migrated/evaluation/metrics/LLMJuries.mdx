@@ -1,0 +1,18 @@
+---
+title: LLM Juries
+---
+
+# LLM Juries
+
+
+> Current module: `opik.evaluation.metrics`
+
+
+Use :class:`LLMJuriesJudge` when you want to call multiple judges and aggregate the
+results into a single decision. Provide a list of judge instances plus an
+aggregation strategy (majority vote, max confidence, etc.).
+
+> API details for `LLMJuriesJudge` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
