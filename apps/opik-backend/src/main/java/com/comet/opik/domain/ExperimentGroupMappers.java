@@ -93,7 +93,7 @@ public final class ExperimentGroupMappers {
         } else if (value instanceof Double d) {
             return BigDecimal.valueOf(d);
         } else {
-            return BigDecimal.ZERO;
+            return null;
         }
     }
 

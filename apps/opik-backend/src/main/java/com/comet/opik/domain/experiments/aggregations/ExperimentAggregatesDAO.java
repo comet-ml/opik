@@ -18,6 +18,7 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.domain.DatasetItemResultMapper;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.ExperimentGroupMappers;
 import com.comet.opik.domain.ExperimentSearchCriteriaBinder;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GroupingQueryBuilder;
@@ -59,13 +60,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.ExperimentGroupMappers.bindGroupCriteria;
-import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupAggregationItem;
-import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupItem;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.FeedbackScoreAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.SpanAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.TraceAggregations;
@@ -2077,31 +2077,22 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     @Override
     public Flux<ExperimentGroupItem> findGroups(ExperimentGroupCriteria criteria) {
-
         log.info("Finding experiment groups from aggregates by criteria: '{}'", criteria);
-
-        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = newGroupTemplate(FIND_GROUPS_FROM_AGGREGATES, criteria, workspaceId);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId);
-
-            bindGroupCriteria(statement, criteria, filterQueryBuilder);
-
-            int groupsCount = criteria.groups().size();
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> toExperimentGroupItem(row, groupsCount)));
-        }));
+        return streamGroupQuery(FIND_GROUPS_FROM_AGGREGATES, criteria,
+                ExperimentGroupMappers::toExperimentGroupItem);
     }
 
     @Override
     public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(ExperimentGroupCriteria criteria) {
-
         log.info("Finding experiment groups aggregations from aggregates by criteria: '{}'", criteria);
+        return streamGroupQuery(FIND_GROUPS_AGGREGATIONS_FROM_AGGREGATES, criteria,
+                ExperimentGroupMappers::toExperimentGroupAggregationItem);
+    }
 
+    private <T> Flux<T> streamGroupQuery(String queryTemplate, ExperimentGroupCriteria criteria,
+            BiFunction<Row, Integer, T> rowMapper) {
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS_FROM_AGGREGATES, criteria, workspaceId);
+            var template = newGroupTemplate(queryTemplate, criteria, workspaceId);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -2111,8 +2102,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             int groupsCount = criteria.groups().size();
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map(
-                            (row, rowMetadata) -> toExperimentGroupAggregationItem(row, groupsCount)));
+                    .flatMap(result -> result.map((row, rowMetadata) -> rowMapper.apply(row, groupsCount)));
         }));
     }
 
