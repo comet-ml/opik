@@ -143,6 +143,22 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
             FilterStrategy.DATASET_ITEM);
 
+    private static final List<FilterQueryBuilder.FilterStrategyParam> EXPERIMENT_ITEMS_STATS_FILTER_STRATEGY_PARAMS = List
+            .of(
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM,
+                            "experiment_item_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES,
+                            "feedback_scores_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+                            "feedback_scores_empty_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"));
+
+    private static final List<FilterStrategy> EXPERIMENT_ITEMS_STATS_BIND_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+            FilterStrategy.DATASET_ITEM);
+
     public static final String SELECT_EXPERIMENT_BY_ID = """
             SELECT
                 id,
@@ -2260,24 +2276,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     "getExperimentItemsStatsFromAggregates", workspaceId, datasetId);
 
             // Apply filters to template
-            Optional.ofNullable(filters).ifPresent(filtersParam -> {
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.EXPERIMENT_ITEM)
-                        .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                                experimentItemFilters));
-
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.FEEDBACK_SCORES)
-                        .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
-                                feedbackScoresFilters));
-
-                FilterQueryBuilder
-                        .toAnalyticsDbFilters(filtersParam, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
-                        .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                feedbackScoresEmptyFilters));
-
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.DATASET_ITEM)
-                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                datasetItemFilters));
-            });
+            FilterQueryBuilder.applyFiltersToTemplate(template, filters,
+                    EXPERIMENT_ITEMS_STATS_FILTER_STRATEGY_PARAMS);
 
             String sql = template.render();
 
@@ -2288,12 +2288,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
 
             // Bind filter parameters
-            Optional.ofNullable(filters).ifPresent(filtersParam -> {
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.EXPERIMENT_ITEM);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.FEEDBACK_SCORES);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.DATASET_ITEM);
-            });
+            FilterQueryBuilder.bindFilters(statement, filters, EXPERIMENT_ITEMS_STATS_BIND_STRATEGIES);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map(
