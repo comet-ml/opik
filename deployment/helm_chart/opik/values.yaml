@@ -944,3 +944,27 @@ zookeeper:
     #     memory: 1500Mi
     #   limits:
     #     memory: 2Gi
+
+# External Secrets Operator integration
+secretStore:
+  enabled: false
+  region: us-east-1
+  role: ""
+
+externalSecretsStoreRef:
+  name: opik-secret-store
+  kind: SecretStore
+
+externalSecrets: []
+  # Example configuration:
+  # - name: clickhouse
+  #   refreshInterval: "2h"
+  #   data:
+  #     - secretKey: username
+  #       remoteRef:
+  #         key: dev/opik/config
+  #         property: CH_USERNAME
+  #     - secretKey: password
+  #       remoteRef:
+  #         key: dev/opik/config
+  #         property: CH_PASSWORD
