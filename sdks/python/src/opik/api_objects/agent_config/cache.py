@@ -150,7 +150,18 @@ class SharedCacheRegistry:
     def stop_refresh_thread(self) -> None:
         with self._thread_lock:
             if self._thread is not None:
-                self._thread.close()
+                thread = self._thread
+                thread.close()
+                try:
+                    thread.join(timeout=5)
+                    if thread.is_alive():
+                        logger.error(
+                            "Cache refresh thread did not stop within the timeout."
+                        )
+                except Exception:
+                    logger.exception(
+                        "Unexpected error while waiting for cache refresh thread to stop."
+                    )
                 self._thread = None
 
 
