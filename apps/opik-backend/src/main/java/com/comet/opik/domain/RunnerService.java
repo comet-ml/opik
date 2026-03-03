@@ -194,17 +194,9 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        int total = runners.size();
-        int fromIndex = Math.min(page * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-        List<LocalRunner> pageContent = runners.subList(fromIndex, toIndex);
-
-        return LocalRunner.LocalRunnerPage.builder()
-                .page(page)
-                .size(size)
-                .total(total)
-                .content(pageContent)
-                .build();
+        return paginate(runners, page, size,
+                (content, p, s, total) -> LocalRunner.LocalRunnerPage.builder()
+                        .page(p).size(s).total(total).content(content).build());
     }
 
     @Override
@@ -412,17 +404,9 @@ class RunnerServiceImpl implements RunnerService {
         jobs.sort(Comparator.comparing(LocalRunnerJob::createdAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
 
-        int total = jobs.size();
-        int fromIndex = Math.min(page * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-        List<LocalRunnerJob> pageContent = jobs.subList(fromIndex, toIndex);
-
-        return LocalRunnerJob.LocalRunnerJobPage.builder()
-                .page(page)
-                .size(size)
-                .total(total)
-                .content(pageContent)
-                .build();
+        return paginate(jobs, page, size,
+                (content, p, s, total) -> LocalRunnerJob.LocalRunnerJobPage.builder()
+                        .page(p).size(s).total(total).content(content).build());
     }
 
     @Override
@@ -654,7 +638,9 @@ class RunnerServiceImpl implements RunnerService {
             if (timeoutStr != null) {
                 try {
                     timeoutSeconds = Integer.parseInt(timeoutStr);
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid timeout value '{}' for job {}, using default {}s", timeoutStr, jobId,
+                            timeoutSeconds);
                 }
             }
 
@@ -985,5 +971,17 @@ class RunnerServiceImpl implements RunnerService {
             throw new NotFoundException("Job not found");
         }
         return new ValidatedJob(jobMap, fields);
+    }
+
+    private static <T, R> R paginate(List<T> items, int page, int size, PageBuilder<T, R> builder) {
+        int total = items.size();
+        int fromIndex = Math.min(page * size, total);
+        int toIndex = Math.min(fromIndex + size, total);
+        return builder.build(items.subList(fromIndex, toIndex), page, size, total);
+    }
+
+    @FunctionalInterface
+    private interface PageBuilder<T, R> {
+        R build(List<T> content, int page, int size, int total);
     }
 }

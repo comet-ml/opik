@@ -16,6 +16,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -231,7 +232,7 @@ public class RunnersResource {
     @GET
     @Path("/jobs/{jobId}/logs")
     @Operation(operationId = "getJobLogs", summary = "Get local runner job logs", description = "Get log entries for a local runner job", responses = {
-            @ApiResponse(responseCode = "200", description = "Log entries"),
+            @ApiResponse(responseCode = "200", description = "Log entries", content = @Content(array = @ArraySchema(schema = @Schema(implementation = LogEntry.class)))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response getJobLogs(@PathParam("jobId") UUID jobId,
             @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {

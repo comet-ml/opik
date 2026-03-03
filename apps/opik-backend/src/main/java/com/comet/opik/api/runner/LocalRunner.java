@@ -26,7 +26,7 @@ public record LocalRunner(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Agent(
-            @NotBlank String name,
+            String name,
             String project,
             String description,
             String language,

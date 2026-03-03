@@ -17,5 +17,5 @@ public record CreateJobRequest(
         @NotBlank String agentName,
         @NotNull JsonNode inputs,
         String project,
-        @NotNull UUID runnerId) {
+        UUID runnerId) {
 }

@@ -10,6 +10,6 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ConnectRequest(
-        @NotBlank String pairingCode,
+        String pairingCode,
         @NotBlank String runnerName) {
 }
