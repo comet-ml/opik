@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0  # Fetch all history for git diff
 
       - name: Install Fern
-        run: npm install -g fern-api@0.64.26
+        run: npm install -g fern-api@4.0.1
 
       - name: Publish Docs
         env:
@@ -28,5 +28,7 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_API_HOST: ${{ secrets.POSTHOG_API_HOST }}
         run: |
-          cd apps/opik-documentation/documentation
+          cd apps/opik-documentation/documentation/fern
+          fern docs md generate
+          cd ..
           fern generate --docs

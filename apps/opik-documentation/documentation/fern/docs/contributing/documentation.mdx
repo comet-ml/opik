@@ -18,7 +18,7 @@ This guide will help you get started with contributing to Opik's documentation.
 
 ## Documentation Structure
 
-This guide covers how to contribute to the two main parts of Opik's documentation: **This Documentation Website**: Built with [Fern](https://www.buildwithfern.com/) and **Python SDK Reference Documentation**: Built with [Sphinx](https://www.sphinx-doc.org/en/master/).
+This guide covers how to contribute to the two main parts of Opik's documentation: **This Documentation Website**: Built with [Fern](https://www.buildwithfern.com/) and **Python SDK Reference Documentation**: Built with [Fern](https://www.buildwithfern.com/).
 
 Here's how you can work with either one:
 
@@ -59,30 +59,33 @@ Here's how you can work with either one:
     </Steps>
 
   </Accordion>
-  <Accordion title="Contributing to the Python SDK Reference Documentation (Sphinx)">
-    The Python SDK reference docs (source in `apps/opik-documentation/python-sdk-docs`) are generated from docstrings in the Python codebase using [Sphinx](https://www.sphinx-doc.org/en/master/).
+  <Accordion title="Contributing to the Python SDK Reference Documentation (Fern)">
+    The Python SDK reference docs (source in `apps/opik-documentation/documentation/fern/docs/reference/python-sdk`) are generated from docstrings in the Python codebase using [Fern](https://www.buildwithfern.com/) via `fern docs md generate`.
     <Steps>
       ### 1. Install Prerequisites
-      Ensure you have Python and pip installed. A virtual environment is highly recommended.
+      Ensure you have Node.js, npm, Python, and Fern CLI available.
 
       ### 2. Set up Locally
       ```bash
-      cd apps/opik-documentation/python-sdk-docs
-      # Install dependencies - Only needs to be run once
-      pip install -r requirements.txt
-      # Run the python sdk reference documentation locally
-      make dev
+      cd apps/opik-documentation/documentation
+
+      # Install dependencies - only needs to be run once
+      npm install
+
+      # Generate Fern library markdown
+      cd fern
+      fern docs md generate
       ```
-      Access the local site at `http://127.0.0.1:8000`. Changes will update in real-time as you modify docstrings in the SDK (`sdks/python`) and rebuild.
+      Access the local site at `http://localhost:3000` after returning to `documentation` and running `npm run dev`.
 
       ### 3. Making Changes
       Improvements to the SDK reference usually involve updating the Python docstrings directly in the SDK source files located in the `sdks/python` directory.
 
       ### 4. Building and Previewing
-      After editing docstrings, run `make dev` (or `make html` for a one-time build) in the `apps/opik-documentation/python-sdk-docs` directory to regenerate the HTML and preview your changes.
+      After editing docstrings, run `fern docs md generate` in `apps/opik-documentation/documentation/fern` and then run `npm run dev` from `apps/opik-documentation/documentation`.
 
       ### 5. Submitting Changes
-      Commit your changes to both the Python SDK source files and any necessary updates in the `python-sdk-docs` directory. Open a Pull Request against the `main` branch.
+      Commit your changes to both the Python SDK source files and any necessary generated markdown in `docs/reference/python-sdk/core-api-generated`. Open a Pull Request against the `main` branch.
     </Steps>
 
   </Accordion>
