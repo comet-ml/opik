@@ -1,10 +1,15 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentGroupAggregationItem;
+import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.Statement;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -17,13 +22,26 @@ import java.util.stream.IntStream;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 
 /**
- * Shared Row-to-object mappers for experiment group query results.
+ * Shared utilities for experiment group queries.
  * Used by both {@link ExperimentDAO} and
  * {@link com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO}.
  */
 public final class ExperimentGroupMappers {
 
     private ExperimentGroupMappers() {
+    }
+
+    public static void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria,
+            FilterQueryBuilder filterQueryBuilder) {
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> statement.bind("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.filters())
+                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT));
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId));
     }
 
     public static List<String> extractGroupValues(Row row, int groupsCount) {

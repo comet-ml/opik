@@ -1856,17 +1856,7 @@ class ExperimentDAO {
     }
 
     private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                });
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
+        ExperimentGroupMappers.bindGroupCriteria(statement, criteria, filterQueryBuilder);
     }
 
     /**

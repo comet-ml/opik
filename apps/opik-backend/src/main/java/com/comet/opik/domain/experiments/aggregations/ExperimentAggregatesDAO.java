@@ -63,6 +63,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.domain.ExperimentGroupMappers.bindGroupCriteria;
 import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupAggregationItem;
 import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupItem;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.FeedbackScoreAggregations;
@@ -2085,7 +2086,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
-            bindGroupCriteria(statement, criteria);
+            bindGroupCriteria(statement, criteria, filterQueryBuilder);
 
             int groupsCount = criteria.groups().size();
 
@@ -2105,7 +2106,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
-            bindGroupCriteria(statement, criteria);
+            bindGroupCriteria(statement, criteria, filterQueryBuilder);
 
             int groupsCount = criteria.groups().size();
 
@@ -2267,18 +2268,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
 
         return template;
-    }
-
-    private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
     }
 
     @Override
