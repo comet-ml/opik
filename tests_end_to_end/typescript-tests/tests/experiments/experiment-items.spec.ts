@@ -19,9 +19,10 @@ Steps:
 4. Verify the trace count matches via backend
 5. Retrieve all item IDs from both UI and backend
 6. Verify that item IDs match between UI and backend
-7. Verify "Go to traces" button navigates to experiment traces
-8. Click an experiment item and verify trace details panel opens
-9. Verify trace information is displayed correctly
+7. Click an experiment item and verify trace details panel opens
+8. Click Trace button and verify trace panel opens
+9. Verify trace details match experiment item content
+10. Verify "Go to traces" button navigates to experiment traces
 
 This test ensures proper synchronization of experiment items between UI and backend, and validates trace navigation.`
     });
@@ -63,38 +64,6 @@ This test ensures proper synchronization of experiment items between UI and back
       const sortedBackendIds = idsOnBackend.sort();
 
       expect(sortedFrontendIds).toEqual(sortedBackendIds);
-    });
-
-    await test.step('Verify "Go to traces" button navigates to experiment traces', async () => {
-      const experimentItems = await helperClient.getExperimentItems(experiment.name);
-      const firstItem = experimentItems[0];
-
-      const goToTracesButton = page.getByRole('link', { name: /Go to traces/i });
-      await expect(goToTracesButton).toBeVisible();
-
-      await goToTracesButton.click();
-      await expect(page).toHaveURL(/\/traces/, { timeout: 10000 });
-      
-      const currentUrl = page.url();
-      expect(currentUrl).toContain('experiment_id');
-
-      const firstTraceRow = page.locator('table tbody tr').first();
-      await expect(firstTraceRow).toBeVisible({ timeout: 10000 });
-
-      const inputValue = firstItem.input?.input || firstItem.data?.input;
-      if (inputValue) {
-        const inputText = typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue);
-        await expect(page.locator('table')).toContainText(inputText);
-      }
-
-      const outputValue = firstItem.output?.output || firstItem.output;
-      if (outputValue) {
-        const outputText = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
-        await expect(page.locator('table')).toContainText(outputText);
-      }
-
-      await page.goBack();
-      await page.waitForLoadState('networkidle');
     });
 
     await test.step('Click experiment item and verify detail panel opens', async () => {
@@ -165,6 +134,39 @@ This test ensures proper synchronization of experiment items between UI and back
 
       const feedbackScoresTab = page.getByRole('tab', { name: 'Feedback scores' }).first();
       await expect(feedbackScoresTab).toBeVisible();
+    });
+
+    await test.step('Verify "Go to traces" button navigates to experiment traces', async () => {
+      const experimentsPage = new ExperimentsPage(page);
+      await experimentsPage.goto();
+      await experimentsPage.clickExperiment(experiment.name);
+
+      const experimentItems = await helperClient.getExperimentItems(experiment.name);
+      const firstItem = experimentItems[0];
+
+      const goToTracesButton = page.getByRole('link', { name: /Go to traces/i });
+      await expect(goToTracesButton).toBeVisible();
+
+      await goToTracesButton.click();
+      await expect(page).toHaveURL(/\/traces/, { timeout: 10000 });
+      
+      const currentUrl = page.url();
+      expect(currentUrl).toContain('experiment_id');
+
+      const firstTraceRow = page.locator('table tbody tr').first();
+      await expect(firstTraceRow).toBeVisible({ timeout: 10000 });
+
+      const inputValue = firstItem.input?.input || firstItem.data?.input;
+      if (inputValue) {
+        const inputText = typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue);
+        await expect(page.locator('table')).toContainText(inputText);
+      }
+
+      const outputValue = firstItem.output?.output || firstItem.output;
+      if (outputValue) {
+        const outputText = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
+        await expect(page.locator('table')).toContainText(outputText);
+      }
     });
   });
 
