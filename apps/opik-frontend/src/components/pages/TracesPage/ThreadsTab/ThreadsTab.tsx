@@ -553,9 +553,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       projectId,
       projectName,
       enableUserFeedbackEditing: true,
-      searchText: !isPlaceholderData ? trimmedSearch : undefined,
     }),
-    [projectId, projectName, trimmedSearch, isPlaceholderData],
+    [projectId, projectName],
   );
 
   const columns = useMemo(() => {

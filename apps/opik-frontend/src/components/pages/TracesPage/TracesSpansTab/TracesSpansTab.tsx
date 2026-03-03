@@ -859,9 +859,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         handleRowClick(row, DetailsActionSection.Comments);
       },
       enableUserFeedbackEditing: true,
-      searchText: !isPlaceholderData ? trimmedSearch : undefined,
     }),
-    [handleRowClick, trimmedSearch, isPlaceholderData],
+    [handleRowClick],
   );
 
   const handleThreadIdClick = useCallback(
