@@ -13,7 +13,7 @@ import java.util.List;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record RunnerJob(
+public record LocalRunnerJob(
         String id,
         String runnerId,
         String agentName,
@@ -31,10 +31,10 @@ public record RunnerJob(
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record RunnerJobPage(
+    public record LocalRunnerJobPage(
             int page,
             int size,
             long total,
-            List<RunnerJob> content) implements Page<RunnerJob> {
+            List<LocalRunnerJob> content) implements Page<LocalRunnerJob> {
     }
 }

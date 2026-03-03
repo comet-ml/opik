@@ -40,11 +40,11 @@ public class RunnerReaperJob extends Job {
         lockService.bestEffortLock(
                 REAPER_LOCK,
                 Mono.fromRunnable(() -> runnerService.reapDeadRunners()),
-                Mono.fromRunnable(() -> log.debug("Could not acquire reaper lock, skipping")),
-                Duration.ofSeconds(55),
-                Duration.ofSeconds(5))
+                Mono.fromRunnable(() -> log.info("Could not acquire reaper lock, skipping")),
+                Duration.ofSeconds(runnerConfig.getReaperLockDurationSeconds()),
+                Duration.ofSeconds(runnerConfig.getReaperLockWaitSeconds()))
                 .subscribe(
-                        __ -> log.debug("Runner reaper completed"),
+                        __ -> log.info("Runner reaper completed"),
                         error -> log.error("Runner reaper failed", error));
     }
 }

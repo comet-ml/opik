@@ -27,4 +27,10 @@ public class RunnerConfig {
 
     @Valid @JsonProperty
     private int completedJobTtlDays = 7;
+
+    @Valid @JsonProperty
+    private int reaperLockDurationSeconds = 55;
+
+    @Valid @JsonProperty
+    private int reaperLockWaitSeconds = 5;
 }

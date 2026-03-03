@@ -6,10 +6,10 @@ import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
 import com.comet.opik.api.runner.HeartbeatResponse;
 import com.comet.opik.api.runner.JobResultRequest;
+import com.comet.opik.api.runner.LocalRunner;
+import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LogEntry;
 import com.comet.opik.api.runner.PairResponse;
-import com.comet.opik.api.runner.Runner;
-import com.comet.opik.api.runner.RunnerJob;
 import com.comet.opik.infrastructure.RunnerConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -125,7 +125,7 @@ class RunnerServiceImplTest {
         return resp.runnerId();
     }
 
-    private RunnerJob createTestJob(String workspaceId, String userName, String agentName) {
+    private LocalRunnerJob createTestJob(String workspaceId, String userName, String agentName) {
         stubNextId();
         CreateJobRequest req = CreateJobRequest.builder()
                 .agentName(agentName)
@@ -336,7 +336,7 @@ class RunnerServiceImplTest {
         void returnsConnectedRunners() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
+            List<LocalRunner> runners = runnerService.listRunners(WORKSPACE_ID);
             assertThat(runners).hasSize(1);
             assertThat(runners.get(0).id()).isEqualTo(runnerId);
             assertThat(runners.get(0).status()).isEqualTo("connected");
@@ -347,7 +347,7 @@ class RunnerServiceImplTest {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             waitForHeartbeatExpiry();
 
-            List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
+            List<LocalRunner> runners = runnerService.listRunners(WORKSPACE_ID);
             assertThat(runners).hasSize(1);
             assertThat(runners.get(0).status()).isEqualTo("disconnected");
         }
@@ -357,13 +357,13 @@ class RunnerServiceImplTest {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             pairAndConnect(OTHER_WORKSPACE_ID, "other-user", "other-runner");
 
-            List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
+            List<LocalRunner> runners = runnerService.listRunners(WORKSPACE_ID);
             assertThat(runners).hasSize(1);
         }
 
         @Test
         void emptyWhenNoRunners() {
-            List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
+            List<LocalRunner> runners = runnerService.listRunners(WORKSPACE_ID);
             assertThat(runners).isEmpty();
         }
     }
@@ -377,19 +377,20 @@ class RunnerServiceImplTest {
         void returnsRunnerWithAgents() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "my-project");
-            meta.put("description", "Summarizes documents");
-            meta.put("language", "python");
-            meta.put("executable", "/usr/bin/python3.11");
-            meta.put("source_file", "agents/summarizer.py");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agentInput = LocalRunner.Agent.builder()
+                    .project("my-project")
+                    .description("Summarizes documents")
+                    .language("python")
+                    .executable("/usr/bin/python3.11")
+                    .sourceFile("agents/summarizer.py")
+                    .build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agentInput));
 
-            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.id()).isEqualTo(runnerId);
             assertThat(runner.status()).isEqualTo("connected");
             assertThat(runner.agents()).hasSize(1);
-            Runner.Agent agent = runner.agents().get(0);
+            LocalRunner.Agent agent = runner.agents().get(0);
             assertThat(agent.name()).isEqualTo("agent1");
             assertThat(agent.project()).isEqualTo("my-project");
             assertThat(agent.description()).isEqualTo("Summarizes documents");
@@ -402,13 +403,12 @@ class RunnerServiceImplTest {
         void returnsEmptyAgentsWhenDisconnected() throws InterruptedException {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "my-project");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("my-project").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent));
 
             waitForHeartbeatExpiry();
 
-            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.status()).isEqualTo("disconnected");
             assertThat(runner.agents()).isEmpty();
         }
@@ -437,9 +437,8 @@ class RunnerServiceImplTest {
         void storesAgentMetadata() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "proj1");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent));
 
             RMap<String, String> agentsMap = redisClient.getMap(
                     "opik:runner:" + runnerId + ":agents", StringCodec.INSTANCE);
@@ -451,13 +450,11 @@ class RunnerServiceImplTest {
         void replacesExistingAgents() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta1 = MAPPER.createObjectNode();
-            meta1.put("project", "proj1");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta1));
+            LocalRunner.Agent agent1 = LocalRunner.Agent.builder().project("proj1").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent1));
 
-            ObjectNode meta2 = MAPPER.createObjectNode();
-            meta2.put("project", "proj2");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent2", meta2));
+            LocalRunner.Agent agent2 = LocalRunner.Agent.builder().project("proj2").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent2", agent2));
 
             RMap<String, String> agentsMap = redisClient.getMap(
                     "opik:runner:" + runnerId + ":agents", StringCodec.INSTANCE);
@@ -470,8 +467,8 @@ class RunnerServiceImplTest {
         void clearsAgentsWhenEmpty() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent));
             runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of());
 
             RMap<String, String> agentsMap = redisClient.getMap(
@@ -483,12 +480,10 @@ class RunnerServiceImplTest {
         void storesAndReturnsAgentTimeout() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "proj1");
-            meta.put("timeout", 120);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").timeout(120).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent));
 
-            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.agents()).hasSize(1);
             assertThat(runner.agents().get(0).timeout()).isEqualTo(120);
         }
@@ -497,11 +492,10 @@ class RunnerServiceImplTest {
         void returnsNullTimeoutWhenNotSet() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "proj1");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of("agent1", agent));
 
-            Runner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
+            LocalRunner runner = runnerService.getRunner(WORKSPACE_ID, runnerId);
             assertThat(runner.agents().get(0).timeout()).isNull();
         }
 
@@ -509,8 +503,8 @@ class RunnerServiceImplTest {
         void throwsNotFoundForWrongWorkspace() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            assertThatThrownBy(() -> runnerService.registerAgents(runnerId, OTHER_WORKSPACE_ID, Map.of("a", meta)))
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
+            assertThatThrownBy(() -> runnerService.registerAgents(runnerId, OTHER_WORKSPACE_ID, Map.of("a", agent)))
                     .isInstanceOf(NotFoundException.class);
         }
     }
@@ -536,10 +530,10 @@ class RunnerServiceImplTest {
         @Test
         void updatesLastHeartbeatOnActiveJobs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             stubNextId();
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNotNull();
 
             runnerService.heartbeat(runnerId, WORKSPACE_ID);
@@ -552,7 +546,7 @@ class RunnerServiceImplTest {
         @Test
         void returnsCancelledJobIds() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             // Claim the job so it's active, then cancel (cancellation set is only for active jobs now)
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
@@ -613,7 +607,7 @@ class RunnerServiceImplTest {
                     .agentName(AGENT_NAME)
                     .project("my-project")
                     .build();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
             assertThat(job.id()).isNotBlank();
             assertThat(job.runnerId()).isEqualTo(runnerId);
@@ -638,7 +632,7 @@ class RunnerServiceImplTest {
             CreateJobRequest req = CreateJobRequest.builder()
                     .agentName(AGENT_NAME)
                     .build();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
             assertThat(job.runnerId()).isEqualTo(runnerId);
         }
@@ -652,7 +646,7 @@ class RunnerServiceImplTest {
                     .agentName(AGENT_NAME)
                     .runnerId(runnerId)
                     .build();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
             assertThat(job.runnerId()).isEqualTo(runnerId);
         }
@@ -708,7 +702,7 @@ class RunnerServiceImplTest {
             CreateJobRequest req = CreateJobRequest.builder()
                     .agentName(AGENT_NAME)
                     .build();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
             assertThat(job.project()).isEqualTo("default");
         }
@@ -717,12 +711,11 @@ class RunnerServiceImplTest {
         void usesAgentTimeoutWhenSet() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("timeout", 300);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(300).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
             stubNextId();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
                     CreateJobRequest.builder().agentName(AGENT_NAME).build());
 
             assertThat(job.timeout()).isEqualTo(300);
@@ -736,12 +729,11 @@ class RunnerServiceImplTest {
         void fallsBackToConfigTimeoutWhenAgentHasNone() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("project", "proj1");
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
             stubNextId();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
                     CreateJobRequest.builder().agentName(AGENT_NAME).build());
 
             assertThat(job.timeout()).isEqualTo(runnerConfig.getJobTimeoutSeconds());
@@ -752,7 +744,7 @@ class RunnerServiceImplTest {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             stubNextId();
-            RunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
+            LocalRunnerJob job = runnerService.createJob(WORKSPACE_ID, USER_NAME,
                     CreateJobRequest.builder().agentName(AGENT_NAME).build());
 
             assertThat(job.timeout()).isEqualTo(runnerConfig.getJobTimeoutSeconds());
@@ -767,9 +759,9 @@ class RunnerServiceImplTest {
         @Test
         void returnsJobWhenPending() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNotNull();
             assertThat(claimed.id()).isEqualTo(created.id());
             assertThat(claimed.status()).isEqualTo("running");
@@ -780,14 +772,14 @@ class RunnerServiceImplTest {
         void returnsNullWhenNoPendingJobs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
             assertThat(claimed).isNull();
         }
 
         @Test
         void removesFromPendingAddsToActive() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
@@ -820,7 +812,7 @@ class RunnerServiceImplTest {
             createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
+            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
             assertThat(page.content()).hasSize(2);
             assertThat(page.total()).isEqualTo(2);
         }
@@ -836,7 +828,7 @@ class RunnerServiceImplTest {
             runnerService.createJob(WORKSPACE_ID, USER_NAME,
                     CreateJobRequest.builder().agentName(AGENT_NAME).project("proj-b").build());
 
-            RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, "proj-a", WORKSPACE_ID, 0, 10);
+            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, "proj-a", WORKSPACE_ID, 0, 10);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().get(0).project()).isEqualTo("proj-a");
         }
@@ -849,11 +841,11 @@ class RunnerServiceImplTest {
                 createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             }
 
-            RunnerJob.RunnerJobPage page0 = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 2);
+            LocalRunnerJob.LocalRunnerJobPage page0 = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 2);
             assertThat(page0.content()).hasSize(2);
             assertThat(page0.total()).isEqualTo(3);
 
-            RunnerJob.RunnerJobPage page1 = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 1, 2);
+            LocalRunnerJob.LocalRunnerJobPage page1 = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 1, 2);
             assertThat(page1.content()).hasSize(1);
         }
 
@@ -864,7 +856,7 @@ class RunnerServiceImplTest {
             createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
+            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
             assertThat(page.content()).hasSize(2);
             assertThat(page.content().get(0).createdAt())
                     .isAfterOrEqualTo(page.content().get(1).createdAt());
@@ -888,18 +880,18 @@ class RunnerServiceImplTest {
                     "opik:runner:" + runnerId + ":jobs", StringCodec.INSTANCE);
             runnerJobs.add(fakeJobId);
 
-            RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
+            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
             assertThat(page.content()).hasSize(1);
         }
 
         @Test
         void skipsExpiredJobHashes() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             redisClient.getMap("opik:job:" + job.id(), StringCodec.INSTANCE).delete();
 
-            RunnerJob.RunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
+            LocalRunnerJob.LocalRunnerJobPage page = runnerService.listJobs(runnerId, null, WORKSPACE_ID, 0, 10);
             assertThat(page.content()).isEmpty();
         }
     }
@@ -912,9 +904,9 @@ class RunnerServiceImplTest {
         @Test
         void returnsJob() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
-            RunnerJob fetched = runnerService.getJob(created.id(), WORKSPACE_ID);
+            LocalRunnerJob fetched = runnerService.getJob(created.id(), WORKSPACE_ID);
             assertThat(fetched.id()).isEqualTo(created.id());
             assertThat(fetched.agentName()).isEqualTo(AGENT_NAME);
         }
@@ -928,7 +920,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob created = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJob(created.id(), OTHER_WORKSPACE_ID))
                     .isInstanceOf(NotFoundException.class);
@@ -943,7 +935,7 @@ class RunnerServiceImplTest {
         @Test
         void returnsAllLogs() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             List<LogEntry> entries = List.of(
                     LogEntry.builder().stream("stdout").text("line1").build(),
@@ -959,7 +951,7 @@ class RunnerServiceImplTest {
         @Test
         void returnsLogsFromOffset() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             List<LogEntry> entries = List.of(
                     LogEntry.builder().stream("stdout").text("line1").build(),
@@ -975,7 +967,7 @@ class RunnerServiceImplTest {
         @Test
         void returnsEmptyWhenOffsetBeyondEnd() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("line1").build()));
@@ -993,7 +985,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJobLogs(job.id(), 0, OTHER_WORKSPACE_ID))
                     .isInstanceOf(NotFoundException.class);
@@ -1008,7 +1000,7 @@ class RunnerServiceImplTest {
         @Test
         void appendsEntriesToList() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("hello").build()));
@@ -1021,7 +1013,7 @@ class RunnerServiceImplTest {
         @Test
         void appendsMultipleBatches() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("batch1").build()));
@@ -1043,7 +1035,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.appendLogs(job.id(), OTHER_WORKSPACE_ID,
                     List.of(LogEntry.builder().stream("stdout").text("x").build())))
@@ -1059,7 +1051,7 @@ class RunnerServiceImplTest {
         @Test
         void completedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             ObjectNode resultNode = MAPPER.createObjectNode();
@@ -1082,7 +1074,7 @@ class RunnerServiceImplTest {
         @Test
         void failedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
@@ -1098,7 +1090,7 @@ class RunnerServiceImplTest {
         @Test
         void setsTraceId() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(job.id(), WORKSPACE_ID,
@@ -1112,7 +1104,7 @@ class RunnerServiceImplTest {
         @Test
         void setsTTLOnJobAndLogs() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.appendLogs(job.id(), WORKSPACE_ID,
@@ -1133,7 +1125,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsBadRequestForInvalidStatus() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             assertThatThrownBy(() -> runnerService.reportResult(job.id(), WORKSPACE_ID,
@@ -1152,7 +1144,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.reportResult(job.id(), OTHER_WORKSPACE_ID,
                     JobResultRequest.builder().status("completed").build()))
@@ -1168,7 +1160,7 @@ class RunnerServiceImplTest {
         @Test
         void cancelActiveJob_addsToCancellationSet() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
@@ -1186,7 +1178,7 @@ class RunnerServiceImplTest {
         @Test
         void cancelPendingJob_removesFromPendingQueue() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             runnerService.cancelJob(job.id(), WORKSPACE_ID);
 
@@ -1216,7 +1208,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.cancelJob(job.id(), OTHER_WORKSPACE_ID))
                     .isInstanceOf(NotFoundException.class);
@@ -1231,7 +1223,7 @@ class RunnerServiceImplTest {
         @Test
         void failsOrphanedActiveJobs() throws InterruptedException {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             waitForHeartbeatExpiry();
@@ -1246,7 +1238,7 @@ class RunnerServiceImplTest {
         @Test
         void failsOrphanedPendingJobs() throws InterruptedException {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             waitForHeartbeatExpiry();
             runnerService.reapDeadRunners();
@@ -1357,11 +1349,10 @@ class RunnerServiceImplTest {
         void failsJobExceedingPerJobTimeout() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("timeout", 60);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(60).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             // Backdate started_at to exceed the 60s timeout
@@ -1379,7 +1370,7 @@ class RunnerServiceImplTest {
         @Test
         void skipsJobWithinTimeout() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             // started_at is "now", default timeout is 1800s — should not be reaped
@@ -1396,7 +1387,7 @@ class RunnerServiceImplTest {
             runnerConfig.setJobTimeoutSeconds(10);
             try {
                 String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-                RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+                LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
                 runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
                 // Remove the timeout field from the job hash to simulate no per-job timeout
@@ -1420,11 +1411,10 @@ class RunnerServiceImplTest {
         void removesReapedJobFromActiveList() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("timeout", 5);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             RMap<String, String> jobMap = redisClient.getMap(
@@ -1442,11 +1432,10 @@ class RunnerServiceImplTest {
         void reapsStuckJobsOnAliveRunners() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("timeout", 5);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             RMap<String, String> jobMap = redisClient.getMap(
@@ -1464,11 +1453,10 @@ class RunnerServiceImplTest {
         void doesNotReapAlreadyCompletedJob() {
             String runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            ObjectNode meta = MAPPER.createObjectNode();
-            meta.put("timeout", 5);
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, meta));
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
 
-            RunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
+            LocalRunnerJob job = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             // Report result before reaping
@@ -1501,11 +1489,10 @@ class RunnerServiceImplTest {
         String runnerId = connectResp.runnerId();
         assertThat(runnerId).isEqualTo(pair.runnerId());
 
-        ObjectNode agentMeta = MAPPER.createObjectNode();
-        agentMeta.put("project", "my-project");
+        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().project("my-project").build();
         runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agentMeta));
 
-        List<Runner> runners = runnerService.listRunners(WORKSPACE_ID);
+        List<LocalRunner> runners = runnerService.listRunners(WORKSPACE_ID);
         assertThat(runners).hasSize(1);
         assertThat(runners.get(0).agents()).hasSize(1);
 
@@ -1517,10 +1504,10 @@ class RunnerServiceImplTest {
                 .project("my-project")
                 .inputs(inputs)
                 .build();
-        RunnerJob created = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
+        LocalRunnerJob created = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);
         assertThat(created.status()).isEqualTo("pending");
 
-        RunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+        LocalRunnerJob claimed = runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
         assertThat(claimed).isNotNull();
         assertThat(claimed.id()).isEqualTo(created.id());
         assertThat(claimed.status()).isEqualTo("running");
@@ -1540,7 +1527,7 @@ class RunnerServiceImplTest {
                         .traceId("trace-abc")
                         .build());
 
-        RunnerJob finalJob = runnerService.getJob(claimed.id(), WORKSPACE_ID);
+        LocalRunnerJob finalJob = runnerService.getJob(claimed.id(), WORKSPACE_ID);
         assertThat(finalJob.status()).isEqualTo("completed");
         assertThat(finalJob.traceId()).isEqualTo("trace-abc");
         assertThat(finalJob.result().get("answer").asText()).isEqualTo("world");

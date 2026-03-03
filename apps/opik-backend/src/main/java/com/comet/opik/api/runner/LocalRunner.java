@@ -11,7 +11,7 @@ import java.util.List;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record Runner(
+public record LocalRunner(
         String id,
         String name,
         String status,
