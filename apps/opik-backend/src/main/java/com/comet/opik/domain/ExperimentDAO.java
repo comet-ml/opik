@@ -1986,7 +1986,7 @@ class ExperimentDAO {
             String queryName,
             ExperimentGroupCriteria criteria,
             BiFunction<Result, Integer, Publisher<T>> resultMapper) {
-        return executeQueryWithTargetProjects(queryTemplate, queryName, criteria, Map.of(), resultMapper);
+        return executeQueryWithTargetProjects(queryTemplate, queryName, criteria, null, resultMapper);
     }
 
     private <T> Flux<T> executeQueryWithTargetProjects(
@@ -2023,7 +2023,9 @@ class ExperimentDAO {
                                         statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                                     }
 
-                                    bindSuiteThresholds(statement, suiteThresholds);
+                                    if (suiteThresholds != null) {
+                                        bindSuiteThresholds(statement, suiteThresholds);
+                                    }
 
                                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                                 })
