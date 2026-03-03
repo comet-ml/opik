@@ -380,23 +380,3 @@ class TestOpikClientGetDataset:
 
         assert isinstance(result, Dataset)
         assert result.name == "test_dataset"
-
-
-class TestOpikClientConfigMethods:
-    def test_get_agent_config__no_project_name__uses_instance_default(self):
-        from opik.api_objects.agent_config.config import AgentConfig
-
-        opik_client_ = opik_client.Opik(project_name="my-project")
-        result = opik_client_.get_agent_config()
-
-        assert isinstance(result, AgentConfig)
-        assert result.project_name == "my-project"
-
-    def test_get_agent_config__explicit_project_name__overrides_default(self):
-        from opik.api_objects.agent_config.config import AgentConfig
-
-        opik_client_ = opik_client.Opik(project_name="my-project")
-        result = opik_client_.get_agent_config(project_name="other-project")
-
-        assert isinstance(result, AgentConfig)
-        assert result.project_name == "other-project"

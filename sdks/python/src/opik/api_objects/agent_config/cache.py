@@ -10,7 +10,7 @@ from .blueprint import Blueprint
 logger = logging.getLogger(__name__)
 
 DEFAULT_TTL_SECONDS = 300
-_MIN_REFRESH_INTERVAL = 1.0
+_MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
 _CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
 
@@ -96,7 +96,7 @@ class CacheRefreshThread(threading.Thread):
         while not self._stop_event.is_set():
             self._refresh_all_stale()
             interval = self._interval or float(_get_ttl_seconds())
-            self._stop_event.wait(max(interval, _MIN_REFRESH_INTERVAL))
+            self._stop_event.wait(max(interval, _MIN_REFRESH_INTERVAL_SECONDS))
 
     def _refresh_all_stale(self) -> None:
         for cache in self._get_caches():
