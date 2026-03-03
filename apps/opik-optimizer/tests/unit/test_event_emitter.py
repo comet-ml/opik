@@ -20,7 +20,7 @@ class TestEventEmitter:
     def test_with_optimization_id(self):
         emitter = EventEmitter(optimization_id="opt-123")
         trial = _make_trial()
-        emitter.on_step_started(0, 2)
+        emitter.on_step_started(0)
         emitter.on_trial_completed(trial)
         emitter.on_best_candidate_changed(trial)
         emitter.on_progress(step_index=0, trials_completed=3, total_trials=5)
@@ -28,7 +28,7 @@ class TestEventEmitter:
     def test_without_optimization_id(self):
         emitter = EventEmitter()
         trial = _make_trial()
-        emitter.on_step_started(0, 2)
+        emitter.on_step_started(0)
         emitter.on_trial_completed(trial)
         emitter.on_best_candidate_changed(trial)
         emitter.on_progress(0, 1, 5)
@@ -39,12 +39,12 @@ class TestMockEmitter:
 
     def test_mock_emitter(self):
         mock_emitter = MagicMock()
-        mock_emitter.on_step_started(0, 2)
+        mock_emitter.on_step_started(0)
         mock_emitter.on_trial_completed(_make_trial())
         mock_emitter.on_best_candidate_changed(_make_trial())
         mock_emitter.on_progress(0, 1, 5)
 
-        mock_emitter.on_step_started.assert_called_once_with(0, 2)
+        mock_emitter.on_step_started.assert_called_once_with(0)
         mock_emitter.on_trial_completed.assert_called_once()
         mock_emitter.on_best_candidate_changed.assert_called_once()
         mock_emitter.on_progress.assert_called_once_with(0, 1, 5)

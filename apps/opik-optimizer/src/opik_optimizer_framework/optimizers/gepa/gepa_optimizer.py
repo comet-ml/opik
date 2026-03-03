@@ -11,7 +11,6 @@ import logging
 from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationState,
@@ -39,7 +38,6 @@ class GepaOptimizer:
         validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
-        event_emitter: EventEmitter,
         baseline_trial: TrialResult | None = None,
     ) -> None:
         try:
@@ -79,11 +77,7 @@ class GepaOptimizer:
         if baseline_trial is not None:
             adapter.register_baseline(seed_candidate, baseline_trial.candidate_id)
 
-        callback = GEPAProgressCallback(
-            event_emitter=event_emitter,
-            adapter=adapter,
-            total_steps=max_metric_calls,
-        )
+        callback = GEPAProgressCallback(adapter=adapter)
 
         _gepa.optimize(
             seed_candidate=seed_candidate,

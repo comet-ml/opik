@@ -74,7 +74,6 @@ def run_optimization(
             validation_set=val_items,
             evaluation_adapter=adapter,
             state=state,
-            event_emitter=event_emitter,
             baseline_trial=baseline_trial,
         )
 

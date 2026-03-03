@@ -16,11 +16,10 @@ class EventEmitter:
     def __init__(self, optimization_id: str | None = None) -> None:
         self._optimization_id = optimization_id
 
-    def on_step_started(self, step_index: int, total_steps: int) -> None:
+    def on_step_started(self, step_index: int) -> None:
         logger.info(
-            "Step %d/%d started (optimization=%s)",
-            step_index + 1,
-            total_steps,
+            "Step %d started (optimization=%s)",
+            step_index,
             self._optimization_id,
         )
 

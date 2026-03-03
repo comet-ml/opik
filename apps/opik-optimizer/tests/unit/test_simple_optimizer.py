@@ -1,7 +1,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
 from opik_optimizer_framework.types import (
     OptimizationState,
@@ -25,7 +24,6 @@ class TestSimpleOptimizer:
     def test_produces_correct_candidate_counts(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = EventEmitter()
 
         call_count = {"total": 0}
 
@@ -58,7 +56,6 @@ class TestSimpleOptimizer:
                 validation_set=[{"id": "id-3"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         assert call_count["total"] == 5  # 3 from step1 + 2 from step2
@@ -68,7 +65,6 @@ class TestSimpleOptimizer:
     def test_step2_uses_best_from_step1(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = EventEmitter()
 
         best_after_step1_id = None
         step2_parent_ids = []
@@ -113,7 +109,6 @@ class TestSimpleOptimizer:
                 validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         assert best_after_step1_id is not None
@@ -122,7 +117,6 @@ class TestSimpleOptimizer:
     def test_retries_on_dedup_rejection(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = EventEmitter()
 
         call_count = {"total": 0}
 
@@ -153,7 +147,6 @@ class TestSimpleOptimizer:
                 validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         # Should have retried past the first rejection
@@ -163,7 +156,6 @@ class TestSimpleOptimizer:
     def test_handles_llm_failure_gracefully(self, sample_optimization_context):
         optimizer = SimpleOptimizer()
         state = OptimizationState()
-        emitter = EventEmitter()
 
         adapter = MagicMock()
         adapter.evaluate = MagicMock(return_value=None)
@@ -176,7 +168,6 @@ class TestSimpleOptimizer:
                 validation_set=[{"id": "id-2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         assert state.trials == []

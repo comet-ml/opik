@@ -22,7 +22,6 @@ from __future__ import annotations
 from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationState,
@@ -38,7 +37,6 @@ class MyOptimizer:
         validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
-        event_emitter: EventEmitter,
         baseline_trial: TrialResult | None = None,
     ) -> None:
         # Your optimization logic here
@@ -125,13 +123,9 @@ Shared state that accumulates trial results:
 
 Trials are automatically added by `EvaluationAdapter.evaluate()` — you don't need to manage this manually.
 
-### `EventEmitter`
+### Progress Reporting
 
-Report progress to the UI:
-
-```python
-event_emitter.on_step_started(step_index=0, total_steps=5)
-```
+Step progress is reported automatically by the `EvaluationAdapter` — it detects when the `step_index` changes between evaluations and emits the event. No explicit calls needed from your optimizer.
 
 ### `baseline_trial`
 
@@ -147,10 +141,8 @@ See `simple_optimizer.py` for a complete working example. The core pattern is:
 
 ```python
 def run(self, context, training_set, validation_set,
-        evaluation_adapter, state, event_emitter, baseline_trial=None):
+        evaluation_adapter, state, baseline_trial=None):
     for step in range(num_steps):
-        event_emitter.on_step_started(step, num_steps)
-
         # 1. Generate candidate prompt (your algorithm's logic)
         new_messages = generate_improved_prompt(context.prompt_messages)
 
@@ -167,7 +159,7 @@ def run(self, context, training_set, validation_set,
 
 ## Testing
 
-Add tests in `tests/unit/`. Mock `EvaluationAdapter` and `EventEmitter` to test your optimizer's logic without hitting real APIs. See `test_simple_optimizer.py` for patterns.
+Add tests in `tests/unit/`. Mock `EvaluationAdapter` to test your optimizer's logic without hitting real APIs. See `test_simple_optimizer.py` for patterns.
 
 If your optimizer depends on an optional library (like `gepa`), place tests in `tests/library_integration/<library>/` and guard with `pytest.importorskip("<library>")` at the top of the file so the unit suite stays fast and dependency-free.
 

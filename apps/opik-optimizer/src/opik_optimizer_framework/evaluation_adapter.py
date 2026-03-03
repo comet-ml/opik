@@ -41,6 +41,7 @@ class EvaluationAdapter:
         self._event_emitter = event_emitter
         self._trial_count = 0
         self._candidate_step_index: dict[str, int] = {}
+        self._last_emitted_step = -1
 
     @property
     def trial_count(self) -> int:
@@ -107,6 +108,10 @@ class EvaluationAdapter:
             step_index = self._candidate_step_index[candidate_id]
         else:
             step_index = self._resolve_step_index(parent_candidate_ids)
+
+        if step_index != self._last_emitted_step:
+            self._event_emitter.on_step_started(step_index)
+            self._last_emitted_step = step_index
 
         self._trial_count += 1
 

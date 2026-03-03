@@ -7,7 +7,6 @@ from typing import Any
 import litellm
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationState,
@@ -51,7 +50,6 @@ class SimpleOptimizer:
         validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
-        event_emitter: EventEmitter,
         baseline_trial: "TrialResult | None" = None,
     ) -> None:
         num_steps = context.optimizer_parameters.get("num_steps", 2)
@@ -64,8 +62,6 @@ class SimpleOptimizer:
             ] * (num_steps - len(candidates_per_step))
 
         for step in range(num_steps):
-            event_emitter.on_step_started(step, num_steps)
-
             if step == 0:
                 base_messages = context.prompt_messages
                 parent_ids: list[str] = []

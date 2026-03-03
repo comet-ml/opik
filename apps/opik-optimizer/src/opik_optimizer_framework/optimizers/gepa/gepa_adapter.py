@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from gepa.core.adapter import EvaluationBatch
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-    from opik_optimizer_framework.event_emitter import EventEmitter
 
 
 @dataclass
@@ -130,7 +129,7 @@ def _candidate_key(candidate: dict[str, str]) -> str:
 
 
 class GEPAProgressCallback:
-    """Bridges GEPA's lifecycle events to the framework's EventEmitter and adapter.
+    """Bridges GEPA's lifecycle events to the FrameworkGEPAAdapter.
 
     Implements the GEPACallback protocol (duck-typed — implement only needed methods).
     GEPA dispatches events via ``notify_callbacks(callbacks, method_name, event)``.
@@ -144,19 +143,14 @@ class GEPAProgressCallback:
 
     def __init__(
         self,
-        event_emitter: EventEmitter,
         adapter: FrameworkGEPAAdapter,
-        total_steps: int = 0,
     ) -> None:
-        self._event_emitter = event_emitter
         self._adapter = adapter
-        self._total_steps = total_steps
 
     def on_iteration_start(self, event: dict[str, Any]) -> None:
         iteration = event["iteration"]
         logger.info("[callback] on_iteration_start: iteration=%d", iteration)
         self._adapter._on_new_step(iteration)
-        self._event_emitter.on_step_started(iteration, self._total_steps)
 
     def on_candidate_selected(self, event: dict[str, Any]) -> None:
         candidate_idx = event["candidate_idx"]

@@ -5,7 +5,6 @@ import pytest
 
 pytest.importorskip("gepa")
 
-from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.gepa.gepa_adapter import (
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
@@ -648,21 +647,18 @@ class TestAdapterParentTracking:
 
 
 class TestGEPAProgressCallback:
-    def test_on_iteration_start_emits_step_started(self):
-        emitter = MagicMock()
+    def test_on_iteration_start_forwards_to_adapter(self):
         adapter = MagicMock()
 
-        callback = GEPAProgressCallback(event_emitter=emitter, adapter=adapter, total_steps=10)
+        callback = GEPAProgressCallback(adapter=adapter)
         callback.on_iteration_start({"iteration": 3, "state": MagicMock()})
 
-        emitter.on_step_started.assert_called_once_with(3, 10)
         adapter._on_new_step.assert_called_once_with(3)
 
     def test_on_candidate_selected_forwards_to_adapter(self):
-        emitter = MagicMock()
         adapter = MagicMock()
 
-        callback = GEPAProgressCallback(event_emitter=emitter, adapter=adapter)
+        callback = GEPAProgressCallback(adapter=adapter)
         callback.on_candidate_selected({
             "iteration": 1,
             "candidate_idx": 2,
@@ -673,10 +669,9 @@ class TestGEPAProgressCallback:
         adapter._on_candidate_selected.assert_called_once_with(2)
 
     def test_on_valset_evaluated_maps_idx_to_candidate(self):
-        emitter = MagicMock()
         adapter = MagicMock()
 
-        callback = GEPAProgressCallback(event_emitter=emitter, adapter=adapter)
+        callback = GEPAProgressCallback(adapter=adapter)
         callback.on_valset_evaluated({
             "iteration": 1,
             "candidate_idx": 2,
@@ -693,10 +688,9 @@ class TestGEPAProgressCallback:
         adapter._on_valset_evaluated.assert_called_once_with(2, {"user_0": "test"})
 
     def test_on_evaluation_start_forwards_to_adapter(self):
-        emitter = MagicMock()
         adapter = MagicMock()
 
-        callback = GEPAProgressCallback(event_emitter=emitter, adapter=adapter)
+        callback = GEPAProgressCallback(adapter=adapter)
         callback.on_evaluation_start({
             "iteration": 2,
             "candidate_idx": 0,
@@ -714,10 +708,9 @@ class TestGEPAProgressCallback:
         )
 
     def test_on_merge_accepted_forwards_parent_ids(self):
-        emitter = MagicMock()
         adapter = MagicMock()
 
-        callback = GEPAProgressCallback(event_emitter=emitter, adapter=adapter)
+        callback = GEPAProgressCallback(adapter=adapter)
         callback.on_merge_accepted({
             "iteration": 5,
             "new_candidate_idx": 3,
@@ -797,7 +790,6 @@ class TestGepaOptimizer:
     def test_run_calls_gepa_optimize(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = EventEmitter()
 
         call_count = {"n": 0}
 
@@ -823,7 +815,6 @@ class TestGepaOptimizer:
                 validation_set=[{"id": "id-3", "question": "Q3", "answer": "A3"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         mock_optimize.assert_called_once()
@@ -838,7 +829,6 @@ class TestGepaOptimizer:
     def test_callback_passed_to_optimize(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -851,7 +841,6 @@ class TestGepaOptimizer:
                 validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         call_kwargs = mock_optimize.call_args.kwargs
@@ -863,7 +852,6 @@ class TestGepaOptimizer:
     def test_adapter_receives_evaluation_adapter(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -876,7 +864,6 @@ class TestGepaOptimizer:
                 validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         gepa_adapter = mock_optimize.call_args.kwargs["adapter"]
@@ -887,7 +874,6 @@ class TestGepaOptimizer:
         import sys
         context = _make_context()
         state = OptimizationState()
-        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -900,13 +886,11 @@ class TestGepaOptimizer:
                     validation_set=[{"id": "id-2"}],
                     evaluation_adapter=adapter,
                     state=state,
-                    event_emitter=emitter,
                 )
 
     def test_train_val_items_passed_with_full_data(self):
         context = _make_context()
         state = OptimizationState()
-        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -926,7 +910,6 @@ class TestGepaOptimizer:
                 validation_set=val,
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         call_kwargs = mock_optimize.call_args.kwargs
@@ -946,7 +929,6 @@ class TestGepaOptimizer:
             }
         )
         state = OptimizationState()
-        emitter = EventEmitter()
         adapter = MagicMock()
 
         optimizer = GepaOptimizer()
@@ -959,7 +941,6 @@ class TestGepaOptimizer:
                 validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
                 evaluation_adapter=adapter,
                 state=state,
-                event_emitter=emitter,
             )
 
         call_kwargs = mock_optimize.call_args.kwargs
