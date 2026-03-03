@@ -61,7 +61,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
 
       - name: Build and Publish TypeScript SDK
         id: build_publish
@@ -72,7 +72,7 @@ jobs:
           is_release: ${{ env.IS_RELEASE }}
           package_name: "TypeScript SDK"
           npm_token: ${{ secrets.NPM_TOKEN }}
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
           skip_commit_push: ${{ inputs.skip_commit_push }}
 
       - name: Summary

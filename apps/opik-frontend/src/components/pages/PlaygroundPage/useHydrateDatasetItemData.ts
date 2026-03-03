@@ -1,25 +1,7 @@
 import { useCallback } from "react";
-import isObject from "lodash/isObject";
 import { DatasetItem } from "@/types/datasets";
 import { useFetchDatasetItem } from "@/api/datasets/useDatasetItemById";
-
-const IMAGE_PLACEHOLDER_REGEX = /\[image(?:_\d+)?\]/i;
-
-const containsImagePlaceholder = (value: unknown): boolean => {
-  if (typeof value === "string") {
-    return IMAGE_PLACEHOLDER_REGEX.test(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.some(containsImagePlaceholder);
-  }
-
-  if (isObject(value)) {
-    return Object.values(value).some(containsImagePlaceholder);
-  }
-
-  return false;
-};
+import { containsTruncatedMedia } from "@/lib/media";
 
 export function useHydrateDatasetItemData() {
   const fetchDatasetItem = useFetchDatasetItem();
@@ -32,7 +14,7 @@ export function useHydrateDatasetItemData() {
 
       let hydratedData = datasetItem.data ?? {};
 
-      if (containsImagePlaceholder(hydratedData)) {
+      if (containsTruncatedMedia(hydratedData)) {
         try {
           const fullDatasetItem = await fetchDatasetItem({
             datasetItemId: datasetItem.id,
