@@ -69,6 +69,7 @@ export enum ManagementPermissionsNames {
   TRACE_DELETE = "trace_delete",
   PROMPT_DELETE = "prompt_delete",
   DATASET_DELETE = "dataset_delete",
+  OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
 }
 
 export interface UserPermission {
