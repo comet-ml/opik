@@ -1223,6 +1223,7 @@ def evaluate_optimization_suite_trial(
         prompts=prompts,
         type="trial",
         optimization_id=optimization_id,
+        evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
     )
