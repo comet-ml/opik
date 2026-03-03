@@ -4,6 +4,7 @@ export interface BlueprintValue {
   key: string;
   type: BlueprintValueType;
   value: string;
+  description?: string;
 }
 
 export interface EnrichedBlueprintValue extends BlueprintValue {

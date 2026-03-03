@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { FileText, RotateCcw } from "lucide-react";
+import {
+  Clock,
+  FileText,
+  Hash,
+  Rocket,
+  RotateCcw,
+  ToggleLeft,
+  Type,
+  User,
+} from "lucide-react";
 
 import {
   ConfigHistoryItem,
   EnrichedBlueprintValue,
 } from "@/types/optimizer-configs";
-import { formatDate } from "@/lib/date";
+import { getTimeFromNow } from "@/lib/date";
 import { cn, formatNumericData } from "@/lib/utils";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import Loader from "@/components/shared/Loader/Loader";
@@ -25,22 +34,49 @@ type ConfigurationDetailViewProps = {
   isLatest: boolean;
 };
 
+const TYPE_ICONS: Record<string, React.ReactNode> = {
+  number: <Hash className="size-3.5 shrink-0 text-muted-slate" />,
+  boolean: <ToggleLeft className="size-3.5 shrink-0 text-muted-slate" />,
+  Prompt: <FileText className="size-3.5 shrink-0 text-muted-slate" />,
+  string: <Type className="size-3.5 shrink-0 text-muted-slate" />,
+};
+
+const getTypeIcon = (type: string) =>
+  TYPE_ICONS[type] ?? <Type className="size-3.5 shrink-0 text-muted-slate" />;
+
+const isProdTag = (tag: string) => /^prod(uction)?$/i.test(tag);
+
+const renderTag = (tag: string) =>
+  isProdTag(tag) ? (
+    <Tag
+      key={tag}
+      size="sm"
+      variant="green"
+      className="inline-flex items-center gap-1"
+    >
+      <Rocket className="size-3 shrink-0" />
+      <span>{tag}</span>
+    </Tag>
+  ) : (
+    <ColoredTag key={tag} label={tag} size="sm" />
+  );
+
 const renderValue = (v: EnrichedBlueprintValue) => {
   switch (v.type) {
     case "number": {
       const num = Number(v.value);
       return (
-        <span className="comet-body-s-accented">
+        <code className="comet-code block w-full rounded bg-muted px-3 py-2">
           {isNaN(num) ? v.value : formatNumericData(num)}
-        </span>
+        </code>
       );
     }
     case "boolean": {
       const isTruthy = v.value === "true";
       return (
-        <Tag size="md" variant={isTruthy ? "green" : "gray"}>
-          {isTruthy ? "True" : "False"}
-        </Tag>
+        <code className="comet-code block w-full rounded bg-muted px-3 py-2">
+          {isTruthy ? "true" : "false"}
+        </code>
       );
     }
     case "Prompt":
@@ -58,7 +94,11 @@ const renderValue = (v: EnrichedBlueprintValue) => {
         </div>
       );
     default:
-      return <span className="comet-body-s truncate">{v.value}</span>;
+      return (
+        <code className="comet-code block w-full rounded bg-muted px-3 py-2">
+          {v.value}
+        </code>
+      );
   }
 };
 
@@ -122,14 +162,12 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
 
   return (
     <>
-      <div className="px-6 py-4">
+      <Card className="mx-6 my-4 p-6">
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="comet-title-m">v{version}</h2>
-            {item.tags.map((tag) => (
-              <ColoredTag key={tag} label={tag} />
-            ))}
+            {item.tags.map(renderTag)}
           </div>
           <div className="flex items-center gap-2">
             {isEditing ? (
@@ -177,41 +215,45 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
             )}
           </div>
         </div>
-        <p className="comet-body-s text-light-slate">{item.description}</p>
-        <p className="comet-body-xs mt-1 text-muted-slate">
-          {item.createdBy} &middot; {formatDate(item.createdAt)}
-        </p>
+        <p className="comet-body-xs text-light-slate">{item.description}</p>
+        <div className="comet-body-xs mt-1 flex items-center gap-1 text-light-slate">
+          <Clock className="size-3 shrink-0" />
+          <span>{getTimeFromNow(item.createdAt)}</span>
+          <User className="size-3.5 ml-1.5 shrink-0" />
+          <span>{item.createdBy}</span>
+        </div>
 
         {/* Agent config section */}
         <p className="comet-body-s-accented mb-3 mt-6">Agent config</p>
         {isPending ? (
           <Loader />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col divide-y divide-border">
             {(agentConfig?.values ?? []).map((v) => {
               const isChanged =
                 v.type !== "Prompt" &&
                 draftValues[v.key] !== undefined &&
                 draftValues[v.key] !== originalValues[v.key];
               return (
-                <Card
+                <div
                   key={v.key}
                   className={cn(
-                    "flex flex-col gap-2 p-4",
-                    isChanged ? "border-l-2 border-l-amber-400" : "",
+                    "flex flex-col gap-2 py-3",
+                    isChanged ? "border-l-2 border-l-amber-400 pl-3" : "",
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="comet-body-xs text-muted-slate">
-                      {v.key}
-                    </span>
-                    <Tag
-                      size="sm"
-                      variant="gray"
-                      className="capitalize shrink-0"
-                    >
-                      {v.type}
-                    </Tag>
+                    {getTypeIcon(v.type)}
+                    <div className="flex flex-col">
+                      <span className="comet-body-xs text-foreground">
+                        {v.key}
+                      </span>
+                      {v.description && (
+                        <span className="comet-body-xs text-muted-slate">
+                          {v.description}
+                        </span>
+                      )}
+                    </div>
                     {isChanged && (
                       <button
                         className="ml-auto flex items-center gap-1 text-xs text-light-slate hover:text-foreground"
@@ -255,12 +297,12 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
                       )
                     )}
                   </div>
-                </Card>
+                </div>
               );
             })}
           </div>
         )}
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirmOpen}
