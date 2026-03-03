@@ -1,0 +1,31 @@
+---
+title: Redirect Client
+---
+
+# Redirect Client
+
+
+The Redirect client provides methods for handling URL redirects in the Opik platform.
+
+> API details for `opik.rest_api.redirect.client.RedirectClient` are available in the generated Core API pages.
+
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :inherited-members:
+   :exclude-members: with_raw_response
+
+## Usage Example
+
+
+```python
+
+import opik
+
+client = opik.Opik()
+
+# Handle redirect operations
+result = client.rest_client.redirect.redirect(
+    target_url="https://example.com/target"
+)
+```

@@ -1,0 +1,70 @@
+---
+title: metrics
+---
+
+# metrics
+
+
+Opik includes a number of pre-built metrics to help you evaluate your LLM application.
+
+Each metric can be called as a standalone function using the `score` method:
+
+```python
+
+from opik.evaluation.metrics import Hallucination
+
+metric = Hallucination()
+
+metric.score(
+   input="What is the capital of France?",
+   output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+   context=["France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower."],
+)
+```
+
+Or as part of an evaluation run using the `evaluate` function.
+
+You can learn more about each metric in the following sections:
+
+### References
+
+- [Equals](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/Equals)
+- [RegexMatch](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/RegexMatch)
+- [Contains](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/Contains)
+- [IsJson](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/IsJson)
+- [LevenshteinRatio](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/LevenshteinRatio)
+- [Hallucination](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/Hallucination)
+- [GEval](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/GEval)
+- [Moderation](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/Moderation)
+- [AnswerRelevance](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/AnswerRelevance)
+- [ContextPrecision](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ContextPrecision)
+- [ContextRecall](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ContextRecall)
+- [BaseMetric](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/BaseMetric)
+- [ConversationThreadMetric](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ConversationThreadMetric)
+- [HeuristicMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/HeuristicMetrics)
+- [ConversationHeuristicMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ConversationHeuristicMetrics)
+- [ConversationLLMJudges](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ConversationLLMJudges)
+- [LLMJudgePresets](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/LLMJudgePresets)
+- [LLMJuries](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/LLMJuries)
+- [UtilityMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/UtilityMetrics)
+
+The pages above fall into two categories:
+
+- Established metric guides (e.g., `Equals`, `Hallucination`) that remain the
+  authoritative deep dives.
+- Aggregation pages that collect the expanded metric families so every class
+  exported via :mod:`opik.evaluation.metrics` has an accompanying API reference.
+
+Use these aggregation pages to browse the extended catalog:
+
+- [HeuristicMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/HeuristicMetrics) — sentence/word overlap, readability, sentiment, prompt safety, and distribution comparisons.
+- [ConversationHeuristicMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ConversationHeuristicMetrics) — fast heuristics for degeneracy and knowledge retention.
+- [ConversationLLMJudges](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/ConversationLLMJudges) — LLM-as-a-judge conversation evaluators and session quality metrics.
+- [LLMJudgePresets](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/LLMJudgePresets) — pre-built GEval presets and bias checks.
+- [LLMJuries](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/LLMJuries) — multi-judge aggregation.
+- [UtilityMetrics](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/metrics/UtilityMetrics) — helpers such as `AggregatedMetric` and `RagasMetricWrapper`.
+
+Import any metric directly from :mod:`opik.evaluation.metrics`, and pair these API
+references with the Fern guides in
+`apps/opik-documentation/documentation/fern/docs/evaluation/metrics` for workflow
+context.

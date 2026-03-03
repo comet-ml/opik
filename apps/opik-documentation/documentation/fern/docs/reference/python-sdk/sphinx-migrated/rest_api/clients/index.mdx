@@ -1,0 +1,96 @@
+---
+title: REST API Clients
+---
+
+# REST API Clients
+
+
+This section documents all the REST API client modules available through `opik.rest_client`.
+Each client provides methods for interacting with specific resources in the Opik platform.
+
+## Core Resource Clients
+
+
+### References
+
+- [traces](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/traces)
+- [spans](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/spans)
+- [datasets](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/datasets)
+- [experiments](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/experiments)
+- [projects](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/projects)
+
+These clients handle the main resources you'll work with in Opik: traces for observability,
+spans for detailed execution tracking, datasets for evaluation data, experiments for testing,
+and projects for organization.
+
+## Feedback & Evaluation Clients
+
+
+### References
+
+- [annotation queues](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/annotation_queues)
+- [feedback definitions](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/feedback_definitions)
+- [automation rule evaluators](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/automation_rule_evaluators)
+- [optimizations](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/optimizations)
+
+These clients manage evaluation and feedback systems: annotation queues for human review,
+defining feedback score types, setting up automated evaluation rules, and running optimization experiments.
+
+## Content & Asset Clients
+
+
+### References
+
+- [prompts](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/prompts)
+- [attachments](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/attachments)
+
+These clients handle content management: prompt templates and versions, and file attachments
+for traces and spans.
+
+## System & Configuration Clients
+
+
+### References
+
+- [check](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/check)
+- [workspaces](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/workspaces)
+- [llm provider key](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/llm_provider_key)
+- [service toggles](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/service_toggles)
+- [system usage](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/system_usage)
+
+These clients provide system-level functionality: health checks, workspace management,
+API key configuration, feature toggles, and usage monitoring.
+
+## Integration Clients
+
+
+### References
+
+- [chat completions](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/chat_completions)
+- [open telemetry ingestion](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/open_telemetry_ingestion)
+- [guardrails](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/guardrails)
+- [redirect](/docs/opik/reference/python-sdk/sphinx-migrated/rest_api/clients/redirect)
+
+These clients support integrations with external systems: chat completion APIs,
+OpenTelemetry data ingestion, content validation, and URL redirection.
+
+## Usage Examples
+
+
+Each client page includes specific usage examples. Here's how to access any client:
+
+```python
+
+import opik
+
+client = opik.Opik()
+
+# Access any client through the rest_client property
+traces_client = client.rest_client.traces
+datasets_client = client.rest_client.datasets
+experiments_client = client.rest_client.experiments
+
+# Use the client methods
+trace = traces_client.get_trace_by_id("trace-id")
+datasets = datasets_client.find_datasets(page=0, size=10)
+```

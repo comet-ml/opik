@@ -1,0 +1,111 @@
+---
+title: Heuristic Metrics
+---
+
+# Heuristic Metrics
+
+
+> Current module: `opik.evaluation.metrics`
+
+
+This section lists the text-similarity, readability, safety, and sentiment metrics
+that can be composed into larger evaluation suites. Several metrics rely on optional
+dependencies (for example, `bert-score`, `sacrebleu`, `fasttext`, `nltk`);
+install the relevant packages before scoring.
+
+## Sentence & Token Overlap
+
+
+> API details for `SentenceBLEU` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `CorpusBLEU` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `GLEU` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `ROUGE` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `ChrF` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `METEOR` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `BERTScore` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+## Distribution Comparisons
+
+
+> API details for `JSDivergence` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `JSDistance` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `KLDivergence` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+## Rank & Readability
+
+
+> API details for `SpearmanRanking` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `Readability` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `Tone` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+## Prompt Safety & Sentiment
+
+
+> API details for `PromptInjection` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `LanguageAdherenceMetric` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `Sentiment` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score
+
+> API details for `VADERSentiment` are available in the generated Core API pages.
+
+    :special-members: __init__
+    :members: score

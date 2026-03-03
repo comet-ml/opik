@@ -15,7 +15,7 @@ jobs:
               uses: actions/checkout@v4
                 
             - name: Install Fern
-              run: npm install -g fern-api@0.64.26
+              run: npm install -g fern-api@4.0.1
 
             - name: Generate preview URL
               id: generate-docs
@@ -23,6 +23,8 @@ jobs:
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
               run: |
+                  cd fern
+                  fern docs md generate
                   OUTPUT=$(fern generate --docs --preview 2>&1) || true
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
@@ -50,16 +52,28 @@ jobs:
                   --format json > linkinator_results.json || true
                 
                 # Parse JSON and filter broken links (excluding 403s)
+                BROKEN_LINK_COUNT=$(jq -r '
+                  [.links[] | select(.state != "OK" and .status != 403)] | length
+                ' linkinator_results.json)
+
                 BROKEN_LINKS=$(jq -r '
                   .links[]
                   | select(.state != "OK" and .status != 403)
                   | "Page: \(.parent)\n❌ Broken link: \(.url) (\(.status))\n"
                 ' linkinator_results.json)
                 
-                if [ -n "$BROKEN_LINKS" ]; then
-                  echo "**The following broken links were found:**" >> preview_url.txt
+                if [ "$BROKEN_LINK_COUNT" -gt 0 ]; then
+                  echo "**Broken links found: $BROKEN_LINK_COUNT**" >> preview_url.txt
                   echo "" >> preview_url.txt
-                  echo "$BROKEN_LINKS" >> preview_url.txt
+                  if [ "$BROKEN_LINK_COUNT" -gt 100 ]; then
+                    echo "Too many broken links to include in a PR comment. See workflow logs for full details." >> preview_url.txt
+                    echo "" >> preview_url.txt
+                    echo "Showing first 100 entries:" >> preview_url.txt
+                    echo "" >> preview_url.txt
+                    echo "$BROKEN_LINKS" | head -n 300 >> preview_url.txt
+                  else
+                    echo "$BROKEN_LINKS" >> preview_url.txt
+                  fi
                 else
                   echo "No broken links found" >> preview_url.txt
                 fi

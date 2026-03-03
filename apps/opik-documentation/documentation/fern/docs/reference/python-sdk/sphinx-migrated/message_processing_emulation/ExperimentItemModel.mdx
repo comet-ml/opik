@@ -1,0 +1,70 @@
+---
+title: ExperimentItemModel
+---
+
+# ExperimentItemModel
+
+
+> Current module: `opik.message_processing.emulation.models`
+
+
+> API details for `ExperimentItemModel` are available in the generated Core API pages.
+
+    :special-members: __init__
+
+## Description
+
+
+`ExperimentItemModel` links a trace produced during evaluation to the dataset item
+and experiment run that generated it. The SDK instantiates these records for you
+while :func:`opik.evaluate` or experiment reruns execute; most users interact with
+them through `ScoreResult.metadata` rather than constructing instances manually.
+Metrics that analyse evaluation outputs can rely on this structure to connect
+results back to source data.
+
+## Attributes
+
+
+   :type: str
+   :noindex:
+
+   Unique identifier for the experiment item record.
+
+   :type: str
+   :noindex:
+
+   Identifier of the experiment that produced this item.
+
+   :type: str
+   :noindex:
+
+   Identifier of the trace logged during the evaluation run.
+
+   :type: str
+   :noindex:
+
+   Identifier of the dataset item evaluated in this experiment result.
+
+## Usage Example
+
+
+The SDK populates `ExperimentItemModel` instances automatically while running evaluations:
+
+```python
+
+from opik.message_processing.emulation.models import ExperimentItemModel
+
+experiment_item = ExperimentItemModel(
+    id="exp_item_001",
+    experiment_id="exp_123",
+    trace_id="trace_abc",
+    dataset_item_id="dataset_item_xyz",
+)
+```
+
+## See Also
+
+
+- :class:`TraceModel` - Stores the trace referenced by `trace_id`.
+- :class:`SpanModel` - Contains spans that reference the same experiment item.
+- [evaluate](/docs/opik/reference/python-sdk/sphinx-migrated/evaluation/evaluate) - How experiments produce trace results.
