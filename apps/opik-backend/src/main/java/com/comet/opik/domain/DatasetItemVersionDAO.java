@@ -333,6 +333,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
 
+    private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM, "experiment_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES, "feedback_scores_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
+                    "feedback_scores_empty_filters"));
+
+    private static final List<FilterStrategy> BIND_STRATEGIES = List.of(
+            FilterStrategy.DATASET_ITEM,
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
                 dataset_item_id,
@@ -1914,27 +1927,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        // Add filters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
-                    FilterStrategy.DATASET_ITEM);
-            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                    datasetItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                            experimentItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
-                            feedbackScoresFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                    .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
-                            feedbackScoresEmptyFilters));
-        }
-
-        // Add search if present
+        FilterQueryBuilder.applyFiltersToTemplate(template, criteria.filters(), FILTER_STRATEGY_PARAMS);
         if (StringUtils.isNotBlank(criteria.search())) {
             template.add("search", true);
         }
@@ -1975,20 +1968,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @return The statement with all parameters bound
      */
     private Statement bindSearchAndFilters(@NonNull Statement statement, @NonNull DatasetItemSearchCriteria criteria) {
-        // Bind search terms if present
         if (StringUtils.isNotBlank(criteria.search())) {
             statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
         }
-
-        // Bind filter parameters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-        }
-
-        return statement;
+        return FilterQueryBuilder.bindFilters(statement, criteria.filters(), BIND_STRATEGIES);
     }
 
     @Override
