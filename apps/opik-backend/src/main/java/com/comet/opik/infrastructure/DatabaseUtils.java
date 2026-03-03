@@ -100,7 +100,8 @@ public class DatabaseUtils {
         }
     }
 
-    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria) {
+    public static ST newTraceThreadFindTemplate(String query, TraceSearchCriteria traceSearchCriteria,
+            String searchClause) {
         var template = TemplateUtils.newST(query);
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -139,6 +140,9 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
+
+        Optional.ofNullable(traceSearchCriteria.searchText())
+                .ifPresent(searchText -> template.add("search_text", searchClause));
         return template;
     }
 
@@ -162,6 +166,9 @@ public class DatabaseUtils {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+
+        Optional.ofNullable(traceSearchCriteria.searchText())
+                .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
     }
 
     public static ST getSTWithLogComment(String query, String queryName, String workspaceId, Object details) {
