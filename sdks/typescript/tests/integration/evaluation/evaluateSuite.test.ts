@@ -47,7 +47,7 @@ describe.skipIf(!shouldRunApiTests)("EvaluationSuite Integration", () => {
     for (const name of createdDatasetNames) {
       try {
         await client.deleteDataset(name);
-      } catch {}
+      } catch { /* cleanup errors ignored */ }
     }
 
     await client.flush();

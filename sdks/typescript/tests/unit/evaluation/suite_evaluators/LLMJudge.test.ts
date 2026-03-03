@@ -37,7 +37,7 @@ class MockModel extends OpikBaseModel {
 // Mock resolveModel so LLMJudge doesn't need real API keys
 vi.mock("@/evaluation/models/modelsFactory", () => ({
   resolveModel: vi.fn(
-    (model?: unknown) =>
+    (_model?: unknown) =>
       new MockModel(
         JSON.stringify({
           "assertion-a": {

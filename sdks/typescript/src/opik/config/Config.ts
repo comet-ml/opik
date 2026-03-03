@@ -99,7 +99,6 @@ export function loadConfig(
   const envConfig = loadFromEnv();
   const fileConfig = loadFromConfigFile();
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { headers: _, ...explicitConfig } = explicit || {};
 
   return validateConfig({

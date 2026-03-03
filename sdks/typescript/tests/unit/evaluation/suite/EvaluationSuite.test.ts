@@ -174,6 +174,7 @@ describe("EvaluationSuite", () => {
             resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
           },
         ],
+        errors: [],
       });
 
       const mockTask = vi.fn().mockResolvedValue({ output: "hello" });
@@ -216,6 +217,7 @@ describe("EvaluationSuite", () => {
             resolvedExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
           },
         ],
+        errors: [],
       });
 
       const getVersionInfoSpy = vi
@@ -530,9 +532,7 @@ describe("EvaluationSuite", () => {
     });
 
     it("should call validateExecutionPolicy when executionPolicy is provided in addItem", async () => {
-      const insertSpy = vi
-        .spyOn(testDataset, "insert")
-        .mockResolvedValue(undefined);
+      vi.spyOn(testDataset, "insert").mockResolvedValue(undefined);
 
       await suite.addItem(
         { input: "test" },

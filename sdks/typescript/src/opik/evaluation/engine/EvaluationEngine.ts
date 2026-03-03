@@ -4,6 +4,7 @@ import { DatasetVersion } from "../../dataset/DatasetVersion";
 import { Experiment } from "../../experiment/Experiment";
 import { BaseMetric } from "../metrics/BaseMetric";
 import {
+  EvaluationError,
   EvaluationResult,
   EvaluationScoreResult,
   EvaluationTask,
@@ -31,6 +32,8 @@ type DatasetOrVersion<T extends DatasetItemData> =
 interface ProgressTracker {
   update(completedRuns: number, itemIndex: number): void;
   complete(elapsedSeconds: number): void;
+  recordFailure(): void;
+  reportErrors(errors: EvaluationError[]): void;
 }
 
 /**
@@ -113,6 +116,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const startTime = performance.now();
 
     const testResults: EvaluationTestResult[] = [];
+    const errors: EvaluationError[] = [];
     const experimentRefs: ExperimentItemReferences[] = [];
     let completedRuns = 0;
 
@@ -130,10 +134,16 @@ export class EvaluationEngine<T = Record<string, unknown>> {
             experimentRefs
           );
           testResults.push(testResult);
-        } catch {
-          // Error already logged and trace updated in executeItemRun.
-          // Experiment ref already persisted via its finally block.
-          // Continue processing remaining items (matches Python SDK executor pattern).
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          errors.push({
+            datasetItemId: item.id,
+            runIndex,
+            message: errorMessage,
+            ...(error instanceof Error && { error }),
+          });
+          progress.recordFailure();
         }
         completedRuns++;
       }
@@ -146,11 +156,13 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
     const elapsedSeconds = (performance.now() - startTime) / 1000;
     progress.complete(elapsedSeconds);
+    progress.reportErrors(errors);
 
     return EvaluationResultProcessor.processResults(
       testResults,
       this.experiment,
-      elapsedSeconds
+      elapsedSeconds,
+      errors
     );
   }
 
@@ -192,24 +204,43 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const savedLogLevel = logger.settings.minLevel;
     logger.settings.minLevel = 6;
 
+    let failedRuns = 0;
+
     const spinnerLabel = this.suiteMode
       ? `Evaluating dataset (0/${totalRuns} runs across ${totalItems} items)`
       : `Evaluating dataset (0/${totalItems} items)`;
     const spinner = ora({ text: spinnerLabel }).start();
 
+    const failSuffix = () => (failedRuns > 0 ? `, ${failedRuns} failed` : "");
+
     return {
       update: (completedRuns: number, itemIndex: number) => {
         spinner.text = this.suiteMode
-          ? `Evaluating dataset (${completedRuns}/${totalRuns} runs across ${totalItems} items, ${Math.round((completedRuns / totalRuns) * 100)}%)`
-          : `Evaluating dataset (${itemIndex + 1}/${totalItems} items, ${Math.round(((itemIndex + 1) / totalItems) * 100)}%)`;
+          ? `Evaluating dataset (${completedRuns}/${totalRuns} runs across ${totalItems} items, ${Math.round((completedRuns / totalRuns) * 100)}%${failSuffix()})`
+          : `Evaluating dataset (${itemIndex + 1}/${totalItems} items, ${Math.round(((itemIndex + 1) / totalItems) * 100)}%${failSuffix()})`;
       },
       complete: (elapsedSeconds: number) => {
-        spinner.succeed(
-          this.suiteMode
-            ? `Evaluation complete: ${totalRuns} runs across ${totalItems} items processed in ${elapsedSeconds.toFixed(2)}s`
-            : `Evaluation complete: ${totalItems} items processed in ${elapsedSeconds.toFixed(2)}s`
-        );
+        const message = this.suiteMode
+          ? `Evaluation complete: ${totalRuns} runs across ${totalItems} items processed in ${elapsedSeconds.toFixed(2)}s`
+          : `Evaluation complete: ${totalItems} items processed in ${elapsedSeconds.toFixed(2)}s`;
+
+        if (failedRuns > 0) {
+          spinner.warn(`${message} (${failedRuns} failed)`);
+        } else {
+          spinner.succeed(message);
+        }
+
         logger.settings.minLevel = savedLogLevel;
+      },
+      recordFailure: () => {
+        failedRuns++;
+      },
+      reportErrors: (errors: EvaluationError[]) => {
+        for (const err of errors) {
+          logger.error(
+            `Dataset item ${err.datasetItemId} (run ${err.runIndex}): ${err.message}`
+          );
+        }
       },
     };
   }
@@ -246,12 +277,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
 
       return testResult;
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      logger.error(
-        `Error processing dataset item: ${datasetItem.id} (run ${runIndex}) - ${errorMessage}`
-      );
-
       if (error instanceof Error) {
         trace.update({
           errorInfo: {

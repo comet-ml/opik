@@ -49,6 +49,7 @@ function makeEvalResult(
   return {
     experimentId,
     testResults,
+    errors: [],
   };
 }
 

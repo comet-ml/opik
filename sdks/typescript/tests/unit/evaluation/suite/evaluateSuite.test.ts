@@ -42,15 +42,11 @@ describe("evaluateSuite", () => {
   let opikClient: OpikClient;
   let testDataset: Dataset;
   let createTracesSpy: MockInstance<typeof opikClient.api.traces.createTraces>;
-  let createSpansSpy: MockInstance<typeof opikClient.api.spans.createSpans>;
   let createExperimentSpy: MockInstance<
     typeof opikClient.api.experiments.createExperiment
   >;
   let streamDatasetItemsSpy: MockInstance<
     typeof opikClient.api.datasets.streamDatasetItems
-  >;
-  let scoreBatchOfTracesSpy: MockInstance<
-    typeof opikClient.api.traces.scoreBatchOfTraces
   >;
   let listDatasetVersionsSpy: MockInstance<
     typeof opikClient.api.datasets.listDatasetVersions
@@ -91,13 +87,13 @@ describe("evaluateSuite", () => {
       .spyOn(opikClient.api.traces, "createTraces")
       .mockImplementation(mockAPIFunction);
 
-    createSpansSpy = vi
-      .spyOn(opikClient.api.spans, "createSpans")
-      .mockImplementation(mockAPIFunction);
+    vi.spyOn(opikClient.api.spans, "createSpans").mockImplementation(
+      mockAPIFunction
+    );
 
-    scoreBatchOfTracesSpy = vi
-      .spyOn(opikClient.api.traces, "scoreBatchOfTraces")
-      .mockImplementation(mockAPIFunction);
+    vi.spyOn(opikClient.api.traces, "scoreBatchOfTraces").mockImplementation(
+      mockAPIFunction
+    );
 
     vi.spyOn(opikClient.api.datasets, "getDatasetByIdentifier").mockImplementation(
       () =>
@@ -441,6 +437,7 @@ describe("evaluateSuite", () => {
           trialId: 1,
         }),
       ],
+      errors: [],
     });
   });
 
@@ -647,6 +644,61 @@ describe("evaluateSuite", () => {
     expect(LLMJudge.fromConfig).toHaveBeenCalledTimes(1);
     expect(result.testResults).toHaveLength(1);
     expect(result.testResults[0].scoreResults).toHaveLength(1);
+  });
+
+  test("collects errors when task throws for some items, remaining items still execute", async () => {
+    // Stream 2 dataset items
+    streamDatasetItemsSpy.mockImplementation(() =>
+      mockAPIFunctionWithStream(
+        JSON.stringify({
+          id: "item-1",
+          data: { input: "test input 1", expected: "test output 1" },
+          source: "sdk",
+        }) +
+          "\n" +
+          JSON.stringify({
+            id: "item-2",
+            data: { input: "test input 2", expected: "test output 2" },
+            source: "sdk",
+          }) +
+          "\n"
+      )
+    );
+
+    // Task that throws for item-1 but succeeds for item-2
+    let callCount = 0;
+    const failingTask: EvaluationTask = async (item: Record<string, unknown>) => {
+      callCount++;
+      if ((item as { id?: string }).id === "item-1") {
+        throw new Error("API connection failed");
+      }
+      return { output: "generated output" };
+    };
+
+    const result = await evaluateSuite({
+      dataset: testDataset,
+      task: failingTask,
+      experimentName: "suite-experiment",
+      client: opikClient,
+    });
+
+    // item-1 failed, item-2 succeeded
+    expect(result.testResults).toHaveLength(1);
+    expect(result.testResults[0].testCase.datasetItemId).toBe("item-2");
+
+    // Error collected for item-1
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toEqual(
+      expect.objectContaining({
+        datasetItemId: "item-1",
+        runIndex: 0,
+        message: "API connection failed",
+      })
+    );
+    expect(result.errors[0].error).toBeInstanceOf(Error);
+
+    // Both items were attempted
+    expect(callCount).toBe(2);
   });
 
   test("per-item executionPolicy — different runsPerItem per item", async () => {

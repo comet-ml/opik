@@ -26,6 +26,26 @@ export type EvaluationResult = {
 
   /** Optional URL to view detailed results in the Opik platform */
   resultUrl?: string;
+
+  /** Errors encountered during evaluation (task failures, API errors, etc.) */
+  errors: EvaluationError[];
+};
+
+/**
+ * Represents an error that occurred during evaluation of a single dataset item run.
+ */
+export type EvaluationError = {
+  /** ID of the dataset item that failed */
+  datasetItemId: string;
+
+  /** Run index (0-based) within the item's execution */
+  runIndex: number;
+
+  /** Human-readable error message */
+  message: string;
+
+  /** Original error object, if available */
+  error?: Error;
 };
 
 /**

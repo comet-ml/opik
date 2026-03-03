@@ -8,7 +8,6 @@ import { OpikApiError } from "@/rest_api";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
-  mockAPIFunctionWithStream,
 } from "../../mockUtils";
 
 vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
