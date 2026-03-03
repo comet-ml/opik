@@ -6,10 +6,11 @@ import datetime
 import json
 import pathlib
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import pytest
 
+from . import episode_aggregation
 from opik.simulation.episode import EpisodeResult
 
 
@@ -17,35 +18,17 @@ def build_episode_artifact(
     reports_by_nodeid: Dict[str, pytest.TestReport],
     episodes_by_nodeid: Dict[str, EpisodeResult],
 ) -> Dict[str, Any]:
-    records: List[Dict[str, Any]] = []
-    episode_passed = 0
-    episode_total = 0
-
-    for nodeid, episode in episodes_by_nodeid.items():
-        report = reports_by_nodeid.get(nodeid)
-        if report is None:
-            continue
-        episode_total += 1
-        report_passed = bool(report.passed)
-        episode_is_passing = episode.is_passing() and report_passed
-        if episode_is_passing:
-            episode_passed += 1
-
-        records.append(
-            {
-                "nodeid": nodeid,
-                "pytest_passed": report_passed,
-                "episode_passed": episode_is_passing,
-                "episode": episode.model_dump(),
-            }
-        )
+    aggregation = episode_aggregation.aggregate_episode_results(
+        reports_by_nodeid=reports_by_nodeid,
+        episodes_by_nodeid=episodes_by_nodeid,
+    )
 
     return {
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "episodes_total": episode_total,
-        "episodes_passed": episode_passed,
-        "episodes_failed": episode_total - episode_passed,
-        "results": records,
+        "episodes_total": aggregation.total,
+        "episodes_passed": aggregation.passed,
+        "episodes_failed": aggregation.failed,
+        "results": aggregation.records,
     }
 
 
