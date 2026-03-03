@@ -2146,7 +2146,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         log.info("Getting dataset items with experiment items from aggregates for dataset: '{}'",
                 criteria.datasetId());
 
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+        var countMono = countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId);
+
+        var itemsMono = asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(
                     SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS,
                     "get_dataset_items_from_aggregates",
@@ -2155,39 +2157,31 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             applyDatasetItemFiltersToTemplate(template, criteria);
 
-            // Add truncate flag and pagination
             template.add("truncate", criteria.truncate());
             template.add("limit", true);
             template.add("offset", true);
 
-            String renderedQuery = template.render();
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("dataset_id", criteria.datasetId().toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("limit", size)
+                    .bind("offset", (page - 1) * size);
 
-            // First get the count
-            return countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId)
-                    .flatMap(total -> {
-                        // Then get the actual items - create statement here to ensure proper connection context
-                        var statement = connection.createStatement(renderedQuery)
-                                .bind("workspace_id", workspaceId)
-                                .bind("dataset_id", criteria.datasetId().toString())
-                                .bind("version_id", versionId.toString())
-                                .bind("limit", size)
-                                .bind("offset", (page - 1) * size);
+            bindDatasetItemSearchParams(statement, criteria);
 
-                        bindDatasetItemSearchParams(statement, criteria);
-
-                        return Flux.from(statement.execute())
-                                .flatMap(DatasetItemResultMapper::mapItem)
-                                .collectList()
-                                .map(items -> new DatasetItemPage(
-                                        items,
-                                        page,
-                                        items.size(),
-                                        total,
-                                        Set.of(), // columns - will be populated later if needed
-                                        List.of() // sortableBy - will be populated later if needed
-                        ));
-                    });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result
+                            .map((row, rowMeta) -> DatasetItemResultMapper.buildItemFromRow(row, rowMeta)))
+                    .collectList();
         }));
+
+        return countMono.flatMap(total -> {
+            if (total == 0) {
+                return Mono.just(DatasetItemPage.empty(page, List.of()));
+            }
+            return itemsMono.map(items -> new DatasetItemPage(items, page, items.size(), total, Set.of(), List.of()));
+        });
     }
 
     private void applyDatasetItemFiltersToTemplate(ST template, DatasetItemSearchCriteria criteria) {

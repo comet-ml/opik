@@ -5,8 +5,12 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationsResponse;
+import com.comet.opik.api.ExperimentGroupCriteria;
+import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentSearchCriteria;
+import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
@@ -600,6 +604,134 @@ class ExperimentAggregatesIntegrationTest {
                 .isEqualTo(aggregationsFromRaw);
     }
 
+    @ParameterizedTest(name = "Criteria filter: {0}")
+    @MethodSource("groupingCriteriaFilterTestCases")
+    @DisplayName("ExperimentAggregatesService.findGroups: aggregate result matches raw when criteria filters are applied")
+    void testFindGroupsWithCriteriaFilters(
+            String testName,
+            Function<GroupCriteriaTestData, ExperimentGroupCriteria> criteriaBuilder) {
+
+        // Given: Isolated workspace with experiments that have known names, types, and project associations
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var namePrefix = "criteria-filter-test-" + UUID.randomUUID() + "-";
+        var project1 = createProject(apiKey, workspaceName);
+        var project2 = createProject(apiKey, workspaceName);
+        var dataset1 = createDataset(apiKey, workspaceName);
+        var dataset2 = createDataset(apiKey, workspaceName);
+
+        // Two REGULAR experiments linked to project1 via dataset1
+        var exp1 = createNamedExperiment(dataset1, namePrefix + "alpha", ExperimentType.REGULAR, apiKey, workspaceName);
+        var exp2 = createNamedExperiment(dataset1, namePrefix + "beta", ExperimentType.REGULAR, apiKey, workspaceName);
+        // One TRIAL experiment linked to project2 via dataset2
+        var exp3 = createNamedExperiment(dataset2, namePrefix + "gamma", ExperimentType.TRIAL, apiKey, workspaceName);
+
+        var feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(exp1.id(), dataset1.id(), project1.name(), feedbackScores, apiKey, workspaceName);
+        createExperimentItemWithData(exp2.id(), dataset1.id(), project1.name(), feedbackScores, apiKey, workspaceName);
+        createExperimentItemWithData(exp3.id(), dataset2.id(), project2.name(), feedbackScores, apiKey, workspaceName);
+
+        List.of(exp1, exp2, exp3)
+                .forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // When: Build criteria and query both raw and aggregate paths
+        var testData = new GroupCriteriaTestData(
+                project1.id(),
+                namePrefix,
+                List.of(
+                        GroupBy.builder().field(GroupingFactory.DATASET_ID).type(FieldType.STRING).build(),
+                        GroupBy.builder().field(GroupingFactory.PROJECT_ID).type(FieldType.STRING).build()));
+
+        var criteria = criteriaBuilder.apply(testData);
+
+        var groupsFromRaw = experimentService.findGroups(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var groupsFromAggregates = experimentAggregatesService.findGroups(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Both paths must return identical results
+        assertGroupsMatch(groupsFromRaw, groupsFromAggregates, testName);
+    }
+
+    @ParameterizedTest(name = "Criteria filter: {0}")
+    @MethodSource("groupingCriteriaFilterTestCases")
+    @DisplayName("ExperimentAggregatesService.findGroupsAggregations: aggregate result matches raw when criteria filters are applied")
+    void testFindGroupsAggregationsWithCriteriaFilters(
+            String testName,
+            Function<GroupCriteriaTestData, ExperimentGroupCriteria> criteriaBuilder) {
+
+        // Given: Isolated workspace with experiments that have known names, types, and project associations
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var namePrefix = "criteria-filter-test-" + UUID.randomUUID() + "-";
+        var project1 = createProject(apiKey, workspaceName);
+        var project2 = createProject(apiKey, workspaceName);
+        var dataset1 = createDataset(apiKey, workspaceName);
+        var dataset2 = createDataset(apiKey, workspaceName);
+
+        // Two REGULAR experiments linked to project1 via dataset1
+        var exp1 = createNamedExperiment(dataset1, namePrefix + "alpha", ExperimentType.REGULAR, apiKey, workspaceName);
+        var exp2 = createNamedExperiment(dataset1, namePrefix + "beta", ExperimentType.REGULAR, apiKey, workspaceName);
+        // One TRIAL experiment linked to project2 via dataset2
+        var exp3 = createNamedExperiment(dataset2, namePrefix + "gamma", ExperimentType.TRIAL, apiKey, workspaceName);
+
+        var feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(exp1.id(), dataset1.id(), project1.name(), feedbackScores, apiKey, workspaceName);
+        createExperimentItemWithData(exp2.id(), dataset1.id(), project1.name(), feedbackScores, apiKey, workspaceName);
+        createExperimentItemWithData(exp3.id(), dataset2.id(), project2.name(), feedbackScores, apiKey, workspaceName);
+
+        List.of(exp1, exp2, exp3)
+                .forEach(experiment -> experimentAggregatesService.populateAggregations(experiment.id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        // When: Build criteria and query both raw and aggregate paths
+        var testData = new GroupCriteriaTestData(
+                project1.id(),
+                namePrefix,
+                List.of(
+                        GroupBy.builder().field(GroupingFactory.DATASET_ID).type(FieldType.STRING).build(),
+                        GroupBy.builder().field(GroupingFactory.PROJECT_ID).type(FieldType.STRING).build()));
+
+        var criteria = criteriaBuilder.apply(testData);
+
+        var aggregationsFromRaw = experimentService.findGroupsAggregations(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var aggregationsFromAggregates = experimentAggregatesService.findGroupsAggregations(criteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Then: Both paths must return identical results
+        assertGroupsAggregationsMatch(aggregationsFromRaw, aggregationsFromAggregates, testName);
+    }
+
     static Stream<Arguments> groupingTestCases() {
         return Stream.of(
                 Arguments.of("dataset_id", List.of(
@@ -623,6 +755,74 @@ class ExperimentAggregatesIntegrationTest {
                                 .build())));
     }
 
+    private record GroupCriteriaTestData(UUID projectId, String namePrefix, List<GroupBy> groups) {
+    }
+
+    static Stream<Arguments> groupingCriteriaFilterTestCases() {
+        return Stream.of(
+                Arguments.of("Filter by name prefix (partial match)",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .name(data.namePrefix())
+                                .build()),
+                Arguments.of("Filter by type REGULAR",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .types(Set.of(ExperimentType.REGULAR))
+                                .build()),
+                Arguments.of("Filter by type TRIAL",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .types(Set.of(ExperimentType.TRIAL))
+                                .build()),
+                Arguments.of("Filter by projectId",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .projectId(data.projectId())
+                                .build()),
+                Arguments.of("Filter by name prefix AND type REGULAR",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .name(data.namePrefix())
+                                .types(Set.of(ExperimentType.REGULAR))
+                                .build()),
+                Arguments.of("Filter by name with no matches (empty result)",
+                        (Function<GroupCriteriaTestData, ExperimentGroupCriteria>) data -> ExperimentGroupCriteria
+                                .builder()
+                                .groups(data.groups())
+                                .name("nonexistent-experiment-name-" + UUID.randomUUID())
+                                .build()));
+    }
+
+    private void assertGroupsMatch(ExperimentGroupResponse fromRaw, ExperimentGroupResponse fromAggregates,
+            String testName) {
+        assertThat(fromRaw).as("Groups from raw should not be null for: %s", testName).isNotNull();
+        assertThat(fromAggregates).as("Groups from aggregates should not be null for: %s", testName).isNotNull();
+        assertThat(fromAggregates)
+                .as("Groups from aggregates should match raw for: %s", testName)
+                .usingRecursiveComparison()
+                .isEqualTo(fromRaw);
+    }
+
+    private void assertGroupsAggregationsMatch(ExperimentGroupAggregationsResponse fromRaw,
+            ExperimentGroupAggregationsResponse fromAggregates, String testName) {
+        assertThat(fromRaw).as("Aggregations from raw should not be null for: %s", testName).isNotNull();
+        assertThat(fromAggregates).as("Aggregations from aggregates should not be null for: %s", testName)
+                .isNotNull();
+        assertThat(fromAggregates)
+                .as("Group aggregations from aggregates should match raw for: %s", testName)
+                .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
+                        .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                        .build())
+                .ignoringCollectionOrderInFields("feedbackScores", "experimentScores")
+                .isEqualTo(fromRaw);
+    }
+
     // Helper methods
 
     private Project createProject(String apiKey, String workspaceName) {
@@ -641,6 +841,18 @@ class ExperimentAggregatesIntegrationTest {
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name()) // Use the actual dataset's name
+                .build();
+        experimentResourceClient.create(experiment, apiKey, workspaceName);
+        return experiment;
+    }
+
+    private Experiment createNamedExperiment(Dataset dataset, String name, ExperimentType type,
+            String apiKey, String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .name(name)
+                .type(type)
                 .build();
         experimentResourceClient.create(experiment, apiKey, workspaceName);
         return experiment;
