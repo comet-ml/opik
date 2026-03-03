@@ -10,6 +10,7 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
 import org.apache.commons.collections4.CollectionUtils;
+import org.stringtemplate.v4.ST;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,6 +30,33 @@ import static com.comet.opik.utils.ValidationUtils.SCALE;
 public final class ExperimentGroupMappers {
 
     private ExperimentGroupMappers() {
+    }
+
+    /**
+     * Applies {@link ExperimentGroupCriteria} fields (name, types, filters, projectId, projectDeleted)
+     * to a StringTemplate.
+     * Shared by {@link ExperimentDAO} and
+     * {@link com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO} to keep
+     * group-query template wiring in one place.
+     *
+     * @param template           the ST template to populate
+     * @param criteria           the group criteria
+     * @param filterQueryBuilder the filter query builder for translating filter objects to SQL fragments
+     */
+    public static void applyGroupCriteriaToTemplate(ST template, ExperimentGroupCriteria criteria,
+            FilterQueryBuilder filterQueryBuilder) {
+        Optional.ofNullable(criteria.name())
+                .ifPresent(name -> template.add("name", name));
+        Optional.ofNullable(criteria.types())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
+                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+        Optional.ofNullable(criteria.projectDeleted())
+                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
     }
 
     public static void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria,

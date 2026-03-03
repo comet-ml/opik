@@ -30,7 +30,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -1927,10 +1926,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        FilterQueryBuilder.applyFiltersToTemplate(template, criteria.filters(), FILTER_STRATEGY_PARAMS);
-        if (StringUtils.isNotBlank(criteria.search())) {
-            template.add("search", true);
-        }
+        DatasetItemSearchCriteriaMapper.applyToTemplate(template, criteria, FILTER_STRATEGY_PARAMS);
     }
 
     /**
@@ -1968,10 +1964,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @return The statement with all parameters bound
      */
     private Statement bindSearchAndFilters(@NonNull Statement statement, @NonNull DatasetItemSearchCriteria criteria) {
-        if (StringUtils.isNotBlank(criteria.search())) {
-            statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-        }
-        return FilterQueryBuilder.bindFilters(statement, criteria.filters(), BIND_STRATEGIES);
+        return DatasetItemSearchCriteriaMapper.bindSearchCriteria(statement, criteria, BIND_STRATEGIES,
+                filterQueryBuilder);
     }
 
     @Override

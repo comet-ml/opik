@@ -1810,19 +1810,7 @@ class ExperimentDAO {
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "");
 
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> template.add("types", types));
-        Optional.ofNullable(criteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
-                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
-        Optional.ofNullable(criteria.projectDeleted())
-                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
-
+        ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
 
         return template;

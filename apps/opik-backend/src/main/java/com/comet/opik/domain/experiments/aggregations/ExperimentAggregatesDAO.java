@@ -18,6 +18,7 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.domain.DatasetItemResultMapper;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.DatasetItemSearchCriteriaMapper;
 import com.comet.opik.domain.ExperimentGroupMappers;
 import com.comet.opik.domain.ExperimentSearchCriteriaBinder;
 import com.comet.opik.domain.FeedbackScoreMapper;
@@ -2219,11 +2220,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             template.add("experiment_ids", true);
         }
 
-        FilterQueryBuilder.applyFiltersToTemplate(template, criteria.filters(), DATASET_ITEM_FILTER_STRATEGY_PARAMS);
-
-        if (StringUtils.isNotBlank(criteria.search())) {
-            template.add("search", true);
-        }
+        DatasetItemSearchCriteriaMapper.applyToTemplate(template, criteria, DATASET_ITEM_FILTER_STRATEGY_PARAMS);
     }
 
     private void bindDatasetItemSearchParams(Statement statement, DatasetItemSearchCriteria criteria) {
@@ -2231,34 +2228,14 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
         }
 
-        FilterQueryBuilder.bindFilters(statement, criteria.filters(), DATASET_ITEM_BIND_STRATEGIES);
-
-        if (StringUtils.isNotBlank(criteria.search())) {
-            filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-        }
+        DatasetItemSearchCriteriaMapper.bindSearchCriteria(statement, criteria, DATASET_ITEM_BIND_STRATEGIES,
+                filterQueryBuilder);
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String workspaceId) {
-
         var template = getSTWithLogComment(query, "find_groups_from_aggregates", workspaceId, "");
-
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> template.add("types", types));
-        Optional.ofNullable(criteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
-                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
-        Optional.ofNullable(criteria.projectDeleted())
-                .filter(Boolean.TRUE::equals)
-                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
-
-        // Add grouping template params - this will add groupSelects and groupBy
+        ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
-
         return template;
     }
 
