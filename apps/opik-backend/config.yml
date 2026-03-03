@@ -690,19 +690,18 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not Local Runner feature is enabled
-  runnersEnabled: ${TOGGLE_RUNNERS_ENABLED:-"false"}
 
 # Local Runner configuration
 runner:
   enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
-  jobTimeoutSeconds: ${OPIK_RUNNER_JOB_TIMEOUT:-1800}
+  jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
   maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}
-  heartbeatTtlSeconds: ${OPIK_RUNNER_HEARTBEAT_TTL:-15}
-  nextJobPollTimeoutSeconds: ${OPIK_RUNNER_NEXT_JOB_POLL_TIMEOUT:-10}
-  deadRunnerPurgeHours: ${OPIK_RUNNER_DEAD_PURGE_HOURS:-24}
-  completedJobTtlDays: ${OPIK_RUNNER_COMPLETED_JOB_TTL_DAYS:-7}
+  heartbeatTtl: ${OPIK_RUNNER_HEARTBEAT_TTL:-15s}
+  nextJobPollTimeout: ${OPIK_RUNNER_NEXT_JOB_POLL_TIMEOUT:-10s}
+  deadRunnerPurgeTime: ${OPIK_RUNNER_DEAD_PURGE_HOURS:-24h}
+  completedJobTtl: ${OPIK_RUNNER_COMPLETED_JOB_TTL:-7d}
+  reaperLockDuration: ${OPIK_RUNNER_REAPER_LOCK_DURATION:-55s}
+  reaperLockWait: ${OPIK_RUNNER_REAPER_LOCK_WAIT:-5s}
 
 # Trace Thread configuration
 traceThreadConfig:

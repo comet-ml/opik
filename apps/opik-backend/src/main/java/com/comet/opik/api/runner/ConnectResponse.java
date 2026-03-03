@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
+import java.util.UUID;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ConnectResponse(
-        String runnerId,
-        String workspaceId) {
+        UUID runnerId,
+        UUID workspaceId) {
 }

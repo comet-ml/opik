@@ -9,21 +9,22 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LocalRunnerJob(
-        String id,
-        String runnerId,
+        UUID id,
+        UUID runnerId,
         String agentName,
-        String status,
+        JobStatus status,
         JsonNode inputs,
         JsonNode result,
         String error,
         String project,
-        String traceId,
-        Integer timeout,
+        UUID traceId,
+        int timeout,
         Instant createdAt,
         Instant startedAt,
         Instant completedAt) {

@@ -6,10 +6,11 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record HeartbeatResponse(
-        List<String> cancelledJobIds) {
+        List<UUID> cancelledJobIds) {
 }

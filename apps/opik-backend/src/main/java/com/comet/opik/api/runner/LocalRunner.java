@@ -1,5 +1,6 @@
 package com.comet.opik.api.runner;
 
+import com.comet.opik.api.Page;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -7,14 +8,15 @@ import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LocalRunner(
-        String id,
+        UUID id,
         String name,
-        String status,
+        RunnerStatus status,
         Instant connectedAt,
         List<Agent> agents) {
 
@@ -29,7 +31,7 @@ public record LocalRunner(
             String executable,
             String sourceFile,
             List<Param> params,
-            Integer timeout) {
+            int timeout) {
 
         @Builder(toBuilder = true)
         @JsonIgnoreProperties(ignoreUnknown = true)
@@ -38,5 +40,15 @@ public record LocalRunner(
                 String name,
                 String type) {
         }
+    }
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record LocalRunnerPage(
+            int page,
+            int size,
+            long total,
+            List<LocalRunner> content) implements Page<LocalRunner> {
     }
 }

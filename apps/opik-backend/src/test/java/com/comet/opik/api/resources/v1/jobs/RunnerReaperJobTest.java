@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.jobs;
 import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.RunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
+import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,8 +11,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
-
-import java.time.Duration;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,8 +38,8 @@ class RunnerReaperJobTest {
     void setUp() {
         reaperJob = new RunnerReaperJob(runnerService, lockService, runnerConfig);
 
-        lenient().when(runnerConfig.getReaperLockDurationSeconds()).thenReturn(55);
-        lenient().when(runnerConfig.getReaperLockWaitSeconds()).thenReturn(5);
+        lenient().when(runnerConfig.getReaperLockDuration()).thenReturn(Duration.seconds(55));
+        lenient().when(runnerConfig.getReaperLockWait()).thenReturn(Duration.seconds(5));
 
         lenient().when(lockService.bestEffortLock(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
@@ -62,26 +61,35 @@ class RunnerReaperJobTest {
 
         reaperJob.doJob(null);
 
-        verify(lockService).bestEffortLock(any(Lock.class), any(Mono.class), any(Mono.class), any(Duration.class),
-                any(Duration.class));
+        verify(lockService).bestEffortLock(any(Lock.class), any(Mono.class), any(Mono.class),
+                any(java.time.Duration.class), any(java.time.Duration.class));
         verify(runnerService).reapDeadRunners();
     }
 
     @Test
     void usesConfigForLockDurations() {
         when(runnerConfig.isEnabled()).thenReturn(true);
-        when(runnerConfig.getReaperLockDurationSeconds()).thenReturn(120);
-        when(runnerConfig.getReaperLockWaitSeconds()).thenReturn(10);
+        when(runnerConfig.getReaperLockDuration()).thenReturn(Duration.seconds(120));
+        when(runnerConfig.getReaperLockWait()).thenReturn(Duration.seconds(10));
 
         reaperJob.doJob(null);
 
-        ArgumentCaptor<Duration> durationCaptor = ArgumentCaptor.forClass(Duration.class);
-        ArgumentCaptor<Duration> waitCaptor = ArgumentCaptor.forClass(Duration.class);
+        ArgumentCaptor<java.time.Duration> durationCaptor = ArgumentCaptor.forClass(java.time.Duration.class);
+        ArgumentCaptor<java.time.Duration> waitCaptor = ArgumentCaptor.forClass(java.time.Duration.class);
 
         verify(lockService).bestEffortLock(any(Lock.class), any(Mono.class), any(Mono.class),
                 durationCaptor.capture(), waitCaptor.capture());
 
-        assertThat(durationCaptor.getValue()).isEqualTo(Duration.ofSeconds(120));
-        assertThat(waitCaptor.getValue()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(durationCaptor.getValue()).isEqualTo(java.time.Duration.ofSeconds(120));
+        assertThat(waitCaptor.getValue()).isEqualTo(java.time.Duration.ofSeconds(10));
+    }
+
+    @Test
+    void skipsWhenInterrupted() {
+        reaperJob.interrupt();
+        reaperJob.doJob(null);
+
+        verify(runnerService, never()).reapDeadRunners();
+        verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
     }
 }

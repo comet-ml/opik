@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
+import java.util.UUID;
+
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -14,5 +16,5 @@ public record CreateJobRequest(
         @NotBlank String agentName,
         JsonNode inputs,
         String project,
-        String runnerId) {
+        UUID runnerId) {
 }

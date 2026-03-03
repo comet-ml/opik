@@ -8,13 +8,13 @@ import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
+import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
 
@@ -22,17 +22,32 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Singleton
 @DisallowConcurrentExecution
 @Every("60s")
-@RequiredArgsConstructor(onConstructor_ = @Inject)
-public class RunnerReaperJob extends Job {
+public class RunnerReaperJob extends Job implements InterruptableJob {
 
-    private static final Lock REAPER_LOCK = new Lock("runner-reaper");
+    private static final Lock REAPER_LOCK = new Lock("runner_reaper", RunnerReaperJob.class.getSimpleName());
 
-    private final @NonNull RunnerService runnerService;
-    private final @NonNull LockService lockService;
-    private final @NonNull RunnerConfig runnerConfig;
+    private final RunnerService runnerService;
+    private final LockService lockService;
+    private final RunnerConfig runnerConfig;
+
+    private final AtomicBoolean interrupted = new AtomicBoolean(false);
+
+    @Inject
+    public RunnerReaperJob(@NonNull RunnerService runnerService,
+            @NonNull LockService lockService,
+            @NonNull RunnerConfig runnerConfig) {
+        this.runnerService = runnerService;
+        this.lockService = lockService;
+        this.runnerConfig = runnerConfig;
+    }
 
     @Override
     public void doJob(JobExecutionContext context) {
+        if (interrupted.get()) {
+            log.info("Runner reaper job interrupted before execution, skipping");
+            return;
+        }
+
         if (!runnerConfig.isEnabled()) {
             return;
         }
@@ -41,10 +56,16 @@ public class RunnerReaperJob extends Job {
                 REAPER_LOCK,
                 Mono.fromRunnable(() -> runnerService.reapDeadRunners()),
                 Mono.fromRunnable(() -> log.info("Could not acquire reaper lock, skipping")),
-                Duration.ofSeconds(runnerConfig.getReaperLockDurationSeconds()),
-                Duration.ofSeconds(runnerConfig.getReaperLockWaitSeconds()))
+                runnerConfig.getReaperLockDuration().toJavaDuration(),
+                runnerConfig.getReaperLockWait().toJavaDuration())
                 .subscribe(
                         __ -> log.info("Runner reaper completed"),
                         error -> log.error("Runner reaper failed", error));
+    }
+
+    @Override
+    public void interrupt() {
+        interrupted.set(true);
+        log.info("Runner reaper job interrupted");
     }
 }

@@ -11,7 +11,6 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.RunnersResourceClient;
 import com.comet.opik.api.runner.ConnectRequest;
-import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
 import com.comet.opik.api.runner.HeartbeatResponse;
 import com.comet.opik.api.runner.JobResultRequest;
@@ -39,6 +38,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static java.util.UUID.randomUUID;
@@ -106,7 +106,7 @@ class RunnersResourceTest {
         // 1. Generate pairing code
         PairResponse pairResponse = runnersClient.generatePairingCode(API_KEY, TEST_WORKSPACE);
         assertThat(pairResponse.pairingCode()).isNotBlank();
-        assertThat(pairResponse.runnerId()).isNotBlank();
+        assertThat(pairResponse.runnerId()).isNotNull();
         assertThat(pairResponse.expiresInSeconds()).isPositive();
 
         // 2. Connect runner using pairing code
@@ -114,23 +114,22 @@ class RunnersResourceTest {
                 .pairingCode(pairResponse.pairingCode())
                 .runnerName("test-runner")
                 .build();
-        ConnectResponse connectResponse = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
-        String runnerId = connectResponse.runnerId();
+        UUID runnerId = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
         assertThat(runnerId).isEqualTo(pairResponse.runnerId());
-        assertThat(connectResponse.workspaceId()).isNotBlank();
 
         // 3. List runners — should contain the connected runner
-        List<LocalRunner> runners = runnersClient.listRunners(API_KEY, TEST_WORKSPACE);
-        assertThat(runners).extracting(LocalRunner::id).contains(runnerId);
-        LocalRunner listedRunner = runners.stream().filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
+        LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(API_KEY, TEST_WORKSPACE);
+        assertThat(runnerPage.content()).extracting(LocalRunner::id).contains(runnerId);
+        LocalRunner listedRunner = runnerPage.content().stream()
+                .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
         assertThat(listedRunner.name()).isEqualTo("test-runner");
-        assertThat(listedRunner.status()).isEqualTo("connected");
+        assertThat(listedRunner.status().getValue()).isEqualTo("connected");
 
         // 4. Get single runner
         LocalRunner runner = runnersClient.getRunner(runnerId, API_KEY, TEST_WORKSPACE);
         assertThat(runner.id()).isEqualTo(runnerId);
         assertThat(runner.name()).isEqualTo("test-runner");
-        assertThat(runner.status()).isEqualTo("connected");
+        assertThat(runner.status().getValue()).isEqualTo("connected");
 
         // 5. Register agents
         LocalRunner.Agent agent = LocalRunner.Agent.builder()
@@ -157,9 +156,12 @@ class RunnersResourceTest {
                 .project("default")
                 .inputs(new ObjectMapper().createObjectNode().put("prompt", "hello"))
                 .build();
-        LocalRunnerJob createdJob = runnersClient.createJob(createJobRequest, API_KEY, TEST_WORKSPACE);
-        assertThat(createdJob.id()).isNotBlank();
-        assertThat(createdJob.status()).isEqualTo("pending");
+        UUID jobId = runnersClient.createJob(createJobRequest, API_KEY, TEST_WORKSPACE);
+        assertThat(jobId).isNotNull();
+
+        // Verify job was created
+        LocalRunnerJob createdJob = runnersClient.getJob(jobId, API_KEY, TEST_WORKSPACE);
+        assertThat(createdJob.status().getValue()).isEqualTo("pending");
         assertThat(createdJob.agentName()).isEqualTo("my-agent");
         assertThat(createdJob.runnerId()).isEqualTo(runnerId);
 
@@ -167,13 +169,13 @@ class RunnersResourceTest {
         try (var response = runnersClient.callNextJob(runnerId, API_KEY, TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(200);
             LocalRunnerJob nextJob = response.readEntity(LocalRunnerJob.class);
-            assertThat(nextJob.id()).isEqualTo(createdJob.id());
-            assertThat(nextJob.status()).isEqualTo("running");
+            assertThat(nextJob.id()).isEqualTo(jobId);
+            assertThat(nextJob.status().getValue()).isEqualTo("running");
         }
 
         // 9. Get job — should now be running
-        LocalRunnerJob runningJob = runnersClient.getJob(createdJob.id(), API_KEY, TEST_WORKSPACE);
-        assertThat(runningJob.status()).isEqualTo("running");
+        LocalRunnerJob runningJob = runnersClient.getJob(jobId, API_KEY, TEST_WORKSPACE);
+        assertThat(runningJob.status().getValue()).isEqualTo("running");
         assertThat(runningJob.startedAt()).isNotNull();
 
         // 10. List jobs
@@ -181,16 +183,16 @@ class RunnersResourceTest {
                 API_KEY, TEST_WORKSPACE);
         assertThat(jobPage.total()).isEqualTo(1);
         assertThat(jobPage.content()).hasSize(1);
-        assertThat(jobPage.content().getFirst().id()).isEqualTo(createdJob.id());
+        assertThat(jobPage.content().getFirst().id()).isEqualTo(jobId);
 
         // 11. Append logs
         List<LogEntry> logEntries = List.of(
                 LogEntry.builder().stream("stdout").text("Starting agent...").build(),
                 LogEntry.builder().stream("stdout").text("Processing complete.").build());
-        runnersClient.appendLogs(createdJob.id(), logEntries, API_KEY, TEST_WORKSPACE);
+        runnersClient.appendLogs(jobId, logEntries, API_KEY, TEST_WORKSPACE);
 
         // 12. Get logs
-        List<LogEntry> logs = runnersClient.getJobLogs(createdJob.id(), 0, API_KEY, TEST_WORKSPACE);
+        List<LogEntry> logs = runnersClient.getJobLogs(jobId, 0, API_KEY, TEST_WORKSPACE);
         assertThat(logs).hasSize(2);
         assertThat(logs.get(0).text()).isEqualTo("Starting agent...");
         assertThat(logs.get(1).text()).isEqualTo("Processing complete.");
@@ -200,13 +202,13 @@ class RunnersResourceTest {
         JobResultRequest resultRequest = JobResultRequest.builder()
                 .status("completed")
                 .result(resultPayload)
-                .traceId(randomUUID().toString())
+                .traceId(randomUUID())
                 .build();
-        runnersClient.reportResult(createdJob.id(), resultRequest, API_KEY, TEST_WORKSPACE);
+        runnersClient.reportResult(jobId, resultRequest, API_KEY, TEST_WORKSPACE);
 
         // 14. Get final job state
-        LocalRunnerJob completedJob = runnersClient.getJob(createdJob.id(), API_KEY, TEST_WORKSPACE);
-        assertThat(completedJob.status()).isEqualTo("completed");
+        LocalRunnerJob completedJob = runnersClient.getJob(jobId, API_KEY, TEST_WORKSPACE);
+        assertThat(completedJob.status().getValue()).isEqualTo("completed");
         assertThat(completedJob.completedAt()).isNotNull();
         assertThat(completedJob.result().get("answer").asText()).isEqualTo("world");
         assertThat(completedJob.traceId()).isEqualTo(resultRequest.traceId());
@@ -219,9 +221,8 @@ class RunnersResourceTest {
         ConnectRequest connectRequest = ConnectRequest.builder()
                 .runnerName("direct-runner")
                 .build();
-        ConnectResponse connectResponse = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
-        String runnerId = connectResponse.runnerId();
-        assertThat(runnerId).isNotBlank();
+        UUID runnerId = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
+        assertThat(runnerId).isNotNull();
 
         // Heartbeat to keep alive
         runnersClient.heartbeat(runnerId, API_KEY, TEST_WORKSPACE);
@@ -231,15 +232,18 @@ class RunnersResourceTest {
                 .agentName("agent-x")
                 .runnerId(runnerId)
                 .build();
-        LocalRunnerJob job = runnersClient.createJob(request, API_KEY, TEST_WORKSPACE);
-        assertThat(job.status()).isEqualTo("pending");
+        UUID jobId = runnersClient.createJob(request, API_KEY, TEST_WORKSPACE);
+
+        // Verify pending
+        LocalRunnerJob job = runnersClient.getJob(jobId, API_KEY, TEST_WORKSPACE);
+        assertThat(job.status().getValue()).isEqualTo("pending");
 
         // Cancel job
-        runnersClient.cancelJob(job.id(), API_KEY, TEST_WORKSPACE);
+        runnersClient.cancelJob(jobId, API_KEY, TEST_WORKSPACE);
 
         // Verify cancelled
-        LocalRunnerJob cancelledJob = runnersClient.getJob(job.id(), API_KEY, TEST_WORKSPACE);
-        assertThat(cancelledJob.status()).isEqualTo("cancelled");
+        LocalRunnerJob cancelledJob = runnersClient.getJob(jobId, API_KEY, TEST_WORKSPACE);
+        assertThat(cancelledJob.status().getValue()).isEqualTo("cancelled");
         assertThat(cancelledJob.completedAt()).isNotNull();
     }
 }

@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.runner.ConnectRequest;
-import com.comet.opik.api.runner.ConnectResponse;
 import com.comet.opik.api.runner.CreateJobRequest;
 import com.comet.opik.api.runner.HeartbeatResponse;
 import com.comet.opik.api.runner.JobResultRequest;
@@ -19,6 +18,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,43 +33,50 @@ public class RunnersResourceClient {
 
     public PairResponse generatePairingCode(String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("pair")
+                .path("pairs")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return response.readEntity(PairResponse.class);
         }
     }
 
-    public ConnectResponse connect(ConnectRequest request, String apiKey, String workspaceName) {
+    public UUID connect(ConnectRequest request, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("connect")
+                .path("connections")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(ConnectResponse.class);
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            String location = response.getHeaderString("Location");
+            assertThat(location).isNotBlank();
+            return UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
         }
     }
 
-    public List<LocalRunner> listRunners(String apiKey, String workspaceName) {
+    public LocalRunner.LocalRunnerPage listRunners(String apiKey, String workspaceName) {
+        return listRunners(0, 25, apiKey, workspaceName);
+    }
+
+    public LocalRunner.LocalRunnerPage listRunners(int page, int size, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .queryParam("page", page)
+                .queryParam("size", size)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get()) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(new GenericType<>() {
-            });
+            return response.readEntity(LocalRunner.LocalRunnerPage.class);
         }
     }
 
-    public LocalRunner getRunner(String runnerId, String apiKey, String workspaceName) {
+    public LocalRunner getRunner(UUID runnerId, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(runnerId)
+                .path(runnerId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -79,10 +86,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public void registerAgents(String runnerId, Map<String, LocalRunner.Agent> agents,
+    public void registerAgents(UUID runnerId, Map<String, LocalRunner.Agent> agents,
             String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(runnerId)
+                .path(runnerId.toString())
                 .path("agents")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -92,10 +99,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public HeartbeatResponse heartbeat(String runnerId, String apiKey, String workspaceName) {
+    public HeartbeatResponse heartbeat(UUID runnerId, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(runnerId)
-                .path("heartbeat")
+                .path(runnerId.toString())
+                .path("heartbeats")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -105,7 +112,7 @@ public class RunnersResourceClient {
         }
     }
 
-    public LocalRunnerJob createJob(CreateJobRequest request, String apiKey, String workspaceName) {
+    public UUID createJob(CreateJobRequest request, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
                 .request()
@@ -113,14 +120,16 @@ public class RunnersResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(request))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            return response.readEntity(LocalRunnerJob.class);
+            String location = response.getHeaderString("Location");
+            assertThat(location).isNotBlank();
+            return UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
         }
     }
 
-    public LocalRunnerJob getJob(String jobId, String apiKey, String workspaceName) {
+    public LocalRunnerJob getJob(UUID jobId, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
-                .path(jobId)
+                .path(jobId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -130,10 +139,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public LocalRunnerJob.LocalRunnerJobPage listJobs(String runnerId, String project,
+    public LocalRunnerJob.LocalRunnerJobPage listJobs(UUID runnerId, String project,
             int page, int size, String apiKey, String workspaceName) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(runnerId)
+                .path(runnerId.toString())
                 .path("jobs")
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -149,10 +158,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public List<LogEntry> getJobLogs(String jobId, int offset, String apiKey, String workspaceName) {
+    public List<LogEntry> getJobLogs(UUID jobId, int offset, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
-                .path(jobId)
+                .path(jobId.toString())
                 .path("logs")
                 .queryParam("offset", offset)
                 .request()
@@ -165,10 +174,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public void appendLogs(String jobId, List<LogEntry> entries, String apiKey, String workspaceName) {
+    public void appendLogs(UUID jobId, List<LogEntry> entries, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
-                .path(jobId)
+                .path(jobId.toString())
                 .path("logs")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -178,11 +187,11 @@ public class RunnersResourceClient {
         }
     }
 
-    public void reportResult(String jobId, JobResultRequest result, String apiKey, String workspaceName) {
+    public void reportResult(UUID jobId, JobResultRequest result, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
-                .path(jobId)
-                .path("result")
+                .path(jobId.toString())
+                .path("results")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -191,10 +200,10 @@ public class RunnersResourceClient {
         }
     }
 
-    public void cancelJob(String jobId, String apiKey, String workspaceName) {
+    public void cancelJob(UUID jobId, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("jobs")
-                .path(jobId)
+                .path(jobId.toString())
                 .path("cancel")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -204,9 +213,9 @@ public class RunnersResourceClient {
         }
     }
 
-    public Response callNextJob(String runnerId, String apiKey, String workspaceName) {
+    public Response callNextJob(UUID runnerId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(runnerId)
+                .path(runnerId.toString())
                 .path("jobs")
                 .path("next")
                 .request()
