@@ -566,7 +566,7 @@ def verify_thread(
                 )
             )
             == 1
-        )
+        ),
     ):
         raise AssertionError(f"Failed to get thread with id '{thread_id}'.")
     threads = threads_client.search_threads(
