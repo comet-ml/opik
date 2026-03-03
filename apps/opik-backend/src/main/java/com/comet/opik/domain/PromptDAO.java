@@ -202,6 +202,36 @@ interface PromptDAO {
 
     @SqlQuery("""
             SELECT
+                p.*,
+                (
+                    SELECT COUNT(pv2.id)
+                    FROM prompt_versions pv2
+                    WHERE pv2.prompt_id = p.id
+                    AND pv2.workspace_id = p.workspace_id
+                ) AS version_count,
+                JSON_OBJECT(
+                    'id', pv.id,
+                    'prompt_id', pv.prompt_id,
+                    'commit', pv.commit,
+                    'template', pv.template,
+                    'metadata', pv.metadata,
+                    'change_description', pv.change_description,
+                    'type', pv.type,
+                    'tags', pv.tags,
+                    'created_at', pv.created_at,
+                    'created_by', pv.created_by,
+                    'last_updated_at', pv.last_updated_at,
+                    'last_updated_by', pv.last_updated_by
+                ) AS requested_version
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id AND p.workspace_id = pv.workspace_id
+            WHERE pv.commit = :commit
+            AND pv.workspace_id = :workspace_id
+            """)
+    List<Prompt> findByCommit(@Bind("commit") String commit, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT
                 pv.id AS prompt_version_id,
                 pv.commit,
                 p.id,

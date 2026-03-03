@@ -19,8 +19,11 @@ Steps:
 4. Verify the trace count matches via backend
 5. Retrieve all item IDs from both UI and backend
 6. Verify that item IDs match between UI and backend
+7. Verify "Go to traces" button navigates to experiment traces
+8. Click an experiment item and verify trace details panel opens
+9. Verify trace information is displayed correctly
 
-This test ensures proper synchronization of experiment items between UI and backend.`
+This test ensures proper synchronization of experiment items between UI and backend, and validates trace navigation.`
     });
 
     const { experiment, datasetSize } = createExperimentWithItems;
@@ -60,6 +63,108 @@ This test ensures proper synchronization of experiment items between UI and back
       const sortedBackendIds = idsOnBackend.sort();
 
       expect(sortedFrontendIds).toEqual(sortedBackendIds);
+    });
+
+    await test.step('Verify "Go to traces" button navigates to experiment traces', async () => {
+      const experimentItems = await helperClient.getExperimentItems(experiment.name);
+      const firstItem = experimentItems[0];
+
+      const goToTracesButton = page.getByRole('link', { name: /Go to traces/i });
+      await expect(goToTracesButton).toBeVisible();
+
+      await goToTracesButton.click();
+      await expect(page).toHaveURL(/\/traces/, { timeout: 10000 });
+      
+      const currentUrl = page.url();
+      expect(currentUrl).toContain('experiment_id');
+
+      const firstTraceRow = page.locator('table tbody tr').first();
+      await expect(firstTraceRow).toBeVisible({ timeout: 10000 });
+
+      const inputValue = firstItem.input?.input || firstItem.data?.input;
+      if (inputValue) {
+        const inputText = typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue);
+        await expect(page.locator('table')).toContainText(inputText);
+      }
+
+      const outputValue = firstItem.output?.output || firstItem.output;
+      if (outputValue) {
+        const outputText = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
+        await expect(page.locator('table')).toContainText(outputText);
+      }
+
+      await page.goBack();
+      await page.waitForLoadState('networkidle');
+    });
+
+    await test.step('Click experiment item and verify detail panel opens', async () => {
+      const firstRow = page.locator('table tbody tr').first();
+      await firstRow.click();
+
+      const datasetItemHeading = page.getByRole('heading', { name: 'Dataset item', level: 4 });
+      await expect(datasetItemHeading).toBeVisible({ timeout: 10000 });
+
+      const traceButton = page.getByRole('button', { name: 'Trace' });
+      await expect(traceButton).toBeVisible();
+
+      await expect(page).toHaveURL(/row=/);
+    });
+
+    await test.step('Click Trace button and verify trace panel opens', async () => {
+      const experimentItems = await helperClient.getExperimentItems(experiment.name);
+      const allTraceIds = experimentItems.map(item => item.trace_id);
+
+      const traceButton = page.getByRole('button', { name: 'Trace' });
+      await traceButton.click();
+
+      await expect(page).toHaveURL(/trace=/, { timeout: 10000 });
+
+      const currentUrl = new URL(page.url());
+      const traceIdInUrl = currentUrl.searchParams.get('trace');
+      
+      expect(traceIdInUrl).toBeTruthy();
+      expect(allTraceIds).toContain(traceIdInUrl);
+
+      const detailsTab = page.getByRole('tab', { name: 'Details' });
+      await expect(detailsTab).toBeVisible();
+    });
+
+    await test.step('Verify trace details match experiment item content', async () => {
+      const experimentItems = await helperClient.getExperimentItems(experiment.name);
+      const currentUrl = new URL(page.url());
+      const traceIdInUrl = currentUrl.searchParams.get('trace');
+      
+      const matchingItem = experimentItems.find(item => item.trace_id === traceIdInUrl);
+      expect(matchingItem).toBeDefined();
+
+      const traceTitle = page.locator('[data-testid="data-viewer-title"]').first();
+      await expect(traceTitle).toBeVisible({ timeout: 10000 });
+
+      const detailsTab = page.getByRole('tab', { name: 'Details' });
+      await expect(detailsTab).toBeVisible();
+
+      const inputOutputTab = page.getByRole('tab', { name: /Input.*Output/i }).first();
+      if (await inputOutputTab.isVisible()) {
+        await inputOutputTab.click();
+
+        const tabPanel = page.locator('[role="tabpanel"]').first();
+        await expect(tabPanel).toBeVisible();
+
+        const inputValue = matchingItem?.input?.input || matchingItem?.data?.input;
+        if (inputValue) {
+          const inputText = typeof inputValue === 'string' ? inputValue : JSON.stringify(inputValue);
+          await expect(tabPanel).toContainText(inputText);
+        }
+
+        const outputValue = matchingItem?.output?.output || matchingItem?.output;
+        if (outputValue) {
+          const outputText = typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
+          await expect(tabPanel).toContainText(outputText);
+        }
+      }
+
+      const feedbackScoresTab = page.getByRole('tab', { name: 'Feedback scores' }).first();
+      await expect(feedbackScoresTab).toBeVisible();
     });
   });
 

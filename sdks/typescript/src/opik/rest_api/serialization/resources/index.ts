@@ -1,3 +1,5 @@
+export * from "./agentConfigs/client/requests/index.js";
+export * as agentConfigs from "./agentConfigs/index.js";
 export * as alerts from "./alerts/index.js";
 export * from "./alerts/types/index.js";
 export * from "./annotationQueues/client/requests/index.js";

@@ -3,6 +3,17 @@
 # isort: skip_file
 
 from .types import (
+    AgentBlueprintHistory,
+    AgentBlueprintHistoryType,
+    AgentBlueprintPublic,
+    AgentBlueprintPublicType,
+    AgentBlueprintWrite,
+    AgentBlueprintWriteType,
+    AgentConfigEnv,
+    AgentConfigValuePublic,
+    AgentConfigValuePublicType,
+    AgentConfigValueWrite,
+    AgentConfigValueWriteType,
     AggregationData,
     Alert,
     AlertAlertType,
@@ -112,6 +123,7 @@ from .types import (
     BatchDeleteByProject,
     BiInformation,
     BiInformationResponse,
+    BlueprintPageHistory,
     BooleanFeedbackDefinition,
     BooleanFeedbackDefinitionCreate,
     BooleanFeedbackDefinitionPublic,
@@ -207,7 +219,9 @@ from .types import (
     ErrorMessage,
     ErrorMessageDetail,
     ErrorMessageDetailed,
+    ErrorMessageHistory,
     ErrorMessagePublic,
+    ErrorMessageWrite,
     EvaluatorItem,
     EvaluatorItemCompare,
     EvaluatorItemCompareType,
@@ -221,6 +235,7 @@ from .types import (
     ExecutionPolicyPublic,
     ExecutionPolicyWrite,
     Experiment,
+    ExperimentEvaluationMethod,
     ExperimentGroupAggregationsResponse,
     ExperimentGroupResponse,
     ExperimentItem,
@@ -236,6 +251,7 @@ from .types import (
     ExperimentItemTraceVisibilityMode,
     ExperimentPagePublic,
     ExperimentPublic,
+    ExperimentPublicEvaluationMethod,
     ExperimentPublicStatus,
     ExperimentPublicType,
     ExperimentScore,
@@ -555,6 +571,7 @@ from .errors import (
     UnprocessableEntityError,
 )
 from . import (
+    agent_configs,
     alerts,
     annotation_queues,
     attachments,
@@ -591,7 +608,7 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility, FindDatasetsRequestType
 from .environment import OpikApiEnvironment
-from .experiments import ExperimentWriteStatus, ExperimentWriteType
+from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
@@ -610,6 +627,17 @@ from .spans import (
 )
 
 __all__ = [
+    "AgentBlueprintHistory",
+    "AgentBlueprintHistoryType",
+    "AgentBlueprintPublic",
+    "AgentBlueprintPublicType",
+    "AgentBlueprintWrite",
+    "AgentBlueprintWriteType",
+    "AgentConfigEnv",
+    "AgentConfigValuePublic",
+    "AgentConfigValuePublicType",
+    "AgentConfigValueWrite",
+    "AgentConfigValueWriteType",
     "AggregationData",
     "Alert",
     "AlertAlertType",
@@ -723,6 +751,7 @@ __all__ = [
     "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
+    "BlueprintPageHistory",
     "BooleanFeedbackDefinition",
     "BooleanFeedbackDefinitionCreate",
     "BooleanFeedbackDefinitionPublic",
@@ -824,7 +853,9 @@ __all__ = [
     "ErrorMessage",
     "ErrorMessageDetail",
     "ErrorMessageDetailed",
+    "ErrorMessageHistory",
     "ErrorMessagePublic",
+    "ErrorMessageWrite",
     "EvaluatorItem",
     "EvaluatorItemCompare",
     "EvaluatorItemCompareType",
@@ -838,6 +869,7 @@ __all__ = [
     "ExecutionPolicyPublic",
     "ExecutionPolicyWrite",
     "Experiment",
+    "ExperimentEvaluationMethod",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
     "ExperimentItem",
@@ -853,6 +885,7 @@ __all__ = [
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicEvaluationMethod",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
     "ExperimentScore",
@@ -863,6 +896,7 @@ __all__ = [
     "ExperimentUpdate",
     "ExperimentUpdateStatus",
     "ExperimentUpdateType",
+    "ExperimentWriteEvaluationMethod",
     "ExperimentWriteStatus",
     "ExperimentWriteType",
     "ExportTraceServiceRequest",
@@ -1186,6 +1220,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "agent_configs",
     "alerts",
     "annotation_queues",
     "attachments",
