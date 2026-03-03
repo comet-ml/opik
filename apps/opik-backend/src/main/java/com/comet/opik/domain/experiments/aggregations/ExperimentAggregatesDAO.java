@@ -2129,59 +2129,14 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     workspaceId,
                     criteria.datasetId().toString());
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            applyDatasetItemFiltersToTemplate(template, criteria);
 
-            // Add filters using filter query builder
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM))
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters", experimentItemFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED))
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY))
-                    .ifPresent(f -> template.add("feedback_scores_empty_filters", f));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-
-            // Add search if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                template.add("search", true);
-            }
-
-            String renderedSql = template.render();
-
-            var statement = connection.createStatement(renderedSql)
+            var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
                     .bind("dataset_id", criteria.datasetId().toString())
                     .bind("version_id", versionId.toString());
 
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-            }
-
-            if (CollectionUtils.isNotEmpty(criteria.filters())) {
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                filterQueryBuilder.bind(statement, criteria.filters(),
-                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-            }
-
-            if (StringUtils.isNotBlank(criteria.search())) {
-                filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-            }
+            bindDatasetItemSearchParams(statement, criteria);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
@@ -2206,41 +2161,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     workspaceId,
                     criteria.datasetId().toString());
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            applyDatasetItemFiltersToTemplate(template, criteria);
 
-            // Add truncate flag
+            // Add truncate flag and pagination
             template.add("truncate", criteria.truncate());
-
-            // Add filters using filter query builder
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM))
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters", experimentItemFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED))
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY))
-                    .ifPresent(f -> template.add("feedback_scores_empty_filters", f));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-
-            // Add search if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                template.add("search", true);
-            }
-
-            // Add pagination
             template.add("limit", true);
             template.add("offset", true);
 
@@ -2257,22 +2181,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                 .bind("limit", size)
                                 .bind("offset", (page - 1) * size);
 
-                        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                            statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-                        }
-
-                        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-                            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                            filterQueryBuilder.bind(statement, criteria.filters(),
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                            filterQueryBuilder.bind(statement, criteria.filters(),
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                        }
-
-                        if (StringUtils.isNotBlank(criteria.search())) {
-                            filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-                        }
+                        bindDatasetItemSearchParams(statement, criteria);
 
                         return Flux.from(statement.execute())
                                 .flatMap(DatasetItemResultMapper::mapItem)
@@ -2287,6 +2196,52 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         ));
                     });
         }));
+    }
+
+    private void applyDatasetItemFiltersToTemplate(ST template, DatasetItemSearchCriteria criteria) {
+        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+            template.add("experiment_ids", true);
+        }
+
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM))
+                .ifPresent(f -> template.add("experiment_item_filters", f));
+
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED))
+                .ifPresent(f -> template.add("feedback_scores_filters", f));
+
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY))
+                .ifPresent(f -> template.add("feedback_scores_empty_filters", f));
+
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
+                .ifPresent(f -> template.add("dataset_item_filters", f));
+
+        if (StringUtils.isNotBlank(criteria.search())) {
+            template.add("search", true);
+        }
+    }
+
+    private void bindDatasetItemSearchParams(Statement statement, DatasetItemSearchCriteria criteria) {
+        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+            statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+        }
+
+        if (CollectionUtils.isNotEmpty(criteria.filters())) {
+            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
+            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
+            filterQueryBuilder.bind(statement, criteria.filters(),
+                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
+            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
+        }
+
+        if (StringUtils.isNotBlank(criteria.search())) {
+            filterQueryBuilder.bindSearchTerms(statement, criteria.search());
+        }
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String workspaceId) {
@@ -2422,7 +2377,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("dataset_id", datasetId.toString())
                     .bind("version_id", versionId.toString())
-                    .bind("experiment_ids", experimentIds.stream().map(UUID::toString).toArray(String[]::new));
+                    .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
 
             // Bind filter parameters
             Optional.ofNullable(filters).ifPresent(filtersParam -> {
