@@ -44,6 +44,15 @@ def test_episode_result__is_passing__checks_assertions_and_budgets__happyflow():
     )
     assert passing_episode.is_passing() is True
 
+    failing_budget_episode = EpisodeResult(
+        scenario_id="scenario-budget-fail",
+        assertions=[EpisodeAssertion(name="hard-check", passed=True, severity="error")],
+        budgets=EpisodeBudgets(
+            max_turns=EpisodeBudgetMetric(used=6, limit=5, unit="count"),
+        ),
+    )
+    assert failing_budget_episode.is_passing() is False
+
     failing_episode = EpisodeResult(
         scenario_id="scenario-fail",
         assertions=[
