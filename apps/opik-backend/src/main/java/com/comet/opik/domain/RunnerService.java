@@ -177,35 +177,15 @@ class RunnerServiceImpl implements RunnerService {
         String runnerId;
 
         if (StringUtils.isNotBlank(request.pairingCode())) {
-            // Pairing code flow
             runnerId = claimPairingCode(request.pairingCode(), workspaceId);
         } else {
-            // API key flow — create runner directly
             runnerId = idGenerator.generateId().toString();
-
-            RMap<String, String> runnerMap = redisClient.getMap(
-                    RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
-            runnerMap.putAll(Map.of(
-                    FIELD_NAME, request.runnerName(),
-                    FIELD_STATUS, STATUS_CONNECTED,
-                    FIELD_WORKSPACE_ID, workspaceId,
-                    FIELD_USER_NAME, userName,
-                    FIELD_CONNECTED_AT, Instant.now().toString()));
-
             addRunnerToWorkspace(workspaceId, runnerId);
         }
 
         evictExistingRunner(workspaceId, userName, runnerId);
         setUserRunner(workspaceId, userName, runnerId);
-
-        RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
-        runnerMap.put(FIELD_NAME, request.runnerName());
-        runnerMap.put(FIELD_STATUS, STATUS_CONNECTED);
-        runnerMap.put(FIELD_CONNECTED_AT, Instant.now().toString());
-        runnerMap.clearExpire();
-
-        setHeartbeat(runnerId);
+        activateRunner(runnerId, workspaceId, userName, request.runnerName());
 
         return ConnectResponse.builder()
                 .runnerId(runnerId)
@@ -788,6 +768,19 @@ class RunnerServiceImpl implements RunnerService {
     private void setUserRunner(String workspaceId, String userName, String runnerId) {
         redisClient.getBucket(USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE)
                 .set(runnerId);
+    }
+
+    private void activateRunner(String runnerId, String workspaceId, String userName, String runnerName) {
+        RMap<String, String> runnerMap = redisClient.getMap(
+                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+        runnerMap.putAll(Map.of(
+                FIELD_NAME, runnerName,
+                FIELD_STATUS, STATUS_CONNECTED,
+                FIELD_WORKSPACE_ID, workspaceId,
+                FIELD_USER_NAME, userName,
+                FIELD_CONNECTED_AT, Instant.now().toString()));
+        runnerMap.clearExpire();
+        setHeartbeat(runnerId);
     }
 
     private void setHeartbeat(String runnerId) {
