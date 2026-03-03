@@ -61,7 +61,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
@@ -1953,48 +1952,13 @@ class ExperimentDAO {
     }
 
     private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            return ExperimentGroupItem.builder()
-                    .groupValues(groupValues)
-                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
-                    .build();
-        });
+        return result.map((row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupItem(row, groupsCount));
     }
 
     private Publisher<ExperimentGroupAggregationItem> mapExperimentGroupAggregationItem(Result result,
             int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            var experimentCount = row.get("experiment_count", Long.class);
-            var traceCount = row.get("trace_count", Long.class);
-            var totalEstimatedCost = getCostValue(row, "total_estimated_cost");
-            var totalEstimatedCostAvg = getCostValue(row, "total_estimated_cost_avg");
-            var duration = getDuration(row);
-            var feedbackScores = getFeedbackScores(row, "feedback_scores");
-            var experimentScores = getFeedbackScores(row, "experiment_scores");
-
-            return ExperimentGroupAggregationItem.builder()
-                    .groupValues(groupValues)
-                    .experimentCount(experimentCount)
-                    .traceCount(traceCount)
-                    .totalEstimatedCost(totalEstimatedCost)
-                    .totalEstimatedCostAvg(totalEstimatedCostAvg)
-                    .duration(duration)
-                    .feedbackScores(feedbackScores)
-                    .experimentScores(experimentScores)
-                    .build();
-        });
+        return result.map(
+                (row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupAggregationItem(row, groupsCount));
     }
 
     @WithSpan

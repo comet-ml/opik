@@ -62,8 +62,9 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupAggregationItem;
+import static com.comet.opik.domain.ExperimentGroupMappers.toExperimentGroupItem;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.FeedbackScoreAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.SpanAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.TraceAggregations;
@@ -2089,7 +2090,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             int groupsCount = criteria.groups().size();
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapExperimentGroupItem(row, groupsCount)));
+                    .flatMap(result -> result.map((row, rowMetadata) -> toExperimentGroupItem(row, groupsCount)));
         }));
     }
 
@@ -2109,8 +2110,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             int groupsCount = criteria.groups().size();
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result
-                            .map((row, rowMetadata) -> mapExperimentGroupAggregationItem(row, groupsCount)));
+                    .flatMap(result -> result.map(
+                            (row, rowMetadata) -> toExperimentGroupAggregationItem(row, groupsCount)));
         }));
     }
 
@@ -2278,64 +2279,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT));
         Optional.ofNullable(criteria.projectId())
                 .ifPresent(projectId -> statement.bind("project_id", projectId));
-    }
-
-    private ExperimentGroupItem mapExperimentGroupItem(Row row, int groupsCount) {
-        var groupValues = IntStream.range(0, groupsCount)
-                .mapToObj(i -> "group_" + i)
-                .map(columnName -> row.get(columnName, String.class))
-                .toList();
-
-        return ExperimentGroupItem.builder()
-                .groupValues(groupValues)
-                .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
-                .build();
-    }
-
-    private ExperimentGroupAggregationItem mapExperimentGroupAggregationItem(Row row, int groupsCount) {
-        var groupValues = java.util.stream.IntStream.range(0, groupsCount)
-                .mapToObj(i -> "group_" + i)
-                .map(columnName -> row.get(columnName, String.class))
-                .toList();
-
-        // Map duration from Map<String, Double> to PercentageValues
-        Map<String, Double> durationMap = row.get("duration", Map.class);
-        PercentageValues duration = Optional.ofNullable(durationMap)
-                .filter(map -> !map.isEmpty())
-                .map(map -> new PercentageValues(
-                        BigDecimal.valueOf(map.getOrDefault("p50", 0.0)),
-                        BigDecimal.valueOf(map.getOrDefault("p90", 0.0)),
-                        BigDecimal.valueOf(map.getOrDefault("p99", 0.0))))
-                .orElse(null);
-
-        // Map feedback scores from Map<String, Double> to List<FeedbackScoreAverage>
-        Map<String, Double> feedbackScoresMap = row.get("feedback_scores", Map.class);
-        List<FeedbackScoreAverage> feedbackScores = Optional.ofNullable(feedbackScoresMap)
-                .map(map -> map.entrySet().stream()
-                        .map(e -> new FeedbackScoreAverage(
-                                e.getKey(),
-                                BigDecimal.valueOf(e.getValue())))
-                        .toList())
-                .orElse(null);
-
-        // Map experiment scores from Map<String, Double> to List<ExperimentScore>
-        Map<String, Double> experimentScoresMap = row.get("experiment_scores", Map.class);
-        List<FeedbackScoreAverage> experimentScores = Optional.ofNullable(experimentScoresMap)
-                .map(map -> map.entrySet().stream()
-                        .map(e -> new FeedbackScoreAverage(e.getKey(), BigDecimal.valueOf(e.getValue())))
-                        .toList())
-                .orElse(null);
-
-        return ExperimentGroupAggregationItem.builder()
-                .groupValues(groupValues)
-                .experimentCount(row.get("experiment_count", Long.class))
-                .traceCount(row.get("trace_count", Long.class))
-                .totalEstimatedCost(getBigDecimal(row, "total_estimated_cost"))
-                .totalEstimatedCostAvg(getBigDecimal(row, "total_estimated_cost_avg"))
-                .duration(duration)
-                .feedbackScores(feedbackScores)
-                .experimentScores(experimentScores)
-                .build();
     }
 
     @Override
