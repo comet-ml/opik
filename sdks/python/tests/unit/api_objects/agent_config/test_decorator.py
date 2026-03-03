@@ -650,9 +650,9 @@ class TestConfigDecoratorTTLEnvVar:
     def test_env_var_overrides_ttl(self, mock_backend, monkeypatch):
         monkeypatch.setenv("OPIK_CONFIG_TTL_SECONDS", "60")
 
-        from opik.api_objects.agent_config.cache import clear_shared_caches
+        from opik.api_objects.agent_config.cache import _registry
 
-        clear_shared_caches()
+        _registry.clear()
 
         @agent_config_decorator
         @dataclasses.dataclass

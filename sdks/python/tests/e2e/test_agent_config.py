@@ -4,7 +4,7 @@ from typing import Annotated, Dict, List
 
 import pytest
 import opik
-from opik.api_objects.agent_config.cache import clear_shared_caches
+from opik.api_objects.agent_config.cache import _registry
 from opik.api_objects.agent_config.decorator import get_cached_config
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types.agent_config_env import AgentConfigEnv
@@ -17,7 +17,7 @@ def _unique_project_name() -> str:
 @pytest.fixture(autouse=True)
 def clear_caches_after_test():
     yield
-    clear_shared_caches()
+    _registry.clear()
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def test_agent_config_decorator__backend_overrides_local_defaults__happyflow(
     assert first.model == "gpt-3.5"
 
     # Clear cache so the second instantiation re-fetches from backend
-    clear_shared_caches()
+    _registry.clear()
 
     # Second instantiation with different local defaults — backend values must win
     @opik.agent_config(project=project_name)
@@ -229,7 +229,7 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
 
     pre_read_latest = agent_config.get_blueprint()
 
-    clear_shared_caches()
+    _registry.clear()
 
     @opik.agent_config(project=project_name, mask_id=mask_id)
     class BaseConfig:  # type: ignore[no-redef]
@@ -261,7 +261,7 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
         envs=[AgentConfigEnv(env_name="staging", blueprint_id=base_blueprint_id)],
     )
 
-    clear_shared_caches()
+    _registry.clear()
 
     @opik.agent_config(project=project_name, env="staging")
     class EnvConfig:  # type: ignore[no-redef]
@@ -294,7 +294,7 @@ def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyfl
     assert config.name == "Steve"
     assert config.temperature == pytest.approx(0.8)
 
-    clear_shared_caches()
+    _registry.clear()
 
     # Second instantiation: backend is now source of truth, "Bob" should be ignored
     @opik.agent_config(project=project_name, env="prod")

@@ -6,26 +6,69 @@ import pytest
 
 from opik.api_objects.agent_config.cache import (
     CacheRefreshThread,
+    SharedCacheRegistry,
     SharedConfigCache,
-    clear_shared_caches,
-    get_shared_cache,
 )
 
 
-@pytest.fixture(autouse=True)
-def _cleanup():
-    yield
-    clear_shared_caches()
+@pytest.fixture
+def registry():
+    r = SharedCacheRegistry()
+    yield r
+    r.clear()
 
 
-class TestRegistryThreadSafety:
-    def test_concurrent_get_shared_cache__returns_same_instance(self):
+class TestSharedCacheRegistry:
+    def test_get__same_key__returns_same_instance(self, registry):
+        a = registry.get("proj", None, None)
+        b = registry.get("proj", None, None)
+        assert a is b
+
+    def test_get__different_key__returns_different_instance(self, registry):
+        a = registry.get("proj-a", None, None)
+        b = registry.get("proj-b", None, None)
+        assert a is not b
+
+    def test_clear__empties_registry(self, registry):
+        registry.get("proj", None, None)
+        registry.clear()
+        # After clear, a new call returns a fresh instance
+        fresh = registry.get("proj", None, None)
+        assert fresh.blueprint_id is None
+
+    def test_clear__stops_thread(self, registry):
+        registry.ensure_refresh_thread_started()
+        assert registry._thread is not None and registry._thread.is_alive()
+        registry.clear()
+        assert registry._thread is None
+
+    def test_ensure_refresh_thread_started__starts_thread(self, registry):
+        assert registry._thread is None
+        registry.ensure_refresh_thread_started()
+        assert registry._thread is not None
+        assert registry._thread.is_alive()
+
+    def test_ensure_refresh_thread_started__second_call_noop(self, registry):
+        registry.ensure_refresh_thread_started()
+        first_thread = registry._thread
+        registry.ensure_refresh_thread_started()
+        assert registry._thread is first_thread
+
+    def test_stop_refresh_thread__stops_and_nulls(self, registry):
+        registry.ensure_refresh_thread_started()
+        thread = registry._thread
+        registry.stop_refresh_thread()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        assert registry._thread is None
+
+    def test_concurrent_get__returns_same_instance(self, registry):
         results = [None] * 10
         barrier = threading.Barrier(10)
 
-        def fetch(idx: int) -> None:
+        def fetch(idx):
             barrier.wait()
-            results[idx] = get_shared_cache("proj", None, None)
+            results[idx] = registry.get("proj", None, None)
 
         threads = [threading.Thread(target=fetch, args=(i,)) for i in range(10)]
         for t in threads:
@@ -138,7 +181,7 @@ class TestRefreshCallback:
 
 class TestCacheRefreshThread:
     def test_stops_on_close(self):
-        thread = CacheRefreshThread(interval_seconds=0.01)
+        thread = CacheRefreshThread(get_caches=list, interval_seconds=0.01)
         thread.start()
         assert thread.is_alive()
 
@@ -146,18 +189,21 @@ class TestCacheRefreshThread:
         thread.join(timeout=2)
         assert not thread.is_alive()
 
-    def test_refreshes_stale_cache(self):
+    def test_refreshes_stale_cache(self, registry):
         bp = mock.Mock()
         bp.id = "bp-bg"
         bp._values = {"K.v": "refreshed"}
 
         callback = mock.Mock(return_value=bp)
 
-        cache = get_shared_cache("bg-proj", None, None)
+        cache = registry.get("bg-proj", None, None)
         cache._ttl_seconds = 0
         cache.set_refresh_callback(callback)
 
-        thread = CacheRefreshThread(interval_seconds=0.05)
+        thread = CacheRefreshThread(
+            get_caches=lambda: list(registry._caches.values()),
+            interval_seconds=0.05,
+        )
         thread.start()
         try:
             time.sleep(0.3)
@@ -167,17 +213,20 @@ class TestCacheRefreshThread:
             thread.close()
             thread.join(timeout=2)
 
-    def test_skips_non_stale_caches(self):
+    def test_skips_non_stale_caches(self, registry):
         bp = mock.Mock()
         bp.id = "bp-init"
         bp._values = {"K.v": "initial"}
 
-        cache = get_shared_cache("fresh-proj", None, None)
+        cache = registry.get("fresh-proj", None, None)
         cache.update(bp)
         callback = mock.Mock()
         cache.set_refresh_callback(callback)
 
-        thread = CacheRefreshThread(interval_seconds=0.05)
+        thread = CacheRefreshThread(
+            get_caches=lambda: list(registry._caches.values()),
+            interval_seconds=0.05,
+        )
         thread.start()
         try:
             time.sleep(0.2)

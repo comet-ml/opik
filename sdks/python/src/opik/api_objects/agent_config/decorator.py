@@ -157,7 +157,7 @@ def agent_config_decorator(
 
 def get_cached_config(instance: AgentConfigInstance) -> cache.SharedConfigCache:
     """Helper method to create a key from the current instance and fetch it from the cache"""
-    return cache.get_shared_cache(
+    return cache._registry.get(
         instance.__opik_project__,
         instance.__opik_env__,
         instance.__opik_mask_id__,
@@ -184,7 +184,7 @@ def _init_cache_entry(
         prefixed_field_types: Mapping of prefixed field key to Python type.
         agent_config: ``AgentConfig`` instance used to build the refresh callback.
     """
-    shared_cache = cache.get_shared_cache(resolved_project, env, mask_id)
+    shared_cache = cache._registry.get(resolved_project, env, mask_id)
     shared_cache.register_fields(prefixed_field_types)
 
     if agent_config is not None and mask_id is None:
@@ -197,7 +197,7 @@ def _init_cache_entry(
             )
 
         shared_cache.set_refresh_callback(_refresh)
-        cache._ensure_refresh_thread_started()
+        cache._registry.ensure_refresh_thread_started()
 
     return shared_cache
 
@@ -310,7 +310,7 @@ def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
         prefixed_key = instance.__opik_fields__[attr].prefixed_key
 
         base_cache = get_cached_config(instance)
-        mask_cache = cache.get_shared_cache(
+        mask_cache = cache._registry.get(
             instance.__opik_project__, instance.__opik_env__, context_mask
         )
         mask_cache.register_fields(base_cache.all_field_types)

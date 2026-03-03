@@ -14,9 +14,6 @@ _MIN_REFRESH_INTERVAL = 1.0
 
 _CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
 
-_registry_lock = threading.RLock()
-_shared_cache_registry: typing.Dict[_CacheKey, "SharedConfigCache"] = {}
-
 
 def _get_ttl_seconds() -> int:
     raw = os.environ.get("OPIK_CONFIG_TTL_SECONDS")
@@ -26,26 +23,6 @@ def _get_ttl_seconds() -> int:
         except ValueError:
             pass
     return DEFAULT_TTL_SECONDS
-
-
-def get_shared_cache(
-    project_name: str,
-    env: typing.Optional[str],
-    mask_id: typing.Optional[str],
-) -> "SharedConfigCache":
-    key: _CacheKey = (project_name, env, mask_id)
-    with _registry_lock:
-        if key not in _shared_cache_registry:
-            _shared_cache_registry[key] = SharedConfigCache(
-                ttl_seconds=_get_ttl_seconds()
-            )
-        return _shared_cache_registry[key]
-
-
-def clear_shared_caches() -> None:
-    stop_refresh_thread()
-    with _registry_lock:
-        _shared_cache_registry.clear()
 
 
 class SharedConfigCache:
@@ -105,8 +82,13 @@ class SharedConfigCache:
 
 
 class CacheRefreshThread(threading.Thread):
-    def __init__(self, interval_seconds: typing.Optional[float] = None) -> None:
+    def __init__(
+        self,
+        get_caches: typing.Callable[[], typing.List[SharedConfigCache]],
+        interval_seconds: typing.Optional[float] = None,
+    ) -> None:
         super().__init__(daemon=True, name="OpikCacheRefresh")
+        self._get_caches = get_caches
         self._stop_event = threading.Event()
         self._interval = interval_seconds
 
@@ -117,9 +99,7 @@ class CacheRefreshThread(threading.Thread):
             self._stop_event.wait(max(interval, _MIN_REFRESH_INTERVAL))
 
     def _refresh_all_stale(self) -> None:
-        with _registry_lock:
-            caches = list(_shared_cache_registry.values())
-        for cache in caches:
+        for cache in self._get_caches():
             if self._stop_event.is_set():
                 break
             if cache.is_stale():
@@ -129,23 +109,45 @@ class CacheRefreshThread(threading.Thread):
         self._stop_event.set()
 
 
-_refresh_thread: typing.Optional[CacheRefreshThread] = None
-_refresh_thread_lock = threading.Lock()
+class SharedCacheRegistry:
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._caches: typing.Dict[_CacheKey, SharedConfigCache] = {}
+        self._thread: typing.Optional[CacheRefreshThread] = None
+        self._thread_lock = threading.Lock()
+
+    def get(
+        self,
+        project_name: str,
+        env: typing.Optional[str],
+        mask_id: typing.Optional[str],
+    ) -> SharedConfigCache:
+        key: _CacheKey = (project_name, env, mask_id)
+        with self._lock:
+            if key not in self._caches:
+                self._caches[key] = SharedConfigCache(ttl_seconds=_get_ttl_seconds())
+            return self._caches[key]
+
+    def clear(self) -> None:
+        self.stop_refresh_thread()
+        with self._lock:
+            self._caches.clear()
+
+    def ensure_refresh_thread_started(self) -> None:
+        with self._thread_lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = CacheRefreshThread(
+                get_caches=lambda: list(self._caches.values())
+            )
+            self._thread.start()
+            atexit.register(self.stop_refresh_thread)
+
+    def stop_refresh_thread(self) -> None:
+        with self._thread_lock:
+            if self._thread is not None:
+                self._thread.close()
+                self._thread = None
 
 
-def _ensure_refresh_thread_started() -> None:
-    global _refresh_thread
-    with _refresh_thread_lock:
-        if _refresh_thread is not None and _refresh_thread.is_alive():
-            return
-        _refresh_thread = CacheRefreshThread()
-        _refresh_thread.start()
-        atexit.register(stop_refresh_thread)
-
-
-def stop_refresh_thread() -> None:
-    global _refresh_thread
-    with _refresh_thread_lock:
-        if _refresh_thread is not None:
-            _refresh_thread.close()
-            _refresh_thread = None
+_registry = SharedCacheRegistry()
