@@ -66,9 +66,15 @@ def mock_backend():
                         return _mask_blueprints[mid]
                     return base_bp
 
+                def _get_by_env_side_effect(**kwargs):
+                    mid = kwargs.get("mask_id")
+                    if mid and mid in _mask_blueprints:
+                        return _mask_blueprints[mid]
+                    return base_bp
+
                 mock_client.rest_client.agent_configs.get_latest_blueprint.side_effect = _get_latest_side_effect
                 mock_client.rest_client.agent_configs.get_latest_blueprint.return_value = base_bp
-                mock_client.rest_client.agent_configs.get_blueprint_by_env.side_effect = None
+                mock_client.rest_client.agent_configs.get_blueprint_by_env.side_effect = _get_by_env_side_effect
                 mock_client.rest_client.agent_configs.get_blueprint_by_env.return_value = base_bp
                 mock_client.rest_client.agent_configs.get_blueprint_by_id.return_value = base_bp
 

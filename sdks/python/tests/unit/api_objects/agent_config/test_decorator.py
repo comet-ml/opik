@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.agent_config.cache import SharedConfigCache
+from opik.api_objects.agent_config.context import agent_config_context
 from opik.api_objects.agent_config.decorator import (
     agent_config_decorator,
     get_cached_config,
@@ -886,8 +887,6 @@ class TestConfigDecoratorPromptFields:
 
 class TestConfigDecoratorContextMask:
     def test_context_mask__attribute_returns_masked_value(self, mock_backend):
-        from opik.api_objects.agent_config.context import agent_config_context
-
         mock_backend.set_blueprint_values(
             [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
         )
@@ -908,8 +907,6 @@ class TestConfigDecoratorContextMask:
             assert instance.temp == 0.2
 
     def test_context_mask__takes_precedence_over_class_mask(self, mock_backend):
-        from opik.api_objects.agent_config.context import agent_config_context
-
         mock_backend.set_blueprint_values(
             [mock.Mock(key="MyConfig.temp", type="number", value=0.5)]
         )
@@ -930,8 +927,6 @@ class TestConfigDecoratorContextMask:
             assert instance.temp == 0.1
 
     def test_context_mask__calls_get_blueprint_with_mask_id(self, mock_backend):
-        from opik.api_objects.agent_config.context import agent_config_context
-
         mock_backend.set_blueprint_values(
             [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
         )
@@ -953,6 +948,78 @@ class TestConfigDecoratorContextMask:
 
         call_kwargs = mock_backend.agent_configs.get_latest_blueprint.call_args[1]
         assert call_kwargs.get("mask_id") == "mask-ctx"
+
+    def test_context_mask__env_pinned_instance__calls_get_blueprint_by_env_with_mask_id(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.3)],
+        )
+
+        @agent_config_decorator(env="prod")
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        mock_backend.agent_configs.get_blueprint_by_env.reset_mock()
+
+        with agent_config_context("mask-ctx"):
+            _ = instance.temp
+
+        call_kwargs = mock_backend.agent_configs.get_blueprint_by_env.call_args[1]
+        assert call_kwargs.get("mask_id") == "mask-ctx"
+        assert call_kwargs.get("env_name") == "prod"
+
+    def test_context_mask__env_pinned_instance__returns_masked_value(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.3)],
+        )
+
+        @agent_config_decorator(env="prod")
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        assert instance.temp == 0.8
+
+        with agent_config_context("mask-ctx"):
+            assert instance.temp == 0.3
+
+    def test_context_mask__no_env__does_not_call_get_blueprint_by_env(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+        )
+        mock_backend.set_mask_blueprint_values(
+            "mask-ctx",
+            [mock.Mock(key="MyConfig.temp", type="number", value=0.5)],
+        )
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            temp: float = 0.8
+
+        instance = MyConfig()
+        mock_backend.agent_configs.get_blueprint_by_env.reset_mock()
+
+        with agent_config_context("mask-ctx"):
+            _ = instance.temp
+
+        mock_backend.agent_configs.get_blueprint_by_env.assert_not_called()
 
 
 class TestConfigDecoratorAnnotatedDescriptions:

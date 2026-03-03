@@ -278,16 +278,20 @@ def _create_blueprint(
         str, typing.Tuple[typing.Any, typing.Any, typing.Optional[str]]
     ] = {}
     for local_name in local_keys:
-        cf = instance.__opik_fields__[local_name]
+        config_field = instance.__opik_fields__[local_name]
         value = object.__getattribute__(instance, local_name)
-        fields_with_values[cf.prefixed_key] = (cf.py_type, value, cf.description)
+        fields_with_values[config_field.prefixed_key] = (
+            config_field.py_type,
+            value,
+            config_field.description,
+        )
 
-    bp = agent_cfg.create_blueprint(
+    blueprint = agent_cfg.create_blueprint(
         fields_with_values=fields_with_values,
         description=description,
         field_types=shared_cache.all_field_types,
     )
-    return bp
+    return blueprint
 
 
 def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
@@ -318,6 +322,7 @@ def _get_masked_value(instance: AgentConfigInstance, attr: str) -> typing.Any:
         if not mask_cache.values:
             bp = agent_cfg.get_blueprint(
                 mask_id=context_mask,
+                env=instance.__opik_env__,
                 field_types=base_cache.all_field_types,
             )
             if bp is not None:
