@@ -875,6 +875,7 @@ class Opik:
             description=dataset_fern.description,
             rest_client=self._rest_client,
             dataset_items_count=dataset_fern.dataset_items_count,
+            dataset_type=dataset_fern.type,
         )
 
         dataset_.__internal_api__sync_hashes__()
@@ -961,6 +962,7 @@ class Opik:
             description=description,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            dataset_type="dataset",
         )
 
         self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
@@ -1048,6 +1050,7 @@ class Opik:
             description=description,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            dataset_type="evaluation_suite",
         )
 
         return evaluation_suite.EvaluationSuite(
@@ -1080,6 +1083,7 @@ class Opik:
             description=dataset_fern.description,
             rest_client=self._rest_client,
             dataset_items_count=dataset_fern.dataset_items_count,
+            dataset_type=dataset_fern.type,
         )
 
         suite_dataset.__internal_api__sync_hashes__()

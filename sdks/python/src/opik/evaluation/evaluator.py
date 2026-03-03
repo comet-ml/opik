@@ -352,6 +352,8 @@ def evaluate_suite(
     Returns:
         EvaluationResult containing test results for building suite results.
     """
+    _validate_dataset_is_evaluation_suite(dataset)
+
     client = opik_client.get_client_cached()
 
     experiment_name = _use_or_create_experiment_name(
@@ -477,6 +479,14 @@ def _evaluate_task(
         )
 
     return evaluation_result_
+
+
+def _validate_dataset_is_evaluation_suite(dataset_: dataset.Dataset) -> None:
+    if dataset_.dataset_type != "evaluation_suite":
+        raise ValueError(
+            f"Dataset '{dataset_.name}' is not configured as an evaluation suite. "
+            f"Use opik_client.create_evaluation_suite() to create a dataset with suite configuration."
+        )
 
 
 def _evaluate_suite_task(
@@ -1208,6 +1218,8 @@ def evaluate_optimization_suite_trial(
     Returns:
         EvaluationResult containing test results for the optimization trial.
     """
+    _validate_dataset_is_evaluation_suite(dataset)
+
     if client is None:
         client = opik_client.get_client_cached()
 

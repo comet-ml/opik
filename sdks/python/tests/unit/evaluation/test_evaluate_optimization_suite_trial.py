@@ -15,6 +15,7 @@ def test_evaluate_optimization_suite_trial__creates_trial_experiment_and_forward
     mock_dataset = mock.MagicMock(
         spec=[
             "__internal_api__stream_items_as_dataclasses__",
+            "_rest_client",
             "id",
             "dataset_items_count",
             "get_version_info",
@@ -23,6 +24,7 @@ def test_evaluate_optimization_suite_trial__creates_trial_experiment_and_forward
         ]
     )
     mock_dataset.name = "suite-dataset"
+    mock_dataset.dataset_type = "evaluation_suite"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
     mock_dataset.get_execution_policy.return_value = {
@@ -73,6 +75,7 @@ def test_evaluate_optimization_suite_trial__creates_trial_experiment_and_forward
         prompts=None,
         type="trial",
         optimization_id="opt-123",
+        evaluation_method="evaluation_suite",
         tags=None,
         dataset_version_id=None,
     )
