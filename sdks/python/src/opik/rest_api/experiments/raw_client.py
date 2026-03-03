@@ -29,6 +29,7 @@ from ..types.experiment_score_write import ExperimentScoreWrite
 from ..types.experiment_update import ExperimentUpdate
 from ..types.experiment_update_status import ExperimentUpdateStatus
 from ..types.experiment_update_type import ExperimentUpdateType
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
@@ -222,6 +223,7 @@ class RawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -246,6 +248,8 @@ class RawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -279,6 +283,7 @@ class RawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
@@ -514,7 +519,7 @@ class RawExperimentsClient:
 
     def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[typing.List[str]]:
+    ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -527,7 +532,7 @@ class RawExperimentsClient:
 
         Returns
         -------
-        HttpResponse[typing.List[str]]
+        HttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -541,9 +546,9 @@ class RawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1257,6 +1262,7 @@ class AsyncRawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[str] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -1281,6 +1287,8 @@ class AsyncRawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[str]
 
         optimization_id : typing.Optional[str]
 
@@ -1314,6 +1322,7 @@ class AsyncRawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
@@ -1549,7 +1558,7 @@ class AsyncRawExperimentsClient:
 
     async def find_feedback_score_names(
         self, *, experiment_ids: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[typing.List[str]]:
+    ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -1562,7 +1571,7 @@ class AsyncRawExperimentsClient:
 
         Returns
         -------
-        AsyncHttpResponse[typing.List[str]]
+        AsyncHttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -1576,9 +1585,9 @@ class AsyncRawExperimentsClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )

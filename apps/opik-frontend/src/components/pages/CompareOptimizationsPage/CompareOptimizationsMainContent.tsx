@@ -53,7 +53,7 @@ const CompareOptimizationsMainContent: React.FC<
     isStudioOptimization && view === OPTIMIZATION_VIEW_TYPE.CONFIGURATION;
 
   return (
-    <div className="flex max-h-[500px] min-w-0 flex-1 overflow-auto">
+    <div className="flex min-w-0 flex-1 overflow-auto">
       {showLogsView && <OptimizationLogs optimization={optimization!} />}
       {showTrialsView && (
         <CompareOptimizationsTrialsTable

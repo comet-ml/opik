@@ -85,6 +85,10 @@ export const LevenshteinMetricParamsSchema = z.object({
   reference_key: z.string().min(1, "Reference key is required"),
 });
 
+export const NumericalSimilarityMetricParamsSchema = z.object({
+  reference_key: z.string().min(1, "Reference key is required"),
+});
+
 const isMessageEmpty = (message: LLMMessage): boolean => {
   const content = message.content;
   if (typeof content === "string") {
@@ -145,6 +149,12 @@ const LevenshteinMetricConfigSchema = BaseOptimizationConfigSchema.extend({
   metricParams: LevenshteinMetricParamsSchema,
 });
 
+const NumericalSimilarityMetricConfigSchema =
+  BaseOptimizationConfigSchema.extend({
+    metricType: z.literal(METRIC_TYPE.NUMERICAL_SIMILARITY),
+    metricParams: NumericalSimilarityMetricParamsSchema,
+  });
+
 const CodeMetricConfigSchema = BaseOptimizationConfigSchema.extend({
   metricType: z.literal(METRIC_TYPE.CODE),
   metricParams: CodeMetricParamsSchema,
@@ -155,6 +165,7 @@ export const OptimizationConfigSchema = z.discriminatedUnion("metricType", [
   JsonSchemaValidatorMetricConfigSchema,
   GEvalMetricConfigSchema,
   LevenshteinMetricConfigSchema,
+  NumericalSimilarityMetricConfigSchema,
   CodeMetricConfigSchema,
 ]);
 

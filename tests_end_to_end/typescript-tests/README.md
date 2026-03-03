@@ -252,7 +252,7 @@ typescript-tests/
     └── ...
 ```
 
-**Note:** MCP server configuration is in the root `.cursor/mcp.json` file.
+**Note:** MCP server configuration is canonical in the root `.agents/mcp.json` file (Cursor-compatible path: `.cursor/mcp.json` after `make cursor`).
 
 ### Workflow Example
 
@@ -297,12 +297,12 @@ git commit -m "[OPIK-1234] [FE] Add analytics dashboard + E2E test"
 - Accesses all fixtures and configuration
 - Used by agents as a starting point
 
-**Agent Definitions:** `../.cursor/agents/`
+**Agent Definitions:** `../../.agents/skills/playwright-e2e/agents/`
 - `playwright-test-planner.md` - Planner agent configuration
 - `playwright-test-generator.md` - Generator agent configuration
 - `playwright-test-healer.md` - Healer agent configuration
 
-**MCP Server:** Root `.cursor/mcp.json`
+**MCP Server:** Root `../../.agents/mcp.json` (or `../../.cursor/mcp.json` in Cursor-compatible mode)
 - Configures Model Context Protocol server (including `playwright-test` server)
 - Enables agent access to Playwright tools
 
@@ -341,9 +341,9 @@ curl http://localhost:5173
 
 ### Additional Resources
 
-- [Playwright Agent Workflow Rule](../.cursor/rules/playwright-agent-workflow.mdc) - Detailed workflow documentation
+- [Playwright E2E Skill](../../.agents/skills/playwright-e2e/SKILL.md) - Detailed workflow documentation
 - [Playwright Test Agents](https://playwright.dev/docs/test-agents) - Official Playwright docs
-- [Quick Start Guide](../QUICKSTART.md) - Quick reference
+- [E2E Suite Root Guide](../README.md) - Quick reference
 
 ## Comparison with Python Tests
 

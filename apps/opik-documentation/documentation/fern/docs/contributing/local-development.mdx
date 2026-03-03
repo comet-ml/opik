@@ -32,7 +32,7 @@ Choose the approach that best fits your development needs:
 - **Docker** and **Docker Compose** - For running infrastructure services
 - **Java 21** and **Maven** - For backend development
 - **Node.js 18+** and **npm** - For frontend development
-- **Python 3.8+** and **pip** - For SDK development
+- **Python 3.10+** and **pip** - For SDK development
 
 ### Verify Installation
 
@@ -734,7 +734,7 @@ pytest tests/
 
 ## IDE Configuration
 
-Opik provides AI coding rules and configurations for editors like Cursor and Claude Code. These are stored in `.agents/` and can be synced to your editor of choice using Makefile.
+Opik provides AI coding rules and configurations for editors like Cursor, Codex, and Claude Code. These are stored in `.agents/` and can be synced to your editor of choice using Makefile.
 
 ### Setup
 
@@ -742,9 +742,14 @@ Opik provides AI coding rules and configurations for editors like Cursor and Cla
 # For Cursor users - creates .cursor symlink to .agents/
 make cursor
 
+# For Codex users - creates .codex symlink and generates Codex-compatible AGENTS files
+make codex
+
 # For Claude Code users - syncs rules to .claude/ and generates .mcp.json
 make claude
 ```
+
+`make codex` keeps `.codex` linked to `.agents` and generates `AGENTS.override.md` plus `.agents/generated/codex/rules/*.md` so Codex can consume rule content derived from `.mdc` files.
 
 ### Directory Structure
 

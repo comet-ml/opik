@@ -23,6 +23,7 @@ from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
 from ..utils import prompt_tracing
+from ..utils.toolcalling.normalize.tool_factory import resolve_toolcalling_tools
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -31,6 +32,41 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _WARNED_NO_LOGPROBS = False
+_SENSITIVE_ARGUMENT_KEYS = (
+    "key",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "api_key",
+)
+_MAX_LOG_VALUE_LENGTH = 48
+
+
+def _sanitize_tool_arguments_for_logging(arguments: Any) -> Any:
+    """Return a redacted copy of tool-call arguments for exception logs."""
+    if isinstance(arguments, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in arguments.items():
+            key_text = str(key)
+            key_lower = key_text.lower()
+            if any(secret in key_lower for secret in _SENSITIVE_ARGUMENT_KEYS):
+                sanitized[key_text] = "***REDACTED***"
+            else:
+                sanitized[key_text] = _sanitize_tool_arguments_for_logging(value)
+        return sanitized
+    if isinstance(arguments, list):
+        return [_sanitize_tool_arguments_for_logging(item) for item in arguments]
+    if isinstance(arguments, tuple):
+        return tuple(_sanitize_tool_arguments_for_logging(item) for item in arguments)
+    if isinstance(arguments, str):
+        lowered = arguments.lower()
+        if any(secret in lowered for secret in _SENSITIVE_ARGUMENT_KEYS):
+            return "***REDACTED***"
+        if len(arguments) > _MAX_LOG_VALUE_LENGTH:
+            return f"{arguments[:_MAX_LOG_VALUE_LENGTH]}..."
+        return arguments
+    return arguments
 
 
 def _patch_litellm_choices_logprobs() -> None:
@@ -324,6 +360,12 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         if (prompt.model_kwargs or {}).get("n", 1) != 1:
             # TODO: Support multi-choice tool execution by selecting a single candidate.
             prompt.model_kwargs["n"] = 1
+        if prompt.tools is None:
+            raise ValueError("prompt.tools must be set before tool-enabled invocation")
+        # Normalize MCP tool entries into function-calling tools + callables.
+        tools_for_call, function_map = resolve_toolcalling_tools(
+            prompt.tools, prompt.function_map
+        )
         final_response = "I was unable to find the desired information."
         last_tool_response: str | None = None
         count = 0
@@ -333,25 +375,69 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         while count < max_iterations:
             count += 1
             response = self._run_completion(
-                prompt=prompt, messages=messages, tools=prompt.tools, seed=seed
+                prompt=prompt, messages=messages, tools=tools_for_call, seed=seed
             )
 
             msg = response.choices[0].message
-            messages.append(msg.to_dict())
+            # Tool-call turns often arrive with content=None and only tool_calls;
+            # normalize to empty string so downstream Pydantic schemas don't warn.
+            if getattr(msg, "content", None) is None:
+                msg.content = ""
+            msg_dict = msg.to_dict()
+            if msg_dict.get("content") is None:
+                msg_dict["content"] = ""
+            messages.append(msg_dict)
             if msg.tool_calls:
                 for tool_call in msg["tool_calls"]:
                     tool_name = tool_call["function"]["name"]
-                    arguments = json.loads(tool_call["function"]["arguments"])
-
-                    tool_func = prompt.function_map.get(tool_name)
-                    try:
-                        tool_result = (
-                            tool_func(**arguments)
-                            if tool_func is not None
-                            else "Unknown tool"
+                    raw_arguments = tool_call["function"].get("arguments", "{}")
+                    arguments: dict[str, Any]
+                    tool_result: Any
+                    argument_error: str | None = None
+                    if isinstance(raw_arguments, dict):
+                        parsed_arguments = raw_arguments
+                    else:
+                        try:
+                            parsed_arguments = json.loads(raw_arguments)
+                        except (json.JSONDecodeError, TypeError) as exc:
+                            parsed_arguments = {}
+                            argument_error = (
+                                f"Invalid JSON arguments for tool `{tool_name}`: {exc}"
+                            )
+                    if not isinstance(parsed_arguments, dict):
+                        parsed_arguments = {}
+                        argument_error = (
+                            f"Tool `{tool_name}` arguments must be a JSON object."
                         )
-                    except Exception:
-                        tool_result = f"Error in calling tool `{tool_name}`"
+                    arguments = parsed_arguments
+
+                    tool_func = function_map.get(tool_name)
+                    if argument_error is not None:
+                        safe_raw_arguments = _sanitize_tool_arguments_for_logging(
+                            raw_arguments
+                        )
+                        logger.warning(
+                            "Skipping tool call due to invalid arguments name=%s args=%r",
+                            tool_name,
+                            safe_raw_arguments,
+                        )
+                        tool_result = argument_error
+                    else:
+                        try:
+                            if tool_func is None:
+                                tool_result = f"Unknown tool `{tool_name}`"
+                            else:
+                                tool_result = tool_func(**arguments)
+                        except Exception as exc:  # pragma: no cover - defensive logging
+                            safe_arguments = _sanitize_tool_arguments_for_logging(
+                                arguments
+                            )
+                            logger.exception(
+                                "Tool call failed name=%s args=%s",
+                                tool_name,
+                                safe_arguments,
+                            )
+                            tool_result = f"Error calling tool `{tool_name}`: {exc}"
                     last_tool_response = str(tool_result)
                     messages.append(
                         {
@@ -369,6 +455,13 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                     _llm_calls._increment_llm_call_tools_counter_if_in_optimizer()
             else:
                 final_response = msg["content"]
+                if msg["content"]:
+                    break
+                if last_tool_response is not None:
+                    follow_up = self._run_completion(
+                        prompt=prompt, messages=messages, tools=None, seed=seed
+                    )
+                    final_response = self._extract_response_text(follow_up)
                 break
         if count >= max_iterations and msg.tool_calls:
             final_response = (

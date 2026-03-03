@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Convert Cursor frontmatter to Claude frontmatter
+# Convert frontmatter between agent tool formats
 # Usage: convert-frontmatter.sh <direction> <input-file> <output-file>
-# direction: cursor-to-claude | claude-to-cursor
+# direction: cursor-to-claude | claude-to-cursor | cursor-to-codex
 
 set -euo pipefail
 
@@ -71,6 +71,22 @@ elif [[ "$direction" == "claude-to-cursor" ]]; then
         }
         next
     }
+    { print }
+    ' "$input" > "$output"
+elif [[ "$direction" == "cursor-to-codex" ]]; then
+    # Strip frontmatter for Codex-friendly markdown documents.
+    awk '
+    BEGIN { in_frontmatter=0; frontmatter_done=0 }
+    /^---$/ && !frontmatter_done {
+        if (in_frontmatter) {
+            in_frontmatter=0
+            frontmatter_done=1
+        } else {
+            in_frontmatter=1
+        }
+        next
+    }
+    in_frontmatter && !frontmatter_done { next }
     { print }
     ' "$input" > "$output"
 else
