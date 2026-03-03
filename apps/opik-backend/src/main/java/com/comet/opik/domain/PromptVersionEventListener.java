@@ -3,19 +3,17 @@ package com.comet.opik.domain;
 import com.comet.opik.api.events.PromptVersionCreatedEvent;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 
 @EagerSingleton
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class PromptVersionEventListener {
 
-    private final AgentConfigService agentConfigService;
-
-    @Inject
-    public PromptVersionEventListener(AgentConfigService agentConfigService) {
-        this.agentConfigService = agentConfigService;
-    }
+    private final @NonNull AgentConfigService agentConfigService;
 
     @Subscribe
     public void onPromptVersionCreated(PromptVersionCreatedEvent event) {

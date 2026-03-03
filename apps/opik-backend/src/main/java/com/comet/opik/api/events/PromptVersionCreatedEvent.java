@@ -1,13 +1,14 @@
 package com.comet.opik.api.events;
 
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.util.UUID;
 
-@Builder
+@Builder(toBuilder = true)
 public record PromptVersionCreatedEvent(
-        String workspaceId,
-        UUID promptId,
-        String commit,
-        String userName) {
+        @NonNull String workspaceId,
+        @NonNull UUID promptId,
+        @NonNull String commit,
+        @NonNull String userName) {
 }

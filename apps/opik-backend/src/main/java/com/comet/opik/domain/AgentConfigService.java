@@ -43,11 +43,11 @@ public interface AgentConfigService {
 
     AgentBlueprint.BlueprintPage getHistory(UUID projectId, int page, int size);
 
-    void updateBlueprintsForNewPromptVersion(
-            @NonNull String workspaceId,
-            @NonNull UUID promptId,
-            @NonNull String newCommit,
-            @NonNull String userName);
+    List<UUID> updateBlueprintsForNewPromptVersion(
+            String workspaceId,
+            UUID promptId,
+            String newCommit,
+            String userName);
 }
 
 @Slf4j
@@ -122,18 +122,15 @@ class AgentConfigServiceImpl implements AgentConfigService {
             String workspaceId,
             String userName) {
 
-        UUID blueprintId = createBlueprintSnapshot(
-                dao, workspaceId, projectId, configId,
-                request.blueprint().id(),
-                request.blueprint().type(),
-                request.blueprint().description(),
-                request.blueprint().values(),
-                userName);
-
-        return request.blueprint().toBuilder()
-                .id(blueprintId)
+        AgentBlueprint blueprint = request.blueprint().toBuilder()
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
+                .build();
+
+        UUID blueprintId = createBlueprintSnapshot(dao, workspaceId, projectId, configId, blueprint);
+
+        return blueprint.toBuilder()
+                .id(blueprintId)
                 .build();
     }
 
@@ -142,17 +139,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
             String workspaceId,
             UUID projectId,
             UUID configId,
-            UUID blueprintId,
-            AgentBlueprint.BlueprintType type,
-            String description,
-            List<AgentConfigValue> values,
-            String userName) {
+            AgentBlueprint blueprint) {
 
-        blueprintId = Objects.requireNonNullElseGet(blueprintId, idGenerator::generateId);
+        UUID blueprintId = Objects.requireNonNullElseGet(blueprint.id(), idGenerator::generateId);
 
         log.info("Creating blueprint '{}' for config '{}'", blueprintId, configId);
 
-        List<String> keys = values.stream()
+        List<String> keys = blueprint.values().stream()
                 .map(AgentConfigValue::key)
                 .toList();
 
@@ -163,12 +156,12 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 workspaceId,
                 projectId,
                 configId,
-                type,
-                description,
-                userName,
-                userName);
+                blueprint.type(),
+                blueprint.description(),
+                blueprint.createdBy(),
+                blueprint.lastUpdatedBy());
 
-        insertValues(dao, values, configId, projectId, blueprintId, workspaceId);
+        insertValues(dao, blueprint.values(), configId, projectId, blueprintId, workspaceId);
 
         return blueprintId;
     }
@@ -446,7 +439,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
     }
 
     @Override
-    public void updateBlueprintsForNewPromptVersion(
+    public List<UUID> updateBlueprintsForNewPromptVersion(
             @NonNull String workspaceId,
             @NonNull UUID promptId,
             @NonNull String newCommit,
@@ -455,7 +448,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
         log.info("Updating blueprints for new prompt version: promptId='{}', commit='{}', workspace='{}'",
                 promptId, newCommit, workspaceId);
 
-        transactionTemplate.inTransaction(WRITE, handle -> {
+        List<UUID> createdBlueprintIds = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
             List<AgentConfigDAO.BlueprintValueReference> references = dao
@@ -463,58 +456,48 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
             if (references.isEmpty()) {
                 log.info("No blueprints to update for prompt '{}' with commit '{}'", promptId, newCommit);
-                return null;
+                return List.<UUID>of();
             }
 
             Map<UUID, List<AgentConfigDAO.BlueprintValueReference>> referencesByProject = references.stream()
                     .collect(Collectors.groupingBy(AgentConfigDAO.BlueprintValueReference::projectId));
 
-            log.info("Found {} projects with outdated prompt references", referencesByProject.size());
+            log.info("Found projects with outdated prompt references: '{}'", referencesByProject.size());
 
-            for (Map.Entry<UUID, List<AgentConfigDAO.BlueprintValueReference>> entry : referencesByProject
-                    .entrySet()) {
-                updateBlueprintForProject(dao, workspaceId, entry.getValue(), newCommit, userName);
+            List<AgentConfigDAO.BlueprintInsertData> blueprintInserts = new ArrayList<>();
+            List<AgentConfigDAO.ValueCloseRef> valueCloses = new ArrayList<>();
+            List<AgentConfigDAO.ValueInsertData> valueInserts = new ArrayList<>();
+
+            for (var entry : referencesByProject.entrySet()) {
+                List<AgentConfigDAO.BlueprintValueReference> refs = entry.getValue();
+                UUID configId = refs.getFirst().configId();
+                UUID blueprintId = idGenerator.generateId();
+
+                blueprintInserts.add(new AgentConfigDAO.BlueprintInsertData(
+                        blueprintId, entry.getKey(), configId,
+                        AgentBlueprint.BlueprintType.BLUEPRINT, null));
+
+                for (var ref : refs) {
+                    valueCloses.add(new AgentConfigDAO.ValueCloseRef(
+                            ref.projectId(), blueprintId, ref.configKey()));
+
+                    valueInserts.add(new AgentConfigDAO.ValueInsertData(
+                            idGenerator.generateId(), ref.projectId(), configId,
+                            ref.configKey(), newCommit, AgentConfigValue.ValueType.PROMPT,
+                            null, blueprintId));
+                }
             }
 
-            return null;
+            dao.batchCloseValuesByKey(workspaceId, valueCloses);
+            dao.batchInsertBlueprints(workspaceId, userName, userName, blueprintInserts);
+            dao.batchInsertValuesMultiProject(workspaceId, valueInserts);
+
+            return blueprintInserts.stream()
+                    .map(AgentConfigDAO.BlueprintInsertData::id)
+                    .toList();
         });
 
-        log.info("Completed blueprint updates for prompt '{}' with commit '{}'", promptId, newCommit);
-    }
-
-    private void updateBlueprintForProject(
-            AgentConfigDAO dao,
-            String workspaceId,
-            List<AgentConfigDAO.BlueprintValueReference> references,
-            String newCommit,
-            String userName) {
-
-        if (references.isEmpty()) {
-            return;
-        }
-
-        var projectId = references.getFirst().projectId();
-        var configId = references.getFirst().configId();
-
-        log.info("Updating blueprint for project '{}', {} values to update", projectId, references.size());
-
-        List<AgentConfigValue> newValues = references.stream()
-                .map(ref -> AgentConfigValue.builder()
-                        .key(ref.configKey())
-                        .value(newCommit)
-                        .type(AgentConfigValue.ValueType.PROMPT)
-                        .build())
-                .toList();
-
-        UUID newBlueprintId = createBlueprintSnapshot(
-                dao, workspaceId, projectId, configId,
-                null,
-                AgentBlueprint.BlueprintType.BLUEPRINT,
-                null,
-                newValues,
-                userName);
-
-        log.info("Created new blueprint '{}' for project '{}' with updated prompt references",
-                newBlueprintId, projectId);
+        log.info("Completed blueprint updates for prompt, created blueprints: '{}'", createdBlueprintIds.size());
+        return createdBlueprintIds;
     }
 }

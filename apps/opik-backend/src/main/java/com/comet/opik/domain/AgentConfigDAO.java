@@ -6,6 +6,8 @@ import com.comet.opik.infrastructure.db.BlueprintTypeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
+import lombok.Builder;
+import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
@@ -43,7 +45,24 @@ interface AgentConfigDAO {
     record BlueprintProject(UUID id, UUID projectId) {
     }
 
-    record BlueprintValueReference(UUID blueprintId, UUID projectId, UUID configId, String configKey, String oldValue) {
+    @Builder(toBuilder = true)
+    record BlueprintValueReference(@NonNull UUID blueprintId, @NonNull UUID projectId, @NonNull UUID configId,
+            @NonNull String configKey, String oldValue) {
+    }
+
+    @Builder(toBuilder = true)
+    record BlueprintInsertData(@NonNull UUID id, @NonNull UUID projectId, @NonNull UUID configId,
+            @NonNull BlueprintType type, String description) {
+    }
+
+    @Builder(toBuilder = true)
+    record ValueCloseRef(@NonNull UUID projectId, @NonNull UUID validToBlueprintId, @NonNull String key) {
+    }
+
+    @Builder(toBuilder = true)
+    record ValueInsertData(@NonNull UUID id, @NonNull UUID projectId, @NonNull UUID configId,
+            @NonNull String key, @NonNull String value, @NonNull AgentConfigValue.ValueType type,
+            String description, @NonNull UUID validFromBlueprintId) {
     }
 
     @SqlQuery("""
@@ -124,6 +143,43 @@ interface AgentConfigDAO {
             @Bind("project_id") UUID projectId,
             @Bind("valid_to_blueprint_id") UUID validToBlueprintId,
             @BindList("keys") List<String> keys);
+
+    @SqlBatch("""
+            UPDATE agent_config_values
+            SET valid_to_blueprint_id = :bean.validToBlueprintId
+            WHERE workspace_id = :workspace_id AND project_id = :bean.projectId
+                AND valid_to_blueprint_id IS NULL
+                AND `key` = :bean.key
+            """)
+    void batchCloseValuesByKey(
+            @Bind("workspace_id") String workspaceId,
+            @BindMethods("bean") List<ValueCloseRef> refs);
+
+    @SqlBatch("""
+            INSERT INTO agent_blueprints (id, workspace_id, project_id, config_id, type, description, created_by, last_updated_by)
+            VALUES (:bean.id, :workspace_id, :bean.projectId, :bean.configId, :bean.type, :bean.description, :created_by, :last_updated_by)
+            """)
+    void batchInsertBlueprints(
+            @Bind("workspace_id") String workspaceId,
+            @Bind("created_by") String createdBy,
+            @Bind("last_updated_by") String lastUpdatedBy,
+            @BindMethods("bean") List<BlueprintInsertData> blueprints);
+
+    @SqlBatch("""
+            INSERT INTO agent_config_values (
+                id, workspace_id, project_id, config_id,
+                `key`, value, type, description,
+                valid_from_blueprint_id, valid_to_blueprint_id
+            )
+            VALUES (
+                :bean.id, :workspace_id, :bean.projectId, :bean.configId,
+                :bean.key, :bean.value, :bean.type, :bean.description,
+                :bean.validFromBlueprintId, NULL
+            )
+            """)
+    void batchInsertValuesMultiProject(
+            @Bind("workspace_id") String workspaceId,
+            @BindMethods("bean") List<ValueInsertData> values);
 
     @SqlQuery("""
             SELECT id, project_id, type, description, created_by, created_at, last_updated_by, last_updated_at
