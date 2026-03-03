@@ -1,0 +1,89 @@
+Here are the most relevant improvements we've made since the last release:
+
+## 🦞 Native OpenClaw Observability with Opik
+
+We've released `opik-openclaw`, a native OpenClaw plugin that gives you full-stack observability for your agents, powered by Opik. This brings enterprise-grade tracing, evaluation, and monitoring to the fastest-growing open-source agent framework.
+
+**What you get:**
+
+- **Full Trace Capture** - Every LLM call, tool execution, memory recall, context assembly, and agent delegation is logged with complete input/output pairs, token counts, latency, and cost
+- **End-to-End Conversation Threading** - Trace a request from the initial message through multi-step reasoning, tool calls, and the final response, even when the agent chains across sub-agents or scheduled heartbeats
+- **Real Cost Visibility** - Per-request, per-model cost breakdowns so you can see exactly where tokens are going and optimize accordingly
+- **Automated Evaluation with LLM-as-a-Judge** - Set up hallucination detection, answer relevance, and context precision metrics that run automatically on your traces
+
+Get started in two minutes: install the plugin with `openclaw plugins install @opik/opik-openclaw`, configure your API key, and traces start flowing immediately. Works with both Opik Cloud and self-hosted instances.
+
+👉 [Visit the GitHub repository here](https://github.com/comet-ml/opik-openclaw)
+
+## 🤖 Expanded Model & Provider Support
+
+We've broadened the range of models and providers you can use across the platform, giving you more flexibility in how you build and evaluate your LLM applications.
+
+**What's new:**
+
+- **Gemini 3.1 Support** - Google's Gemini 3.1 is now available as a supported model across the platform
+- **Claude Sonnet 4.6 as Default** - Claude Sonnet 4.6 is now the default Anthropic model, bringing improved performance out of the box
+- **OpenRouter Native UX** - OpenRouter now has a much more native out-of-the-box experience in the Opik UI. `openrouter/free` is directly selectable, and `openrouter/*` route models including `/auto` are supported and prioritized in model selection
+- **Updated Default Models** - The Python SDK has been updated to retire legacy gpt-4* defaults in favor of more current models
+- **OpenAI TTS Tracking** - You can now track OpenAI text-to-speech model calls (audio.speech) with full tracing support
+- **OpenAI-Compatible Providers for LLM-as-a-Judge** - Use any OpenAI-compatible provider when running LLM-as-a-Judge evaluation metrics, giving you more flexibility in choosing your evaluation model
+
+## 📦 SDK Improvements
+
+We've continued to expand the capabilities of both the TypeScript and Python SDKs, making it easier to integrate Opik into your workflows programmatically.
+
+**What's new:**
+
+- **G-Eval Metric (TypeScript)** - The G-Eval evaluation metric is now available in the TypeScript SDK, enabling structured LLM-based evaluation directly from your TypeScript projects
+- **Annotation Queue Support (TypeScript)** - Manage and interact with annotation queues programmatically from the TypeScript SDK
+- **Thread Search (TypeScript)** - Search through conversation threads programmatically with the new `searchThreads` functionality in the TypeScript SDK
+- **Offline Message Persistence (Python)** - When the Python SDK loses connectivity to the Opik server, telemetry messages are now persisted locally in a SQLite database and automatically replayed once the connection is restored — ensuring no data is lost during network outages
+- **OTEL Integration Docs Expansion** - We've shipped a major expansion of our [OpenTelemetry integration documentation](https://www.comet.com/docs/opik/integrations/overview), including new pages and updated guidance for multiple frameworks and providers with emphasis on TypeScript
+
+## 🚀 Optimization Studio & Optimizer SDK
+
+We've made the Optimization Studio more powerful and flexible, with new metrics, persistence, and a major Optimizer SDK update.
+
+**What's new:**
+
+- **JSONPath Support & Numerical Similarity Metric** - The Optimization Studio now supports JSONPath expressions for extracting values from complex outputs, along with a new Numerical Similarity metric for comparing numeric results
+- **Native MCP/Tool Optimization** - The v3.x Optimizer SDK now includes fully native [MCP and tool optimization](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization) support, including support for remote MCP and improved tool-signature handling
+- **Multi-Metric Optimization** - Multi-metric optimization is now working across span data with working examples for cost, speed, and quality tradeoff scenarios
+- **Stronger Sampling & Agent Optimization** - Since the initial v3 SDK launch, we've added stronger sampling controls, full agent optimization including multi-prompt support, and finer prompt-control inside optimizer loops
+- **Optimizer SDK 3.1.0** - The Optimizer SDK has been updated to version 3.1.0 with all of the above improvements and the retirement of legacy gpt-4* model references
+
+## ✨ Platform Features & UX Improvements
+
+We've made several improvements to make your day-to-day workflow smoother and more intuitive.
+
+**What's improved:**
+
+- **Updated Default Columns** - Default columns across all tables have been refreshed to surface the most relevant information by default
+- **Relative Time Format** - Time columns now display relative timestamps (e.g., "2 hours ago") for quicker at-a-glance understanding
+- **Smart Threads Tab Default** - Projects with threads now automatically default to the Threads tab, getting you to the right view faster
+- **Consistent Destructive Actions** - Destructive menu options are now visually unified with red text and separators for clearer intent
+- **Feedback Score Precision** - Feedback scores are now rounded to 2 decimal places with full precision available on hover
+- **Workspace Color Maps** - Configure workspace-level color maps for consistent visual styling across your projects
+- **Image Attachments in Threads** - View image attachments directly within the thread view for better context when reviewing conversations
+- **Bulk Tag Operations** - Add or remove tags in bulk across traces, spans, and other entities for faster organization
+- **Inline Feedback Definition Creation** - Create new feedback definitions directly from the annotation queue form without leaving your workflow
+- **Dataset Item Descriptions** - Dataset items now support a description field, making it easier to document and annotate your evaluation data
+- **[Revamped MCP Server](https://github.com/comet-ml/opik-mcp)** - The Opik MCP server has been revamped to align with current MCP standards, with added support for remote MCP, improved auth behavior, and expanded native features including prompt and dataset workflows
+
+## 🏷️ Prompt Version Tags
+
+We've introduced prompt version tags, giving you a lightweight way to label and organize your prompt versions across the platform.
+
+**What's new:**
+
+- **Version Tags in Comparison View** - Easily see and compare tagged prompt versions side by side in the prompt comparison view
+- **Python SDK Support** - Create, manage, and retrieve prompt version tags programmatically from the Python SDK
+- **Retrieve Prompts by Commits** - A new API endpoint lets you retrieve prompts by their commit references, enabling tighter integration with your version control workflow
+
+👉 [Prompt Version Tags Documentation](https://www.comet.com/docs/opik/prompt_engineering/prompt_management#prompt-version-tags)
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/1.10.10...1.10.23)
+
+_Releases_: `1.10.11`, `1.10.12`, `1.10.13`, `1.10.14`, `1.10.15`, `1.10.16`, `1.10.17`, `1.10.18`, `1.10.19`, `1.10.20`, `1.10.21`, `1.10.22`, `1.10.23`
