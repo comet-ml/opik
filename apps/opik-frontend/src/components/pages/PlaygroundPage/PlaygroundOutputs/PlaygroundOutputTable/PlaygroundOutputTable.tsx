@@ -54,13 +54,12 @@ const PlaygroundOutputTable = ({
     defaultValue: {},
   });
 
-  const { hydratedItems: hydratedDatasetItems, isHydrating } =
+  const { hydratedItems: hydratedDatasetItems } =
     useIncrementalDatasetHydration(datasetItems);
 
-  const noDataMessage =
-    isLoadingDatasetItems || (isHydrating && hydratedDatasetItems.length === 0)
-      ? "Loading..."
-      : "No dataset items";
+  const noDataMessage = isLoadingDatasetItems
+    ? "Loading..."
+    : "No dataset items";
 
   const rows = useMemo(() => {
     if (isLoadingDatasetItems) {

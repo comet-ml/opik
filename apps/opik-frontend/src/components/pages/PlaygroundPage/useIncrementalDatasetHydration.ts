@@ -20,10 +20,10 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
       return;
     }
 
-    const hydrateItems = async () => {
-      setIsHydrating(true);
-      setHydratedItems([]);
+    setHydratedItems(datasetItems);
+    setIsHydrating(true);
 
+    const hydrateItems = async () => {
       for (let i = 0; i < datasetItems.length; i++) {
         if (cancelledRef.current) return;
 
@@ -31,10 +31,11 @@ export function useIncrementalDatasetHydration(datasetItems: DatasetItem[]): {
 
         if (cancelledRef.current) return;
 
-        setHydratedItems((prev) => [
-          ...prev,
-          { ...datasetItems[i], data: hydratedData },
-        ]);
+        setHydratedItems((prev) =>
+          prev.map((item, idx) =>
+            idx === i ? { ...item, data: hydratedData } : item,
+          ),
+        );
       }
 
       setIsHydrating(false);
