@@ -134,7 +134,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response registerAgents(@PathParam("runnerId") UUID runnerId,
-            @NotNull Map<String, LocalRunner.Agent> agents) {
+            @NotNull @Valid Map<String, LocalRunner.Agent> agents) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.registerAgents(runnerId, workspaceId, agents);

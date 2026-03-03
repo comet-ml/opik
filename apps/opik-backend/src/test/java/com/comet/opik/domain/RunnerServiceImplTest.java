@@ -5,6 +5,7 @@ import com.comet.opik.api.runner.ConnectRequest;
 import com.comet.opik.api.runner.CreateJobRequest;
 import com.comet.opik.api.runner.HeartbeatResponse;
 import com.comet.opik.api.runner.JobResultRequest;
+import com.comet.opik.api.runner.JobStatus;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LogEntry;
@@ -1078,7 +1079,7 @@ class RunnerServiceImplTest {
             resultNode.put("output", "success");
 
             runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").result(resultNode).build());
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).result(resultNode).build());
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -1098,7 +1099,7 @@ class RunnerServiceImplTest {
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("failed").error("something broke").build());
+                    JobResultRequest.builder().status(JobStatus.FAILED).error("something broke").build());
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -1115,7 +1116,7 @@ class RunnerServiceImplTest {
 
             UUID traceId = UUID.randomUUID();
             runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").traceId(traceId).build());
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).traceId(traceId).build());
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -1132,7 +1133,7 @@ class RunnerServiceImplTest {
                     List.of(LogEntry.builder().stream("stdout").text("log").build()));
 
             runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").build());
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).build());
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -1150,7 +1151,7 @@ class RunnerServiceImplTest {
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             assertThatThrownBy(() -> runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("running").build()))
+                    JobResultRequest.builder().status(JobStatus.RUNNING).build()))
                     .isInstanceOf(ClientErrorException.class)
                     .satisfies(e -> assertThat(((ClientErrorException) e).getResponse().getStatus()).isEqualTo(400));
         }
@@ -1158,7 +1159,7 @@ class RunnerServiceImplTest {
         @Test
         void throwsNotFoundForMissing() {
             assertThatThrownBy(() -> runnerService.reportResult(UUID.randomUUID(), WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").build()))
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).build()))
                     .isInstanceOf(NotFoundException.class);
         }
 
@@ -1168,7 +1169,7 @@ class RunnerServiceImplTest {
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.reportResult(jobId, OTHER_WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").build()))
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).build()))
                     .isInstanceOf(NotFoundException.class);
         }
     }
@@ -1473,7 +1474,7 @@ class RunnerServiceImplTest {
             runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
 
             runnerService.reportResult(jobId, WORKSPACE_ID,
-                    JobResultRequest.builder().status("completed").build());
+                    JobResultRequest.builder().status(JobStatus.COMPLETED).build());
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -1536,7 +1537,7 @@ class RunnerServiceImplTest {
         resultNode.put("answer", "world");
         runnerService.reportResult(claimed.id(), WORKSPACE_ID,
                 JobResultRequest.builder()
-                        .status("completed")
+                        .status(JobStatus.COMPLETED)
                         .result(resultNode)
                         .traceId(traceId)
                         .build());

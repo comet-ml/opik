@@ -23,6 +23,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBucket;
@@ -33,7 +34,6 @@ import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 
 import java.io.UncheckedIOException;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -130,8 +130,6 @@ class RunnerServiceImpl implements RunnerService {
     private static final String FIELD_ERROR = "error";
     private static final String FIELD_TRACE_ID = "trace_id";
     private static final String FIELD_TIMEOUT = "timeout";
-
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final @NonNull RedissonClient redisClient;
     private final @NonNull RunnerConfig runnerConfig;
@@ -475,7 +473,7 @@ class RunnerServiceImpl implements RunnerService {
         RMap<String, String> jobMap = job.map();
         Map<String, String> fields = job.fields();
 
-        JobStatus resultStatus = JobStatus.valueOf(result.status().toUpperCase());
+        JobStatus resultStatus = result.status();
         if (!TERMINAL_JOB_STATUSES.contains(resultStatus)) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
@@ -720,7 +718,8 @@ class RunnerServiceImpl implements RunnerService {
         for (int attempt = 0; attempt < 10; attempt++) {
             StringBuilder sb = new StringBuilder(PAIRING_CODE_LENGTH);
             for (int i = 0; i < PAIRING_CODE_LENGTH; i++) {
-                sb.append(PAIRING_CODE_ALPHABET.charAt(SECURE_RANDOM.nextInt(PAIRING_CODE_ALPHABET.length())));
+                sb.append(PAIRING_CODE_ALPHABET
+                        .charAt(RandomUtils.secure().randomInt(0, PAIRING_CODE_ALPHABET.length())));
             }
             String code = sb.toString();
 

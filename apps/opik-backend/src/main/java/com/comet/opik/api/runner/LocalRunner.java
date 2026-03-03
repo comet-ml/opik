@@ -4,6 +4,8 @@ import com.comet.opik.api.Page;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -24,21 +26,21 @@ public record LocalRunner(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Agent(
-            String name,
+            @NotBlank String name,
             String project,
             String description,
             String language,
             String executable,
             String sourceFile,
-            List<Param> params,
+            @Valid List<@Valid Param> params,
             int timeout) {
 
         @Builder(toBuilder = true)
         @JsonIgnoreProperties(ignoreUnknown = true)
         @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
         public record Param(
-                String name,
-                String type) {
+                @NotBlank String name,
+                @NotBlank String type) {
         }
     }
 

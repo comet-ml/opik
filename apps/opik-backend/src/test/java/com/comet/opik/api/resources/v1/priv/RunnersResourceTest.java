@@ -14,6 +14,7 @@ import com.comet.opik.api.runner.ConnectRequest;
 import com.comet.opik.api.runner.CreateJobRequest;
 import com.comet.opik.api.runner.HeartbeatResponse;
 import com.comet.opik.api.runner.JobResultRequest;
+import com.comet.opik.api.runner.JobStatus;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LogEntry;
@@ -200,7 +201,7 @@ class RunnersResourceTest {
         // 13. Report result
         JsonNode resultPayload = new ObjectMapper().createObjectNode().put("answer", "world");
         JobResultRequest resultRequest = JobResultRequest.builder()
-                .status("completed")
+                .status(JobStatus.COMPLETED)
                 .result(resultPayload)
                 .traceId(randomUUID())
                 .build();
