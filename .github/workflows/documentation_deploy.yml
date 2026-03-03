@@ -28,5 +28,6 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           POSTHOG_API_HOST: ${{ secrets.POSTHOG_API_HOST }}
         run: |
-          cd apps/opik-documentation/documentation
+          cd apps/opik-documentation/documentation/fern
+          fern docs md generate
           fern generate --docs
