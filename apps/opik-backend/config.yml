@@ -702,6 +702,7 @@ runner:
   completedJobTtl: ${OPIK_RUNNER_COMPLETED_JOB_TTL:-7d}
   reaperLockDuration: ${OPIK_RUNNER_REAPER_LOCK_DURATION:-55s}
   reaperLockWait: ${OPIK_RUNNER_REAPER_LOCK_WAIT:-5s}
+  nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
 
 # Trace Thread configuration
 traceThreadConfig:

@@ -509,6 +509,7 @@ runner:
   completedJobTtl: 1h
   reaperLockDuration: 10s
   reaperLockWait: 2s
+  nextJobAsyncTimeoutBuffer: 2s
 
 # Trace Thread configuration
 traceThreadConfig:

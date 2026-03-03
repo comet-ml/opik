@@ -199,7 +199,8 @@ public class RunnersResource {
             @Suspended AsyncResponse asyncResponse) {
         ensureEnabled();
         long pollTimeoutSeconds = runnerConfig.getNextJobPollTimeout().toSeconds();
-        asyncResponse.setTimeout(pollTimeoutSeconds + 5, TimeUnit.SECONDS);
+        long bufferSeconds = runnerConfig.getNextJobAsyncTimeoutBuffer().toSeconds();
+        asyncResponse.setTimeout(pollTimeoutSeconds + bufferSeconds, TimeUnit.SECONDS);
         asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.noContent().build()));
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.nextJob(runnerId, workspaceId)
@@ -215,7 +216,8 @@ public class RunnersResource {
                     if (cause instanceof WebApplicationException wae) {
                         asyncResponse.resume(wae);
                     } else {
-                        log.error("Error polling next job", cause);
+                        log.error("Error polling next job for runner='{}' workspace='{}'", runnerId, workspaceId,
+                                cause);
                         asyncResponse.resume(Response.serverError().build());
                     }
                     return null;

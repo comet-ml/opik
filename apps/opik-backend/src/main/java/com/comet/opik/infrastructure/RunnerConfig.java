@@ -45,4 +45,8 @@ public class RunnerConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration reaperLockWait = Duration.seconds(5);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration nextJobAsyncTimeoutBuffer = Duration.seconds(5);
 }
