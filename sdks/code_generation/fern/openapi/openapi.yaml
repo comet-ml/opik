@@ -10055,6 +10055,9 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
     FeedbackScore:
       required:
       - name
@@ -10665,6 +10668,9 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -11453,6 +11459,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -11591,6 +11602,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -12349,6 +12365,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid

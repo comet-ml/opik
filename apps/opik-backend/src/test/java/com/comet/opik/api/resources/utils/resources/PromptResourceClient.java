@@ -90,6 +90,22 @@ public class PromptResourceClient {
         }
     }
 
+    public Prompt getPromptByCommit(String commit, String apiKey, String workspaceName) {
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path("by-commit")
+                .path(commit)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(Prompt.class);
+        }
+    }
+
     public List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
             String workspaceName) {
 

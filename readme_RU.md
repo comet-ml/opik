@@ -238,6 +238,7 @@ opik configure
 | OpenAI (Python) | Журнал трассировки вызовов OpenAI LLM | [Документация](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik) |
 | OpenAI (JS/TS) | Журнал трассировки вызовов OpenAI JavaScript/TypeScript | [Документация](https://www.comet.com/docs/opik/integrations/openai-typescript?utm_source=opik&utm_medium=github&utm_content=openai_typescript_link&utm_campaign=opik) |
 | Агенты OpenAI | Журнал трассировки вызовов OpenAI Agents SDK | [Документация](https://www.comet.com/docs/opik/integrations/openai_agents?utm_source=opik&utm_medium=github&utm_content=openai_agents_link&utm_campaign=opik) |
+| OpenClaw | Журнал трассировки запусков агентов OpenClaw | [Документация](https://www.comet.com/docs/opik/integrations/openclaw?utm_source=opik&utm_medium=github&utm_content=openclaw_link&utm_campaign=opik) |
 | OpenRouter | Журнал трассировки вызовов OpenRouter LLM | [Документация](https://www.comet.com/docs/opik/integrations/openrouter?utm_source=opik&utm_medium=github&utm_content=openrouter_link&utm_campaign=opik) |
 | Открытая телеметрия | Журнал трассировки вызовов, поддерживаемых OpenTelemetry | [Документация](https://www.comet.com/docs/opik/tracing/opentelemetry/overview?utm_source=opik&utm_medium=github&utm_content=opentelemetry_link&utm_campaign=opik) |
 | OpenWebUI | Журнал трассировки диалогов OpenWebUI | [Документация](https://www.comet.com/docs/opik/integrations/openwebui?utm_source=opik&utm_medium=github&utm_content=openwebui_link&utm_campaign=opik) |

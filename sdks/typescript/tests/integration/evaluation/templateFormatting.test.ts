@@ -5,10 +5,11 @@ import { PromptType } from "@/prompt/types";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { cleanupDatasets, createSimpleDataset } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Template Formatting Integration", () => {
   let client: Opik;
