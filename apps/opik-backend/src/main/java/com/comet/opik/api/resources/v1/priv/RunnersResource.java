@@ -135,7 +135,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response registerAgents(@PathParam("runnerId") UUID runnerId,
-            @NotNull @Valid Map<String, LocalRunner.Agent> agents) {
+            @RequestBody(description = "Map of agent name to agent definition", content = @Content(schema = @Schema(implementation = Object.class))) @NotNull @Valid Map<String, LocalRunner.Agent> agents) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.registerAgents(runnerId, workspaceId, agents);
@@ -250,7 +250,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response appendLogs(@PathParam("jobId") UUID jobId,
-            @NotNull @Valid List<@NotNull LogEntry> entries) {
+            @RequestBody(content = @Content(array = @ArraySchema(schema = @Schema(implementation = LogEntry.class)))) @NotNull @Valid List<@NotNull LogEntry> entries) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.appendLogs(jobId, workspaceId, entries);

@@ -32,7 +32,7 @@ public record LocalRunner(
             String language,
             String executable,
             String sourceFile,
-            @Valid List<@Valid Param> params,
+            @Valid List<Param> params,
             int timeout) {
 
         @Builder(toBuilder = true)
