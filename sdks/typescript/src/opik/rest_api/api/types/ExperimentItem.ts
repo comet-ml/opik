@@ -21,4 +21,5 @@ export interface ExperimentItem {
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemTraceVisibilityMode;
+    description?: string;
 }

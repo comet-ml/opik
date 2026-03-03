@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_public import CommentPublic
 from .dataset_version_summary_public import DatasetVersionSummaryPublic
+from .experiment_public_evaluation_method import ExperimentPublicEvaluationMethod
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
 from .experiment_score_public import ExperimentScorePublic
@@ -26,6 +27,7 @@ class ExperimentPublic(UniversalBaseModel):
     metadata: typing.Optional[JsonListStringPublic] = None
     tags: typing.Optional[typing.List[str]] = None
     type: typing.Optional[ExperimentPublicType] = None
+    evaluation_method: typing.Optional[ExperimentPublicEvaluationMethod] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAveragePublic]] = None
     comments: typing.Optional[typing.List[CommentPublic]] = None
