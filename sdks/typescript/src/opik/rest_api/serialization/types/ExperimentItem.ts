@@ -34,6 +34,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
             "trace_visibility_mode",
             ExperimentItemTraceVisibilityMode.optional(),
         ),
+        description: core.serialization.string().optional(),
     });
 
 export declare namespace ExperimentItem {
@@ -56,5 +57,6 @@ export declare namespace ExperimentItem {
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemTraceVisibilityMode.Raw | null;
+        description?: string | null;
     }
 }

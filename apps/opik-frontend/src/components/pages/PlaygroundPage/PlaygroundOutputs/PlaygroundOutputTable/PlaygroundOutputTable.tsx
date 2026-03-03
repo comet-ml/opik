@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import get from "lodash/get";
 import isEmpty from "lodash/isEmpty";
 import {
@@ -21,7 +21,7 @@ import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
+import { useIncrementalDatasetHydration } from "@/components/pages/PlaygroundPage/useIncrementalDatasetHydration";
 import PlaygroundTagsCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
 type PlaygroundOutputTableData = {
@@ -54,56 +54,27 @@ const PlaygroundOutputTable = ({
     defaultValue: {},
   });
 
-  const hydrateDatasetItemData = useHydrateDatasetItemData();
-  const [hydratedDatasetItems, setHydratedDatasetItems] = useState<
-    DatasetItem[]
-  >([]);
-  const [isHydrating, setIsHydrating] = useState(false);
+  const { hydratedItems: hydratedDatasetItems } =
+    useIncrementalDatasetHydration(datasetItems);
 
-  // Hydrate dataset items when they change
-  useEffect(() => {
-    const hydrateItems = async () => {
-      setIsHydrating(true);
-      const hydratedItems = await Promise.all(
-        datasetItems.map(async (item) => {
-          const hydratedData = await hydrateDatasetItemData(item);
-          return {
-            ...item,
-            data: hydratedData,
-          };
-        }),
-      );
-      setHydratedDatasetItems(hydratedItems);
-      setIsHydrating(false);
-    };
-
-    if (datasetItems.length > 0) {
-      hydrateItems();
-    } else {
-      setHydratedDatasetItems([]);
-      setIsHydrating(false);
-    }
-  }, [datasetItems, hydrateDatasetItemData]);
-
-  const noDataMessage =
-    isLoadingDatasetItems || isHydrating ? "Loading..." : "No dataset items";
+  const noDataMessage = isLoadingDatasetItems
+    ? "Loading..."
+    : "No dataset items";
 
   const rows = useMemo(() => {
-    if (isLoadingDatasetItems || isHydrating) {
+    if (isLoadingDatasetItems) {
       return [];
     }
 
-    return hydratedDatasetItems.map((di) => {
-      return {
-        id: di.id,
-        dataItemId: di.id,
-        variables: {
-          ...di.data,
-        },
-        tags: di.tags || [],
-      };
-    });
-  }, [hydratedDatasetItems, isLoadingDatasetItems, isHydrating]);
+    return hydratedDatasetItems.map((di) => ({
+      id: di.id,
+      dataItemId: di.id,
+      variables: {
+        ...di.data,
+      },
+      tags: di.tags || [],
+    }));
+  }, [hydratedDatasetItems, isLoadingDatasetItems]);
 
   const columns = useMemo(() => {
     if (isEmpty(datasetColumns)) {

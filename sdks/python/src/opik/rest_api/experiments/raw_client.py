@@ -33,6 +33,7 @@ from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
+from .types.experiment_write_evaluation_method import ExperimentWriteEvaluationMethod
 from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
@@ -223,6 +224,7 @@ class RawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[ExperimentWriteEvaluationMethod] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -247,6 +249,8 @@ class RawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[ExperimentWriteEvaluationMethod]
 
         optimization_id : typing.Optional[str]
 
@@ -280,6 +284,7 @@ class RawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
@@ -1258,6 +1263,7 @@ class AsyncRawExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
+        evaluation_method: typing.Optional[ExperimentWriteEvaluationMethod] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -1282,6 +1288,8 @@ class AsyncRawExperimentsClient:
         tags : typing.Optional[typing.Sequence[str]]
 
         type : typing.Optional[ExperimentWriteType]
+
+        evaluation_method : typing.Optional[ExperimentWriteEvaluationMethod]
 
         optimization_id : typing.Optional[str]
 
@@ -1315,6 +1323,7 @@ class AsyncRawExperimentsClient:
                 ),
                 "tags": tags,
                 "type": type,
+                "evaluation_method": evaluation_method,
                 "optimization_id": optimization_id,
                 "status": status,
                 "experiment_scores": convert_and_respect_annotation_metadata(
