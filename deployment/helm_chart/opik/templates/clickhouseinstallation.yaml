@@ -42,10 +42,6 @@ spec:
       {{- if .profile }}
       {{ .username }}/profile: {{ .profile }}
       {{- end }}
-      {{- if .allow_databases }}
-      {{ .username }}/allow_databases:
-        {{- toYaml .allow_databases | nindent 8 }}
-      {{- end }}
       {{ .username }}/networks/ip:
       {{- if .networks }}
         {{- toYaml .networks | nindent 8 }}
