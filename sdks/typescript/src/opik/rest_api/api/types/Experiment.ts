@@ -12,6 +12,7 @@ export interface Experiment {
     metadata?: OpikApi.JsonListString;
     tags?: string[];
     type?: OpikApi.ExperimentType;
+    evaluationMethod?: OpikApi.ExperimentEvaluationMethod;
     optimizationId?: string;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     comments?: OpikApi.Comment[];

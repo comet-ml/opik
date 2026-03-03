@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Comment } from "./Comment.js";
 import { DatasetVersionSummary } from "./DatasetVersionSummary.js";
+import { ExperimentEvaluationMethod } from "./ExperimentEvaluationMethod.js";
 import { ExperimentScore } from "./ExperimentScore.js";
 import { ExperimentStatus } from "./ExperimentStatus.js";
 import { ExperimentType } from "./ExperimentType.js";
@@ -24,6 +25,7 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         metadata: JsonListString.optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
         type: ExperimentType.optional(),
+        evaluationMethod: core.serialization.property("evaluation_method", ExperimentEvaluationMethod.optional()),
         optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
         feedbackScores: core.serialization.property(
             "feedback_scores",
@@ -67,6 +69,7 @@ export declare namespace Experiment {
         metadata?: JsonListString.Raw | null;
         tags?: string[] | null;
         type?: ExperimentType.Raw | null;
+        evaluation_method?: ExperimentEvaluationMethod.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         comments?: Comment.Raw[] | null;

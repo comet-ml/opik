@@ -270,6 +270,7 @@ from .execution_policy_compare import ExecutionPolicyCompare
 from .execution_policy_public import ExecutionPolicyPublic
 from .execution_policy_write import ExecutionPolicyWrite
 from .experiment import Experiment
+from .experiment_evaluation_method import ExperimentEvaluationMethod
 from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from .experiment_group_response import ExperimentGroupResponse
 from .experiment_item import ExperimentItem
@@ -287,6 +288,7 @@ from .experiment_item_reference_public import ExperimentItemReferencePublic
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
+from .experiment_public_evaluation_method import ExperimentPublicEvaluationMethod
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
 from .experiment_score import ExperimentScore
@@ -833,6 +835,7 @@ __all__ = [
     "ExecutionPolicyPublic",
     "ExecutionPolicyWrite",
     "Experiment",
+    "ExperimentEvaluationMethod",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
     "ExperimentItem",
@@ -848,6 +851,7 @@ __all__ = [
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicEvaluationMethod",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
     "ExperimentScore",
