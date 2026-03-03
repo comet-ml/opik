@@ -948,6 +948,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS metadata,
                 toFloat64(0) AS tags,
                 avgMap(threads.usage) as usage,
+                sumMap(threads.usage) as usage_sum,
                 avgMap(threads.feedback_scores) AS feedback_scores,
                 toFloat64(0) AS llm_span_count_avg,
                 toFloat64(0) AS span_count_avg,

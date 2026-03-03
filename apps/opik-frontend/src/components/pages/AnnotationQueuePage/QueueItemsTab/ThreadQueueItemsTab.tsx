@@ -202,10 +202,27 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "first_message",
+  "last_message",
+  "number_of_messages",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "first_message",
   "last_message",
-  "comments",
+  "number_of_messages",
+  COLUMN_COMMENTS_ID,
+  "start_time",
+  "end_time",
+  "duration",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  "tags",
+  "created_at",
+  "last_updated_at",
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
@@ -376,7 +393,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

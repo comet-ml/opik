@@ -27,10 +27,14 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const {
-    permissions: { canViewExperiments },
+    permissions: { canViewExperiments, canViewDashboards, canViewDatasets },
   } = usePermissions();
 
-  const menuItems = getMenuItems({ canViewExperiments: !!canViewExperiments });
+  const menuItems = getMenuItems({
+    canViewExperiments,
+    canViewDashboards,
+    canViewDatasets,
+  });
 
   const { data: projectData } = useProjectsList(
     {
@@ -52,7 +56,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewDatasets,
     },
   );
 
@@ -64,7 +68,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewExperiments,
     },
   );
 
@@ -138,7 +142,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: expanded && canViewDashboards,
     },
   );
 

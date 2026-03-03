@@ -3,16 +3,15 @@ import { Page, expect, Locator } from '@playwright/test';
 export class TracesPage {
   readonly page: Page;
   readonly tracesTable: Locator;
-  readonly traceNamesSelector: string;
   readonly nextPageButton: Locator;
   readonly deleteButton: Locator;
   readonly attachmentsSubmenuButton: Locator;
   readonly attachmentContainer: Locator;
+  private nameColumnIndex: number = -1;
 
   constructor(page: Page) {
     this.page = page;
     this.tracesTable = page.getByRole('table');
-    this.traceNamesSelector = 'tr td:nth-child(3) div span';
 
     this.nextPageButton = page
       .locator('div')
@@ -30,6 +29,13 @@ export class TracesPage {
 
   async initialize(): Promise<void> {
     await this.page.waitForTimeout(1000);
+
+    // Ensure we're on the Traces view (not Threads or Spans)
+    const tracesToggle = this.page.getByRole('radio', { name: 'Traces' });
+    if ((await tracesToggle.getAttribute('aria-checked')) !== 'true') {
+      await tracesToggle.click();
+      await this.page.waitForTimeout(500);
+    }
 
     try {
       await this.page.getByTestId('columns-button').click({ timeout: 5000 });
@@ -49,9 +55,26 @@ export class TracesPage {
     await this.page.keyboard.press('Escape');
   }
 
+  private async resolveNameColumnIndex(): Promise<number> {
+    if (this.nameColumnIndex > 0) return this.nameColumnIndex;
+
+    const headers = this.page.locator('thead th');
+    const count = await headers.count();
+    for (let i = 0; i < count; i++) {
+      const text = await headers.nth(i).innerText();
+      if (text.match(/^Name\b/)) {
+        this.nameColumnIndex = i + 1;
+        return this.nameColumnIndex;
+      }
+    }
+    throw new Error('Name column not found in traces table. Was initialize() called?');
+  }
+
   async getAllTraceNamesOnPage(): Promise<string[]> {
-    await this.page.waitForSelector(this.traceNamesSelector);
-    return await this.page.locator(this.traceNamesSelector).allInnerTexts();
+    const idx = await this.resolveNameColumnIndex();
+    const selector = `tr td:nth-child(${idx}) div span`;
+    await this.page.waitForSelector(selector);
+    return await this.page.locator(selector).allInnerTexts();
   }
 
   async clickFirstTraceWithName(traceName: string): Promise<void> {
@@ -68,8 +91,10 @@ export class TracesPage {
   }
 
   async getFirstTraceNameOnPage(): Promise<string | null> {
-    await this.page.waitForSelector(this.traceNamesSelector);
-    return await this.page.locator(this.traceNamesSelector).first().textContent();
+    const idx = await this.resolveNameColumnIndex();
+    const selector = `tr td:nth-child(${idx}) div span`;
+    await this.page.waitForSelector(selector);
+    return await this.page.locator(selector).first().textContent();
   }
 
   async getAllTraceNamesInProject(): Promise<string[]> {

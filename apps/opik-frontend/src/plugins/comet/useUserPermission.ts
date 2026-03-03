@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
@@ -59,22 +59,77 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const canViewExperiments = useMemo(() => {
-    if (isWorkspaceOwner) return true;
+  const checkNullablePermission = useCallback(
+    (permissionName: ManagementPermissionsNames) => {
+      if (isWorkspaceOwner) return true;
 
-    const permissionValue = getUserPermissionValue(
-      workspacePermissions,
-      ManagementPermissionsNames.EXPERIMENT_VIEW,
-    );
+      const permissionValue = getUserPermissionValue(
+        workspacePermissions,
+        permissionName,
+      );
 
-    // should default to true if the permission is not found
-    return permissionValue !== false;
-  }, [workspacePermissions, isWorkspaceOwner]);
+      // should default to true if the permission is not found
+      return permissionValue !== false;
+    },
+    [workspacePermissions, isWorkspaceOwner],
+  );
+
+  const canViewDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canViewExperiments = useMemo(
+    () =>
+      canViewDatasets &&
+      checkNullablePermission(ManagementPermissionsNames.EXPERIMENT_VIEW),
+    [canViewDatasets, checkNullablePermission],
+  );
+
+  const canViewDashboards = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DASHBOARD_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canDeleteProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeleteAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ANNOTATION_QUEUE_DELETE,
+      ),
+    [checkNullablePermission],
+  );
+
+  const canDeleteTraces = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeletePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canDeleteDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_DELETE),
+    [checkNullablePermission],
+  );
 
   return {
     canInviteMembers,
     isWorkspaceOwner,
     canViewExperiments,
+    canViewDashboards,
+    canViewDatasets,
+    canDeleteProjects,
+    canDeleteAnnotationQueues,
+    canDeleteTraces,
+    canDeletePrompts,
+    canDeleteDatasets,
     isPending: isEnabled && isPending,
   };
 };

@@ -27,7 +27,7 @@ const CompareOptimizationsSidebar: React.FC<
   status,
 }) => {
   return (
-    <div className="max-h-[500px] w-2/5 shrink-0 overflow-auto">
+    <div className="w-2/5 shrink-0 overflow-auto">
       {bestExperiment && optimization ? (
         <BestPrompt
           experiment={bestExperiment}

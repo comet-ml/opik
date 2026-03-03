@@ -34,6 +34,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -54,6 +55,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -71,11 +73,35 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  "total_estimated_cost_sum",
-  "duration.p50",
   "last_updated_at",
-  "created_at",
+  "trace_count",
+  "duration.p50",
+  "total_estimated_cost_sum",
+  "error_count",
+  "usage.total_tokens",
+  COLUMN_FEEDBACK_SCORES_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "last_updated_at",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_sum",
+  "error_count",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "thread_count",
+  "tags",
   "description",
+  "created_at",
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
 ];
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
@@ -91,6 +117,10 @@ const ProjectsPage: React.FunctionComponent = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+
+  const {
+    permissions: { canDeleteProjects },
+  } = usePermissions();
 
   const columnsDef: ColumnData<ProjectWithStatistic>[] = useMemo(() => {
     return [
@@ -110,7 +140,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -176,7 +206,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.total_tokens",
-        label: "Total tokens (avg.)",
+        label: "Avg total tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.total_tokens)
@@ -185,7 +215,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.prompt_tokens",
-        label: "Input tokens (avg.)",
+        label: "Avg input tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.prompt_tokens)
@@ -194,7 +224,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: "usage.completion_tokens",
-        label: "Output tokens (avg.)",
+        label: "Avg output tokens",
         type: COLUMN_TYPE.number,
         accessorFn: (row) =>
           row.usage && isNumber(row.usage.completion_tokens)
@@ -203,7 +233,7 @@ const ProjectsPage: React.FunctionComponent = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback scores (avg.)",
+        label: "Avg feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
@@ -332,7 +362,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
@@ -348,7 +378,9 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<ProjectWithStatistic>(),
+      ...(canDeleteProjects
+        ? [generateSelectColumDef<ProjectWithStatistic>()]
+        : []),
       ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
         columnsDef,
         {
@@ -360,7 +392,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: ProjectRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef]);
+  }, [selectedColumns, columnsOrder, columnsDef, canDeleteProjects]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -411,8 +443,12 @@ const ProjectsPage: React.FunctionComponent = () => {
           dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
-          <ProjectsActionsPanel projects={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteProjects && (
+            <>
+              <ProjectsActionsPanel projects={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}
@@ -435,12 +471,16 @@ const ProjectsPage: React.FunctionComponent = () => {
           setSorting: setSortedColumns,
         }}
         resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
+        selectionConfig={
+          canDeleteProjects
+            ? {
+                rowSelection,
+                setRowSelection,
+              }
+            : undefined
+        }
         getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
+        columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

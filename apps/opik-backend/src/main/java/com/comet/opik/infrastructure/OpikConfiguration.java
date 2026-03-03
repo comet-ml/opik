@@ -115,4 +115,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private RunnerConfig runner = new RunnerConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();
 }
