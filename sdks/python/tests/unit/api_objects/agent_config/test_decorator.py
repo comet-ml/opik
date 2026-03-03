@@ -95,7 +95,7 @@ class TestConfigDecoratorInit:
     ):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="MyConfig.temp", type="number", value=0.3),
+                mock.Mock(key="MyConfig.temp", type="float", value=0.3),
                 mock.Mock(key="MyConfig.name", type="string", value="backend-agent"),
             ]
         )
@@ -113,7 +113,7 @@ class TestConfigDecoratorInit:
     def test_init__existing_blueprint_applies_backend_values(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="MyConfig.temp", type="number", value=0.3),
+                mock.Mock(key="MyConfig.temp", type="float", value=0.3),
                 mock.Mock(key="MyConfig.name", type="string", value="backend-agent"),
             ]
         )
@@ -133,7 +133,7 @@ class TestConfigDecoratorInit:
     ):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="MyConfig.temp", type="number", value=0.3),
+                mock.Mock(key="MyConfig.temp", type="float", value=0.3),
             ]
         )
 
@@ -159,7 +159,7 @@ class TestConfigDecoratorInit:
     ):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="MyConfig.temp", type="number", value=0.3),
+                mock.Mock(key="MyConfig.temp", type="float", value=0.3),
             ]
         )
 
@@ -243,7 +243,7 @@ class TestConfigDecoratorMaskAndEnv:
         self, mock_backend, decorator_kwargs
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.5)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.5)]
         )
 
         @agent_config_decorator(**decorator_kwargs)
@@ -333,8 +333,8 @@ class TestConfigDecoratorTraceMetadata:
     ):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="MyConfig.temp", type="number", value=0.8),
-                mock.Mock(key="MyConfig.max_tokens", type="number", value=2000),
+                mock.Mock(key="MyConfig.temp", type="float", value=0.8),
+                mock.Mock(key="MyConfig.max_tokens", type="integer", value=2000),
             ]
         )
 
@@ -466,7 +466,7 @@ class TestConfigDecoratorMultiClass:
         ModelConfig()
 
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="ModelConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="ModelConfig.temp", type="float", value=0.8)]
         )
 
         mock_backend.agent_configs.create_agent_config.reset_mock()
@@ -482,7 +482,7 @@ class TestConfigDecoratorMultiClass:
     def test_backend_values_applied_to_correct_instances(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.5),
                 mock.Mock(key="PromptConfig.template", type="string", value="backend"),
             ]
         )
@@ -506,7 +506,7 @@ class TestConfigDecoratorMultiClass:
     def test_single_fetch_populates_both_classes(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.5),
                 mock.Mock(key="PromptConfig.template", type="string", value="backend"),
             ]
         )
@@ -533,7 +533,7 @@ class TestConfigDecoratorMultiClass:
     def test_background_refresh_after_ttl__updates_cache(self, mock_backend):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.5),
                 mock.Mock(key="PromptConfig.template", type="string", value="v1"),
             ]
         )
@@ -555,7 +555,7 @@ class TestConfigDecoratorMultiClass:
 
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.9),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.9),
                 mock.Mock(key="PromptConfig.template", type="string", value="v2"),
             ]
         )
@@ -571,7 +571,7 @@ class TestConfigDecoratorMultiClass:
     ):
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.5),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.5),
                 mock.Mock(key="PromptConfig.template", type="string", value="v1"),
             ]
         )
@@ -593,7 +593,7 @@ class TestConfigDecoratorMultiClass:
 
         mock_backend.set_blueprint_values(
             [
-                mock.Mock(key="ModelConfig.temp", type="number", value=0.9),
+                mock.Mock(key="ModelConfig.temp", type="float", value=0.9),
                 mock.Mock(key="PromptConfig.template", type="string", value="v2"),
             ]
         )
@@ -888,11 +888,11 @@ class TestConfigDecoratorPromptFields:
 class TestConfigDecoratorContextMask:
     def test_context_mask__attribute_returns_masked_value(self, mock_backend):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.2)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.2)],
         )
 
         @agent_config_decorator
@@ -908,11 +908,11 @@ class TestConfigDecoratorContextMask:
 
     def test_context_mask__takes_precedence_over_class_mask(self, mock_backend):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.5)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.5)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.1)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.1)],
         )
 
         @agent_config_decorator(mask_id="class-mask")
@@ -928,11 +928,11 @@ class TestConfigDecoratorContextMask:
 
     def test_context_mask__calls_get_blueprint_with_mask_id(self, mock_backend):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.2)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.2)],
         )
 
         @agent_config_decorator
@@ -953,11 +953,11 @@ class TestConfigDecoratorContextMask:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.3)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.3)],
         )
 
         @agent_config_decorator(env="prod")
@@ -979,11 +979,11 @@ class TestConfigDecoratorContextMask:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.3)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.3)],
         )
 
         @agent_config_decorator(env="prod")
@@ -1001,11 +1001,11 @@ class TestConfigDecoratorContextMask:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.8)]
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
         )
         mock_backend.set_mask_blueprint_values(
             "mask-ctx",
-            [mock.Mock(key="MyConfig.temp", type="number", value=0.5)],
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.5)],
         )
 
         @agent_config_decorator
