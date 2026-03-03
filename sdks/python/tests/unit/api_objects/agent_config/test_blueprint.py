@@ -38,23 +38,23 @@ def _make_raw_blueprint(
 
 
 class TestBlueprintProperties:
-    def test_id(self):
+    def test_property_id__blueprint_has_id__returns_value(self):
         bp = Blueprint(_make_raw_blueprint(blueprint_id="bp-42"))
         assert bp.id == "bp-42"
 
-    def test_description(self):
+    def test_property_description__blueprint_has_description__returns_value(self):
         bp = Blueprint(_make_raw_blueprint(description="test desc"))
         assert bp.description == "test desc"
 
-    def test_type(self):
+    def test_property_type__blueprint_has_type__returns_value(self):
         bp = Blueprint(_make_raw_blueprint(bp_type="mask"))
         assert bp.type == "mask"
 
-    def test_envs(self):
+    def test_property_envs__blueprint_has_envs__returns_value(self):
         bp = Blueprint(_make_raw_blueprint(envs=["prod", "staging"]))
         assert bp.envs == ["prod", "staging"]
 
-    def test_created_by(self):
+    def test_property_created_by__blueprint_has_creator__returns_value(self):
         bp = Blueprint(_make_raw_blueprint(created_by="user-1"))
         assert bp.created_by == "user-1"
 
