@@ -235,6 +235,7 @@ from .types import (
     ExecutionPolicyPublic,
     ExecutionPolicyWrite,
     Experiment,
+    ExperimentEvaluationMethod,
     ExperimentGroupAggregationsResponse,
     ExperimentGroupResponse,
     ExperimentItem,
@@ -250,6 +251,7 @@ from .types import (
     ExperimentItemTraceVisibilityMode,
     ExperimentPagePublic,
     ExperimentPublic,
+    ExperimentPublicEvaluationMethod,
     ExperimentPublicStatus,
     ExperimentPublicType,
     ExperimentScore,
@@ -606,7 +608,7 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility, FindDatasetsRequestType
 from .environment import OpikApiEnvironment
-from .experiments import ExperimentWriteStatus, ExperimentWriteType
+from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
@@ -867,6 +869,7 @@ __all__ = [
     "ExecutionPolicyPublic",
     "ExecutionPolicyWrite",
     "Experiment",
+    "ExperimentEvaluationMethod",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
     "ExperimentItem",
@@ -882,6 +885,7 @@ __all__ = [
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
+    "ExperimentPublicEvaluationMethod",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
     "ExperimentScore",
@@ -892,6 +896,7 @@ __all__ = [
     "ExperimentUpdate",
     "ExperimentUpdateStatus",
     "ExperimentUpdateType",
+    "ExperimentWriteEvaluationMethod",
     "ExperimentWriteStatus",
     "ExperimentWriteType",
     "ExportTraceServiceRequest",

@@ -23,6 +23,7 @@ from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .raw_client import AsyncRawExperimentsClient, RawExperimentsClient
+from .types.experiment_write_evaluation_method import ExperimentWriteEvaluationMethod
 from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
@@ -179,7 +180,7 @@ class ExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
-        evaluation_method: typing.Optional[str] = OMIT,
+        evaluation_method: typing.Optional[ExperimentWriteEvaluationMethod] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -205,7 +206,7 @@ class ExperimentsClient:
 
         type : typing.Optional[ExperimentWriteType]
 
-        evaluation_method : typing.Optional[str]
+        evaluation_method : typing.Optional[ExperimentWriteEvaluationMethod]
 
         optimization_id : typing.Optional[str]
 
@@ -892,7 +893,7 @@ class AsyncExperimentsClient:
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         type: typing.Optional[ExperimentWriteType] = OMIT,
-        evaluation_method: typing.Optional[str] = OMIT,
+        evaluation_method: typing.Optional[ExperimentWriteEvaluationMethod] = OMIT,
         optimization_id: typing.Optional[str] = OMIT,
         status: typing.Optional[ExperimentWriteStatus] = OMIT,
         experiment_scores: typing.Optional[typing.Sequence[ExperimentScoreWrite]] = OMIT,
@@ -918,7 +919,7 @@ class AsyncExperimentsClient:
 
         type : typing.Optional[ExperimentWriteType]
 
-        evaluation_method : typing.Optional[str]
+        evaluation_method : typing.Optional[ExperimentWriteEvaluationMethod]
 
         optimization_id : typing.Optional[str]
 
