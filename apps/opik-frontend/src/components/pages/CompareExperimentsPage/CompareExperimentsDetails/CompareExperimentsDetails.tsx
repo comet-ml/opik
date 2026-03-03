@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
+import isNumber from "lodash/isNumber";
 import { BooleanParam, useQueryParam } from "use-query-params";
 import { Maximize2, Minimize2 } from "lucide-react";
 
@@ -13,6 +14,7 @@ import ExperimentsBarChart from "@/components/pages-shared/experiments/Experimen
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import FeedbackScoresList from "@/components/pages-shared/FeedbackScoresList/FeedbackScoresList";
+import { formatPassRate } from "@/components/shared/DataTableCells/PassRateCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   FeedbackScoreDisplay,
@@ -25,6 +27,20 @@ import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/View
 import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
+
+function hasPassRate(
+  e: Experiment | undefined,
+): e is Experiment & {
+  pass_rate: number;
+  passed_count: number;
+  total_count: number;
+} {
+  return (
+    isNumber(e?.pass_rate) &&
+    isNumber(e?.passed_count) &&
+    isNumber(e?.total_count)
+  );
+}
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -72,6 +88,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
     experiments,
   });
 
+  const allHavePassRate = experiments.every(hasPassRate);
+
   const experimentTracesSearch = useMemo(
     () => ({
       traces_filters: generateExperimentIdFilter(experimentsIds[0]),
@@ -80,7 +98,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   );
 
   const renderCompareFeedbackScoresButton = () => {
-    if (!isCompare) return null;
+    if (!isCompare || allHavePassRate) return null;
 
     const text = showCharts ? "Collapse charts" : "Expand charts";
     const Icon = showCharts ? Minimize2 : Maximize2;
@@ -137,12 +155,29 @@ const CompareExperimentsDetails: React.FunctionComponent<
       );
     }
 
+    if (hasPassRate(experiment)) {
+      return (
+        <div className="flex h-11 items-center gap-2">
+          <span className="comet-body-s-accented">
+            Pass rate:{" "}
+            {formatPassRate(
+              experiment.pass_rate,
+              experiment.passed_count,
+              experiment.total_count,
+            )}
+          </span>
+        </div>
+      );
+    }
+
     return <FeedbackScoresList scores={experimentScores} />;
   };
 
   const renderCharts = () => {
     if (!isCompare || !showCharts || isPending || view === VIEW_TYPE.DASHBOARDS)
       return null;
+
+    if (allHavePassRate) return null;
 
     return (
       <div className="mb-2 mt-4 overflow-auto">

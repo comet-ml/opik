@@ -1,0 +1,170 @@
+import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import useEvaluationSuiteDraftStore from "@/store/EvaluationSuiteDraftStore";
+import { reconstructEvaluators } from "@/lib/evaluator-converters";
+import {
+  DatasetItem,
+  DatasetVersion,
+  Dataset,
+  DATASET_TYPE,
+  Evaluator,
+} from "@/types/datasets";
+import { EvaluatorDisplayRow } from "@/types/evaluation-suites";
+import { UseDatasetItemsListResponse } from "@/api/datasets/useDatasetItemsList";
+
+interface BuildPayloadOptions {
+  tags?: string[];
+  changeDescription?: string;
+  override?: boolean;
+}
+
+function findItemInCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  suiteId: string,
+  itemId: string,
+): DatasetItem | undefined {
+  const queries = queryClient.getQueriesData<UseDatasetItemsListResponse>({
+    queryKey: ["dataset-items", { datasetId: suiteId }],
+  });
+  for (const [, data] of queries) {
+    const item = data?.content?.find((i) => i.id === itemId);
+    if (item) return item;
+  }
+  return undefined;
+}
+
+export function useEvaluationSuiteSavePayload(suiteId: string) {
+  const queryClient = useQueryClient();
+
+  const buildPayload = useCallback(
+    ({ tags, changeDescription, override = false }: BuildPayloadOptions) => {
+      const state = useEvaluationSuiteDraftStore.getState();
+
+      // Read suite data from cache
+      const suiteData = queryClient.getQueryData<Dataset>([
+        "dataset",
+        { datasetId: suiteId },
+      ]);
+      if (!suiteData) {
+        throw new Error(
+          "Evaluation suite data not found in cache. Please refresh and try again.",
+        );
+      }
+
+      const baseVersion = suiteData.latest_version?.id ?? "";
+      if (!baseVersion) {
+        throw new Error(
+          "Base version is missing. The evaluation suite may not have been fully loaded.",
+        );
+      }
+
+      const isEvaluationSuite =
+        suiteData.type === DATASET_TYPE.EVALUATION_SUITE;
+
+      // Serialize items from store
+      const addedItems = Array.from(state.addedItems.values());
+      const editedItemsMap = new Map(state.editedItems);
+      const deletedIds = Array.from(state.deletedIds);
+
+      let evaluators: Evaluator[] | undefined;
+      const executionPolicy = state.executionPolicy ?? undefined;
+
+      if (isEvaluationSuite) {
+        // Read version data from cache
+        const versionsData = queryClient.getQueryData<{
+          content: DatasetVersion[];
+        }>(["dataset-versions", { datasetId: suiteId, page: 1, size: 1 }]);
+        const versionEvaluators = versionsData?.content?.[0]?.evaluators ?? [];
+
+        // Reconstruct suite-level evaluators
+        evaluators = reconstructEvaluators(
+          versionEvaluators,
+          state.addedEvaluators,
+          state.editedEvaluators,
+          state.deletedEvaluatorIds,
+        );
+
+        // Collect all itemIds that have item-level evaluator changes
+        const itemIdsWithChanges = new Set<string>();
+        const evaluatorMaps = [
+          state.itemAddedEvaluators,
+          state.itemEditedEvaluators,
+          state.itemDeletedEvaluatorIds,
+        ];
+        for (const map of evaluatorMaps) {
+          for (const [itemId, inner] of map) {
+            if (inner.size > 0) {
+              itemIdsWithChanges.add(itemId);
+            }
+          }
+        }
+
+        // For each item with evaluator changes, reconstruct its evaluators
+        for (const itemId of itemIdsWithChanges) {
+          const cachedItem = findItemInCache(queryClient, suiteId, itemId);
+          const originalItemEvaluators = cachedItem?.evaluators ?? [];
+          const itemAdded =
+            state.itemAddedEvaluators.get(itemId) ??
+            new Map<string, EvaluatorDisplayRow>();
+          const itemEdited =
+            state.itemEditedEvaluators.get(itemId) ??
+            new Map<string, Partial<EvaluatorDisplayRow>>();
+          const itemDeleted =
+            state.itemDeletedEvaluatorIds.get(itemId) ?? new Set<string>();
+
+          const itemEvaluators = reconstructEvaluators(
+            originalItemEvaluators,
+            itemAdded,
+            itemEdited,
+            itemDeleted,
+          );
+
+          // Merge evaluators into the edited_items entry
+          const existingChanges = editedItemsMap.get(itemId) || {};
+          editedItemsMap.set(itemId, {
+            ...existingChanges,
+            evaluators: itemEvaluators,
+          });
+        }
+      }
+
+      // Serialize edited items, converting store representation to API format.
+      // The store preserves `execution_policy: undefined` to signal that the
+      // user explicitly cleared an item-level override. The API expects a
+      // `clear_execution_policy: true` flag instead of an undefined field.
+      const editedItems = Array.from(editedItemsMap.entries()).map(
+        ([id, changes]) => {
+          const entry: Record<string, unknown> = { id };
+          for (const [key, value] of Object.entries(changes)) {
+            if (key === "execution_policy" && value === undefined) {
+              entry.clear_execution_policy = true;
+            } else if (value !== undefined) {
+              entry[key] = value;
+            }
+          }
+          return entry;
+        },
+      );
+
+      return {
+        datasetId: suiteId,
+        payload: {
+          added_items: addedItems,
+          edited_items: editedItems,
+          deleted_ids: deletedIds,
+          base_version: baseVersion,
+          tags,
+          change_description: changeDescription,
+          ...(evaluators !== undefined && { evaluators }),
+          ...(executionPolicy !== undefined && {
+            execution_policy: executionPolicy,
+          }),
+        },
+        override,
+      };
+    },
+    [suiteId, queryClient],
+  );
+
+  return { buildPayload };
+}
