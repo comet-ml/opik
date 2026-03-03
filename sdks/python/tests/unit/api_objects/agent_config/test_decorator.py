@@ -859,7 +859,7 @@ class TestConfigDecoratorPromptFields:
         )
         mock_backend.client.rest_client.prompts.get_prompt_by_id.assert_not_called()
 
-    def test_existing_blueprint_prompt_version_field__resolution_fails__field_omitted(
+    def test_existing_blueprint_prompt_version_field__resolution_fails__raises(
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
@@ -880,9 +880,8 @@ class TestConfigDecoratorPromptFields:
         class MyConfig:
             version: PromptVersionDetail = dataclasses.field(default=None)
 
-        instance = MyConfig()
-
-        assert instance.version is None
+        with pytest.raises(Exception, match="not found"):
+            MyConfig()
 
 
 class TestConfigDecoratorContextMask:
