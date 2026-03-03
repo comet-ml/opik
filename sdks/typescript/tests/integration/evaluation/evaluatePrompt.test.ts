@@ -6,6 +6,7 @@ import { ExactMatch } from "@/evaluation/metrics/heuristics/ExactMatch";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import {
   createQADataset,
@@ -13,7 +14,7 @@ import {
   cleanupPrompts,
 } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
   let client: Opik;

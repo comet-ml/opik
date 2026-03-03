@@ -65,6 +65,13 @@ export function getIntegrationTestStatus(): string {
 }
 
 /**
+ * Check if OpenAI API key is available for tests that require it.
+ */
+export function hasOpenAiApiKey(): boolean {
+  return !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.length > 0;
+}
+
+/**
  * Check if Anthropic API key is available for tests that require it.
  */
 export function hasAnthropicApiKey(): boolean {

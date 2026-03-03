@@ -8,10 +8,11 @@ import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hall
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { createEvaluationDataset, cleanupDatasets } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
   let client: Opik;

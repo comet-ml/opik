@@ -8,6 +8,7 @@ import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
   hasAnthropicApiKey,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { createQADataset, cleanupDatasets } from "./helpers/testData";
 
@@ -37,7 +38,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
   });
 
   describe("evaluatePrompt with Model Types", () => {
-    it("should work with default model (gpt-5-nano)", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with default model (gpt-5-nano)", async () => {
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
 
@@ -53,7 +54,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with modelId string (gpt-5-nano)", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with modelId string (gpt-5-nano)", async () => {
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
 
@@ -68,7 +69,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with modelId string (gpt-5-mini)", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with modelId string (gpt-5-mini)", async () => {
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
 
@@ -83,7 +84,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with LanguageModel instance (with structured output)", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with LanguageModel instance (with structured output)", async () => {
       const { openai } = await import("@ai-sdk/openai");
       const customModel = openai("gpt-5-nano");
 
@@ -101,7 +102,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with LanguageModel instance (without structured output)", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with LanguageModel instance (without structured output)", async () => {
       const { openai } = await import("@ai-sdk/openai");
       const customModel = openai("gpt-5-nano"); // No structured output option
 
@@ -120,7 +121,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with OpikBaseModel instance", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with OpikBaseModel instance", async () => {
       const customModel = new VercelAIChatModel("gpt-5-nano");
 
       const dataset = await createQADataset(client);
@@ -184,7 +185,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
   });
 
   describe("LLM Metrics with Model Types", () => {
-    it("should work with modelId string in AnswerRelevance", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with modelId string in AnswerRelevance", async () => {
       const metric = new AnswerRelevance({
         model: "gpt-5-nano",
         requireContext: false,
@@ -201,7 +202,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work with LanguageModel instance in Hallucination", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with LanguageModel instance in Hallucination", async () => {
       const { openai } = await import("@ai-sdk/openai");
       const customModel = openai("gpt-5-nano");
 
@@ -219,7 +220,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work with OpikBaseModel in metrics", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with OpikBaseModel in metrics", async () => {
       const customModel = new VercelAIChatModel("gpt-5-nano");
 
       const metric = new AnswerRelevance({
@@ -239,7 +240,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
   });
 
   describe("Structured Output Requirements", () => {
-    it("should handle models with structured output for metrics", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should handle models with structured output for metrics", async () => {
       const { openai } = await import("@ai-sdk/openai");
 
       // Models with structured output support should work fine
@@ -260,7 +261,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work with models without explicit structured output flag", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with models without explicit structured output flag", async () => {
       const { openai } = await import("@ai-sdk/openai");
 
       // Even without explicit structuredOutputs flag, gpt-5-nano supports it
@@ -283,7 +284,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
   });
 
   describe("Model Configuration Options", () => {
-    it("should work with custom temperature in evaluatePrompt", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with custom temperature in evaluatePrompt", async () => {
       const { openai } = await import("@ai-sdk/openai");
       const customModel = openai("gpt-5-nano");
 
@@ -301,7 +302,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
       expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
     }, 60000);
 
-    it("should work with trackGenerations option in VercelAIChatModel", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with trackGenerations option in VercelAIChatModel", async () => {
       const modelWithTracking = new VercelAIChatModel("gpt-5-nano", {
         trackGenerations: true,
       });
