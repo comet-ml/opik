@@ -9,7 +9,7 @@ import rich.table
 import rich.text
 
 import opik.url_helpers
-from . import test_runs_storage
+from . import episode_aggregation, test_runs_storage
 
 
 def print(reports: List[pytest.TestReport]) -> None:
@@ -36,34 +36,24 @@ def print(reports: List[pytest.TestReport]) -> None:
 
     episode_failed = 0
     if episode_results:
-        episode_passed = 0
-        failed_scenarios = []
-        episode_total = 0
         reports_by_nodeid = {report.nodeid: report for report in reports}
-        for nodeid, episode in episode_results.items():
-            report = reports_by_nodeid.get(nodeid)
-            if report is None:
-                continue
-            episode_total += 1
-            report_passed = bool(report.passed)
-            is_passing = episode.is_passing() and report_passed
-            if is_passing:
-                episode_passed += 1
-            else:
-                failed_scenarios.append(episode.scenario_id)
-                episode_failed += 1
+        aggregation = episode_aggregation.aggregate_episode_results(
+            reports_by_nodeid=reports_by_nodeid,
+            episodes_by_nodeid=episode_results,
+        )
+        episode_failed = aggregation.failed
 
         table.add_row()
-        table.add_row("Episodes:", f"{episode_total}")
-        table.add_row("Episodes passed:", f"{episode_passed}", style="green")
+        table.add_row("Episodes:", f"{aggregation.total}")
+        table.add_row("Episodes passed:", f"{aggregation.passed}", style="green")
         table.add_row(
             "Episodes failed:",
             f"{episode_failed}",
             style="red" if episode_failed > 0 else "dim",
         )
-        if failed_scenarios:
-            preview = ", ".join(failed_scenarios[:5])
-            if len(failed_scenarios) > 5:
+        if aggregation.failed_scenarios:
+            preview = ", ".join(aggregation.failed_scenarios[:5])
+            if len(aggregation.failed_scenarios) > 5:
                 preview += ", ..."
             table.add_row("Failed scenarios:", preview)
 
