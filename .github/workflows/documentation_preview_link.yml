@@ -22,6 +22,7 @@ jobs:
               working-directory: apps/opik-documentation/documentation
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   cd fern
                   fern docs md generate
