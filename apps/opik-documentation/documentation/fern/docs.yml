@@ -84,6 +84,15 @@ tabs:
     display-name: Opik University
     icon: fa-regular fa-graduation-cap
     slug: /opik-university
+
+libraries:
+  opik-python-core:
+    input:
+      path: ../../../../sdks/python/src/opik
+    output:
+      path: docs/reference/python-sdk/core-api-generated
+    lang: python
+
 navigation:
   - tab: documentation
     layout:
@@ -947,8 +956,8 @@ navigation:
         contents:
           - link: Reference
             href: https://www.comet.com/docs/opik/python-sdk-reference/
-          - page: Core API (Pilot)
-            path: docs/reference/python-sdk/core-api.mdx
+          - library: opik-python-core
+            title: Core API (Pilot)
             slug: core-api
           - page: REST API Client
             path: docs/reference/python-sdk/rest-api.mdx
