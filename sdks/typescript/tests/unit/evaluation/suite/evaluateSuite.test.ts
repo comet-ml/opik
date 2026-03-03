@@ -182,7 +182,7 @@ describe("evaluateSuite", () => {
         name: "suite-experiment",
         datasetName: "test-dataset",
         datasetVersionId: "version-1",
-        // TODO: assert evaluationMethod: "evaluation_suite" once Fern-generated ExperimentWrite includes the field
+        evaluationMethod: "evaluation_suite",
       })
     );
 

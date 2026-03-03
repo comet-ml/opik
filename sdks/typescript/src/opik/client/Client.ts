@@ -568,6 +568,7 @@ export class OpikClient {
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
    * @param datasetVersionId Optional ID of the dataset version to link the experiment to
+   * @param evaluationMethod @internal Used by evaluation suites — not part of the public API
    * @returns The created Experiment object
    */
   public createExperiment = async ({
@@ -588,7 +589,7 @@ export class OpikClient {
     type?: ExperimentType;
     optimizationId?: string;
     datasetVersionId?: string;
-    evaluationMethod?: string;
+    evaluationMethod?: OpikApi.ExperimentWriteEvaluationMethod;
     tags?: string[];
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
@@ -617,7 +618,7 @@ export class OpikClient {
         optimizationId,
         datasetVersionId,
         tags,
-        // TODO: pass evaluationMethod here once Fern-generated ExperimentWrite includes the field
+        evaluationMethod,
       });
 
       logger.debug("Experiment created with id:", id);

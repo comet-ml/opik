@@ -12,6 +12,7 @@ import {
   getIntegrationTestStatus,
 } from "./api/shouldRunIntegrationTests";
 import { logger } from "@/utils/logger";
+import { generateId } from "@/utils/generateId";
 import { MockInstance } from "vitest";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
@@ -144,7 +145,7 @@ describe.skipIf(!shouldRunApiTests)(
     it("should perform complete thread queue flow: create, add threads, remove threads, delete", async () => {
       const testQueueName = `test-thread-queue-${Date.now()}`;
       const testProjectName = `test-project-threads-${Date.now()}`;
-      const threadId = `thread-${Date.now()}`;
+      const threadId = generateId();
       createdProjectNames.push(testProjectName);
 
       const queue = await client.createThreadsAnnotationQueue({

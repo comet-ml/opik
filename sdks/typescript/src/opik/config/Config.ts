@@ -106,7 +106,7 @@ export function loadConfig(
     ...DEFAULT_CONFIG,
     ...fileConfig,
     ...envConfig,
-    ...explicitConfig,
+    ...filterUndefined(explicitConfig),
   });
 }
 

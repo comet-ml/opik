@@ -33,11 +33,6 @@ interface ProgressTracker {
   complete(elapsedSeconds: number): void;
 }
 
-interface ItemRunResult {
-  testResult: EvaluationTestResult | null;
-  experimentRef: ExperimentItemReferences;
-}
-
 /**
  * Extended options that include suite-specific fields.
  */
@@ -127,27 +122,30 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       const metrics = this.getItemMetrics(item);
 
       for (let runIndex = 0; runIndex < runsPerItem; runIndex++) {
-        const { testResult, experimentRef } = await this.executeItemRun(
-          item,
-          metrics,
-          runIndex
-        );
-
-        if (testResult) {
+        try {
+          const testResult = await this.executeItemRun(
+            item,
+            metrics,
+            runIndex,
+            experimentRefs
+          );
           testResults.push(testResult);
+        } catch {
+          // Error already logged and trace updated in executeItemRun.
+          // Experiment ref already persisted via its finally block.
+          // Continue processing remaining items (matches Python SDK executor pattern).
         }
-        experimentRefs.push(experimentRef);
         completedRuns++;
       }
 
       progress.update(completedRuns, i);
     }
 
-    const elapsedSeconds = (performance.now() - startTime) / 1000;
-    progress.complete(elapsedSeconds);
-
     this.experiment.insert(experimentRefs);
     await this.client.flush();
+
+    const elapsedSeconds = (performance.now() - startTime) / 1000;
+    progress.complete(elapsedSeconds);
 
     return EvaluationResultProcessor.processResults(
       testResults,
@@ -219,8 +217,9 @@ export class EvaluationEngine<T = Record<string, unknown>> {
   private async executeItemRun(
     datasetItem: DatasetItemData & T & { id: string },
     metrics: BaseMetric[] | undefined,
-    runIndex: number
-  ): Promise<ItemRunResult> {
+    runIndex: number,
+    experimentRefs: ExperimentItemReferences[]
+  ): Promise<EvaluationTestResult> {
     const trace = this.client.trace({
       projectName: this.projectName,
       name: "evaluation_task",
@@ -229,10 +228,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     });
     trackStorage.enterWith({ trace });
 
-    let testResult: EvaluationTestResult | null = null;
-
     try {
-      testResult = await this.executeTask(datasetItem, metrics, trace);
+      const testResult = await this.executeTask(datasetItem, metrics, trace);
 
       if (this.suiteMode) {
         testResult.trialId = runIndex;
@@ -246,6 +243,8 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         output: testResult.testCase.taskOutput,
         endTime: new Date(),
       });
+
+      return testResult;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -263,15 +262,17 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           endTime: new Date(),
         });
       }
+
+      throw error;
+    } finally {
+      experimentRefs.push(
+        new ExperimentItemReferences({
+          datasetItemId: datasetItem.id,
+          traceId: trace.data.id,
+          projectName: trace.data.projectName,
+        })
+      );
     }
-
-    const experimentRef = new ExperimentItemReferences({
-      datasetItemId: datasetItem.id,
-      traceId: trace.data.id,
-      projectName: trace.data.projectName,
-    });
-
-    return { testResult, experimentRef };
   }
 
   private async executeTask(

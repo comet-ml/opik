@@ -19,7 +19,7 @@ import type { EvaluationTask } from "../types";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
 import type { Prompt } from "@/prompt/Prompt";
 import { generateId } from "@/utils/generateId";
-import { logger } from "@/utils/logger";
+
 
 export interface EvaluationSuiteRunOptions {
   experimentName?: string;
