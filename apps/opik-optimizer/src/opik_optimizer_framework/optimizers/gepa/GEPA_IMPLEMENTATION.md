@@ -108,7 +108,7 @@ Persistent parent mapping. Once set for a `candidate_id`, never overwritten. Thi
 
 ### `register_baseline(seed_candidate, baseline_candidate_id)`
 
-Called by `GepaOptimizer` before GEPA starts. Pre-seeds `_known_candidates` with the orchestrator's baseline `candidate_id` so GEPA's initial seed evaluation reuses the same UUID instead of generating a new one. Also stores a self-reference in `_candidate_parents` (`[baseline_candidate_id]`) so that all subsequent re-evaluations of the seed carry the baseline as their parent.
+Called by `GepaOptimizer` before GEPA starts. Pre-seeds `_known_candidates` so the initialization eval (before iterations) reuses the baseline's `candidate_id` at step 0. When the first iteration starts, `_on_new_step` clears the pre-seeded entry so that exploration evals get a new candidate_id at step 1 with `parents=[baseline_id]`.
 
 ## Parent ID Resolution
 
@@ -116,8 +116,9 @@ The `_resolve_parent_ids()` method resolves parents using a priority chain:
 
 1. **Merge parents** (`_pending_merge_parent_ids`) — from `on_merge_accepted`, for merged candidates
 2. **Pre-eval parents** (`_pending_eval_parent_ids`) — from `on_evaluation_start`, GEPA's authoritative source. If the resolved list is non-empty, it is returned. If it resolves to empty (all GEPA indices unknown), falls through to step 3.
-3. **Persistent parents** (`_candidate_parents[known_id]`) — stored parents for re-evaluations of known candidates (includes the baseline self-reference)
+3. **Persistent parents** (`_candidate_parents[known_id]`) — stored parents for re-evaluations of known candidates (baseline has `[]`)
 4. **Selected parent** (`_selected_parent_id`) — fallback from `on_candidate_selected`
+5. **Baseline** (`_baseline_candidate_id`) — last resort for candidates with no other parent resolution
 
 ## Experiment Metadata
 
@@ -128,7 +129,7 @@ Each experiment created by the adapter includes these metadata fields:
 | `step_index` | Parent lineage (max parent step + 1) | Derived from parents; re-evals reuse cached step |
 | `batch_index` | `adapter._current_step` | GEPA iteration number |
 | `candidate_id` | `_known_candidates` or new UUID | Stable across re-evals of same prompt |
-| `parent_candidate_ids` | `_resolve_parent_ids()` | Only `[]` for baseline; all others have parent IDs |
+| `parent_candidate_ids` | `_resolve_parent_ids()` | `[]` for baseline; exploration and derived candidates have parent IDs |
 | `num_items` | `len(batch)` | Distinguishes minibatch (small) from valset (large) |
 | `capture_traces` | `on_evaluation_start` | Whether this was the reflection eval |
 | `eval_purpose` | Derived from state | See below |
@@ -149,21 +150,22 @@ With 4 GEPA iterations, mutation succeeding at iteration 3:
 ```
 step  batch  candidate  parents    num  traces  eval_purpose
    0      -  AAA        []           5  -       baseline
-   0      -  AAA        [AAA]        1  false   initialization
-   0      0  AAA        [AAA]        2  true    exploration:minibatch
-   0      1  AAA        [AAA]        2  true    exploration:minibatch
-   0      2  AAA        [AAA]        2  true    exploration:minibatch
-   0      3  AAA        [AAA]        2  true    exploration:minibatch
-   1      3  BBB        [AAA]        2  false   exploration:mutation
-   1      3  BBB        [AAA]        1  false   validation
+   0      -  AAA        []           1  false   initialization
+   1      0  BBB        [AAA]        2  true    exploration:minibatch
+   1      1  BBB        [AAA]        2  true    exploration:minibatch
+   1      2  BBB        [AAA]        2  true    exploration:minibatch
+   1      3  BBB        [AAA]        2  true    exploration:minibatch
+   2      3  CCC        [BBB]        2  false   exploration:mutation
+   2      3  CCC        [BBB]        1  false   validation
 ```
 
 Key observations:
+- Step 0 is the baseline (AAA). The initialization eval (GEPA's internal seed eval before iterations) also reuses AAA at step 0.
+- Once iterations start, the seed prompt gets a new candidate_id (BBB) at step 1 with `parents=[AAA]`. Same prompt content, but now part of the optimization process.
+- Mutations (CCC) get their own candidate_id with `parents=[BBB]` and `step_index=2`.
 - `step_index` is derived from parent lineage (max parent step + 1). Re-evals of the same candidate reuse its cached step.
-- `batch_index` groups experiments by GEPA iteration
-- `candidate_id` is stable (AAA appears at step 0 for all its evaluations)
-- Only the baseline has `parent_candidate_ids=[]`. All other experiments (including re-evaluations of the seed) carry parent IDs. The seed's re-evals have `[AAA]` (self-reference via `register_baseline`).
-- Multiple experiments can share the same `step_index` — use creation time for ordering within a step
+- `batch_index` groups experiments by GEPA iteration.
+- Multiple experiments can share the same `step_index` — use creation time for ordering within a step.
 
 ## Configuration Parameters
 

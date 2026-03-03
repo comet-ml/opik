@@ -8,7 +8,6 @@ from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.factory import create_optimizer
 from opik_optimizer_framework.sampler import sample_split
 from opik_optimizer_framework.types import (
-    CandidateConfig,
     OptimizationContext,
     OptimizationResult,
     OptimizationState,
@@ -56,13 +55,8 @@ def run_optimization(
     optimizer = create_optimizer(context.optimizer_type)
 
     # Evaluate baseline (original prompt)
-    baseline_config = CandidateConfig(
-        prompt_messages=context.prompt_messages,
-        model=context.model,
-        model_parameters=context.model_parameters,
-    )
     baseline_trial = adapter.evaluate(
-        config=baseline_config,
+        config=context.baseline_config,
         dataset_item_ids=dataset_item_ids,
         eval_purpose="baseline",
     )

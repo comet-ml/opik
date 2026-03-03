@@ -19,10 +19,11 @@ Create a new file (e.g., `my_optimizer.py`) and implement a class with this sign
 ```python
 from __future__ import annotations
 
+from typing import Any
+
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import (
-    CandidateConfig,
     OptimizationContext,
     OptimizationState,
     TrialResult,
@@ -33,8 +34,8 @@ class MyOptimizer:
     def run(
         self,
         context: OptimizationContext,
-        training_set: list[str],
-        validation_set: list[str],
+        training_set: list[dict[str, Any]],
+        validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,
@@ -76,6 +77,7 @@ Contains the optimization configuration:
 | `prompt_messages` | `list[dict]` | The original prompt (list of `{"role": ..., "content": ...}`) |
 | `model` | `str` | LiteLLM model identifier (e.g., `"gpt-4o-mini"`) |
 | `model_parameters` | `dict` | Model call parameters (temperature, etc.) |
+| `baseline_config` | `dict[str, Any]` | Full config dict for baseline evaluation (prompt_messages, model, model_parameters, etc.) |
 | `optimizer_parameters` | `dict` | Algorithm-specific parameters from the UI |
 | `optimization_id` | `str` | Unique ID for this optimization run |
 | `dataset_name` | `str` | Name of the evaluation suite dataset |
@@ -85,15 +87,12 @@ Contains the optimization configuration:
 The main interface for evaluating candidates. Call `evaluate()` to score a prompt variant:
 
 ```python
-config = CandidateConfig(
-    prompt_messages=[{"role": "system", "content": "improved prompt..."}],
-    model=context.model,
-    model_parameters=context.model_parameters,
-)
+# Build config by copying baseline and replacing prompt_messages
+config = {**context.baseline_config, "prompt_messages": new_messages}
 
 trial = evaluation_adapter.evaluate(
     config=config,
-    dataset_item_ids=training_set,          # Which items to evaluate on
+    dataset_item_ids=[str(item["id"]) for item in training_set],
     parent_candidate_ids=["parent-uuid"],   # Lineage (optional)
     eval_purpose="exploration",             # See eval_purpose values below
 )
@@ -155,15 +154,11 @@ def run(self, context, training_set, validation_set,
         # 1. Generate candidate prompt (your algorithm's logic)
         new_messages = generate_improved_prompt(context.prompt_messages)
 
-        # 2. Evaluate it
-        config = CandidateConfig(
-            prompt_messages=new_messages,
-            model=context.model,
-            model_parameters=context.model_parameters,
-        )
+        # 2. Evaluate it — copy baseline config, replace prompt_messages
+        config = {**context.baseline_config, "prompt_messages": new_messages}
         trial = evaluation_adapter.evaluate(
             config=config,
-            dataset_item_ids=training_set,
+            dataset_item_ids=[str(item["id"]) for item in training_set],
             eval_purpose="exploration",
         )
 

@@ -9,13 +9,8 @@ from typing import Any, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
-try:
-    from gepa.core.adapter import EvaluationBatch, GEPAAdapter
-except ImportError:
-    GEPAAdapter = None  # type: ignore[assignment,misc]
-    EvaluationBatch = None  # type: ignore[assignment,misc]
-
 if TYPE_CHECKING:
+    from gepa.core.adapter import EvaluationBatch
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
     from opik_optimizer_framework.event_emitter import EventEmitter
 
@@ -66,14 +61,6 @@ def infer_dataset_keys(items: list[dict[str, Any]]) -> tuple[str, str]:
     excluded = {output_key, "id", "metadata"}
     input_key = next((k for k in sample.keys() if k not in excluded), "text")
     return input_key, output_key
-
-
-def _ensure_gepa_available() -> None:
-    if GEPAAdapter is None:
-        raise ImportError(
-            "The 'gepa' package is required for GepaOptimizer. "
-            "Install it with: pip install 'gepa>=0.1.0'"
-        )
 
 
 def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
@@ -272,14 +259,11 @@ class FrameworkGEPAAdapter:
     def __init__(
         self,
         base_messages: list[dict[str, str]],
-        model: str,
-        model_parameters: dict[str, Any],
+        baseline_config: dict[str, Any],
         evaluation_adapter: EvaluationAdapter,
     ) -> None:
-        _ensure_gepa_available()
         self._base_messages = base_messages
-        self._model = model
-        self._model_parameters = model_parameters
+        self._baseline_config = baseline_config
         self._evaluation_adapter = evaluation_adapter
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
 
@@ -290,6 +274,7 @@ class FrameworkGEPAAdapter:
         # Persistent parent mapping: candidate_id → parent_candidate_ids
         self._candidate_parents: dict[str, list[str]] = {}
         self._current_step = -1
+        self._baseline_candidate_id: str | None = None
 
         # Pre-eval metadata set by on_evaluation_start (consumed in evaluate())
         self._pending_eval_parent_ids: list[int] | None = None
@@ -304,18 +289,26 @@ class FrameworkGEPAAdapter:
     def register_baseline(
         self, seed_candidate: dict[str, str], baseline_candidate_id: str,
     ) -> None:
-        """Pre-seed the candidate mapping with the baseline's candidate_id.
+        """Register the baseline so GEPA's initialization reuses the same candidate_id.
 
-        Called before GEPA starts so its initial seed evaluation reuses the
-        same candidate_id that the orchestrator's baseline eval produced.
-        Re-evaluations of the seed by GEPA will carry the baseline as parent.
+        Pre-seeds ``_known_candidates`` so the initialization eval (before
+        iterations) reuses AAA at step 0.  When the first iteration starts,
+        ``_on_new_step`` clears the pre-seeded entry so that exploration evals
+        get a new candidate_id (BBB) at step 1 with ``parents=[AAA]``.
         """
         key = _candidate_key(seed_candidate)
         self._known_candidates[key] = baseline_candidate_id
-        self._candidate_parents[baseline_candidate_id] = [baseline_candidate_id]
+        self._candidate_parents[baseline_candidate_id] = []
+        self._baseline_candidate_id = baseline_candidate_id
+        self._seed_candidate_key = key
 
     def _on_new_step(self, step: int) -> None:
         """Called by GEPAProgressCallback on each iteration start."""
+        # Transition from initialization to iterations: stop reusing baseline's
+        # candidate_id so exploration evals get their own id at step 1.
+        if self._current_step < 0 and hasattr(self, "_seed_candidate_key"):
+            self._known_candidates.pop(self._seed_candidate_key, None)
+
         self._current_step = step
         self._selected_parent_id = None
         self._pending_merge_parent_ids = None
@@ -409,6 +402,10 @@ class FrameworkGEPAAdapter:
         # New candidate — parent is the one selected at the start of this iteration
         if self._selected_parent_id is not None:
             return [self._selected_parent_id]
+
+        # Last resort — baseline is the root of all lineage
+        if self._baseline_candidate_id is not None:
+            return [self._baseline_candidate_id]
         return None
 
     def _determine_eval_purpose(self) -> str:
@@ -450,6 +447,7 @@ class FrameworkGEPAAdapter:
         capture_traces: bool,
     ) -> EvaluationBatch:
         """Convert per-item feedback into GEPA's EvaluationBatch format."""
+        from gepa.core.adapter import EvaluationBatch
         outputs: list[dict[str, Any]] = []
         scores: list[float] = []
         trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
@@ -496,8 +494,6 @@ class FrameworkGEPAAdapter:
         Delegates to the framework's EvaluationAdapter to get real scores
         from the evaluation suite (LLM judge assertions, etc.).
         """
-        from opik_optimizer_framework.types import CandidateConfig
-
         key = _candidate_key(candidate)
         parent_candidate_ids = self._resolve_parent_ids(candidate)
         existing_candidate_id = self._known_candidates.get(key)
@@ -515,11 +511,7 @@ class FrameworkGEPAAdapter:
             if inst.opik_item.get("id") is not None
         ]
 
-        config = CandidateConfig(
-            prompt_messages=prompt_messages,
-            model=self._model,
-            model_parameters=self._model_parameters,
-        )
+        config = {**self._baseline_config, "prompt_messages": prompt_messages}
 
         batch_index = self._current_step if self._current_step >= 0 else None
         eval_purpose = self._determine_eval_purpose()

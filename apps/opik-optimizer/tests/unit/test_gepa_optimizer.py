@@ -26,13 +26,14 @@ from opik_optimizer_framework.types import (
 # -- helpers ------------------------------------------------------------------
 
 def _make_context(**overrides):
+    prompt_messages = [
+        {"role": "system", "content": "You are helpful."},
+        {"role": "user", "content": "Answer: {question}"},
+    ]
     defaults = dict(
         optimization_id="opt-gepa-test",
         dataset_name="test-dataset",
-        prompt_messages=[
-            {"role": "system", "content": "You are helpful."},
-            {"role": "user", "content": "Answer: {question}"},
-        ],
+        prompt_messages=prompt_messages,
         model="openai/gpt-4o-mini",
         model_parameters={"temperature": 0.5},
         metric_type="equals",
@@ -42,6 +43,11 @@ def _make_context(**overrides):
             "max_candidates": 3,
             "reflection_minibatch_size": 2,
             "seed": 42,
+        },
+        baseline_config={
+            "prompt_messages": prompt_messages,
+            "model": "openai/gpt-4o-mini",
+            "model_parameters": {"temperature": 0.5},
         },
     )
     defaults.update(overrides)
@@ -82,14 +88,15 @@ def _build_adapter(mock_eval_adapter):
     """Create a FrameworkGEPAAdapter with mocked internals, bypassing __init__."""
     adapter = FrameworkGEPAAdapter.__new__(FrameworkGEPAAdapter)
     adapter._base_messages = [{"role": "user", "content": "Hi"}]
-    adapter._model = "test-model"
-    adapter._model_parameters = {}
+    adapter._baseline_config = {"prompt_messages": [{"role": "user", "content": "Hi"}], "model": "test-model"}
     adapter._evaluation_adapter = mock_eval_adapter
     adapter._last_per_item_feedback = {}
     adapter._gepa_idx_to_candidate_id = {}
     adapter._known_candidates = {}
     adapter._candidate_parents = {}
     adapter._current_step = -1
+    adapter._baseline_candidate_id = None
+    adapter._seed_candidate_key = None
     adapter._selected_parent_id = None
     adapter._pending_merge_parent_ids = None
     adapter._pending_eval_parent_ids = None
@@ -184,8 +191,7 @@ class TestExtractPerItemFeedback:
 
 
 class TestFrameworkGEPAAdapterEvaluate:
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_evaluate_delegates_to_evaluation_adapter(self, mock_eb_cls):
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
 
@@ -215,8 +221,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         assert result.outputs[0]["output"] == "output-id-1"
         assert result.outputs[1]["output"] == "output-id-2"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_evaluate_falls_back_to_trial_score(self, mock_eb_cls):
         """When raw_result has no per-item data, fall back to the trial's aggregate score."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -235,8 +240,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         assert result.scores == [0.6]
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_evaluate_records_candidate_mapping(self, mock_eb_cls):
         """After evaluate(), the candidate is recorded for lineage tracking."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -255,8 +259,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         key = _candidate_key(candidate)
         assert adapter._known_candidates[key] == "c-123"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_initialization_before_iterations(self, mock_eb_cls):
         """Before any iteration starts (_current_step == -1), purpose is 'initialization'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -275,8 +278,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
         assert call_kwargs["eval_purpose"] == "initialization"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_exploration_minibatch(self, mock_eb_cls):
         """Minibatch reflection eval (capture_traces=True) → 'exploration:minibatch'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -297,8 +299,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
         assert call_kwargs["eval_purpose"] == "exploration:minibatch"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_exploration_mutation(self, mock_eb_cls):
         """Mutated candidate eval (capture_traces=False) → 'exploration:mutation'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -319,8 +320,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
         assert call_kwargs["eval_purpose"] == "exploration:mutation"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_validation_without_callback_metadata(self, mock_eb_cls):
         """During iteration without on_evaluation_start metadata, purpose is 'validation'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -345,8 +345,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
 
 class TestAdapterParentTracking:
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_selected_parent_used_for_new_candidate(self, mock_eb_cls):
         """on_candidate_selected sets the parent for new candidates in this iteration."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -388,8 +387,7 @@ class TestAdapterParentTracking:
         second_call = mock_eval_adapter.evaluate_with_details.call_args_list[1]
         assert second_call.kwargs["parent_candidate_ids"] == ["parent-1"]
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_valset_evaluated_maps_gepa_idx(self, mock_eb_cls):
         """on_valset_evaluated maps GEPA candidate index to framework ID."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -412,8 +410,7 @@ class TestAdapterParentTracking:
 
         assert adapter._gepa_idx_to_candidate_id[0] == "fw-123"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_merge_parent_ids_from_callback(self, mock_eb_cls):
         """MergeAcceptedEvent sets parent IDs for the next evaluate call."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -455,8 +452,7 @@ class TestAdapterParentTracking:
         assert adapter._pending_eval_capture_traces is None
         assert adapter._pending_eval_candidate_idx is None
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_candidate_id_reused_for_known_candidate(self, mock_eb_cls):
         """Known candidates get the same candidate_id passed to evaluate_with_details."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -484,8 +480,7 @@ class TestAdapterParentTracking:
         second_call = mock_eval_adapter.evaluate_with_details.call_args_list[1]
         assert second_call.kwargs["candidate_id"] == "stable-id"
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_persistent_parents_for_derived_candidate(self, mock_eb_cls):
         """Derived candidates always carry parent_candidate_ids across re-evals."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -520,8 +515,7 @@ class TestAdapterParentTracking:
         second_call = mock_eval_adapter.evaluate_with_details.call_args_list[1]
         assert second_call.kwargs["parent_candidate_ids"] == ["parent-1"]
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_batch_index_and_metadata_passed(self, mock_eb_cls):
         """batch_index, num_items, and capture_traces are passed to evaluate_with_details."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -544,8 +538,7 @@ class TestAdapterParentTracking:
         assert call_kwargs["num_items"] == 2
         assert call_kwargs["capture_traces"] is True
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_evaluation_start_parent_ids_used(self, mock_eb_cls):
         """on_evaluation_start parent_ids (from GEPA) resolve to framework IDs."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -573,8 +566,7 @@ class TestAdapterParentTracking:
         assert call_kwargs["parent_candidate_ids"] == ["parent-fw-id"]
         assert call_kwargs["capture_traces"] is False
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_evaluation_start_capture_traces_overrides_arg(self, mock_eb_cls):
         """on_evaluation_start capture_traces overrides the evaluate() argument."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -599,8 +591,7 @@ class TestAdapterParentTracking:
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
         assert call_kwargs["capture_traces"] is True
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_pending_eval_cleared_after_evaluate(self, mock_eb_cls):
         """Pending eval metadata is consumed (cleared) after evaluate()."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -620,8 +611,7 @@ class TestAdapterParentTracking:
         assert adapter._pending_eval_capture_traces is None
         assert adapter._pending_eval_candidate_idx is None
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_candidate_parents_stored_once(self, mock_eb_cls):
         """_candidate_parents is set on first eval and not overwritten by re-evals."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
@@ -739,8 +729,7 @@ class TestGEPAProgressCallback:
 
 
 class TestMakeReflectiveDataset:
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_uses_reasons_from_evaluation_suite(self, mock_eb_cls):
         adapter = _build_adapter(MagicMock())
 
@@ -772,8 +761,7 @@ class TestMakeReflectiveDataset:
         assert "Evaluator feedback:" in feedback
         assert "security concern" in feedback
 
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.GEPAAdapter", new=object)
-    @patch("opik_optimizer_framework.optimizers.gepa.gepa_adapter.EvaluationBatch")
+    @patch("gepa.core.adapter.EvaluationBatch")
     def test_falls_back_to_expected_answer_when_no_reasons(self, mock_eb_cls):
         adapter = _build_adapter(MagicMock())
 
@@ -825,8 +813,8 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
-            mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
                 training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}, {"id": "id-2", "question": "Q2", "answer": "A2"}],
@@ -836,8 +824,8 @@ class TestGepaOptimizer:
                 event_emitter=emitter,
             )
 
-        mock_gepa.optimize.assert_called_once()
-        call_kwargs = mock_gepa.optimize.call_args.kwargs
+        mock_optimize.assert_called_once()
+        call_kwargs = mock_optimize.call_args.kwargs
         assert call_kwargs["seed_candidate"] == {
             "system_0": "You are helpful.",
             "user_1": "Answer: {question}",
@@ -853,8 +841,8 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
-            mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
                 training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
@@ -864,7 +852,7 @@ class TestGepaOptimizer:
                 event_emitter=emitter,
             )
 
-        call_kwargs = mock_gepa.optimize.call_args.kwargs
+        call_kwargs = mock_optimize.call_args.kwargs
         callbacks = call_kwargs["callbacks"]
         assert isinstance(callbacks, list)
         assert len(callbacks) == 1
@@ -878,9 +866,8 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
-            mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
-
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
                 training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
@@ -890,11 +877,12 @@ class TestGepaOptimizer:
                 event_emitter=emitter,
             )
 
-        gepa_adapter = mock_gepa.optimize.call_args.kwargs["adapter"]
+        gepa_adapter = mock_optimize.call_args.kwargs["adapter"]
         assert isinstance(gepa_adapter, FrameworkGEPAAdapter)
         assert gepa_adapter._evaluation_adapter is adapter
 
     def test_gepa_not_installed_raises(self):
+        import sys
         context = _make_context()
         state = OptimizationState()
         emitter = EventEmitter()
@@ -902,7 +890,7 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa", None):
+        with patch.dict(sys.modules, {"gepa": None}):
             with pytest.raises(ImportError, match="gepa"):
                 optimizer.run(
                     context=context,
@@ -928,8 +916,8 @@ class TestGepaOptimizer:
         ]
         val = [{"id": "id-4", "question": "Q4", "answer": "A4"}]
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
-            mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
                 training_set=train,
@@ -939,7 +927,7 @@ class TestGepaOptimizer:
                 event_emitter=emitter,
             )
 
-        call_kwargs = mock_gepa.optimize.call_args.kwargs
+        call_kwargs = mock_optimize.call_args.kwargs
         assert len(call_kwargs["trainset"]) == 3
         assert len(call_kwargs["valset"]) == 1
         assert call_kwargs["trainset"][0].opik_item == train[0]
@@ -961,8 +949,8 @@ class TestGepaOptimizer:
 
         optimizer = GepaOptimizer()
 
-        with patch("opik_optimizer_framework.optimizers.gepa.gepa_optimizer._gepa") as mock_gepa:
-            mock_gepa.optimize.return_value = SimpleNamespace(candidates=[])
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(candidates=[])
             optimizer.run(
                 context=context,
                 training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
@@ -972,7 +960,7 @@ class TestGepaOptimizer:
                 event_emitter=emitter,
             )
 
-        call_kwargs = mock_gepa.optimize.call_args.kwargs
+        call_kwargs = mock_optimize.call_args.kwargs
         assert call_kwargs["reflection_minibatch_size"] == 5
         assert call_kwargs["candidate_selection_strategy"] == "epsilon_greedy"
         assert call_kwargs["seed"] == 99

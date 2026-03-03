@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
 from opik_optimizer_framework.types import (
-    CandidateConfig,
     OptimizationState,
     TrialResult,
 )

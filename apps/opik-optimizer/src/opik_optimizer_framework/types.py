@@ -4,12 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclass(frozen=True)
-class CandidateConfig:
-    prompt_messages: list[dict[str, str]]
-    model: str
-    model_parameters: dict[str, Any] = field(default_factory=dict)
-    mask_id: str | None = None
+CandidateConfig = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -51,6 +46,8 @@ class OptimizationContext:
     metric_parameters: dict[str, Any]
     optimizer_type: str
     optimizer_parameters: dict[str, Any]
+    baseline_config: CandidateConfig = field(default_factory=dict)
+
 
 
 @dataclass

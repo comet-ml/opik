@@ -76,11 +76,11 @@ def create_task(config: CandidateConfig) -> Task:
     Routes to RemoteExecutionTask when config has a mask_id,
     otherwise falls back to LLMTask.
     """
-    if config.mask_id is not None:
-        return RemoteExecutionTask(mask_id=config.mask_id)
+    if config.get("mask_id") is not None:
+        return RemoteExecutionTask(mask_id=config["mask_id"])
 
     return LLMTask(
-        prompt_messages=config.prompt_messages,
-        model=config.model,
-        model_parameters=config.model_parameters,
+        prompt_messages=config["prompt_messages"],
+        model=config["model"],
+        model_parameters=config.get("model_parameters", {}),
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Any, TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
@@ -16,8 +16,8 @@ class OptimizerProtocol(Protocol):
     def run(
         self,
         context: OptimizationContext,
-        training_set: list[str],
-        validation_set: list[str],
+        training_set: list[dict[str, Any]],
+        validation_set: list[dict[str, Any]],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         event_emitter: EventEmitter,

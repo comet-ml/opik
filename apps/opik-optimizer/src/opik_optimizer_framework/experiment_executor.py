@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import logging
 from typing import Any
 
@@ -76,7 +75,7 @@ def run_experiment_with_details(
         "candidate_id": candidate.candidate_id,
         "step_index": candidate.step_index,
         "parent_candidate_ids": candidate.parent_candidate_ids,
-        "configuration": dataclasses.asdict(candidate.config),
+        "configuration": candidate.config,
     }
     if batch_index is not None:
         experiment_config["batch_index"] = batch_index
@@ -108,7 +107,7 @@ def run_experiment_with_details(
         metric_scores={metric_type: score},
         experiment_id=getattr(result, "experiment_id", None),
         experiment_name=getattr(result, "experiment_name", None),
-        prompt_messages=candidate.config.prompt_messages,
+        prompt_messages=candidate.config["prompt_messages"],
         parent_candidate_ids=candidate.parent_candidate_ids,
     )
     return trial, result

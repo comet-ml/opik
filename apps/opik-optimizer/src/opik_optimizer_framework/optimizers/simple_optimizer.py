@@ -9,7 +9,6 @@ import litellm
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.types import (
-    CandidateConfig,
     OptimizationContext,
     OptimizationState,
     TrialResult,
@@ -112,11 +111,7 @@ class SimpleOptimizer:
             if candidate_messages is None:
                 continue
 
-            config = CandidateConfig(
-                prompt_messages=candidate_messages,
-                model=context.model,
-                model_parameters=context.model_parameters,
-            )
+            config = {**context.baseline_config, "prompt_messages": candidate_messages}
 
             trial = evaluation_adapter.evaluate(
                 config=config,

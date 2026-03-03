@@ -7,7 +7,6 @@ from opik_optimizer_framework.candidate_materializer import materialize_candidat
 from opik_optimizer_framework.candidate_validator import validate_candidate
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.experiment_executor import run_experiment_with_details
-from opik_optimizer_framework.result_aggregator import record_trial
 from opik_optimizer_framework.types import (
     CandidateConfig,
     OptimizationState,
@@ -137,7 +136,9 @@ class EvaluationAdapter:
             self._candidate_step_index[trial.candidate_id] = step_index
 
         previous_best = self._state.best_trial
-        record_trial(self._state, trial)
+        self._state.trials.append(trial)
+        if self._state.best_trial is None or trial.score > self._state.best_trial.score:
+            self._state.best_trial = trial
         self._event_emitter.on_trial_completed(trial)
 
         if self._state.best_trial is trial and self._state.best_trial is not previous_best:

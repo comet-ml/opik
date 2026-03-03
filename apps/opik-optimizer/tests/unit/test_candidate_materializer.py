@@ -1,7 +1,6 @@
 import uuid
 
 from opik_optimizer_framework.candidate_materializer import materialize_candidate
-from opik_optimizer_framework.types import CandidateConfig
 
 
 class TestCandidateMaterializer:

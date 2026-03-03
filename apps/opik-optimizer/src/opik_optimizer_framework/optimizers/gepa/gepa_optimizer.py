@@ -28,11 +28,6 @@ from .gepa_adapter import (
 
 logger = logging.getLogger(__name__)
 
-try:
-    import gepa as _gepa
-except ImportError:
-    _gepa = None  # type: ignore[assignment]
-
 
 class GepaOptimizer:
     """Optimizer that uses GEPA's genetic-Pareto algorithm."""
@@ -47,7 +42,9 @@ class GepaOptimizer:
         event_emitter: EventEmitter,
         baseline_trial: TrialResult | None = None,
     ) -> None:
-        if _gepa is None:
+        try:
+            import gepa as _gepa
+        except ImportError:
             raise ImportError(
                 "The 'gepa' package is required for GepaOptimizer. "
                 "Install it with: pip install 'gepa>=0.1.0'"
@@ -75,8 +72,7 @@ class GepaOptimizer:
 
         adapter = FrameworkGEPAAdapter(
             base_messages=context.prompt_messages,
-            model=context.model,
-            model_parameters=context.model_parameters,
+            baseline_config=context.baseline_config,
             evaluation_adapter=evaluation_adapter,
         )
 

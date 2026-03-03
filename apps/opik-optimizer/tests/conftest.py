@@ -1,7 +1,6 @@
 import pytest
 
 from opik_optimizer_framework.types import (
-    CandidateConfig,
     OptimizationContext,
     OptimizationState,
 )
@@ -17,15 +16,15 @@ def sample_prompt_messages():
 
 @pytest.fixture
 def sample_candidate_config(sample_prompt_messages):
-    return CandidateConfig(
-        prompt_messages=sample_prompt_messages,
-        model="openai/gpt-4o-mini",
-        model_parameters={"temperature": 0.7},
-    )
+    return {
+        "prompt_messages": sample_prompt_messages,
+        "model": "openai/gpt-4o-mini",
+        "model_parameters": {"temperature": 0.7},
+    }
 
 
 @pytest.fixture
-def sample_optimization_context(sample_prompt_messages):
+def sample_optimization_context(sample_candidate_config, sample_prompt_messages):
     return OptimizationContext(
         optimization_id="opt-test-123",
         dataset_name="test-dataset",
@@ -36,6 +35,7 @@ def sample_optimization_context(sample_prompt_messages):
         metric_parameters={},
         optimizer_type="SimpleOptimizer",
         optimizer_parameters={},
+        baseline_config=sample_candidate_config,
     )
 
 
