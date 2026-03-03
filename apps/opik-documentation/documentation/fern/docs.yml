@@ -88,7 +88,8 @@ tabs:
 libraries:
   opik-python-core:
     input:
-      path: ../../../../sdks/python/src/opik
+      git: https://github.com/comet-ml/opik.git
+      subpath: sdks/python/src/opik
     output:
       path: docs/reference/python-sdk/core-api-generated
     lang: python
