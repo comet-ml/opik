@@ -16,7 +16,6 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -1342,9 +1341,9 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
-                    .duration(getDuration(row))
-                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
-                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .duration(ExperimentGroupMappers.getDuration(row))
+                    .totalEstimatedCost(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost_avg"))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -1363,32 +1362,6 @@ class ExperimentDAO {
                             .orElse(null))
                     .build();
         });
-    }
-
-    private static BigDecimal getCostValue(Row row, String fieldName) {
-        return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
-                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(null);
-    }
-
-    private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .map(durations -> new PercentageValues(
-                        convertToBigDecimal(durations.get("p50")),
-                        convertToBigDecimal(durations.get("p90")),
-                        convertToBigDecimal(durations.get("p99"))))
-                .orElse(null);
-    }
-
-    private static BigDecimal convertToBigDecimal(Number value) {
-        if (value instanceof BigDecimal) {
-            return (BigDecimal) value;
-        } else if (value instanceof Double) {
-            return BigDecimal.valueOf((Double) value);
-        } else {
-            return BigDecimal.ZERO;
-        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {

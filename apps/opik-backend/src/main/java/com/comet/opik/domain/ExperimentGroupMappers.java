@@ -71,13 +71,13 @@ public final class ExperimentGroupMappers {
                 .build();
     }
 
-    private static BigDecimal getCostValue(Row row, String fieldName) {
+    public static BigDecimal getCostValue(Row row, String fieldName) {
         return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
                 .orElse(null);
     }
 
-    private static PercentageValues getDuration(Row row) {
+    public static PercentageValues getDuration(Row row) {
         return Optional.ofNullable(row.get("duration", Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .map(durations -> new PercentageValues(
