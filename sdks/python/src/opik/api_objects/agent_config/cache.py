@@ -62,6 +62,10 @@ class SharedConfigCache:
             self.values = new_values
             self._last_fetch = time.monotonic()
 
+    def value_keys(self) -> typing.Set[str]:
+        with self._lock:
+            return set(self.values.keys())
+
     def is_stale(self) -> bool:
         with self._lock:
             if self._last_fetch is None:

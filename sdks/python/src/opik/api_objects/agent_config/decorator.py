@@ -219,7 +219,7 @@ def _resolve_and_cache_blueprint(instance: AgentConfigInstance) -> None:
         cf.prefixed_key: cf.py_type for cf in instance_fields.values()
     }
 
-    extra_keys = set(prefixed_field_types.keys()) - set(shared_cache.values.keys())
+    extra_keys = set(prefixed_field_types.keys()) - shared_cache.value_keys()
     # If no difference with cache - no need to do any extra fetches
     if not extra_keys:
         return
