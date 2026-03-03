@@ -41,6 +41,11 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 - Treat `documentation/fern/docs.yml` (or `docs.yaml` where used) as the routing source of truth; do not infer URL paths from folder layout alone.
 - Store new images under `documentation/fern/img/`.
 
+### Python SDK Reference Location Rule
+- Default: Python SDK reference docs belong in `python-sdk-docs/source/**` (Sphinx pipeline).
+- Approved exception (migration): Fern native library-generated Python SDK reference pages may live under `documentation/fern/docs/reference/python-sdk/**` when generated via `documentation/fern/docs.yml` `libraries` configuration.
+- While this exception is used, keep Sphinx as the full-reference source of truth unless a PR explicitly migrates additional sections.
+
 ## Testing Guidelines
 - There is no dedicated automated docs test suite in this directory.
 - Validation is primarily local render verification:
