@@ -18,7 +18,7 @@ import java.util.UUID;
 public record LocalRunner(
         UUID id,
         String name,
-        RunnerStatus status,
+        LocalRunnerStatus status,
         Instant connectedAt,
         List<Agent> agents) {
 

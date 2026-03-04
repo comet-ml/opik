@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.RunnerService;
-import com.comet.opik.infrastructure.RunnerConfig;
+import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
 import io.dropwizard.jobs.annotations.Every;
@@ -22,20 +22,20 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Singleton
 @DisallowConcurrentExecution
 @Every("60s")
-public class RunnerReaperJob extends Job implements InterruptableJob {
+public class LocalRunnerReaperJob extends Job implements InterruptableJob {
 
-    private static final Lock REAPER_LOCK = new Lock("runner_reaper", RunnerReaperJob.class.getSimpleName());
+    private static final Lock REAPER_LOCK = new Lock("runner_reaper", LocalRunnerReaperJob.class.getSimpleName());
 
-    private final RunnerService runnerService;
+    private final LocalRunnerService runnerService;
     private final LockService lockService;
-    private final RunnerConfig runnerConfig;
+    private final LocalRunnerConfig runnerConfig;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     @Inject
-    public RunnerReaperJob(@NonNull RunnerService runnerService,
+    public LocalRunnerReaperJob(@NonNull LocalRunnerService runnerService,
             @NonNull LockService lockService,
-            @NonNull RunnerConfig runnerConfig) {
+            @NonNull LocalRunnerConfig runnerConfig) {
         this.runnerService = runnerService;
         this.lockService = lockService;
         this.runnerConfig = runnerConfig;

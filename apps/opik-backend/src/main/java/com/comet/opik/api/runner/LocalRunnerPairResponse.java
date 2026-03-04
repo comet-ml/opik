@@ -10,7 +10,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record PairResponse(
+public record LocalRunnerPairResponse(
         String pairingCode,
         UUID runnerId,
         int expiresInSeconds) {

@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.jobs;
 
-import com.comet.opik.domain.RunnerService;
-import com.comet.opik.infrastructure.RunnerConfig;
+import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,22 +21,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class RunnerReaperJobTest {
+class LocalRunnerReaperJobTest {
 
     @Mock
-    private RunnerService runnerService;
+    private LocalRunnerService runnerService;
 
     @Mock
     private LockService lockService;
 
     @Mock
-    private RunnerConfig runnerConfig;
+    private LocalRunnerConfig runnerConfig;
 
-    private RunnerReaperJob reaperJob;
+    private LocalRunnerReaperJob reaperJob;
 
     @BeforeEach
     void setUp() {
-        reaperJob = new RunnerReaperJob(runnerService, lockService, runnerConfig);
+        reaperJob = new LocalRunnerReaperJob(runnerService, lockService, runnerConfig);
 
         lenient().when(runnerConfig.getReaperLockDuration()).thenReturn(Duration.seconds(55));
         lenient().when(runnerConfig.getReaperLockWait()).thenReturn(Duration.seconds(5));

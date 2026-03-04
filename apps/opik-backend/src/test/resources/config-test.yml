@@ -499,7 +499,7 @@ serviceToggles:
   collaboratorsTabEnabled: "false"
 
 # Local Runner configuration
-runner:
+localRunner:
   enabled: true
   jobTimeout: 30s
   maxPendingJobsPerRunner: 100

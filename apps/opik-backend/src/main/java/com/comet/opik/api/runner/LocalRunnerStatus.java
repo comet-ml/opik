@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public enum RunnerStatus {
+public enum LocalRunnerStatus {
 
     PAIRING("pairing"),
     CONNECTED("connected"),

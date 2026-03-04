@@ -18,7 +18,7 @@ public record LocalRunnerJob(
         UUID id,
         UUID runnerId,
         String agentName,
-        JobStatus status,
+        LocalRunnerJobStatus status,
         JsonNode inputs,
         JsonNode result,
         String error,

@@ -2,16 +2,16 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.runner.ConnectRequest;
-import com.comet.opik.api.runner.CreateJobRequest;
-import com.comet.opik.api.runner.HeartbeatResponse;
-import com.comet.opik.api.runner.JobResultRequest;
+import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
+import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
-import com.comet.opik.api.runner.LogEntry;
-import com.comet.opik.api.runner.PairResponse;
-import com.comet.opik.domain.RunnerService;
-import com.comet.opik.infrastructure.RunnerConfig;
+import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
+import com.comet.opik.api.runner.LocalRunnerLogEntry;
+import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.domain.LocalRunnerService;
+import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,32 +52,32 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-@Path("/v1/private/runners")
+@Path("/v1/private/local-runners")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Runners", description = "Local runner management endpoints")
-public class RunnersResource {
+public class LocalRunnersResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull RunnerService runnerService;
-    private final @NonNull RunnerConfig runnerConfig;
+    private final @NonNull LocalRunnerService runnerService;
+    private final @NonNull LocalRunnerConfig runnerConfig;
 
     @POST
     @Path("/pairs")
     @RateLimited
     @Operation(operationId = "generatePairingCode", summary = "Generate a pairing code", description = "Generate a pairing code for a local runner in the current workspace", responses = {
-            @ApiResponse(responseCode = "201", description = "Pairing code generated", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = PairResponse.class))),
+            @ApiResponse(responseCode = "201", description = "Pairing code generated", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = LocalRunnerPairResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response generatePairingCode(@Context UriInfo uriInfo) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        PairResponse response = runnerService.generatePairingCode(workspaceId, userName);
+        LocalRunnerPairResponse response = runnerService.generatePairingCode(workspaceId, userName);
         var uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/runners/{runnerId}")
+                .path("v1/private/local-runners/{runnerId}")
                 .build(response.runnerId());
         return Response.created(uri).entity(response).build();
     }
@@ -90,14 +90,14 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response connect(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ConnectRequest.class))) @NotNull @Valid ConnectRequest request,
+            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerConnectRequest.class))) @NotNull @Valid LocalRunnerConnectRequest request,
             @Context UriInfo uriInfo) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID runnerId = runnerService.connect(workspaceId, userName, request);
         var uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/runners/{runnerId}")
+                .path("v1/private/local-runners/{runnerId}")
                 .build(runnerId);
         return Response.created(uri).build();
     }
@@ -146,13 +146,13 @@ public class RunnersResource {
     @Path("/{runnerId}/heartbeats")
     @RateLimited
     @Operation(operationId = "heartbeat", summary = "Local runner heartbeat", description = "Refresh local runner heartbeat", responses = {
-            @ApiResponse(responseCode = "200", description = "Heartbeat response", content = @Content(schema = @Schema(implementation = HeartbeatResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Heartbeat response", content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response heartbeat(@PathParam("runnerId") UUID runnerId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        HeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId);
+        LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId);
         return Response.ok(response).build();
     }
 
@@ -164,7 +164,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response createJob(
-            @RequestBody(content = @Content(schema = @Schema(implementation = CreateJobRequest.class))) @NotNull @Valid CreateJobRequest request,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateLocalRunnerJobRequest.class))) @NotNull @Valid CreateLocalRunnerJobRequest request,
             @Context UriInfo uriInfo) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -239,13 +239,13 @@ public class RunnersResource {
     @GET
     @Path("/jobs/{jobId}/logs")
     @Operation(operationId = "getJobLogs", summary = "Get local runner job logs", description = "Get log entries for a local runner job", responses = {
-            @ApiResponse(responseCode = "200", description = "Log entries", content = @Content(array = @ArraySchema(schema = @Schema(implementation = LogEntry.class)))),
+            @ApiResponse(responseCode = "200", description = "Log entries", content = @Content(array = @ArraySchema(schema = @Schema(implementation = LocalRunnerLogEntry.class)))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response getJobLogs(@PathParam("jobId") UUID jobId,
             @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        List<LogEntry> logs = runnerService.getJobLogs(jobId, offset, workspaceId);
+        List<LocalRunnerLogEntry> logs = runnerService.getJobLogs(jobId, offset, workspaceId);
         return Response.ok(logs).build();
     }
 
@@ -257,7 +257,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response appendLogs(@PathParam("jobId") UUID jobId,
-            @RequestBody(content = @Content(array = @ArraySchema(schema = @Schema(implementation = LogEntry.class)))) @NotNull @Valid List<@NotNull LogEntry> entries) {
+            @RequestBody(content = @Content(array = @ArraySchema(schema = @Schema(implementation = LocalRunnerLogEntry.class)))) @NotNull @Valid List<@NotNull LocalRunnerLogEntry> entries) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.appendLogs(jobId, workspaceId, entries);
@@ -271,7 +271,7 @@ public class RunnersResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response reportResult(@PathParam("jobId") UUID jobId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = JobResultRequest.class))) @NotNull @Valid JobResultRequest result) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerJobResultRequest.class))) @NotNull @Valid LocalRunnerJobResultRequest result) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         runnerService.reportResult(jobId, workspaceId, result);

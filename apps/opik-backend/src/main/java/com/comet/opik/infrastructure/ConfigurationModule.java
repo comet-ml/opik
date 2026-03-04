@@ -16,7 +16,7 @@ public class ConfigurationModule extends DropwizardAwareModule<OpikConfiguration
         bind(WebhookConfig.class).toInstance(webhookConfig);
         bind(ServiceTogglesConfig.class).toInstance(serviceTogglesConfig);
 
-        var runnerConfig = configuration(RunnerConfig.class);
-        bind(RunnerConfig.class).toInstance(runnerConfig);
+        var localRunnerConfig = configuration(LocalRunnerConfig.class);
+        bind(LocalRunnerConfig.class).toInstance(localRunnerConfig);
     }
 }

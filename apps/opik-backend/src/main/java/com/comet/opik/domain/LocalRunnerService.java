@@ -1,17 +1,17 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.runner.ConnectRequest;
-import com.comet.opik.api.runner.CreateJobRequest;
-import com.comet.opik.api.runner.HeartbeatResponse;
-import com.comet.opik.api.runner.JobResultRequest;
-import com.comet.opik.api.runner.JobStatus;
+import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
+import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
-import com.comet.opik.api.runner.LogEntry;
-import com.comet.opik.api.runner.PairResponse;
-import com.comet.opik.api.runner.RunnerStatus;
-import com.comet.opik.infrastructure.RunnerConfig;
+import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
+import com.comet.opik.api.runner.LocalRunnerJobStatus;
+import com.comet.opik.api.runner.LocalRunnerLogEntry;
+import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.LocalRunnerStatus;
+import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -29,6 +29,7 @@ import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RBucket;
 import org.redisson.api.RList;
 import org.redisson.api.RMap;
+import org.redisson.api.RScoredSortedSet;
 import org.redisson.api.RSet;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
@@ -37,7 +38,6 @@ import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,12 +46,12 @@ import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
-@ImplementedBy(RunnerServiceImpl.class)
-public interface RunnerService {
+@ImplementedBy(LocalRunnerServiceImpl.class)
+public interface LocalRunnerService {
 
-    PairResponse generatePairingCode(String workspaceId, String userName);
+    LocalRunnerPairResponse generatePairingCode(String workspaceId, String userName);
 
-    UUID connect(String workspaceId, String userName, ConnectRequest request);
+    UUID connect(String workspaceId, String userName, LocalRunnerConnectRequest request);
 
     LocalRunner.LocalRunnerPage listRunners(String workspaceId, int page, int size);
 
@@ -59,9 +59,9 @@ public interface RunnerService {
 
     void registerAgents(UUID runnerId, String workspaceId, Map<String, LocalRunner.Agent> agents);
 
-    HeartbeatResponse heartbeat(UUID runnerId, String workspaceId);
+    LocalRunnerHeartbeatResponse heartbeat(UUID runnerId, String workspaceId);
 
-    UUID createJob(String workspaceId, String userName, CreateJobRequest request);
+    UUID createJob(String workspaceId, String userName, CreateLocalRunnerJobRequest request);
 
     CompletionStage<LocalRunnerJob> nextJob(UUID runnerId, String workspaceId);
 
@@ -70,11 +70,11 @@ public interface RunnerService {
 
     LocalRunnerJob getJob(UUID jobId, String workspaceId);
 
-    List<LogEntry> getJobLogs(UUID jobId, int offset, String workspaceId);
+    List<LocalRunnerLogEntry> getJobLogs(UUID jobId, int offset, String workspaceId);
 
-    void appendLogs(UUID jobId, String workspaceId, List<LogEntry> entries);
+    void appendLogs(UUID jobId, String workspaceId, List<LocalRunnerLogEntry> entries);
 
-    void reportResult(UUID jobId, String workspaceId, JobResultRequest result);
+    void reportResult(UUID jobId, String workspaceId, LocalRunnerJobResultRequest result);
 
     void cancelJob(UUID jobId, String workspaceId);
 
@@ -84,30 +84,63 @@ public interface RunnerService {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class RunnerServiceImpl implements RunnerService {
+class LocalRunnerServiceImpl implements LocalRunnerService {
 
     private static final String PAIRING_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private static final int PAIRING_CODE_LENGTH = 6;
-    private static final int PAIRING_CODE_TTL_SECONDS = 300;
-    private static final int PAIRING_RUNNER_TTL_SECONDS = 600;
-    private static final int MAX_AGENTS_PER_RUNNER = 50;
-    private static final int MAX_LOG_ENTRIES_PER_BATCH = 1000;
 
-    private static final String PAIR_KEY = "opik:runners:pair:%s";
-    private static final String RUNNER_KEY = "opik:runners:runner:%s";
-    private static final String RUNNER_AGENTS_KEY = "opik:runners:runner:%s:agents";
-    private static final String RUNNER_HEARTBEAT_KEY = "opik:runners:runner:%s:heartbeat";
-    private static final String WORKSPACE_RUNNERS_KEY = "opik:runners:workspace:%s:runners";
-    private static final String USER_RUNNER_KEY = "opik:runners:workspace:%s:user:%s:runner";
     private static final String WORKSPACES_WITH_RUNNERS_KEY = "opik:runners:workspaces:with_runners";
-    private static final String JOB_KEY = "opik:runners:job:%s";
-    private static final String JOB_LOGS_KEY = "opik:runners:job:%s:logs";
-    private static final String PENDING_JOBS_KEY = "opik:runners:jobs:%s:pending";
-    private static final String ACTIVE_JOBS_KEY = "opik:runners:jobs:%s:active";
-    private static final String RUNNER_JOBS_KEY = "opik:runners:runner:%s:jobs";
-    private static final String RUNNER_CANCELLATIONS_KEY = "opik:runners:runner:%s:cancellations";
 
-    private static final Set<JobStatus> TERMINAL_JOB_STATUSES = Set.of(JobStatus.COMPLETED, JobStatus.FAILED);
+    private static String pairKey(String code) {
+        return "opik:runners:pair:" + code;
+    }
+
+    private static String runnerKey(UUID runnerId) {
+        return "opik:runners:runner:" + runnerId;
+    }
+
+    private static String runnerAgentsKey(UUID runnerId) {
+        return "opik:runners:runner:" + runnerId + ":agents";
+    }
+
+    private static String runnerHeartbeatKey(UUID runnerId) {
+        return "opik:runners:runner:" + runnerId + ":heartbeat";
+    }
+
+    private static String workspaceRunnersKey(String workspaceId) {
+        return "opik:runners:workspace:" + workspaceId + ":runners";
+    }
+
+    private static String userRunnerKey(String workspaceId, String userName) {
+        return "opik:runners:workspace:" + workspaceId + ":user:" + userName + ":runner";
+    }
+
+    private static String jobKey(UUID jobId) {
+        return "opik:runners:job:" + jobId;
+    }
+
+    private static String jobLogsKey(UUID jobId) {
+        return "opik:runners:job:" + jobId + ":logs";
+    }
+
+    private static String pendingJobsKey(UUID runnerId) {
+        return "opik:runners:jobs:" + runnerId + ":pending";
+    }
+
+    private static String activeJobsKey(UUID runnerId) {
+        return "opik:runners:jobs:" + runnerId + ":active";
+    }
+
+    private static String runnerJobsKey(UUID runnerId) {
+        return "opik:runners:runner:" + runnerId + ":jobs";
+    }
+
+    private static String runnerCancellationsKey(UUID runnerId) {
+        return "opik:runners:runner:" + runnerId + ":cancellations";
+    }
+
+    private static final Set<LocalRunnerJobStatus> TERMINAL_JOB_STATUSES = Set.of(LocalRunnerJobStatus.COMPLETED,
+            LocalRunnerJobStatus.FAILED);
 
     private static final String FIELD_ID = "id";
     private static final String FIELD_NAME = "name";
@@ -132,44 +165,50 @@ class RunnerServiceImpl implements RunnerService {
     private static final String FIELD_TIMEOUT = "timeout";
 
     private final @NonNull RedissonClient redisClient;
-    private final @NonNull RunnerConfig runnerConfig;
+    private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull IdGenerator idGenerator;
 
     @Override
-    public PairResponse generatePairingCode(@NonNull String workspaceId, @NonNull String userName) {
-        String code = generateUniqueCode();
+    public LocalRunnerPairResponse generatePairingCode(@NonNull String workspaceId, @NonNull String userName) {
+        String code = generatePairingCodeString();
         UUID runnerId = idGenerator.generateId();
 
-        RBucket<String> pairBucket = redisClient.getBucket(PAIR_KEY.formatted(code), StringCodec.INSTANCE);
-        pairBucket.set(runnerId + ":" + workspaceId, Duration.ofSeconds(PAIRING_CODE_TTL_SECONDS));
+        RBucket<String> pairBucket = redisClient.getBucket(pairKey(code), StringCodec.INSTANCE);
+        boolean claimed = pairBucket.setIfAbsent(runnerId + ":" + workspaceId,
+                runnerConfig.getPairingCodeTtl().toJavaDuration());
+        if (!claimed) {
+            throw new ClientErrorException(Response.status(Response.Status.CONFLICT)
+                    .entity(new ErrorMessage(List.of("Pairing code collision. Please try again.")))
+                    .build());
+        }
 
-        RMap<String, String> runnerMap = redisClient.getMap(RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+        RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
         runnerMap.putAll(Map.of(
                 FIELD_NAME, "",
-                FIELD_STATUS, RunnerStatus.PAIRING.getValue(),
+                FIELD_STATUS, LocalRunnerStatus.PAIRING.getValue(),
                 FIELD_WORKSPACE_ID, workspaceId,
                 FIELD_USER_NAME, userName));
-        runnerMap.expire(Duration.ofSeconds(PAIRING_RUNNER_TTL_SECONDS));
+        runnerMap.expire(runnerConfig.getPairingRunnerTtl().toJavaDuration());
 
-        addRunnerToWorkspace(workspaceId, runnerId.toString());
-        setUserRunner(workspaceId, userName, runnerId.toString());
+        addRunnerToWorkspace(workspaceId, runnerId);
+        setUserRunner(workspaceId, userName, runnerId);
 
-        return PairResponse.builder()
+        return LocalRunnerPairResponse.builder()
                 .pairingCode(code)
                 .runnerId(runnerId)
-                .expiresInSeconds(PAIRING_CODE_TTL_SECONDS)
+                .expiresInSeconds((int) runnerConfig.getPairingCodeTtl().toSeconds())
                 .build();
     }
 
     @Override
     public UUID connect(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull ConnectRequest request) {
-        String runnerId;
+            @NonNull LocalRunnerConnectRequest request) {
+        UUID runnerId;
 
         if (StringUtils.isNotBlank(request.pairingCode())) {
             runnerId = claimPairingCode(request.pairingCode(), workspaceId);
         } else {
-            runnerId = idGenerator.generateId().toString();
+            runnerId = idGenerator.generateId();
             addRunnerToWorkspace(workspaceId, runnerId);
         }
 
@@ -177,33 +216,38 @@ class RunnerServiceImpl implements RunnerService {
         setUserRunner(workspaceId, userName, runnerId);
         activateRunner(runnerId, workspaceId, userName, request.runnerName());
 
-        return UUID.fromString(runnerId);
+        return runnerId;
     }
 
     @Override
     public LocalRunner.LocalRunnerPage listRunners(@NonNull String workspaceId, int page, int size) {
-        RSet<String> runnerIds = redisClient.getSet(
-                WORKSPACE_RUNNERS_KEY.formatted(workspaceId), StringCodec.INSTANCE);
-        Set<String> ids = runnerIds.readAll();
+        RScoredSortedSet<String> runnerIds = redisClient.getScoredSortedSet(
+                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
+        int total = runnerIds.size();
+
+        int fromIndex = page * size;
+        int toIndex = fromIndex + size - 1;
+
+        var ids = runnerIds.valueRange(fromIndex, toIndex);
 
         List<LocalRunner> runners = new ArrayList<>();
-        for (String runnerId : ids) {
+        for (String runnerIdStr : ids) {
+            UUID runnerId = UUID.fromString(runnerIdStr);
             LocalRunner runner = loadRunner(runnerId, workspaceId);
             if (runner != null) {
                 runners.add(runner);
             }
         }
 
-        return paginate(runners, page, size,
-                (content, p, s, total) -> LocalRunner.LocalRunnerPage.builder()
-                        .page(p).size(s).total(total).content(content).build());
+        return LocalRunner.LocalRunnerPage.builder()
+                .page(page).size(size).total(total).content(runners).build();
     }
 
     @Override
     public LocalRunner getRunner(@NonNull String workspaceId, @NonNull UUID runnerId) {
-        LocalRunner runner = loadRunner(runnerId.toString(), workspaceId);
+        LocalRunner runner = loadRunner(runnerId, workspaceId);
         if (runner == null) {
-            throw new NotFoundException("Runner not found");
+            throw new NotFoundException("Runner not found: " + runnerId);
         }
         return runner;
     }
@@ -211,16 +255,16 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public void registerAgents(@NonNull UUID runnerId, @NonNull String workspaceId,
             @NonNull Map<String, LocalRunner.Agent> agents) {
-        validateRunnerWorkspace(runnerId.toString(), workspaceId);
+        validateRunnerWorkspace(runnerId, workspaceId);
 
-        if (agents.size() > MAX_AGENTS_PER_RUNNER) {
+        if (agents.size() > runnerConfig.getMaxAgentsPerRunner()) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
-                            "Too many agents. Maximum is " + MAX_AGENTS_PER_RUNNER)))
+                            "Too many agents. Maximum is " + runnerConfig.getMaxAgentsPerRunner())))
                     .build());
         }
 
-        String key = RUNNER_AGENTS_KEY.formatted(runnerId);
+        String key = runnerAgentsKey(runnerId);
         RMap<String, String> agentsMap = redisClient.getMap(key, StringCodec.INSTANCE);
         agentsMap.delete();
 
@@ -232,25 +276,25 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     @Override
-    public HeartbeatResponse heartbeat(@NonNull UUID runnerId, @NonNull String workspaceId) {
+    public LocalRunnerHeartbeatResponse heartbeat(@NonNull UUID runnerId, @NonNull String workspaceId) {
         RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerKey(runnerId), StringCodec.INSTANCE);
         Map<String, String> fields = runnerMap.readAllMap();
 
         if (fields.isEmpty()) {
             throw new ClientErrorException(Response.status(Response.Status.GONE)
-                    .entity(new ErrorMessage(List.of("Runner not found or evicted")))
+                    .entity(new ErrorMessage(List.of("Runner not found or evicted: " + runnerId)))
                     .build());
         }
 
         if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
-            throw new NotFoundException("Runner not found");
+            throw new NotFoundException("Runner not found: " + runnerId);
         }
 
         String userName = fields.get(FIELD_USER_NAME);
         if (userName != null) {
             RBucket<String> currentRunnerBucket = redisClient.getBucket(
-                    USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
+                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
             String currentRunnerId = currentRunnerBucket.get();
             if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
                 throw new ClientErrorException(Response.status(Response.Status.GONE)
@@ -259,46 +303,48 @@ class RunnerServiceImpl implements RunnerService {
             }
         }
 
-        setHeartbeat(runnerId.toString());
+        setHeartbeat(runnerId);
 
         RList<String> activeJobs = redisClient.getList(
-                ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                activeJobsKey(runnerId), StringCodec.INSTANCE);
         List<String> activeJobIds = activeJobs.readAll();
         String now = Instant.now().toString();
-        for (String jobId : activeJobIds) {
-            RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+        for (String jobIdStr : activeJobIds) {
+            UUID jobId = UUID.fromString(jobIdStr);
+            RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
             if (jobMap.isExists()) {
                 jobMap.put(FIELD_LAST_HEARTBEAT, now);
             }
         }
 
         RSet<String> cancellations = redisClient.getSet(
-                RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerCancellationsKey(runnerId), StringCodec.INSTANCE);
         Set<String> cancelledIds = cancellations.readAll();
         cancellations.delete();
 
-        return HeartbeatResponse.builder()
+        return LocalRunnerHeartbeatResponse.builder()
                 .cancelledJobIds(cancelledIds.stream().map(UUID::fromString).toList())
                 .build();
     }
 
     @Override
     public UUID createJob(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull CreateJobRequest request) {
-        String runnerId;
+            @NonNull CreateLocalRunnerJobRequest request) {
+        UUID runnerId;
 
         if (request.runnerId() == null) {
-            runnerId = redisClient.<String>getBucket(
-                    USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE).get();
+            String runnerIdStr = redisClient.<String>getBucket(
+                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE).get();
 
-            if (runnerId == null) {
+            if (runnerIdStr == null) {
                 throw new NotFoundException(Response.status(Response.Status.NOT_FOUND)
                         .entity(new ErrorMessage(List.of(
                                 "No runner configured. Pair one from the Runners page.")))
                         .build());
             }
+            runnerId = UUID.fromString(runnerIdStr);
         } else {
-            runnerId = request.runnerId().toString();
+            runnerId = request.runnerId();
         }
 
         validateRunnerWorkspace(runnerId, workspaceId);
@@ -311,21 +357,21 @@ class RunnerServiceImpl implements RunnerService {
         }
 
         RList<String> pendingJobs = redisClient.getList(
-                PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                pendingJobsKey(runnerId), StringCodec.INSTANCE);
         if (pendingJobs.size() >= runnerConfig.getMaxPendingJobsPerRunner()) {
             throw new ClientErrorException(Response.status(429)
                     .entity(new ErrorMessage(List.of("Too many pending jobs for this runner")))
                     .build());
         }
 
-        String jobId = idGenerator.generateId().toString();
+        UUID jobId = idGenerator.generateId();
         String now = Instant.now().toString();
 
         Map<String, String> jobFields = new HashMap<>();
-        jobFields.put(FIELD_ID, jobId);
-        jobFields.put(FIELD_RUNNER_ID, runnerId);
+        jobFields.put(FIELD_ID, jobId.toString());
+        jobFields.put(FIELD_RUNNER_ID, runnerId.toString());
         jobFields.put(FIELD_AGENT_NAME, request.agentName());
-        jobFields.put(FIELD_STATUS, JobStatus.PENDING.getValue());
+        jobFields.put(FIELD_STATUS, LocalRunnerJobStatus.PENDING.getValue());
         jobFields.put(FIELD_PROJECT, request.project() != null ? request.project() : "default");
         jobFields.put(FIELD_WORKSPACE_ID, workspaceId);
         jobFields.put(FIELD_CREATED_AT, now);
@@ -338,39 +384,40 @@ class RunnerServiceImpl implements RunnerService {
         int timeout = resolveAgentTimeout(runnerId, request.agentName());
         jobFields.put(FIELD_TIMEOUT, String.valueOf(timeout));
 
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+        RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
         jobMap.putAll(jobFields);
 
-        pendingJobs.add(jobId);
-        RSet<String> runnerJobs = redisClient.getSet(
-                RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
-        runnerJobs.add(jobId);
+        pendingJobs.add(jobId.toString());
+        RScoredSortedSet<String> runnerJobs = redisClient.getScoredSortedSet(
+                runnerJobsKey(runnerId), StringCodec.INSTANCE);
+        runnerJobs.add(Instant.now().toEpochMilli(), jobId.toString());
 
-        return UUID.fromString(jobId);
+        return jobId;
     }
 
     @Override
     public CompletionStage<LocalRunnerJob> nextJob(@NonNull UUID runnerId, @NonNull String workspaceId) {
-        validateRunnerWorkspace(runnerId.toString(), workspaceId);
+        validateRunnerWorkspace(runnerId, workspaceId);
 
-        String pendingKey = PENDING_JOBS_KEY.formatted(runnerId);
-        String activeKey = ACTIVE_JOBS_KEY.formatted(runnerId);
+        String pendingKey = pendingJobsKey(runnerId);
+        String activeKey = activeJobsKey(runnerId);
 
         RBlockingDeque<String> blockingDeque = redisClient.getBlockingDeque(pendingKey, StringCodec.INSTANCE);
 
         return blockingDeque.pollFirstAsync(runnerConfig.getNextJobPollTimeout().toSeconds(), TimeUnit.SECONDS)
-                .thenApplyAsync(jobId -> {
-                    if (jobId == null) {
+                .thenApplyAsync(jobIdStr -> {
+                    if (jobIdStr == null) {
                         return null;
                     }
 
                     RList<String> activeList = redisClient.getList(activeKey, StringCodec.INSTANCE);
-                    activeList.add(jobId);
+                    activeList.add(jobIdStr);
 
+                    UUID jobId = UUID.fromString(jobIdStr);
                     RMap<String, String> jobMap = redisClient.getMap(
-                            JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+                            jobKey(jobId), StringCodec.INSTANCE);
                     String now = Instant.now().toString();
-                    jobMap.put(FIELD_STATUS, JobStatus.RUNNING.getValue());
+                    jobMap.put(FIELD_STATUS, LocalRunnerJobStatus.RUNNING.getValue());
                     jobMap.put(FIELD_STARTED_AT, now);
                     jobMap.put(FIELD_LAST_HEARTBEAT, now);
 
@@ -381,13 +428,23 @@ class RunnerServiceImpl implements RunnerService {
     @Override
     public LocalRunnerJob.LocalRunnerJobPage listJobs(@NonNull UUID runnerId, String project,
             @NonNull String workspaceId, int page, int size) {
-        RSet<String> runnerJobs = redisClient.getSet(
-                RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
-        Set<String> allJobIds = runnerJobs.readAll();
+        RScoredSortedSet<String> runnerJobs = redisClient.getScoredSortedSet(
+                runnerJobsKey(runnerId), StringCodec.INSTANCE);
+
+        if (project != null) {
+            return listJobsWithFilter(runnerJobs, project, workspaceId, page, size);
+        }
+
+        int total = runnerJobs.size();
+        int fromIndex = page * size;
+        int toIndex = fromIndex + size - 1;
+
+        var jobIds = runnerJobs.valueRangeReversed(fromIndex, toIndex);
 
         List<LocalRunnerJob> jobs = new ArrayList<>();
-        for (String jobId : allJobIds) {
-            RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+        for (String jobIdStr : jobIds) {
+            UUID jobId = UUID.fromString(jobIdStr);
+            RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
             Map<String, String> fields = jobMap.readAllMap();
             if (fields.isEmpty()) {
                 continue;
@@ -395,31 +452,50 @@ class RunnerServiceImpl implements RunnerService {
             if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
                 continue;
             }
-            if (project != null && !project.equals(fields.get(FIELD_PROJECT))) {
-                continue;
-            }
             jobs.add(buildRunnerJob(fields));
         }
 
-        jobs.sort(Comparator.comparing(LocalRunnerJob::createdAt,
-                Comparator.nullsLast(Comparator.reverseOrder())));
+        return LocalRunnerJob.LocalRunnerJobPage.builder()
+                .page(page).size(size).total(total).content(jobs).build();
+    }
 
-        return paginate(jobs, page, size,
-                (content, p, s, total) -> LocalRunnerJob.LocalRunnerJobPage.builder()
-                        .page(p).size(s).total(total).content(content).build());
+    private LocalRunnerJob.LocalRunnerJobPage listJobsWithFilter(RScoredSortedSet<String> runnerJobs,
+            String project, String workspaceId, int page, int size) {
+        var allJobIds = runnerJobs.valueRangeReversed(0, -1);
+
+        List<LocalRunnerJob> matched = new ArrayList<>();
+        for (String jobIdStr : allJobIds) {
+            UUID jobId = UUID.fromString(jobIdStr);
+            RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
+            Map<String, String> fields = jobMap.readAllMap();
+            if (fields.isEmpty() || !workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
+                continue;
+            }
+            if (!project.equals(fields.get(FIELD_PROJECT))) {
+                continue;
+            }
+            matched.add(buildRunnerJob(fields));
+        }
+
+        int total = matched.size();
+        int fromIndex = Math.min(page * size, total);
+        int toIndex = Math.min(fromIndex + size, total);
+
+        return LocalRunnerJob.LocalRunnerJobPage.builder()
+                .page(page).size(size).total(total).content(matched.subList(fromIndex, toIndex)).build();
     }
 
     @Override
     public LocalRunnerJob getJob(@NonNull UUID jobId, @NonNull String workspaceId) {
-        var job = loadValidatedJob(jobId.toString(), workspaceId);
+        var job = loadValidatedJob(jobId, workspaceId);
         return buildRunnerJob(job.fields());
     }
 
     @Override
-    public List<LogEntry> getJobLogs(@NonNull UUID jobId, int offset, @NonNull String workspaceId) {
-        loadValidatedJob(jobId.toString(), workspaceId);
+    public List<LocalRunnerLogEntry> getJobLogs(@NonNull UUID jobId, int offset, @NonNull String workspaceId) {
+        loadValidatedJob(jobId, workspaceId);
 
-        RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
+        RList<String> logsList = redisClient.getList(jobLogsKey(jobId), StringCodec.INSTANCE);
         int logSize = logsList.size();
         if (offset >= logSize) {
             return List.of();
@@ -427,23 +503,23 @@ class RunnerServiceImpl implements RunnerService {
 
         List<String> entries = logsList.range(offset, logSize - 1);
         return entries.stream()
-                .map(json -> JsonUtils.readValue(json, LogEntry.class))
+                .map(json -> JsonUtils.readValue(json, LocalRunnerLogEntry.class))
                 .toList();
     }
 
     @Override
     public void appendLogs(@NonNull UUID jobId, @NonNull String workspaceId,
-            @NonNull List<LogEntry> entries) {
-        if (entries.size() > MAX_LOG_ENTRIES_PER_BATCH) {
+            @NonNull List<LocalRunnerLogEntry> entries) {
+        if (entries.size() > runnerConfig.getMaxLogEntriesPerBatch()) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
-                            "Too many log entries. Maximum per batch is " + MAX_LOG_ENTRIES_PER_BATCH)))
+                            "Too many log entries. Maximum per batch is " + runnerConfig.getMaxLogEntriesPerBatch())))
                     .build());
         }
 
-        loadValidatedJob(jobId.toString(), workspaceId);
+        loadValidatedJob(jobId, workspaceId);
 
-        RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
+        RList<String> logsList = redisClient.getList(jobLogsKey(jobId), StringCodec.INSTANCE);
         List<String> serialized = entries.stream()
                 .map(JsonUtils::writeValueAsString)
                 .toList();
@@ -452,12 +528,8 @@ class RunnerServiceImpl implements RunnerService {
 
     @Override
     public void reportResult(@NonNull UUID jobId, @NonNull String workspaceId,
-            @NonNull JobResultRequest result) {
-        var job = loadValidatedJob(jobId.toString(), workspaceId);
-        RMap<String, String> jobMap = job.map();
-        Map<String, String> fields = job.fields();
-
-        JobStatus resultStatus = result.status();
+            @NonNull LocalRunnerJobResultRequest result) {
+        LocalRunnerJobStatus resultStatus = result.status();
         if (!TERMINAL_JOB_STATUSES.contains(resultStatus)) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ErrorMessage(List.of(
@@ -465,9 +537,13 @@ class RunnerServiceImpl implements RunnerService {
                     .build());
         }
 
+        var job = loadValidatedJob(jobId, workspaceId);
+        RMap<String, String> jobMap = job.map();
+        Map<String, String> fields = job.fields();
+
         String currentStatus = fields.get(FIELD_STATUS);
-        JobStatus current = parseJobStatus(currentStatus);
-        if (current != null && (TERMINAL_JOB_STATUSES.contains(current) || current == JobStatus.CANCELLED)) {
+        LocalRunnerJobStatus current = parseJobStatus(currentStatus);
+        if (current != null && (TERMINAL_JOB_STATUSES.contains(current) || current == LocalRunnerJobStatus.CANCELLED)) {
             return;
         }
 
@@ -484,42 +560,44 @@ class RunnerServiceImpl implements RunnerService {
             jobMap.put(FIELD_TRACE_ID, result.traceId().toString());
         }
 
-        String runnerId = fields.get(FIELD_RUNNER_ID);
-        if (runnerId != null) {
+        String runnerIdStr = fields.get(FIELD_RUNNER_ID);
+        if (runnerIdStr != null) {
+            UUID runnerId = UUID.fromString(runnerIdStr);
             RList<String> activeList = redisClient.getList(
-                    ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                    activeJobsKey(runnerId), StringCodec.INSTANCE);
             activeList.remove(jobId.toString());
         }
 
-        expireJobAndLogs(jobId.toString(), jobMap);
+        expireJobAndLogs(jobId, jobMap);
     }
 
     @Override
     public void cancelJob(@NonNull UUID jobId, @NonNull String workspaceId) {
-        var job = loadValidatedJob(jobId.toString(), workspaceId);
+        var job = loadValidatedJob(jobId, workspaceId);
         RMap<String, String> jobMap = job.map();
         Map<String, String> fields = job.fields();
 
         String currentStatus = fields.get(FIELD_STATUS);
-        JobStatus current = parseJobStatus(currentStatus);
-        if (current != null && (TERMINAL_JOB_STATUSES.contains(current) || current == JobStatus.CANCELLED)) {
+        LocalRunnerJobStatus current = parseJobStatus(currentStatus);
+        if (current != null && (TERMINAL_JOB_STATUSES.contains(current) || current == LocalRunnerJobStatus.CANCELLED)) {
             return;
         }
 
-        jobMap.put(FIELD_STATUS, JobStatus.CANCELLED.getValue());
+        jobMap.put(FIELD_STATUS, LocalRunnerJobStatus.CANCELLED.getValue());
         jobMap.put(FIELD_COMPLETED_AT, Instant.now().toString());
 
-        String runnerId = fields.get(FIELD_RUNNER_ID);
-        if (runnerId != null) {
+        String runnerIdStr = fields.get(FIELD_RUNNER_ID);
+        if (runnerIdStr != null) {
+            UUID runnerId = UUID.fromString(runnerIdStr);
             RList<String> pendingJobs = redisClient.getList(
-                    PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                    pendingJobsKey(runnerId), StringCodec.INSTANCE);
             boolean wasInPending = pendingJobs.remove(jobId.toString());
 
             if (wasInPending) {
-                expireJobAndLogs(jobId.toString(), jobMap);
+                expireJobAndLogs(jobId, jobMap);
             } else {
                 RSet<String> cancellations = redisClient.getSet(
-                        RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                        runnerCancellationsKey(runnerId), StringCodec.INSTANCE);
                 cancellations.add(jobId.toString());
             }
         }
@@ -541,11 +619,12 @@ class RunnerServiceImpl implements RunnerService {
     }
 
     private void reapWorkspaceRunners(String workspaceId) {
-        RSet<String> runnerIds = redisClient.getSet(
-                WORKSPACE_RUNNERS_KEY.formatted(workspaceId), StringCodec.INSTANCE);
-        Set<String> ids = runnerIds.readAll();
+        RScoredSortedSet<String> runnerIds = redisClient.getScoredSortedSet(
+                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
+        var ids = runnerIds.readAll();
 
-        for (String runnerId : ids) {
+        for (String runnerIdStr : ids) {
+            UUID runnerId = UUID.fromString(runnerIdStr);
             try {
                 reapRunner(runnerId, workspaceId);
             } catch (Exception e) {
@@ -563,13 +642,13 @@ class RunnerServiceImpl implements RunnerService {
         }
     }
 
-    private void reapRunner(String runnerId, String workspaceId) {
+    private void reapRunner(UUID runnerId, String workspaceId) {
         if (isRunnerAlive(runnerId)) {
             return;
         }
 
         RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerKey(runnerId), StringCodec.INSTANCE);
         if (!runnerMap.isExists()) {
             removeRunnerFromWorkspace(workspaceId, runnerId);
             return;
@@ -594,36 +673,37 @@ class RunnerServiceImpl implements RunnerService {
         }
     }
 
-    private void failOrphanedJobs(String runnerId) {
+    private void failOrphanedJobs(UUID runnerId) {
         RList<String> activeJobs = redisClient.getList(
-                ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                activeJobsKey(runnerId), StringCodec.INSTANCE);
         List<String> activeJobIds = activeJobs.readAll();
-        for (String jobId : activeJobIds) {
-            failJob(jobId, "Runner disconnected");
+        for (String jobIdStr : activeJobIds) {
+            failJob(UUID.fromString(jobIdStr), "Runner disconnected");
         }
         activeJobs.delete();
 
         RList<String> pendingJobs = redisClient.getList(
-                PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                pendingJobsKey(runnerId), StringCodec.INSTANCE);
         List<String> pendingJobIds = pendingJobs.readAll();
-        for (String jobId : pendingJobIds) {
-            failJob(jobId, "Runner disconnected");
+        for (String jobIdStr : pendingJobIds) {
+            failJob(UUID.fromString(jobIdStr), "Runner disconnected");
         }
         pendingJobs.delete();
 
-        redisClient.getSet(RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getScoredSortedSet(runnerJobsKey(runnerId), StringCodec.INSTANCE).delete();
     }
 
-    private void reapStuckJobs(String runnerId) {
+    private void reapStuckJobs(UUID runnerId) {
         RList<String> activeJobs = redisClient.getList(
-                ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                activeJobsKey(runnerId), StringCodec.INSTANCE);
         List<String> activeJobIds = activeJobs.readAll();
         Instant now = Instant.now();
 
-        for (String jobId : activeJobIds) {
-            RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+        for (String jobIdStr : activeJobIds) {
+            UUID jobId = UUID.fromString(jobIdStr);
+            RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
             if (!jobMap.isExists()) {
-                activeJobs.remove(jobId);
+                activeJobs.remove(jobIdStr);
                 continue;
             }
 
@@ -647,78 +727,71 @@ class RunnerServiceImpl implements RunnerService {
             if (Duration.between(startedAt, now).getSeconds() > timeoutSeconds) {
                 log.warn("Job {} on runner {} exceeded timeout of {}s", jobId, runnerId, timeoutSeconds);
                 failJob(jobId, "Job timed out after " + timeoutSeconds + "s");
-                activeJobs.remove(jobId);
+                activeJobs.remove(jobIdStr);
             }
         }
     }
 
-    private void failJob(String jobId, String error) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+    private void failJob(UUID jobId, String error) {
+        RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
         if (!jobMap.isExists()) {
             return;
         }
         String status = jobMap.get(FIELD_STATUS);
-        JobStatus current = parseJobStatus(status);
-        if (current == JobStatus.COMPLETED || current == JobStatus.FAILED || current == JobStatus.CANCELLED) {
+        LocalRunnerJobStatus current = parseJobStatus(status);
+        if (current == LocalRunnerJobStatus.COMPLETED || current == LocalRunnerJobStatus.FAILED
+                || current == LocalRunnerJobStatus.CANCELLED) {
             return;
         }
-        jobMap.put(FIELD_STATUS, JobStatus.FAILED.getValue());
+        jobMap.put(FIELD_STATUS, LocalRunnerJobStatus.FAILED.getValue());
         jobMap.put(FIELD_ERROR, error);
         jobMap.put(FIELD_COMPLETED_AT, Instant.now().toString());
 
         expireJobAndLogs(jobId, jobMap);
     }
 
-    private void expireJobAndLogs(String jobId, RMap<String, String> jobMap) {
+    private void expireJobAndLogs(UUID jobId, RMap<String, String> jobMap) {
         Duration ttl = runnerConfig.getCompletedJobTtl().toJavaDuration();
         jobMap.expire(ttl);
-        RList<String> logsList = redisClient.getList(JOB_LOGS_KEY.formatted(jobId), StringCodec.INSTANCE);
+        RList<String> logsList = redisClient.getList(jobLogsKey(jobId), StringCodec.INSTANCE);
         logsList.expire(ttl);
     }
 
-    private void purgeRunner(String runnerId, String workspaceId, Map<String, String> runnerFields) {
+    private void purgeRunner(UUID runnerId, String workspaceId, Map<String, String> runnerFields) {
         log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
 
-        redisClient.getMap(RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getMap(RUNNER_AGENTS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getBucket(RUNNER_HEARTBEAT_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getSet(RUNNER_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getSet(RUNNER_CANCELLATIONS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getList(PENDING_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getList(ACTIVE_JOBS_KEY.formatted(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getMap(runnerAgentsKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getBucket(runnerHeartbeatKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getScoredSortedSet(runnerJobsKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getSet(runnerCancellationsKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getList(pendingJobsKey(runnerId), StringCodec.INSTANCE).delete();
+        redisClient.getList(activeJobsKey(runnerId), StringCodec.INSTANCE).delete();
 
         removeRunnerFromWorkspace(workspaceId, runnerId);
 
         String userName = runnerFields.get(FIELD_USER_NAME);
         if (userName != null) {
             RBucket<String> userRunnerBucket = redisClient.getBucket(
-                    USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
+                    userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
             String currentId = userRunnerBucket.get();
-            if (runnerId.equals(currentId)) {
+            if (runnerId.toString().equals(currentId)) {
                 userRunnerBucket.delete();
             }
         }
     }
 
-    private String generateUniqueCode() {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            StringBuilder sb = new StringBuilder(PAIRING_CODE_LENGTH);
-            for (int i = 0; i < PAIRING_CODE_LENGTH; i++) {
-                sb.append(PAIRING_CODE_ALPHABET
-                        .charAt(RandomUtils.secure().randomInt(0, PAIRING_CODE_ALPHABET.length())));
-            }
-            String code = sb.toString();
-
-            RBucket<String> existing = redisClient.getBucket(PAIR_KEY.formatted(code), StringCodec.INSTANCE);
-            if (!existing.isExists()) {
-                return code;
-            }
+    private String generatePairingCodeString() {
+        StringBuilder sb = new StringBuilder(PAIRING_CODE_LENGTH);
+        for (int i = 0; i < PAIRING_CODE_LENGTH; i++) {
+            sb.append(PAIRING_CODE_ALPHABET
+                    .charAt(RandomUtils.secure().randomInt(0, PAIRING_CODE_ALPHABET.length())));
         }
-        throw new IllegalStateException("Failed to generate unique pairing code after 10 attempts");
+        return sb.toString();
     }
 
-    private String claimPairingCode(String code, String workspaceId) {
-        RBucket<String> pairBucket = redisClient.getBucket(PAIR_KEY.formatted(code), StringCodec.INSTANCE);
+    private UUID claimPairingCode(String code, String workspaceId) {
+        RBucket<String> pairBucket = redisClient.getBucket(pairKey(code), StringCodec.INSTANCE);
         String value = pairBucket.get();
         if (value == null) {
             throw new ClientErrorException(Response.status(Response.Status.BAD_REQUEST)
@@ -739,31 +812,32 @@ class RunnerServiceImpl implements RunnerService {
         }
 
         pairBucket.delete();
-        return parts[0];
+        return UUID.fromString(parts[0]);
     }
 
-    private void evictExistingRunner(String workspaceId, String userName, String newRunnerId) {
+    private void evictExistingRunner(String workspaceId, String userName, UUID newRunnerId) {
         RBucket<String> userRunnerBucket = redisClient.getBucket(
-                USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE);
-        String oldRunnerId = userRunnerBucket.get();
+                userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
+        String oldRunnerIdStr = userRunnerBucket.get();
 
-        if (oldRunnerId != null && !oldRunnerId.equals(newRunnerId)) {
-            redisClient.getBucket(RUNNER_HEARTBEAT_KEY.formatted(oldRunnerId), StringCodec.INSTANCE).delete();
+        if (oldRunnerIdStr != null && !oldRunnerIdStr.equals(newRunnerId.toString())) {
+            UUID oldRunnerId = UUID.fromString(oldRunnerIdStr);
+            redisClient.getBucket(runnerHeartbeatKey(oldRunnerId), StringCodec.INSTANCE).delete();
             log.info("Evicted runner {} in workspace {}", oldRunnerId, workspaceId);
         }
     }
 
-    private void setUserRunner(String workspaceId, String userName, String runnerId) {
-        redisClient.getBucket(USER_RUNNER_KEY.formatted(workspaceId, userName), StringCodec.INSTANCE)
-                .set(runnerId);
+    private void setUserRunner(String workspaceId, String userName, UUID runnerId) {
+        redisClient.getBucket(userRunnerKey(workspaceId, userName), StringCodec.INSTANCE)
+                .set(runnerId.toString());
     }
 
-    private void activateRunner(String runnerId, String workspaceId, String userName, String runnerName) {
+    private void activateRunner(UUID runnerId, String workspaceId, String userName, String runnerName) {
         RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerKey(runnerId), StringCodec.INSTANCE);
         runnerMap.putAll(Map.of(
                 FIELD_NAME, runnerName,
-                FIELD_STATUS, RunnerStatus.CONNECTED.getValue(),
+                FIELD_STATUS, LocalRunnerStatus.CONNECTED.getValue(),
                 FIELD_WORKSPACE_ID, workspaceId,
                 FIELD_USER_NAME, userName,
                 FIELD_CONNECTED_AT, Instant.now().toString()));
@@ -771,30 +845,30 @@ class RunnerServiceImpl implements RunnerService {
         setHeartbeat(runnerId);
     }
 
-    private void setHeartbeat(String runnerId) {
+    private void setHeartbeat(UUID runnerId) {
         RBucket<String> heartbeat = redisClient.getBucket(
-                RUNNER_HEARTBEAT_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerHeartbeatKey(runnerId), StringCodec.INSTANCE);
         heartbeat.set("alive", runnerConfig.getHeartbeatTtl().toJavaDuration());
     }
 
-    private boolean isRunnerAlive(String runnerId) {
+    private boolean isRunnerAlive(UUID runnerId) {
         RBucket<String> heartbeat = redisClient.getBucket(
-                RUNNER_HEARTBEAT_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerHeartbeatKey(runnerId), StringCodec.INSTANCE);
         return heartbeat.isExists();
     }
 
-    private void addRunnerToWorkspace(String workspaceId, String runnerId) {
-        RSet<String> workspaceRunners = redisClient.getSet(
-                WORKSPACE_RUNNERS_KEY.formatted(workspaceId), StringCodec.INSTANCE);
-        workspaceRunners.add(runnerId);
+    private void addRunnerToWorkspace(String workspaceId, UUID runnerId) {
+        RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
+                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
+        workspaceRunners.add(Instant.now().toEpochMilli(), runnerId.toString());
 
         workspacesWithRunners(workspaceId, true);
     }
 
-    private void removeRunnerFromWorkspace(String workspaceId, String runnerId) {
-        RSet<String> workspaceRunners = redisClient.getSet(
-                WORKSPACE_RUNNERS_KEY.formatted(workspaceId), StringCodec.INSTANCE);
-        workspaceRunners.remove(runnerId);
+    private void removeRunnerFromWorkspace(String workspaceId, UUID runnerId) {
+        RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
+                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
+        workspaceRunners.remove(runnerId.toString());
     }
 
     private void workspacesWithRunners(String workspaceId, boolean add) {
@@ -806,9 +880,9 @@ class RunnerServiceImpl implements RunnerService {
         }
     }
 
-    private LocalRunner loadRunner(String runnerId, String workspaceId) {
+    private LocalRunner loadRunner(UUID runnerId, String workspaceId) {
         RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerKey(runnerId), StringCodec.INSTANCE);
         Map<String, String> fields = runnerMap.readAllMap();
 
         if (fields.isEmpty()) {
@@ -821,15 +895,15 @@ class RunnerServiceImpl implements RunnerService {
         }
 
         String storedStatus = fields.get(FIELD_STATUS);
-        RunnerStatus status;
-        if (RunnerStatus.PAIRING.getValue().equals(storedStatus)) {
-            status = RunnerStatus.PAIRING;
+        LocalRunnerStatus status;
+        if (LocalRunnerStatus.PAIRING.getValue().equals(storedStatus)) {
+            status = LocalRunnerStatus.PAIRING;
         } else {
-            status = isRunnerAlive(runnerId) ? RunnerStatus.CONNECTED : RunnerStatus.DISCONNECTED;
+            status = isRunnerAlive(runnerId) ? LocalRunnerStatus.CONNECTED : LocalRunnerStatus.DISCONNECTED;
         }
 
         List<LocalRunner.Agent> agents = List.of();
-        if (status == RunnerStatus.CONNECTED) {
+        if (status == LocalRunnerStatus.CONNECTED) {
             agents = loadAgents(runnerId);
         }
 
@@ -838,7 +912,7 @@ class RunnerServiceImpl implements RunnerService {
                 : null;
 
         return LocalRunner.builder()
-                .id(UUID.fromString(runnerId))
+                .id(runnerId)
                 .name(fields.get(FIELD_NAME))
                 .status(status)
                 .connectedAt(connectedAt)
@@ -846,9 +920,9 @@ class RunnerServiceImpl implements RunnerService {
                 .build();
     }
 
-    private List<LocalRunner.Agent> loadAgents(String runnerId) {
+    private List<LocalRunner.Agent> loadAgents(UUID runnerId) {
         RMap<String, String> agentsMap = redisClient.getMap(
-                RUNNER_AGENTS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                runnerAgentsKey(runnerId), StringCodec.INSTANCE);
         Map<String, String> allAgents = agentsMap.readAllMap();
 
         List<LocalRunner.Agent> agents = new ArrayList<>();
@@ -916,11 +990,11 @@ class RunnerServiceImpl implements RunnerService {
         return UUID.fromString(value);
     }
 
-    private JobStatus parseJobStatus(String value) {
+    private LocalRunnerJobStatus parseJobStatus(String value) {
         if (value == null) {
             return null;
         }
-        for (JobStatus s : JobStatus.values()) {
+        for (LocalRunnerJobStatus s : LocalRunnerJobStatus.values()) {
             if (s.getValue().equals(value)) {
                 return s;
             }
@@ -928,10 +1002,10 @@ class RunnerServiceImpl implements RunnerService {
         return null;
     }
 
-    private int resolveAgentTimeout(String runnerId, String agentName) {
+    private int resolveAgentTimeout(UUID runnerId, String agentName) {
         try {
             RMap<String, String> agentsMap = redisClient.getMap(
-                    RUNNER_AGENTS_KEY.formatted(runnerId), StringCodec.INSTANCE);
+                    runnerAgentsKey(runnerId), StringCodec.INSTANCE);
             String agentJson = agentsMap.get(agentName);
             if (agentJson != null) {
                 JsonNode meta = JsonUtils.getJsonNodeFromString(agentJson);
@@ -945,43 +1019,28 @@ class RunnerServiceImpl implements RunnerService {
         return (int) runnerConfig.getJobTimeout().toSeconds();
     }
 
-    private void validateRunnerWorkspace(String runnerId, String workspaceId) {
+    private void validateRunnerWorkspace(UUID runnerId, String workspaceId) {
         RMap<String, String> runnerMap = redisClient.getMap(
-                RUNNER_KEY.formatted(runnerId), StringCodec.INSTANCE);
-        validateRunnerWorkspace(runnerMap, workspaceId);
-    }
-
-    private void validateRunnerWorkspace(RMap<String, String> runnerMap, String workspaceId) {
+                runnerKey(runnerId), StringCodec.INSTANCE);
         String storedWorkspaceId = runnerMap.get(FIELD_WORKSPACE_ID);
         if (!workspaceId.equals(storedWorkspaceId)) {
-            throw new NotFoundException("Runner not found");
+            throw new NotFoundException("Runner not found: " + runnerId);
         }
     }
 
     private record ValidatedJob(RMap<String, String> map, Map<String, String> fields) {
     }
 
-    private ValidatedJob loadValidatedJob(String jobId, String workspaceId) {
-        RMap<String, String> jobMap = redisClient.getMap(JOB_KEY.formatted(jobId), StringCodec.INSTANCE);
+    private ValidatedJob loadValidatedJob(UUID jobId, String workspaceId) {
+        RMap<String, String> jobMap = redisClient.getMap(jobKey(jobId), StringCodec.INSTANCE);
         Map<String, String> fields = jobMap.readAllMap();
         if (fields.isEmpty()) {
-            throw new NotFoundException("Job not found");
+            throw new NotFoundException("Job not found: " + jobId);
         }
         if (!workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
-            throw new NotFoundException("Job not found");
+            throw new NotFoundException("Job not found: " + jobId);
         }
         return new ValidatedJob(jobMap, fields);
     }
 
-    private static <T, R> R paginate(List<T> items, int page, int size, PageBuilder<T, R> builder) {
-        int total = items.size();
-        int fromIndex = Math.min(page * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-        return builder.build(items.subList(fromIndex, toIndex), page, size, total);
-    }
-
-    @FunctionalInterface
-    private interface PageBuilder<T, R> {
-        R build(List<T> content, int page, int size, int total);
-    }
 }

@@ -10,7 +10,7 @@ import lombok.Data;
 import java.util.concurrent.TimeUnit;
 
 @Data
-public class RunnerConfig {
+public class LocalRunnerConfig {
 
     @Valid @JsonProperty
     private boolean enabled;
@@ -49,4 +49,18 @@ public class RunnerConfig {
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration nextJobAsyncTimeoutBuffer = Duration.seconds(5);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration pairingCodeTtl = Duration.seconds(300);
+
+    @Valid @NotNull @JsonProperty
+    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration pairingRunnerTtl = Duration.seconds(600);
+
+    @Valid @JsonProperty
+    private int maxAgentsPerRunner = 50;
+
+    @Valid @JsonProperty
+    private int maxLogEntriesPerBatch = 1000;
 }

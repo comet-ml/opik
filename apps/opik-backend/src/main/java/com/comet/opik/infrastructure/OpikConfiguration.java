@@ -114,7 +114,7 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
-    private RunnerConfig runner = new RunnerConfig();
+    private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
     private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();

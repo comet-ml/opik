@@ -692,7 +692,7 @@ serviceToggles:
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
 
 # Local Runner configuration
-runner:
+localRunner:
   enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
   jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
   maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}

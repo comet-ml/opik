@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public enum JobStatus {
+public enum LocalRunnerJobStatus {
 
     PENDING("pending"),
     RUNNING("running"),
