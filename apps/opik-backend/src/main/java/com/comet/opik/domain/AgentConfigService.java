@@ -473,18 +473,29 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 UUID configId = refs.getFirst().configId();
                 UUID blueprintId = idGenerator.generateId();
 
-                blueprintInserts.add(new AgentConfigDAO.BlueprintInsertData(
-                        blueprintId, entry.getKey(), configId,
-                        AgentBlueprint.BlueprintType.BLUEPRINT, null));
+                blueprintInserts.add(AgentConfigDAO.BlueprintInsertData.builder()
+                        .id(blueprintId)
+                        .projectId(entry.getKey())
+                        .configId(configId)
+                        .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                        .build());
 
                 for (var ref : refs) {
-                    valueCloses.add(new AgentConfigDAO.ValueCloseRef(
-                            ref.projectId(), blueprintId, ref.configKey()));
+                    valueCloses.add(AgentConfigDAO.ValueCloseRef.builder()
+                            .projectId(ref.projectId())
+                            .validToBlueprintId(blueprintId)
+                            .key(ref.configKey())
+                            .build());
 
-                    valueInserts.add(new AgentConfigDAO.ValueInsertData(
-                            idGenerator.generateId(), ref.projectId(), configId,
-                            ref.configKey(), newCommit, AgentConfigValue.ValueType.PROMPT,
-                            null, blueprintId));
+                    valueInserts.add(AgentConfigDAO.ValueInsertData.builder()
+                            .id(idGenerator.generateId())
+                            .projectId(ref.projectId())
+                            .configId(configId)
+                            .key(ref.configKey())
+                            .value(newCommit)
+                            .type(AgentConfigValue.ValueType.PROMPT)
+                            .validFromBlueprintId(blueprintId)
+                            .build());
                 }
             }
 
