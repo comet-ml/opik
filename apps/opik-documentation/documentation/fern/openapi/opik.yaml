@@ -1673,14 +1673,6 @@ paths:
         schema:
           type: string
           description: "Filter datasets by name (partial match, case insensitive)"
-      - name: type
-        in: query
-        schema:
-          type: string
-          description: Filter datasets by type (dataset or evaluation_suite)
-          enum:
-          - dataset
-          - evaluation_suite
       - name: sorting
         in: query
         schema:
@@ -4701,6 +4693,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -4957,6 +4954,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -5261,6 +5263,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5526,6 +5533,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5600,6 +5612,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -5730,6 +5747,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
