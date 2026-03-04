@@ -134,6 +134,16 @@ interface TraceDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class TraceDAOImpl implements TraceDAO {
 
+    private static final String TRACE_SEARCH_CLAUSE = """
+            (ilike(id, :search_text)
+            OR ilike(name, :search_text)
+            OR ilike(input, :search_text)
+            OR ilike(output, :search_text)
+            OR ilike(metadata, :search_text)
+            OR ilike(error_info, :search_text)
+            OR arrayExists(element -> ilike(element, :search_text), tags)
+            OR ilike(thread_id, :search_text))""";
+
     private static final String BATCH_INSERT = """
             INSERT INTO traces(
                 id,
@@ -1221,6 +1231,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
@@ -1629,6 +1640,7 @@ class TraceDAOImpl implements TraceDAO {
                     <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(filters)> AND <filters> <endif>
+                    <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
                     AND id IN (
@@ -2256,6 +2268,7 @@ class TraceDAOImpl implements TraceDAO {
                 <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
@@ -3017,7 +3030,7 @@ class TraceDAOImpl implements TraceDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("find_traces_by_project_id", workspaceId,
                     "page:" + page + ":size:" + size + ":" + traceSearchCriteria.toString());
-            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria);
+            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE);
 
             bindTemplateExcludeFieldVariables(traceSearchCriteria, template);
 
@@ -3123,7 +3136,7 @@ class TraceDAOImpl implements TraceDAO {
     private Mono<? extends Result> countTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
         return makeMonoContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("count_traces_by_project", workspaceId, traceSearchCriteria.toString());
-            var template = newTraceThreadFindTemplate(COUNT_BY_PROJECT_ID, traceSearchCriteria);
+            var template = newTraceThreadFindTemplate(COUNT_BY_PROJECT_ID, traceSearchCriteria, TRACE_SEARCH_CLAUSE);
             template.add("log_comment", logComment);
 
             var statement = connection.createStatement(template.render())
@@ -3313,7 +3326,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("get_trace_stats", workspaceId, "");
-            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACES_STATS, criteria);
+            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACES_STATS, criteria, TRACE_SEARCH_CLAUSE);
             statsSQL.add("log_comment", logComment);
 
             var statement = connection.createStatement(statsSQL.render())
@@ -3590,7 +3603,7 @@ class TraceDAOImpl implements TraceDAO {
 
         return makeFluxContextAware((userName, workspaceId) -> {
             var logComment = getLogComment("find_trace_stream", workspaceId, "limit:" + limit + ":" + criteria);
-            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, criteria);
+            var template = newTraceThreadFindTemplate(SELECT_BY_PROJECT_ID, criteria, TRACE_SEARCH_CLAUSE);
             template.add("log_comment", logComment);
 
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());

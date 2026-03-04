@@ -4,11 +4,11 @@ import type * as OpikApi from "../../../../api/index.js";
 import * as core from "../../../../core/index.js";
 import type * as serializers from "../../../index.js";
 
-export const FindDatasetsRequestType: core.serialization.Schema<
-    serializers.FindDatasetsRequestType.Raw,
-    OpikApi.FindDatasetsRequestType
+export const ExperimentWriteEvaluationMethod: core.serialization.Schema<
+    serializers.ExperimentWriteEvaluationMethod.Raw,
+    OpikApi.ExperimentWriteEvaluationMethod
 > = core.serialization.enum_(["dataset", "evaluation_suite"]);
 
-export declare namespace FindDatasetsRequestType {
+export declare namespace ExperimentWriteEvaluationMethod {
     export type Raw = "dataset" | "evaluation_suite";
 }

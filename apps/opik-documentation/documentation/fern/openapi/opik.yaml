@@ -1673,14 +1673,6 @@ paths:
         schema:
           type: string
           description: "Filter datasets by name (partial match, case insensitive)"
-      - name: type
-        in: query
-        schema:
-          type: string
-          description: Filter datasets by type (dataset or evaluation_suite)
-          enum:
-          - dataset
-          - evaluation_suite
       - name: sorting
         in: query
         schema:
@@ -4317,6 +4309,45 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/prompts/by-commit/{commit}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt by commit
+      description: Get prompt by commit
+      operationId: getPromptByCommit
+      parameters:
+      - name: commit
+        in: path
+        required: true
+        schema:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/versions/{versionId}:
     get:
       tags:
@@ -4662,6 +4693,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -4918,6 +4954,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -5222,6 +5263,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5487,6 +5533,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5561,6 +5612,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -5691,6 +5747,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -6382,8 +6443,7 @@ components:
           minLength: 0
           type: string
         value:
-          maxLength: 512
-          minLength: 0
+          minLength: 1
           type: string
         type:
           type: string
@@ -6520,8 +6580,7 @@ components:
           minLength: 0
           type: string
         value:
-          maxLength: 512
-          minLength: 0
+          minLength: 1
           type: string
         type:
           type: string
@@ -10055,6 +10114,9 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
     FeedbackScore:
       required:
       - name
@@ -10665,6 +10727,9 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -11453,6 +11518,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -11591,6 +11661,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -12349,6 +12424,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -14571,6 +14651,8 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion"
+        requested_version:
+          $ref: "#/components/schemas/PromptVersion"
     PromptVersion:
       required:
       - template
@@ -14807,6 +14889,8 @@ components:
           format: int64
           readOnly: true
         latest_version:
+          $ref: "#/components/schemas/PromptVersion_Detail"
+        requested_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
     PromptVersionPage_Public:
       type: object

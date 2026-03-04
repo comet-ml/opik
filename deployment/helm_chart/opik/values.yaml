@@ -551,6 +551,8 @@ component:
       # Media (audio/video) allowed to load
       media-src:
         - "'self'"
+        - "data:"
+        - "blob:"
         - "https:"
         - "http:"
       # Fonts allowed to load
