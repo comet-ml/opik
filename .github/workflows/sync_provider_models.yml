@@ -1,0 +1,108 @@
+name: Sync Provider Models Daily
+
+on:
+  schedule:
+    - cron: '30 0 * * 1-5' # 30 min after model prices sync, Monday to Friday
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  sync-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Set branch name
+        run: |
+          echo "BRANCH_NAME=github-actions/NA-sync-provider-models-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
+
+      - name: Run sync script
+        id: sync
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set +e
+          python scripts/sync_provider_models.py 2>sync_stderr.txt | tee sync_summary.txt
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Capture summary for PR body (multiline output)
+          {
+            echo "summary<<EOF"
+            cat sync_summary.txt
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "No new models found, skipping PR creation."
+          fi
+
+      - name: Check for changes
+        if: steps.sync.outputs.exit_code == '0'
+        id: check_changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: JosiahSiegel/remote-branch-action@v1.2.0
+        with:
+          branch: ${{ env.BRANCH_NAME }}
+
+      - name: Commit files
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          set -ex
+          git config --local user.email "github-actions@comet.com"
+          git config --local user.name "Github Actions (${{ github.actor }})"
+          git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
+          git add apps/opik-frontend/src/types/providers.ts
+          git add apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts
+          git commit -m "[NA] [BE+FE] Sync provider model definitions"
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          branch: ${{ env.BRANCH_NAME }}
+          title: "[NA] [BE+FE] Sync provider model definitions"
+          body: |
+            ## Details
+            Automated sync of LLM provider model definitions from source APIs.
+
+            **Sources (provider APIs when keys available, prices JSON fallback):**
+            - OpenRouter: `https://openrouter.ai/api/v1/models`
+            - OpenAI: `https://api.openai.com/v1/models`
+            - Anthropic: `https://api.anthropic.com/v1/models`
+            - Gemini: `https://generativelanguage.googleapis.com/v1beta/models`
+            - Fallback: `model_prices_and_context_window.json`
+
+            **Sync summary:**
+            ```
+            ${{ steps.sync.outputs.summary }}
+            ```
+
+            ## Change checklist
+            - [X] User facing change
+
+            ## Testing
+            - Passed CI
+          base: main
