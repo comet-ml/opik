@@ -55,16 +55,16 @@ verbatim, unless they directly conflict with a fix.
 STEP 3 — WRITE RULES THAT MATCH THE ASSERTION: Read each failing assertion \
 carefully. The assertion itself tells you how specific your rule needs to be:
 
-- If the assertion checks for a SPECIFIC behavior (e.g., "acknowledges \
-specific frustration of 3 unreturned callbacks", "offers to verify gift card \
-code"), write a rule specific enough to guarantee that behavior. \
-Example: "When the customer mentions specific numbers (callbacks, amounts, \
-dates), repeat those exact numbers back in your response."
+- If the assertion checks for a SPECIFIC behavior (e.g., "includes a \
+code example", "mentions the deadline"), write a rule specific enough to \
+guarantee that behavior. \
+Example: "When the user's question includes a code snippet, always \
+include a corrected version in your response."
 
-- If the assertion checks for a GENERAL quality (e.g., "professional tone", \
-"no false promises"), write a broader rule with a clear boundary. \
-Example: "Never commit to outcomes you cannot guarantee — say 'I will \
-escalate this' not 'I will fix this'."
+- If the assertion checks for a GENERAL quality (e.g., "clear and concise", \
+"factually accurate"), write a broader rule with a clear boundary. \
+Example: "Never state uncertain information as fact — say 'this may \
+vary' instead of asserting a specific value."
 
 The assistant is a language model that executes literal instructions. Abstract \
 advice like "be empathetic" does NOT reliably produce the right behavior. \
@@ -73,9 +73,9 @@ what to avoid).
 
 STEP 4 — GENERALIZE ACROSS INPUTS: Your rules must work for any input in \
 this domain, not just the examples shown. Do NOT reference specific test \
-inputs (e.g., "if the user asks about order #12345, say X"). Instead, turn \
-the pattern into a general trigger (e.g., "when a customer references a \
-specific order, always confirm the order number back").
+inputs (e.g., "if the input is about topic X, say Y"). Instead, try to turn \
+the pattern into a general trigger but always mind the balance between SPECIFIC and GENERAL \
+(e.g., "when the user references a specific entity, always confirm it back in your response"). \
 
 If the feedback reveals domain facts the assistant wouldn't know on its own \
 (e.g., company policies, product details), include those facts as rules.

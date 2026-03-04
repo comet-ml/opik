@@ -205,8 +205,10 @@ export const useCompareOptimizationsData = () => {
 
   const rows = useMemo(
     () =>
-      experiments.filter(({ name }) =>
-        name.toLowerCase().includes(search!.toLowerCase()),
+      experiments.filter(
+        ({ name, type }) =>
+          type !== EXPERIMENT_TYPE.MINI_BATCH &&
+          name.toLowerCase().includes(search!.toLowerCase()),
       ),
     [experiments, search],
   );
