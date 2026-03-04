@@ -47,10 +47,11 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .agent_config.config import AgentConfig
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
+from .. import config as opik_config
 from .. import (
-    config,
     datetime_helpers,
     exceptions,
     httpx_client,
@@ -119,7 +120,7 @@ class Opik:
             None
         """
 
-        config_ = config.get_from_user_inputs(
+        config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
@@ -143,10 +144,10 @@ class Opik:
         atexit.register(self.end, timeout=self._flush_timeout)
 
     @property
-    def config(self) -> config.OpikConfig:
+    def config(self) -> opik_config.OpikConfig:
         """
         Returns:
-            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+            OpikConfig: Read-only copy of the configuration of the Opik client.
         """
         return self._config.model_copy()
 
@@ -731,7 +732,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
@@ -781,7 +782,7 @@ class Opik:
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_trace_feedback_scores_batch_message = (
@@ -1577,7 +1578,7 @@ class Opik:
         """
 
         dereferenced_workspace = self._workspace
-        if dereferenced_workspace == config.OPIK_WORKSPACE_DEFAULT_NAME:
+        if dereferenced_workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
             dereferenced_workspace = (
                 self._rest_client.check.get_workspace_name().workspace_name
             )
@@ -2271,6 +2272,16 @@ class Opik:
         """
         self._rest_client.annotation_queues.delete_annotation_queue_batch(
             ids=[queue_id]
+        )
+
+    def get_agent_config(
+        self,
+        project_name: Optional[str] = None,
+    ) -> AgentConfig:
+        project_name = project_name or self._project_name
+        return AgentConfig(
+            project_name=project_name,
+            rest_client_=self._rest_client,
         )
 
 
