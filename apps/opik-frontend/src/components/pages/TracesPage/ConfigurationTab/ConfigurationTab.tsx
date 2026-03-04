@@ -44,6 +44,8 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
   return (
     <div className="flex min-h-[400px] gap-0">
       <div className="min-w-0 flex-1">
+        <p className="comet-body-s-accented mx-6 mt-6">Agent configuration</p>
+
         {selectedItem ? (
           <ConfigurationDetailView
             item={selectedItem}
@@ -58,8 +60,9 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         )}
       </div>
 
-      <div className="w-72 shrink-0 border-l">
-        <h3>Version history</h3>
+      <div className="w-142 shrink-0">
+        <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
+
         <ConfigurationHistoryTimeline
           items={allRows}
           total={total}
