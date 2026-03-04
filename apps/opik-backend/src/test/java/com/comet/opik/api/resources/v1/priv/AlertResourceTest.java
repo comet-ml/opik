@@ -152,9 +152,8 @@ class AlertResourceTest {
             "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy"};
 
-    public static final String[] PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS = {"latestVersion", "template", "metadata",
-            "changeDescription",
-            "type", "createdAt", "lastUpdatedAt", "versionCount"};
+    public static final String[] PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS = {"latestVersion", "requestedVersion",
+            "template", "metadata", "changeDescription", "type", "createdAt", "lastUpdatedAt", "versionCount"};
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
