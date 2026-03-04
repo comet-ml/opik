@@ -81,10 +81,7 @@ export const AssertionsBreakdownTooltip: React.FC<
                     {name}
                   </TableCell>
                   {assertionsByRun.map((run, runIdx) => (
-                    <TableCell
-                      key={runIdx}
-                      className="px-3 py-1.5 text-center"
-                    >
+                    <TableCell key={runIdx} className="px-3 py-1.5 text-center">
                       <PassedIcon passed={run[aIdx]?.passed ?? false} />
                     </TableCell>
                   ))}

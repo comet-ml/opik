@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import { DatasetItem } from "@/types/datasets";
-import { EvaluatorDisplayRow, ExecutionPolicy } from "@/types/evaluation-suites";
+import {
+  EvaluatorDisplayRow,
+  ExecutionPolicy,
+} from "@/types/evaluation-suites";
 
 interface EvaluationSuiteDraftState {
   addedItems: Map<string, DatasetItem>;

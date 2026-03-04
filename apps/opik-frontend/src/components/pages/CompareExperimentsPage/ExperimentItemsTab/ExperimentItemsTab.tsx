@@ -400,9 +400,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       }),
       mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
         id: COLUMN_ID_ID,
-        label: isEvalSuite
-          ? "ID (Evaluation suite item)"
-          : "Dataset item ID",
+        label: isEvalSuite ? "ID (Evaluation suite item)" : "Dataset item ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),

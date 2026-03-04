@@ -36,9 +36,7 @@ function getStatusFromExperimentItems(row: ExperimentsCompare): StatusInfo {
     };
   }
 
-  const assertionsByRun = items.map(
-    (item) => item.assertion_results ?? [],
-  );
+  const assertionsByRun = items.map((item) => item.assertion_results ?? []);
   const passedCount = items.filter(
     (item) => item.status === ExperimentItemStatus.PASSED,
   ).length;

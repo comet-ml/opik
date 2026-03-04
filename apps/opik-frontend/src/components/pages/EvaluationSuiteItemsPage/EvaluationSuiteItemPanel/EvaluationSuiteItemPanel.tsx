@@ -62,11 +62,8 @@ const EvaluationSuiteItemPanelLayout: React.FC<
   suitePolicy,
   savedItemPolicy,
 }) => {
-  const {
-    isPending,
-    handleDelete,
-    horizontalNavigation,
-  } = useDatasetItemEditorAutosaveContext();
+  const { isPending, handleDelete, horizontalNavigation } =
+    useDatasetItemEditorAutosaveContext();
 
   const { toast } = useToast();
 

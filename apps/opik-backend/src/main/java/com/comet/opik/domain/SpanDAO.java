@@ -73,6 +73,18 @@ import static java.util.function.Predicate.not;
 @Slf4j
 class SpanDAO {
 
+    private static final String SPAN_SEARCH_CLAUSE = """
+            (ilike(id, :search_text)
+            OR ilike(trace_id, :search_text)
+            OR ilike(name, :search_text)
+            OR ilike(type, :search_text)
+            OR ilike(input, :search_text)
+            OR ilike(output, :search_text)
+            OR ilike(metadata, :search_text)
+            OR arrayExists(element -> ilike(element, :search_text), tags)
+            OR ilike(model, :search_text)
+            OR ilike(provider, :search_text))""";
+
     private static final String BULK_INSERT = """
             INSERT INTO spans(
                 id,
@@ -974,6 +986,7 @@ class SpanDAO {
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                   SELECT
@@ -1101,6 +1114,7 @@ class SpanDAO {
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1302,6 +1316,7 @@ class SpanDAO {
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
                 <if(feedback_scores_filters)>
                 AND id in (
                     SELECT
@@ -1332,7 +1347,8 @@ class SpanDAO {
                 sum(output_count) as output,
                 sum(metadata_count) as metadata,
                 avg(tags_count) as tags,
-                avgMap(usage) as usage,
+                avgMap(s.usage) as usage,
+                sumMap(s.usage) as usage_sum,
                 avgMap(feedback_scores) AS feedback_scores,
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
@@ -2217,6 +2233,8 @@ class SpanDAO {
                 .ifPresent(uuid_from_time -> template.add("uuid_from_time", uuid_from_time));
         Optional.ofNullable(spanSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
+        Optional.ofNullable(spanSearchCriteria.searchText())
+                .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
         return template;
     }
 
@@ -2239,6 +2257,8 @@ class SpanDAO {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(spanSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+        Optional.ofNullable(spanSearchCriteria.searchText())
+                .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
     }
 
     @WithSpan

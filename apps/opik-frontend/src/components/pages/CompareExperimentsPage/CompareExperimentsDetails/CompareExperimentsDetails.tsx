@@ -28,9 +28,7 @@ import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 
-function hasPassRate(
-  e: Experiment | undefined,
-): e is Experiment & {
+function hasPassRate(e: Experiment | undefined): e is Experiment & {
   pass_rate: number;
   passed_count: number;
   total_count: number;
