@@ -185,15 +185,16 @@ class TestExtractPerItemFeedback:
         feedback = _extract_per_item_feedback(raw)
         assert "item-1" in feedback
         assert feedback["item-1"]["score"] == 1.0
-        assert len(feedback["item-1"]["assertions"]) == 1
-        assert feedback["item-1"]["assertions"][0]["name"] == "relevance"
-        assert feedback["item-1"]["assertions"][0]["value"] == 1.0
-        assert feedback["item-1"]["assertions"][0]["reason"] == "The response is relevant"
+        assert len(feedback["item-1"]["runs"]) == 1
+        run0 = feedback["item-1"]["runs"][0]
+        assert run0["assertions"][0]["name"] == "relevance"
+        assert run0["assertions"][0]["value"] == 1.0
+        assert run0["assertions"][0]["reason"] == "The response is relevant"
         # mean(0.0, 1.0) = 0.5
         assert feedback["item-2"]["score"] == 0.5
-        assert len(feedback["item-2"]["assertions"]) == 2
+        assert len(feedback["item-2"]["runs"][0]["assertions"]) == 2
 
-    def test_keeps_worst_run_per_item(self):
+    def test_preserves_all_runs_per_item(self):
         raw = SimpleNamespace(test_results=[
             SimpleNamespace(
                 test_case=SimpleNamespace(
@@ -217,10 +218,11 @@ class TestExtractPerItemFeedback:
             ),
         ])
         feedback = _extract_per_item_feedback(raw)
-        assert feedback["item-1"]["output"] == "bad run"
-        assert sum(1 for a in feedback["item-1"]["assertions"] if a["value"] < 1.0) == 1
-        assert feedback["item-1"]["total_runs"] == 2
-        assert feedback["item-1"]["passed_runs"] == 1
+        assert len(feedback["item-1"]["runs"]) == 2
+        assert feedback["item-1"]["runs"][0]["output"] == "good run"
+        assert feedback["item-1"]["runs"][1]["output"] == "bad run"
+        # mean of run scores: (1.0 + 0.5) / 2 = 0.75
+        assert feedback["item-1"]["score"] == 0.75
 
     def test_handles_none_result(self):
         assert _extract_per_item_feedback(None) == {}
@@ -753,7 +755,7 @@ class TestGEPAProgressCallback:
 
 
 class TestMakeReflectiveDataset:
-    def test_shows_only_failed_assertions_in_feedback(self):
+    def test_shows_failed_and_passed_assertions_in_feedback(self):
         adapter = _build_adapter(MagicMock())
 
         eval_batch = SimpleNamespace(
@@ -762,13 +764,18 @@ class TestMakeReflectiveDataset:
             trajectories=[
                 {
                     "input": {"question": "Q1", "answer": "A1"},
-                    "output": "hello",
-                    "score": 0.0,
-                    "assertions": [
-                        {"name": "security concern", "value": 0.0, "reason": "The response does not address the security concern"},
-                        {"name": "immediate steps", "value": 0.0, "reason": "No immediate steps to secure account were mentioned"},
-                        {"name": "tone", "value": 1.0, "reason": "Tone is appropriate"},
+                    "runs": [
+                        {
+                            "output": "hello",
+                            "score": 0.0,
+                            "assertions": [
+                                {"name": "security concern", "value": 0.0, "reason": "The response does not address the security concern"},
+                                {"name": "immediate steps", "value": 0.0, "reason": "No immediate steps to secure account were mentioned"},
+                                {"name": "tone", "value": 1.0, "reason": "Tone is appropriate"},
+                            ],
+                        },
                     ],
+                    "score": 0.0,
                 }
             ],
         )
@@ -797,11 +804,16 @@ class TestMakeReflectiveDataset:
             trajectories=[
                 {
                     "input": {"question": "Q1"},
-                    "output": "hello",
-                    "score": 1.0,
-                    "assertions": [
-                        {"name": "relevance", "value": 1.0, "reason": "Relevant"},
+                    "runs": [
+                        {
+                            "output": "hello",
+                            "score": 1.0,
+                            "assertions": [
+                                {"name": "relevance", "value": 1.0, "reason": "Relevant"},
+                            ],
+                        },
                     ],
+                    "score": 1.0,
                 }
             ],
         )
@@ -825,9 +837,8 @@ class TestMakeReflectiveDataset:
             trajectories=[
                 {
                     "input": {"id": "1", "question": "What is X?", "context": "X is a thing", "extra": 42},
-                    "output": "answer",
+                    "runs": [{"output": "answer", "score": 0.5, "assertions": []}],
                     "score": 0.5,
-                    "assertions": [],
                 }
             ],
         )
@@ -853,9 +864,8 @@ class TestMakeReflectiveDataset:
             trajectories=[
                 {
                     "input": {"question": "Q1"},
-                    "output": "hello",
+                    "runs": [{"output": "hello", "score": 0.5, "assertions": []}],
                     "score": 0.5,
-                    "assertions": [],
                 }
             ],
         )
@@ -868,6 +878,48 @@ class TestMakeReflectiveDataset:
 
         assert "system_0" in result
         assert "user_1" in result
+
+    def test_multiple_runs_shown_separately(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "run1"}],
+            scores=[0.5],
+            trajectories=[
+                {
+                    "input": {"question": "Q1"},
+                    "runs": [
+                        {
+                            "output": "run1-output",
+                            "score": 1.0,
+                            "assertions": [{"name": "a", "value": 1.0, "reason": "ok"}],
+                        },
+                        {
+                            "output": "run2-output",
+                            "score": 0.0,
+                            "assertions": [{"name": "a", "value": 0.0, "reason": "fail"}],
+                        },
+                    ],
+                    "score": 0.5,
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        records = result["user_0"]
+        assert len(records) == 2
+        # Sorted by num_failed desc — failed run first
+        assert records[0]["Generated Outputs"] == "run2-output"
+        assert "Run 2/2" in records[0]["Feedback"]
+        assert "FAILED" in records[0]["Feedback"]
+        assert records[1]["Generated Outputs"] == "run1-output"
+        assert "Run 1/2" in records[1]["Feedback"]
+        assert "PASSED" in records[1]["Feedback"]
 
 
 # -- optimizer tests -----------------------------------------------------------

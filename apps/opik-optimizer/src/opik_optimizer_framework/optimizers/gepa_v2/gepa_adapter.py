@@ -74,18 +74,12 @@ def rebuild_prompt_messages(
 def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     """Extract per-item feedback from the raw EvaluationResult.
 
-    When multiple runs exist for the same item (runs_per_item > 1), keeps
-    the run with the most failed assertions — this gives the reflection LLM
-    the most actionable feedback. Also tracks total_runs and passed_runs
-    so the reflection prompt can indicate whether a failure is consistent
-    or intermittent.
+    When multiple runs exist for the same item (runs_per_item > 1), all runs
+    are preserved so the reflection LLM can see what varies across attempts.
 
     Returns a dict keyed by dataset_item_id with:
-      - output: the LLM output text
-      - score: aggregate score (1.0 if all assertions passed, 0.0 otherwise)
-      - assertions: list of dicts with name, value, reason per assertion
-      - total_runs: how many runs were executed for this item
-      - passed_runs: how many runs had all assertions pass
+      - runs: list of dicts, each with output, score, assertions
+      - score: mean score across all runs (for GEPA's numeric optimization)
     """
     feedback: dict[str, dict[str, Any]] = {}
     if raw_result is None or not hasattr(raw_result, "test_results"):
@@ -107,31 +101,15 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
                 "reason": getattr(sr, "reason", None) or "",
             })
 
-        num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-        item_score = sum(scores) / len(scores) if scores else 0.0
-        run_passed = num_failed == 0
+        run_score = sum(scores) / len(scores) if scores else 0.0
+        run = {"output": output_text, "score": run_score, "assertions": assertions}
 
-        existing = feedback.get(item_id)
-        if existing is not None:
-            existing["total_runs"] += 1
-            if run_passed:
-                existing["passed_runs"] += 1
-            existing_failures = sum(
-                1 for a in existing["assertions"] if a["value"] < 1.0
-            )
-            if num_failed <= existing_failures:
-                continue
-            existing["output"] = output_text
-            existing["score"] = item_score
-            existing["assertions"] = assertions
+        if item_id not in feedback:
+            feedback[item_id] = {"runs": [run], "score": run_score}
         else:
-            feedback[item_id] = {
-                "output": output_text,
-                "score": item_score,
-                "assertions": assertions,
-                "total_runs": 1,
-                "passed_runs": 1 if run_passed else 0,
-            }
+            feedback[item_id]["runs"].append(run)
+            all_scores = [r["score"] for r in feedback[item_id]["runs"]]
+            feedback[item_id]["score"] = sum(all_scores) / len(all_scores)
 
     return feedback
 
@@ -389,8 +367,9 @@ class FrameworkGEPAAdapter:
         for inst in batch:
             item_id = str(inst.get("id", ""))
             item_feedback = per_item.get(item_id, {})
-            output_text = item_feedback.get("output", "")
+            runs = item_feedback.get("runs", [])
             score = item_feedback.get("score", 0.0)
+            output_text = runs[0]["output"] if runs else ""
 
             outputs.append({"output": output_text})
             scores.append(score)
@@ -399,11 +378,8 @@ class FrameworkGEPAAdapter:
                 trajectories.append(
                     {
                         "input": inst,
-                        "output": output_text,
+                        "runs": runs,
                         "score": score,
-                        "assertions": item_feedback.get("assertions", []),
-                        "total_runs": item_feedback.get("total_runs", 1),
-                        "passed_runs": item_feedback.get("passed_runs", 0),
                     }
                 )
 
@@ -509,10 +485,8 @@ class FrameworkGEPAAdapter:
     ) -> dict[str, list[dict[str, Any]]]:
         """Build the feedback dataset for GEPA's reflection LLM.
 
-        Each entry contains:
-        - Inputs: the task input (dataset item fields, excluding internal keys)
-        - Generated Outputs: the agent's response
-        - Feedback: only failed assertions with names and reasons
+        When runs_per_item > 1, each run is shown separately so the
+        reflection LLM can see what varies across attempts.
         """
         if not components_to_update:
             components_to_update = [
@@ -529,18 +503,10 @@ class FrameworkGEPAAdapter:
                 if k != "id"
             }
 
-        def _build_feedback(
-            score: float,
-            assertions: list[dict[str, Any]],
-            total_runs: int,
-            passed_runs: int,
-        ) -> str:
+        def _build_run_feedback(assertions: list[dict[str, Any]]) -> str:
             failed = [a for a in assertions if a["value"] < 1.0]
             passed = [a for a in assertions if a["value"] >= 1.0]
-
-            lines = [f"Score={score:.1f}."]
-            if total_runs > 1:
-                lines[0] += f" (passed {passed_runs}/{total_runs} runs)"
+            lines = []
             if failed:
                 lines.append("FAILED assertions (fix these):")
                 for a in failed:
@@ -555,18 +521,22 @@ class FrameworkGEPAAdapter:
         records = []
         for traj in trajectories:
             dataset_item = traj.get("input", {})
-            output_text = traj.get("output", "")
-            score = traj.get("score", 0.0)
-            assertions = traj.get("assertions", [])
-            total_runs = traj.get("total_runs", 1)
-            passed_runs = traj.get("passed_runs", 0)
-            num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-            records.append({
-                "Inputs": _build_inputs(dataset_item),
-                "Generated Outputs": output_text,
-                "Feedback": _build_feedback(score, assertions, total_runs, passed_runs),
-                "_num_failed": num_failed,
-            })
+            runs = traj.get("runs", [])
+            total_runs = len(runs)
+            inputs = _build_inputs(dataset_item)
+
+            for run_idx, run in enumerate(runs):
+                assertions = run.get("assertions", [])
+                num_failed = sum(1 for a in assertions if a["value"] < 1.0)
+                feedback = _build_run_feedback(assertions)
+                if total_runs > 1:
+                    feedback = f"Run {run_idx + 1}/{total_runs}. {feedback}"
+                records.append({
+                    "Inputs": inputs,
+                    "Generated Outputs": run.get("output", ""),
+                    "Feedback": feedback,
+                    "_num_failed": num_failed,
+                })
 
         records.sort(key=lambda r: r["_num_failed"], reverse=True)
         for r in records:
@@ -626,19 +596,24 @@ class FrameworkGEPAAdapter:
             current_instruction = f"Parameter: {name}\n{candidate[name]}"
             dataset_with_feedback = reflective_dataset[name]
 
+            input_dict = {
+                "current_instruction_doc": current_instruction,
+                "dataset_with_feedback": dataset_with_feedback,
+                "prompt_template": self._reflection_prompt_template,
+            }
+
+            rendered_prompt = InstructionProposalSignature.prompt_renderer(input_dict)
+
             log_entry: dict[str, Any] = {
                 "component": name,
                 "current_instruction": current_instruction,
                 "dataset_with_feedback": [dict(d) for d in dataset_with_feedback],
+                "rendered_prompt": rendered_prompt if isinstance(rendered_prompt, str) else str(rendered_prompt),
             }
 
             result = InstructionProposalSignature.run(
                 lm=lm,
-                input_dict={
-                    "current_instruction_doc": current_instruction,
-                    "dataset_with_feedback": dataset_with_feedback,
-                    "prompt_template": self._reflection_prompt_template,
-                },
+                input_dict=input_dict,
             )
             new_text = result["new_instruction"]
             prefix = f"Parameter: {name}\n"
