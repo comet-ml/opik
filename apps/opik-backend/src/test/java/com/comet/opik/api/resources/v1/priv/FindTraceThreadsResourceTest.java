@@ -1236,6 +1236,113 @@ class FindTraceThreadsResourceTest {
     }
 
     @Nested
+    @DisplayName("Search Trace Threads:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SearchTraceThreads {
+
+        private Stream<Arguments> searchFieldProvider() {
+            return Stream.of(
+                    Arguments.of("input"),
+                    Arguments.of("output"));
+        }
+
+        @ParameterizedTest(name = "search by {0}")
+        @MethodSource("searchFieldProvider")
+        void searchThreads__whenSearchByField__thenReturnMatchingThreads(String field) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+            var matchingThreadId = "thread-" + uniqueTerm;
+            var nonMatchingThreadId = "thread-other-" + UUID.randomUUID();
+
+            var matchingValue = com.comet.opik.utils.JsonUtils.getJsonNodeFromString(
+                    "{\"content\": \"find-me-" + uniqueTerm + "\"}");
+
+            var matchingTraces = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        var builder = createTrace().toBuilder()
+                                .projectName(projectName)
+                                .threadId(matchingThreadId)
+                                .endTime(now.plus(i, ChronoUnit.MILLIS))
+                                .startTime(now);
+                        switch (field) {
+                            case "input" -> builder.input(matchingValue);
+                            case "output" -> builder.output(matchingValue);
+                            default -> throw new IllegalArgumentException("Unknown field: " + field);
+                        }
+                        return builder.build();
+                    })
+                    .toList();
+
+            var nonMatchingTraces = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .threadId(nonMatchingThreadId)
+                                .endTime(now.plus(i, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .toList();
+
+            var allTraces = new ArrayList<>(matchingTraces);
+            allTraces.addAll(nonMatchingTraces);
+            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            var actualPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                    List.of(), List.of(), Map.of("search", uniqueTerm));
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+            assertThat(actualPage.content().getFirst().id()).isEqualTo(matchingThreadId);
+        }
+
+        @Test
+        @DisplayName("When searching with no match, should return empty results")
+        void searchThreads__whenSearchHasNoMatch__thenReturnEmpty() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = "thread-" + UUID.randomUUID();
+
+            var traces = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .threadId(threadId)
+                                .endTime(now.plus(i, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var projectId = getProjectId(projectName, workspaceName, apiKey);
+
+            var actualPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                    List.of(), List.of(), Map.of("search", "nonexistent_xyz_12345"));
+
+            assertThat(actualPage.total()).isEqualTo(0);
+            assertThat(actualPage.content()).isEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("Find Trace Threads With Time Filtering:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindTraceThreadsTimeFilteringTests {

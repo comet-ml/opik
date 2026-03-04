@@ -307,6 +307,7 @@ class RawSpansClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -338,6 +339,8 @@ class RawSpansClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -365,6 +368,7 @@ class RawSpansClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -951,6 +955,7 @@ class RawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -969,6 +974,8 @@ class RawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -991,6 +998,7 @@ class RawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1497,6 +1505,7 @@ class AsyncRawSpansClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1528,6 +1537,8 @@ class AsyncRawSpansClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -1555,6 +1566,7 @@ class AsyncRawSpansClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -2141,6 +2153,7 @@ class AsyncRawSpansClient:
         trace_id: typing.Optional[str] = None,
         type: typing.Optional[GetSpanStatsRequestType] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2159,6 +2172,8 @@ class AsyncRawSpansClient:
         type : typing.Optional[GetSpanStatsRequestType]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -2181,6 +2196,7 @@ class AsyncRawSpansClient:
                 "trace_id": trace_id,
                 "type": type,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },

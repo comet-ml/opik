@@ -408,6 +408,7 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
+                    .put(DatasetField.TYPE, TYPE_DB)
                     .build());
 
     private static final Map<DatasetItemField, String> DATASET_ITEM_FIELDS_MAP = new EnumMap<>(
@@ -602,7 +603,8 @@ public class FilterQueryBuilder {
                 DatasetField.LAST_UPDATED_AT,
                 DatasetField.LAST_UPDATED_BY,
                 DatasetField.LAST_CREATED_EXPERIMENT_AT,
-                DatasetField.LAST_CREATED_OPTIMIZATION_AT));
+                DatasetField.LAST_CREATED_OPTIMIZATION_AT,
+                DatasetField.TYPE));
 
         map.put(FilterStrategy.ANNOTATION_QUEUE, Set.of(
                 AnnotationQueueField.ID,
