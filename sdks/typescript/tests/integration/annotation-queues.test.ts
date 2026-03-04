@@ -191,23 +191,27 @@ describe.skipIf(!shouldRunApiTests)(
         2000
       );
 
-      // GET THREADS: Search for threads using searchThreads
+      // GET THREADS: Wait for thread with threadModelId populated.
+      // Thread creation is async (TraceThreadListener processes TracesCreated events),
+      // so the thread may appear in search before thread_model_id is set via the
+      // trace_threads LEFT JOIN. Wait until the full record is ready.
       const threads = await searchAndWaitForDone(
         async () => {
-          return await client.searchThreads({
+          const results = await client.searchThreads({
             projectName: testProjectName,
           });
+          const match = results.find((t) => t.id === threadId);
+          // Only return results when our thread has threadModelId populated
+          return match?.threadModelId ? results : [];
         },
         1,
         30000,
         2000
       );
 
-      expect(threads.length).toBeGreaterThanOrEqual(1);
-
-      // Find our thread
       const ourThread = threads.find((t) => t.id === threadId);
       expect(ourThread).toBeDefined();
+      expect(ourThread!.threadModelId).toBeDefined();
 
       // ADD THREADS: Add thread to the queue
       await queue.addThreads([ourThread!]);
