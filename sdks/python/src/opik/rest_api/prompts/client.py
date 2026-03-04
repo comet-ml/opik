@@ -350,6 +350,33 @@ class PromptsClient:
         _response = self._raw_client.delete_prompts_batch(ids=ids, request_options=request_options)
         return _response.data
 
+    def get_prompt_by_commit(
+        self, commit: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptDetail:
+        """
+        Get prompt by commit
+
+        Parameters
+        ----------
+        commit : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptDetail
+            OK
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.prompts.get_prompt_by_commit(commit='commit', )
+        """
+        _response = self._raw_client.get_prompt_by_commit(commit, request_options=request_options)
+        return _response.data
+
     def get_prompt_version_by_id(
         self, version_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> PromptVersionDetail:
@@ -865,6 +892,36 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_prompts_batch(ids=ids, request_options=request_options)
+        return _response.data
+
+    async def get_prompt_by_commit(
+        self, commit: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> PromptDetail:
+        """
+        Get prompt by commit
+
+        Parameters
+        ----------
+        commit : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        PromptDetail
+            OK
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.prompts.get_prompt_by_commit(commit='commit', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_prompt_by_commit(commit, request_options=request_options)
         return _response.data
 
     async def get_prompt_version_by_id(
