@@ -343,14 +343,16 @@ const PromptModelSelect = ({
           </div>
         </SelectContent>
       </Select>
-      <ManageAIProviderDialog
-        key={resetDialogKeyRef.current}
-        configuredProvidersList={configuredProvidersList}
-        open={openConfigDialog}
-        setOpen={setOpenConfigDialog}
-        onAddProvider={onAddProvider}
-        onDeleteProvider={onDeleteProvider}
-      />
+      {canUpdateAIProviders && (
+        <ManageAIProviderDialog
+          key={resetDialogKeyRef.current}
+          configuredProvidersList={configuredProvidersList}
+          open={openConfigDialog}
+          setOpen={setOpenConfigDialog}
+          onAddProvider={onAddProvider}
+          onDeleteProvider={onDeleteProvider}
+        />
+      )}
     </>
   );
 };
