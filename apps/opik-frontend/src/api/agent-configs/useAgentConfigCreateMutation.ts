@@ -1,29 +1,29 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import api, {
-  OPTIMIZER_CONFIGS_KEY,
-  OPTIMIZER_CONFIGS_REST_ENDPOINT,
+  AGENT_CONFIGS_KEY,
+  AGENT_CONFIGS_REST_ENDPOINT,
 } from "@/api/api";
-import { OptimizerConfig } from "@/types/optimizer-configs";
+import { AgentConfig } from "@/types/agent-configs";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
-type UseOptimizerConfigCreateMutationParams = {
-  optimizerConfig: OptimizerConfig;
+type UseAgentConfigCreateMutationParams = {
+  agentConfig: AgentConfig;
 };
 
-const useOptimizerConfigCreateMutation = () => {
+const useAgentConfigCreateMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({
-      optimizerConfig,
-    }: UseOptimizerConfigCreateMutationParams) => {
+      agentConfig,
+    }: UseAgentConfigCreateMutationParams) => {
       const { headers } = await api.post(
-        OPTIMIZER_CONFIGS_REST_ENDPOINT,
-        optimizerConfig,
+        AGENT_CONFIGS_REST_ENDPOINT,
+        agentConfig,
       );
 
       const id = extractIdFromLocation(headers?.location);
@@ -45,10 +45,10 @@ const useOptimizerConfigCreateMutation = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: [OPTIMIZER_CONFIGS_KEY],
+        queryKey: [AGENT_CONFIGS_KEY],
       });
     },
   });
 };
 
-export default useOptimizerConfigCreateMutation;
+export default useAgentConfigCreateMutation;

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import {
   BlueprintDetails,
   EnrichedBlueprintValue,
-} from "@/types/optimizer-configs";
+} from "@/types/agent-configs";
 import { PromptCommitInfo } from "@/types/prompts";
 import usePromptsByCommits from "@/api/prompts/usePromptsByCommits";
 
@@ -13,8 +13,8 @@ type UseLatestBlueprintParams = {
 const MOCK_BLUEPRINT: BlueprintDetails = {
   id: "0195f1d4-1bf2-7b61-9ad9-1c71b4c9d0a7",
   description: "Reduce temperature for more determinism",
-  createdBy: "user_123",
-  createdAt: "2026-02-28T10:27:05.901Z",
+  created_by: "user_123",
+  created_at: "2026-02-28T10:27:05.901Z",
   values: [
     { key: "model", type: "string", value: "gpt-4.1-mini" },
     { key: "temperature", type: "number", value: "0.1" },
@@ -33,7 +33,7 @@ const MOCK_BLUEPRINT: BlueprintDetails = {
 //   { projectId }: UseLatestBlueprintParams,
 // ) => {
 //   const { data } = await api.get(
-//     `${OPTIMIZER_CONFIGS_REST_ENDPOINT}blueprint/retrieve`,
+//     `${AGENT_CONFIGS_REST_ENDPOINT}blueprint/retrieve`,
 //     {
 //       signal,
 //       params: {

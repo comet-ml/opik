@@ -2,12 +2,16 @@ import React from "react";
 import { Clock, FilePen, User } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { ConfigHistoryItem } from "@/types/optimizer-configs";
+import { ConfigHistoryItem } from "@/types/agent-configs";
 import { getTimeFromNow } from "@/lib/date";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import ProdTag from "./ProdTag";
-import { isProdTag, sortTags } from "./utils/agent-configurations";
+import {
+  getVersionDescription,
+  isProdTag,
+  sortTags,
+} from "@/utils/agent-configurations";
 
 type ConfigurationHistoryTimelineProps = {
   items: ConfigHistoryItem[];
@@ -26,7 +30,6 @@ const ConfigurationHistoryTimeline: React.FC<
   return (
     <ul className="p-4">
       {items.map((item, index) => {
-        const isLatest = index === 0;
         const isSelected = index === selectedIndex;
         const isLast = index === items.length - 1;
         const sortedTags = sortTags(item.tags);
@@ -54,7 +57,6 @@ const ConfigurationHistoryTimeline: React.FC<
               />
             </div>
 
-            {/* Card */}
             <div
               className={cn(
                 "min-w-0 flex-1 cursor-pointer rounded px-3 py-2 transition-colors",
@@ -76,16 +78,17 @@ const ConfigurationHistoryTimeline: React.FC<
               </div>
               <p className="comet-body-xs mt-1.5 flex items-center gap-1 truncate text-light-slate">
                 <FilePen className="size-3 shrink-0" />
-                {item.description}
+                {item.description ||
+                  getVersionDescription(item.id, item.created_by)}
               </p>
               <div className="comet-body-xs mt-1.5 flex items-center gap-3 text-light-slate">
                 <span className="flex items-center gap-1">
                   <Clock className="size-3 shrink-0" />
-                  {getTimeFromNow(item.createdAt)}
+                  {getTimeFromNow(item.created_at)}
                 </span>
                 <span className="flex items-center gap-1">
                   <User className="size-3 shrink-0" />
-                  {item.createdBy}
+                  {item.created_by}
                 </span>
               </div>
             </div>

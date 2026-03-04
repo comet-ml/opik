@@ -4,8 +4,8 @@ import { Wrench } from "lucide-react";
 import last from "lodash/last";
 
 import { Tag, TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { ConfigHistoryItem } from "@/types/optimizer-configs";
-import useConfigHistoryListInfinite from "@/api/optimizer-configs/useConfigHistoryListInfinite";
+import { ConfigHistoryItem } from "@/types/agent-configs";
+import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
 import { generateTagVariant } from "@/lib/traces";
 import { Button } from "@/components/ui/button";
 import Loader from "@/components/shared/Loader/Loader";
@@ -164,7 +164,7 @@ const DeploymentHistoryTab: React.FC<DeploymentHistoryTabProps> = ({
                         {item.description}
                       </p>
                       <p className="comet-body-xs">
-                        {getTimeFromNow(item.createdAt)}
+                        {getTimeFromNow(item.created_at)}
                       </p>
                     </div>
                   </li>

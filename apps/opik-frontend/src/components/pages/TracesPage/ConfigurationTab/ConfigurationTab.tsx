@@ -3,8 +3,8 @@ import { StringParam, useQueryParam } from "use-query-params";
 
 import Loader from "@/components/shared/Loader/Loader";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import useConfigHistoryListInfinite from "@/api/optimizer-configs/useConfigHistoryListInfinite";
-import { ConfigHistoryItem } from "@/types/optimizer-configs";
+import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryListInfinite";
+import { ConfigHistoryItem } from "@/types/agent-configs";
 import ConfigurationHistoryTimeline from "./ConfigurationHistoryTimeline";
 import ConfigurationDetailView from "./ConfigurationDetailView";
 
@@ -60,7 +60,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         )}
       </div>
 
-      <div className="w-142 shrink-0">
+      <div className="w-[30%] shrink-0">
         <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
 
         <ConfigurationHistoryTimeline

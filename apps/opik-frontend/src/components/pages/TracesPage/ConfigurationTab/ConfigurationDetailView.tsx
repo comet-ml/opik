@@ -16,19 +16,23 @@ import {
 import {
   ConfigHistoryItem,
   EnrichedBlueprintValue,
-} from "@/types/optimizer-configs";
+} from "@/types/agent-configs";
 import { getTimeFromNow } from "@/lib/date";
 import { formatNumericData } from "@/lib/utils";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import Loader from "@/components/shared/Loader/Loader";
 import { Card } from "@/components/ui/card";
 import ProdTag from "./ProdTag";
-import { isProdTag, sortTags } from "./utils/agent-configurations";
+import {
+  getVersionDescription,
+  isProdTag,
+  sortTags,
+} from "@/utils/agent-configurations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import useAgentConfigById from "@/api/optimizer-configs/useAgentConfigById";
-import useAgentConfigEnvsMutation from "@/api/optimizer-configs/useAgentConfigEnvsMutation";
+import useAgentConfigById from "@/api/agent-configs/useAgentConfigById";
+import useAgentConfigEnvsMutation from "@/api/agent-configs/useAgentConfigEnvsMutation";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 
 type ConfigurationDetailViewProps = {
@@ -172,7 +176,6 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
 
   return (
     <>
-
       <Card className="mx-6 my-4 p-6">
         {/* Header */}
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -216,28 +219,30 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
                     Edit
                   </Button>
                 )}
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={isPromoting}
-                >
-                  <Rocket className="mr-1.5 size-3.5" color="#A3E635" />
-                  {isPromoting ? "Promoting..." : "Promote to prod"}
-                </Button>
+                {!item.tags.some(isProdTag) && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={isPromoting}
+                  >
+                    <Rocket className="mr-1.5 size-3.5" color="#A3E635" />
+                    {isPromoting ? "Promoting..." : "Promote to prod"}
+                  </Button>
+                )}
               </>
             )}
           </div>
         </div>
         <p className="comet-body-s flex items-center gap-1 text-light-slate">
           <FilePen className="size-3 shrink-0" />
-          {item.description}
+          {item.description || getVersionDescription(item.id, item.created_by)}
         </p>
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">
           <Clock className="size-3 shrink-0" />
-          <span>{getTimeFromNow(item.createdAt)}</span>
+          <span>{getTimeFromNow(item.created_at)}</span>
           <User className="size-3.5 ml-1.5 shrink-0" />
-          <span>{item.createdBy}</span>
+          <span>{item.created_by}</span>
         </div>
 
         {isPending ? (

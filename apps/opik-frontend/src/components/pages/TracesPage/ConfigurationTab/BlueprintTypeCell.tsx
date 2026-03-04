@@ -1,7 +1,7 @@
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { Tag } from "@/components/ui/tag";
-import { EnrichedBlueprintValue } from "@/types/optimizer-configs";
+import { EnrichedBlueprintValue } from "@/types/agent-configs";
 
 const BlueprintTypeCell = (context: CellContext<EnrichedBlueprintValue, string>) => {
   const value = context.getValue();

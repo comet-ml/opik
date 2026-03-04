@@ -1,6 +1,6 @@
 import React from "react";
 
-import { ConfigHistoryItem } from "@/types/optimizer-configs";
+import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate } from "@/lib/date";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 
@@ -23,7 +23,7 @@ const DeploymentHistoryItem: React.FC<DeploymentHistoryItemProps> = ({
       </div>
       <p className="comet-body-s text-light-slate">{item.description}</p>
       <p className="comet-body-xs mt-2 text-muted-slate">
-        {item.createdBy} &middot; {formatDate(item.createdAt)}
+        {item.created_by} &middot; {formatDate(item.created_at)}
       </p>
     </div>
   );

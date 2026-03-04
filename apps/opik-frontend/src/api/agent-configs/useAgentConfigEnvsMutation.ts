@@ -6,11 +6,11 @@ import api, {
   AGENT_CONFIGS_KEY,
   AGENT_CONFIGS_REST_ENDPOINT,
 } from "@/api/api";
-import { OptimizerConfigEnvsRequest } from "@/types/optimizer-configs";
+import { AgentConfigEnvsRequest } from "@/types/agent-configs";
 import { useToast } from "@/components/ui/use-toast";
 
 type UseAgentConfigEnvsMutationParams = {
-  envsRequest: OptimizerConfigEnvsRequest;
+  envsRequest: AgentConfigEnvsRequest;
 };
 
 const useAgentConfigEnvsMutation = () => {
