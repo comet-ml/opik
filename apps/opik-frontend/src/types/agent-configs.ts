@@ -37,7 +37,7 @@ export interface AgentConfigEnv {
 }
 
 export interface AgentConfigEnvsRequest {
-  projectId: string;
+  project_id: string;
   envs: AgentConfigEnv[];
 }
 

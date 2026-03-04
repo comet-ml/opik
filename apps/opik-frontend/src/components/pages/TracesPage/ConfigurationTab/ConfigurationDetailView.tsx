@@ -168,7 +168,7 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
   const handleConfirmPromote = () => {
     promoteToProd({
       envsRequest: {
-        projectId,
+        project_id: projectId,
         envs: [{ env_name: "prod", blueprint_id: item.id }],
       },
     });
