@@ -75,7 +75,7 @@ jobs:
           git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
           git add apps/opik-frontend/src/types/providers.ts
           git add apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts
-          git commit -m "[NA] [BE+FE] Sync provider model definitions"
+          git commit -m "[NA] [BE][FE] chore: sync provider model definitions"
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'
@@ -83,17 +83,11 @@ jobs:
         with:
           token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: ${{ env.BRANCH_NAME }}
-          title: "[NA] [BE+FE] Sync provider model definitions"
+          title: "[NA] [BE][FE] chore: sync provider model definitions"
           body: |
             ## Details
-            Automated sync of LLM provider model definitions from source APIs.
 
-            **Sources (provider APIs when keys available, prices JSON fallback):**
-            - OpenRouter: `https://openrouter.ai/api/v1/models`
-            - OpenAI: `https://api.openai.com/v1/models`
-            - Anthropic: `https://api.anthropic.com/v1/models`
-            - Gemini: `https://generativelanguage.googleapis.com/v1beta/models`
-            - Fallback: `model_prices_and_context_window.json`
+            Automated sync of LLM provider model definitions from source APIs and prices JSON.
 
             **Sync summary:**
             ```
@@ -101,8 +95,29 @@ jobs:
             ```
 
             ## Change checklist
-            - [X] User facing change
+            - [x] User facing
+            - [ ] Documentation update
+
+            ## Issues
+
+            - NA
+
+            ## AI-WATERMARK
+
+            AI-WATERMARK: yes
+
+            - If yes:
+              - Tools: GitHub Actions (`sync_provider_models.yml`)
+              - Model(s): N/A (scripted automation)
+              - Scope: Automated model list sync
+              - Human verification: Requires manual review before merge
 
             ## Testing
-            - Passed CI
+
+            - Script dry-run passed in CI
+            - Changes are add-only; stale/deprecated models flagged for manual review
+
+            ## Documentation
+
+            N/A
           base: main
