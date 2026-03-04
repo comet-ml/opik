@@ -43,6 +43,7 @@ export const supportsGeminiThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
   return (
+    model === PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO ||
     model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
     model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH
   );
@@ -58,7 +59,10 @@ export const supportsGeminiThinkingLevel = (
 export const supportsVertexAIThinkingLevel = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
-  return model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+  return (
+    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_1_PRO ||
+    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO
+  );
 };
 
 /**

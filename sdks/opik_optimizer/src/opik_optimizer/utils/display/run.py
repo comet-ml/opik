@@ -78,10 +78,27 @@ class OptimizationRunDisplay:
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         optimizer_config: dict[str, Any],
     ) -> None:
+        tool_use_allowed = optimizer_config.get("allow_tool_use")
+        optimizable_roles = optimizer_config.get("optimizable_roles")
+        if isinstance(optimizable_roles, list):
+            optimizable_roles = set(map(str, optimizable_roles))
+        elif optimizable_roles is None:
+            optimizable_roles = None
+        else:
+            optimizable_roles = {str(optimizable_roles)}
+        optimized_tool_names = None
+        tool_names = optimizer_config.get("tool_names")
+        if isinstance(tool_names, list):
+            optimized_tool_names = set(map(str, tool_names))
+        elif optimizer_config.get("optimize_tools") is False:
+            optimized_tool_names = set()
         display_terminal.display_configuration(
             messages=prompt,
             optimizer_config=optimizer_config,
             verbose=self._verbose,
+            tool_use_allowed=tool_use_allowed,
+            optimizable_roles=optimizable_roles,
+            optimized_tool_names=optimized_tool_names,
         )
 
     def baseline_evaluation(self, context: OptimizationContext) -> ContextManager[Any]:

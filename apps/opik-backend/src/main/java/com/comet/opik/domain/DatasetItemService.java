@@ -53,6 +53,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
@@ -429,8 +430,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             }))
                             .flatMap(existingItem -> {
                                 // Apply patch to the existing item
-                                DatasetItem patchedItem = applyPatchToItem(
-                                        existingItem, patchData, userName);
+                                DatasetItem patchedItem = applyPatchToItem(existingItem, patchData, userName);
 
                                 log.info("Creating version with single item edit for dataset '{}', baseVersion='{}'",
                                         datasetId, baseVersionId);
@@ -521,7 +521,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.datasetId(), batchUpdate.filters(),
                     batchUpdate.update(),
                     batchUpdate.mergeTags());
-        });
+        }).onErrorResume(TagOperations::mapTagLimitError);
     }
 
     /**
@@ -1538,6 +1538,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
+                        // Validate tag limits on all items being inserted or edited
+                        Stream.concat(
+                                addedItemsWithIds.stream().map(DatasetItem::tags),
+                                editedItemEdits.stream().map(DatasetItemEdit::tags))
+                                .filter(tags -> tags != null && tags.size() > TagOperations.MAX_TAGS_PER_ITEM)
+                                .findFirst()
+                                .ifPresent(tags -> {
+                                    throw new ClientErrorException(
+                                            Response.status(422)
+                                                    .entity(new ErrorMessage(List.of(
+                                                            TagOperations.TAG_LIMIT_ERROR)))
+                                                    .build());
+                                });
+
                         // Edit items via INSERT...SELECT (merge happens in SQL, not Java)
                         Mono<Long> editedCountMono = versionDao.editItemsViaSelectInsert(
                                 datasetId, baseVersionId, newVersionId,
@@ -2028,20 +2042,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
     }
 
     /**
-     * Canonical method to create a dataset version from delta changes.
-     * All other createVersionFromDelta overloads delegate to this method.
-     *
-     * @param datasetId the dataset ID
-     * @param newVersionId the new version ID
-     * @param itemsTotal total number of items in the new version
-     * @param baseVersionId base version ID (null for first version)
-     * @param tags version tags (null if not specified)
-     * @param changeDescription description of changes (null for auto-generated)
-     * @param batchGroupId batch group ID (null if not a batch operation)
-     * @param workspaceId workspace ID
-     * @param userName user name
-     * @return Mono emitting the created DatasetVersion
-     */
+    * Canonical method to create a dataset version from delta changes.
+    * All other createVersionFromDelta overloads delegate to this method.
+    *
+    * @param datasetId the dataset ID
+    * @param newVersionId the new version ID
+    * @param itemsTotal total number of items in the new version
+    * @param baseVersionId base version ID (null for first version)
+    * @param tags version tags (null if not specified)
+    * @param changeDescription description of changes (null for auto-generated)
+    * @param batchGroupId batch group ID (null if not a batch operation)
+    * @param workspaceId workspace ID
+    * @param userName user name
+    * @return Mono emitting the created DatasetVersion
+    */
     private Mono<DatasetVersion> createVersionFromDelta(
             UUID datasetId,
             UUID newVersionId,
@@ -2069,8 +2083,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 batchGroupId,
                 workspaceId,
                 userName))
-                .retryWhen(RetryUtils.handleOnDeadLocks())
                 .subscribeOn(Schedulers.boundedElastic())
+                .retryWhen(RetryUtils.handleOnDeadLocks())
                 .doOnSuccess(version -> {
                     if (baseVersionId == null) {
                         log.info("Created first version '{}' for dataset '{}' with hash '{}'",

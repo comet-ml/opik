@@ -56,6 +56,22 @@ def test_get_messages_with_content_parts() -> None:
     assert messages[0]["content"][2]["text"] == "What do you see?"
 
 
+def test_rejects_remote_mcp_without_url() -> None:
+    with pytest.raises(ValueError):
+        ChatPrompt(
+            system="System",
+            tools=[
+                {
+                    "mcp": {
+                        "name": "remote_docs",
+                        "server": {"type": "remote"},
+                        "tool": {"name": "search-docs"},
+                    }
+                }
+            ],
+        )
+
+
 class TestChatPromptEdgeCases:
     """Edge case tests for ChatPrompt."""
 

@@ -31,6 +31,7 @@ class Prompt(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     version_count: typing.Optional[int] = None
     latest_version: typing.Optional[PromptVersion] = None
+    requested_version: typing.Optional[PromptVersion] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

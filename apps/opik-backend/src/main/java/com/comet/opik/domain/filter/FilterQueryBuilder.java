@@ -21,7 +21,9 @@ import com.comet.opik.api.sorting.SortingField;
 import com.google.common.collect.ImmutableMap;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.stringtemplate.v4.ST;
 
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -408,6 +410,7 @@ public class FilterQueryBuilder {
                     .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
                     .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
+                    .put(DatasetField.TYPE, TYPE_DB)
                     .build());
 
     private static final Map<DatasetItemField, String> DATASET_ITEM_FIELDS_MAP = new EnumMap<>(
@@ -606,7 +609,8 @@ public class FilterQueryBuilder {
                 DatasetField.LAST_UPDATED_AT,
                 DatasetField.LAST_UPDATED_BY,
                 DatasetField.LAST_CREATED_EXPERIMENT_AT,
-                DatasetField.LAST_CREATED_OPTIMIZATION_AT));
+                DatasetField.LAST_CREATED_OPTIMIZATION_AT,
+                DatasetField.TYPE));
 
         map.put(FilterStrategy.ANNOTATION_QUEUE, Set.of(
                 AnnotationQueueField.ID,
@@ -938,6 +942,51 @@ public class FilterQueryBuilder {
                     statement = statement.bind("filterKey%d".formatted(i), key);
                 }
             }
+        }
+        return statement;
+    }
+
+    /**
+     * Maps a {@link FilterStrategy} to the StringTemplate parameter name it populates.
+     */
+    public record FilterStrategyParam(FilterStrategy strategy, String templateParam) {
+    }
+
+    /**
+     * Applies a configurable list of filter strategies to a StringTemplate.
+     * For each entry whose strategy produces a non-empty SQL fragment, adds the fragment
+     * under the corresponding template parameter name.
+     *
+     * @param template       the ST template to populate
+     * @param filters        the caller-supplied filter list (may be null or empty)
+     * @param strategyParams ordered list of (strategy, templateParam) pairs to evaluate
+     */
+    public static void applyFiltersToTemplate(ST template, List<? extends Filter> filters,
+            List<FilterStrategyParam> strategyParams) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return;
+        }
+        for (var entry : strategyParams) {
+            toAnalyticsDbFilters(filters, entry.strategy())
+                    .ifPresent(sql -> template.add(entry.templateParam(), sql));
+        }
+    }
+
+    /**
+     * Binds filter parameters for a configurable list of filter strategies to an R2DBC statement.
+     *
+     * @param statement  the statement to bind parameters to
+     * @param filters    the caller-supplied filter list (may be null or empty)
+     * @param strategies ordered list of strategies whose parameters should be bound
+     * @return the statement with all parameters bound
+     */
+    public static Statement bindFilters(Statement statement, List<? extends Filter> filters,
+            List<FilterStrategy> strategies) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return statement;
+        }
+        for (var strategy : strategies) {
+            statement = bind(statement, filters, strategy);
         }
         return statement;
     }

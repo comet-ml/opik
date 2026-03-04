@@ -30,7 +30,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -332,6 +331,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
+
+    private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM, "experiment_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES, "feedback_scores_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY,
+                    "feedback_scores_empty_filters"));
+
+    private static final List<FilterStrategy> BIND_STRATEGIES = List.of(
+            FilterStrategy.DATASET_ITEM,
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
 
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
@@ -1001,7 +1013,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     tfs.total_estimated_cost,
                     tfs.usage,
                     tfs.visibility_mode,
-                    tfs.metadata
+                    tfs.metadata,
+                    di.description
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
             LEFT JOIN dataset_items_resolved AS di ON di.id = ei.dataset_item_id
@@ -1184,34 +1197,38 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
-                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
-                <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """
+            + TagOperations.tagUpdateFragment("src.tags")
+            + """
+                        as tags,
+                        <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                        <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
+                        src.item_created_at,
+                        now64(9) as item_last_updated_at,
+                        src.item_created_by,
+                        :userName as item_last_updated_by,
+                        now64(9) as created_at,
+                        now64(9) as last_updated_at,
+                        :userName as created_by,
+                        :userName as last_updated_by,
+                        src.workspace_id
+                    FROM (
+                        SELECT *
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND dataset_version_id = :baseVersionId
+                        <if(item_ids)>
+                        AND dataset_item_id IN :itemIds
+                        <endif>
+                        <if(dataset_item_filters)>
+                        AND <dataset_item_filters>
+                        <endif>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY dataset_item_id
+                    ) AS src
+                    SETTINGS short_circuit_function_evaluation = 'force_enable'
+                    """;
 
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
             INSERT INTO dataset_item_versions (
@@ -1909,30 +1926,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @param criteria The search criteria containing filters and search terms
      */
     private void addFiltersToTemplate(@NonNull ST template, @NonNull DatasetItemSearchCriteria criteria) {
-        // Add filters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            var datasetItemFiltersOpt = FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(),
-                    FilterStrategy.DATASET_ITEM);
-            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                    datasetItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.EXPERIMENT_ITEM)
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                            experimentItemFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
-                            feedbackScoresFilters));
-
-            FilterQueryBuilder.toAnalyticsDbFilters(criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                    .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
-                            feedbackScoresEmptyFilters));
-        }
-
-        // Add search if present
-        if (StringUtils.isNotBlank(criteria.search())) {
-            template.add("search", true);
-        }
+        DatasetItemSearchCriteriaMapper.applyToTemplate(template, criteria, FILTER_STRATEGY_PARAMS);
     }
 
     /**
@@ -1970,20 +1964,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * @return The statement with all parameters bound
      */
     private Statement bindSearchAndFilters(@NonNull Statement statement, @NonNull DatasetItemSearchCriteria criteria) {
-        // Bind search terms if present
-        if (StringUtils.isNotBlank(criteria.search())) {
-            statement = filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-        }
-
-        // Bind filter parameters if present
-        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES);
-            statement = FilterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
-        }
-
-        return statement;
+        return DatasetItemSearchCriteriaMapper.bindSearchCriteria(statement, criteria, BIND_STRATEGIES,
+                filterQueryBuilder);
     }
 
     @Override
@@ -2526,12 +2508,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     template.add("description", true);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    template.add("tags", true);
-                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
-                        template.add("merge_tags", true);
-                    }
-                }
+
+                TagOperations.configureTagTemplate(template, batchUpdate.update(),
+                        Boolean.TRUE.equals(batchUpdate.mergeTags()));
+
                 if (batchUpdate.update().evaluators() != null) {
                     template.add("evaluators", true);
                 }
@@ -2586,9 +2566,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     statement.bind("description", batchUpdate.update().description());
                 }
-                if (batchUpdate.update().tags() != null) {
-                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
-                }
+
+                TagOperations.bindTagParams(statement, batchUpdate.update());
+
                 if (batchUpdate.update().evaluators() != null) {
                     statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
                 }
@@ -2967,11 +2947,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)));
+                    .flatMap(result -> result
+                            .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)));
         });
     }
 
-    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row) {
+    private DatasetItem mapVersionedItemToDatasetItem(io.r2dbc.spi.Row row, io.r2dbc.spi.RowMetadata rowMetadata) {
         // Map data field - stored as Map<String, String> in ClickHouse
         Map<String, com.fasterxml.jackson.databind.JsonNode> data = Optional.ofNullable(row.get("data", Map.class))
                 .filter(m -> !m.isEmpty())
@@ -2988,6 +2969,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
+                .description(DatasetItemResultMapper.getDescription(row, rowMetadata))
                 .source(Optional.ofNullable(row.get("source", String.class))
                         .map(com.comet.opik.api.DatasetItemSource::fromString)
                         .orElse(null))
@@ -3003,6 +2985,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .map(java.util.Arrays::asList)
                         .map(Set::copyOf)
                         .orElse(null))
+                .evaluators(DatasetItemResultMapper.getEvaluators(row, rowMetadata))
+                .executionPolicy(DatasetItemResultMapper.getExecutionPolicy(row, rowMetadata))
                 .createdAt(row.get("created_at", Instant.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
@@ -3071,7 +3055,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("workspace_id", workspaceId);
 
                 return Flux.from(statement.execute())
-                        .flatMap(result -> result.map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row)))
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> mapVersionedItemToDatasetItem(row, rowMetadata)))
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {

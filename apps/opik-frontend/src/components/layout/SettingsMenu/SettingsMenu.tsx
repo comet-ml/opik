@@ -14,13 +14,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
-import { useDateFormat } from "@/hooks/useDateFormat";
-import DateFormatDropdown from "@/components/shared/DateFormatDropdown/DateFormatDropdown";
 
 const SettingsMenu = () => {
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
-  const [dateFormat, setDateFormat] = useDateFormat();
 
   return (
     <DropdownMenu>
@@ -58,10 +55,6 @@ const SettingsMenu = () => {
             </DropdownMenuPortal>
           </DropdownMenuSub>
         </DropdownMenuGroup>
-        <DateFormatDropdown
-          dateFormat={dateFormat}
-          setDateFormat={setDateFormat}
-        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

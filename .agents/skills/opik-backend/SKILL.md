@@ -10,6 +10,104 @@ description: Java backend patterns for Opik. Use when working in apps/opik-backe
 - **DI**: Guice modules, constructor injection with `@Inject`
 - **Databases**: MySQL (metadata, transactional) + ClickHouse (analytics, append-only)
 
+## Naming Conventions
+
+### Plural Names (Resources, Tests, URLs, DB Tables)
+- **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
+- **Resource test classes**: `TracesResourceTest`, `SpansResourceTest`, `DatasetsResourceTest` (not `TraceResourceTest`)
+- **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
+- **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
+
+### Singular Names (DAO, Service)
+- **DAO classes**: `TraceDAO`, `SpanDAO`, `DatasetDAO` (not `TracesDAO`)
+- **Service classes**: `TraceService`, `SpanService`, `DatasetService` (not `TracesService`)
+
+```java
+// ✅ GOOD
+@Path("/v1/private/traces")
+public class TracesResource { }
+
+// ✅ GOOD - DAO and Service use singular
+public class TraceDAO { }
+public class TraceService { }
+
+// ✅ GOOD - test classes match plural resource name
+public class TracesResourceTest { }
+
+// ❌ BAD - singular test class
+public class TraceResourceTest { }
+
+// ❌ BAD - singular resource/URL
+@Path("/v1/private/trace")
+public class TraceResource { }
+
+// ❌ BAD - plural DAO/Service
+public class TracesDAO { }
+public class TracesService { }
+```
+
+## Lombok Conventions
+
+### Records and DTOs
+- Always annotate records/DTOs with `@Builder(toBuilder = true)`
+- Add `@NonNull` on all non-optional fields
+- Use builders (not constructors) when instantiating records
+
+```java
+// ✅ GOOD
+@Builder(toBuilder = true)
+record MyData(@NonNull UUID id, @NonNull String name, String description) {}
+
+MyData data = MyData.builder()
+        .id(id)
+        .name(name)
+        .build();
+
+// ❌ BAD - plain constructor (positional mistakes, less readable)
+new MyData(id, name, null);
+
+// ❌ BAD - @Builder without toBuilder
+@Builder
+record MyData(UUID id, String name) {}
+```
+
+### Dependency Injection
+- Use `@RequiredArgsConstructor(onConstructor_ = @Inject)` instead of manual constructors
+
+```java
+// ✅ GOOD
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+public class MyService {
+    private final @NonNull DependencyA depA;
+    private final @NonNull DependencyB depB;
+}
+
+// ❌ BAD - boilerplate constructor
+public class MyService {
+    private final DependencyA depA;
+    @Inject
+    public MyService(DependencyA depA) {
+        this.depA = depA;
+    }
+}
+```
+
+### Interfaces
+- Don't put validation annotations (`@NonNull`) on interface method parameters
+- Keep interfaces free of implementation details
+
+```java
+// ✅ GOOD
+interface MyService {
+    void process(String workspaceId, UUID promptId);
+}
+
+// ❌ BAD - validation on interface
+interface MyService {
+    void process(@NonNull String workspaceId, @NonNull UUID promptId);
+}
+```
+
 ## Critical Gotchas
 
 ### StringTemplate Memory Leak
