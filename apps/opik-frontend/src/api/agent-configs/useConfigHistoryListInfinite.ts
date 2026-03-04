@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useInfiniteQuery } from "@tanstack/react-query";
 
-import api, { AGENT_CONFIGS_REST_ENDPOINT } from "@/api/api";
+import api, { AGENT_CONFIGS_KEY, AGENT_CONFIGS_REST_ENDPOINT } from "@/api/api";
 import { ConfigHistoryItem } from "@/types/agent-configs";
 
 const PAGE_SIZE = 20;
@@ -38,10 +38,7 @@ export default function useConfigHistoryListInfinite({
   projectId: string;
 }) {
   return useInfiniteQuery<UseConfigHistoryListInfiniteResponse>({
-    queryKey: [
-      `${AGENT_CONFIGS_REST_ENDPOINT}blueprints/history/projects`,
-      { projectId },
-    ],
+    queryKey: [AGENT_CONFIGS_KEY, "history", { projectId }],
     queryFn: (ctx) =>
       getConfigHistoryList(ctx, { projectId, page: ctx.pageParam as number }),
     getNextPageParam: ({ page, size, total }) =>

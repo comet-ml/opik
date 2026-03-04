@@ -4,6 +4,7 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { ConfigHistoryItem } from "@/types/agent-configs";
+import { AGENT_CONFIGS_KEY } from "@/api/api";
 
 export type UseConfigHistoryListParams = {
   projectId: string;
@@ -44,7 +45,7 @@ export default function useConfigHistoryList(
 ) {
   return useQuery({
     queryKey: [
-      `${AGENT_CONFIGS_REST_ENDPOINT}blueprints/history/projects`,
+      AGENT_CONFIGS_KEY,
       params,
     ],
     queryFn: (ctx) => getConfigHistoryList(ctx, params),

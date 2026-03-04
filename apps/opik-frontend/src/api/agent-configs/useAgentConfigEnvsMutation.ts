@@ -20,7 +20,7 @@ const useAgentConfigEnvsMutation = () => {
   return useMutation({
     mutationFn: async ({ envsRequest }: UseAgentConfigEnvsMutationParams) => {
       const { data } = await api.post(
-        `${AGENT_CONFIGS_REST_ENDPOINT}envs`,
+        `${AGENT_CONFIGS_REST_ENDPOINT}blueprints/environments`,
         envsRequest,
       );
 
@@ -41,7 +41,7 @@ const useAgentConfigEnvsMutation = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: [AGENT_CONFIGS_KEY, "envs"],
+        queryKey: [AGENT_CONFIGS_KEY],
       });
     },
   });

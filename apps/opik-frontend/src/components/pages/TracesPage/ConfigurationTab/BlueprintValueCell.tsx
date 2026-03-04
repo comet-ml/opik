@@ -14,7 +14,8 @@ const BlueprintValueCell = (
 
   const renderValue = () => {
     switch (row.type) {
-      case "number": {
+      case "int":
+      case "float": {
         const num = Number(value);
         return (
           <span className="truncate">

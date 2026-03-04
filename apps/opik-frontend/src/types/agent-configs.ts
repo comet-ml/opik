@@ -1,4 +1,4 @@
-export type BlueprintValueType = "string" | "number" | "boolean" | "Prompt";
+export type BlueprintValueType = "string" | "int" | "float" | "boolean" | "Prompt";
 
 export interface BlueprintValue {
   key: string;
@@ -12,7 +12,7 @@ export interface EnrichedBlueprintValue extends BlueprintValue {
   promptId?: string;
 }
 
-enum BlueprintType {
+export enum BlueprintType {
   BLUEPRINT = "blueprint",
   MASK = "mask",
 }
@@ -26,8 +26,8 @@ export interface Blueprint {
 
 export interface AgentConfig {
   id?: string;
-  projectId?: string;
-  // ALEX: Check if we need projectName
+  project_id?: string;
+  project_name?: string;
   blueprint: Blueprint;
 }
 

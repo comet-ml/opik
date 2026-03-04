@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseAgentConfigCreateMutationParams = {
-  agentConfig: AgentConfig;
+  agentConfig: Omit<AgentConfig, "id">;
 };
 
 const useAgentConfigCreateMutation = () => {
@@ -22,7 +22,7 @@ const useAgentConfigCreateMutation = () => {
       agentConfig,
     }: UseAgentConfigCreateMutationParams) => {
       const { headers } = await api.post(
-        AGENT_CONFIGS_REST_ENDPOINT,
+        `${AGENT_CONFIGS_REST_ENDPOINT}blueprints/`,
         agentConfig,
       );
 
