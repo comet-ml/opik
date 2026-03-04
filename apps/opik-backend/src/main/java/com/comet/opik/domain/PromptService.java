@@ -6,8 +6,11 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
+import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.events.PromptVersionCreatedEvent;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
@@ -86,6 +89,10 @@ public interface PromptService {
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
     Mono<Map<UUID, PromptVersionInfo>> getVersionsInfoByVersionsIds(Set<UUID> versionsIds);
+
+    List<PromptVersionLink> getByCommits(List<String> commits);
+
+    Prompt getByCommit(String commit);
 }
 
 @Singleton
@@ -690,6 +697,53 @@ class PromptServiceImpl implements PromptService {
                 })).subscribeOn(Schedulers.boundedElastic()));
     }
 
+    @Override
+    public Prompt getByCommit(@NonNull String commit) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            List<Prompt> matches = promptDAO.findByCommit(commit, workspaceId);
+
+            if (matches.isEmpty()) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+
+            if (matches.size() > 1) {
+                throw new ConflictException(
+                        "Ambiguous commit: multiple prompt versions found for commit '%s'".formatted(commit));
+            }
+
+            return matches.getFirst();
+        });
+    }
+
+    @Override
+    public List<PromptVersionLink> getByCommits(@NonNull List<String> commits) {
+        if (commits.isEmpty()) {
+            return List.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptDAO promptDAO = handle.attach(PromptDAO.class);
+
+            Map<String, PromptVersionLink> linksByCommit = promptDAO
+                    .findPromptsByCommits(commits, workspaceId).stream()
+                    .collect(toMap(PromptVersionLink::commit, Function.identity(),
+                            (existing, duplicate) -> existing));
+
+            return commits.stream()
+                    .map(commit -> linksByCommit.getOrDefault(commit,
+                            PromptVersionLink.builder()
+                                    .commit(commit)
+                                    .build()))
+                    .toList();
+        });
+    }
+
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
             String userName) {
         eventBus.post(AlertEvent.builder()
@@ -698,6 +752,13 @@ class PromptServiceImpl implements PromptService {
                 .workspaceName(workspaceName)
                 .userName(userName)
                 .payload(promptVersion)
+                .build());
+
+        eventBus.post(PromptVersionCreatedEvent.builder()
+                .workspaceId(workspaceId)
+                .promptId(promptVersion.promptId())
+                .commit(promptVersion.commit())
+                .userName(userName)
                 .build());
     }
 

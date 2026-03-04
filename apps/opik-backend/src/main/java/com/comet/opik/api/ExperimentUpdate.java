@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.TagOperations.TagUpdatable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -23,8 +24,10 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 public record ExperimentUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String name,
         JsonNode metadata,
-        @Valid @Size(max = 50, message = "Cannot have more than 50 tags") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags,
+        @Valid @Size(max = 50, message = "Cannot have more than 50 tags") @Schema(description = "Tags") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags,
+        @Valid @Size(max = 50, message = "Cannot have more than 50 tags to add") @Schema(description = "Tags to add") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToAdd,
+        @Valid @Size(max = 50, message = "Cannot have more than 50 tags to remove") @Schema(description = "Tags to remove") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToRemove,
         ExperimentType type,
         @Schema(description = "The status of the experiment") ExperimentStatus status,
-        List<@NotNull @Valid ExperimentScore> experimentScores) {
+        List<@NotNull @Valid ExperimentScore> experimentScores) implements TagUpdatable {
 }

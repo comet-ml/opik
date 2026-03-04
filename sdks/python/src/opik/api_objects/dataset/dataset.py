@@ -506,6 +506,7 @@ class Dataset(DatasetExportOperations):
             span_id=item.span_id,  # type: ignore
             source=item.source,  # type: ignore
             data=item.get_content(),
+            description=item.description,
             evaluators=evaluators,
             execution_policy=execution_policy,
         )

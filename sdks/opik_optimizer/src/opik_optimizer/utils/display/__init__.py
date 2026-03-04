@@ -6,6 +6,7 @@ from .format import (
     format_float,
     format_prompt,
     format_prompt_for_plaintext,
+    format_prompt_payload,
     format_prompt_snippet,
     format_score_progress,
     format_tool_summary,
@@ -29,6 +30,7 @@ from .terminal import (
     display_success,
     display_text_block,
     display_tool_description,
+    display_tools_panel,
     render_rich_result,
 )
 
@@ -38,6 +40,7 @@ __all__ = [
     "format_float",
     "format_prompt",
     "format_prompt_for_plaintext",
+    "format_prompt_payload",
     "format_prompt_snippet",
     "format_score_progress",
     "format_tool_summary",
@@ -59,5 +62,6 @@ __all__ = [
     "display_success",
     "display_text_block",
     "display_tool_description",
+    "display_tools_panel",
     "render_rich_result",
 ]

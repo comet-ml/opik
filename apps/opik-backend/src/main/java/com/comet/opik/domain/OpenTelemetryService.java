@@ -118,8 +118,29 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         .build())
                 .toList();
 
+        // Some integrations (e.g. PydanticAI/Logfire) put cumulative usage tokens on parent/agent spans
+        // that already represent the sum of all child LLM call spans. Including both the parent and children
+        // in sumMap() aggregation would double-count tokens. Clear usage from parent spans whose children
+        // also carry usage, so only the leaf LLM spans contribute to the aggregated token counts.
+        var parentIdsWithChildrenHavingUsage = opikSpans.stream()
+                .filter(span -> span.parentSpanId() != null
+                        && span.usage() != null
+                        && !span.usage().isEmpty())
+                .map(com.comet.opik.api.Span::parentSpanId)
+                .collect(Collectors.toSet());
+
+        var dedupedSpans = parentIdsWithChildrenHavingUsage.isEmpty()
+                ? opikSpans
+                : opikSpans.stream()
+                        .map(span -> parentIdsWithChildrenHavingUsage.contains(span.id())
+                                && span.usage() != null
+                                && !span.usage().isEmpty()
+                                        ? span.toBuilder().usage(null).build()
+                                        : span)
+                        .toList();
+
         // check if there spans without parentId: we will use them as a Trace too
-        return Flux.fromStream(opikSpans.stream().filter(span -> span.parentSpanId() == null))
+        return Flux.fromStream(dedupedSpans.stream().filter(span -> span.parentSpanId() == null))
                 .flatMap(rootSpan -> {
                     // Extract thread_id from root span metadata if present
                     String threadId = null;
@@ -146,10 +167,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .then(Mono.defer(() -> {
-                    var spanBatch = SpanBatch.builder().spans(opikSpans).build();
+                    var spanBatch = SpanBatch.builder().spans(dedupedSpans).build();
 
                     log.info("Parsed OpenTelemetry span batch for project '{}' into {} spans", projectName,
-                            opikSpans.size());
+                            dedupedSpans.size());
 
                     return spanService.create(spanBatch);
                 }));

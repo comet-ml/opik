@@ -20,5 +20,6 @@ public record TraceSearchCriteria(
         boolean stripAttachments,
         Set<Trace.TraceField> exclude,
         UUID uuidFromTime,
-        UUID uuidToTime) {
+        UUID uuidToTime,
+        String searchText) {
 }

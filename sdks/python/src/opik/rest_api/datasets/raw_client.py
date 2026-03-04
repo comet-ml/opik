@@ -1276,6 +1276,7 @@ class RawDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -1297,6 +1298,8 @@ class RawDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -1320,6 +1323,7 @@ class RawDatasetsClient:
                 "span_id": span_id,
                 "source": source,
                 "data": data,
+                "description": description,
                 "tags": tags,
                 "evaluators": convert_and_respect_annotation_metadata(
                     object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"
@@ -3287,6 +3291,7 @@ class AsyncRawDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -3308,6 +3313,8 @@ class AsyncRawDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -3331,6 +3338,7 @@ class AsyncRawDatasetsClient:
                 "span_id": span_id,
                 "source": source,
                 "data": data,
+                "description": description,
                 "tags": tags,
                 "evaluators": convert_and_respect_annotation_metadata(
                     object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"
