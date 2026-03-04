@@ -79,13 +79,32 @@ await page.getByRole('menuitem', { name: 'Delete' }).click();
 
 Some page objects (like `TracesPage`, `ThreadsPage`) do NOT extend `BasePage` and don't have a `goto()` method. They are used after navigating to a project. Check the page-object-catalog for which ones extend `BasePage`.
 
+### Missing Test IDs in Frontend Code
+
+When a locator fails because no reliable selector exists for an element, you are **allowed and encouraged** to add `data-testid` attributes directly to the React frontend source code in `apps/opik-frontend/src/`:
+
+```typescript
+// Before: fragile CSS selector in page object
+this.page.locator('.some-dynamic-class > div:nth-child(2)')
+
+// Fix: add data-testid to the React component
+// In apps/opik-frontend/src/components/SomeComponent.tsx:
+//   <div data-testid="trace-detail-sidebar">...</div>
+
+// After: robust test ID in page object
+this.page.getByTestId('trace-detail-sidebar')
+```
+
+Use kebab-case `{feature}-{element}` naming (e.g., `dataset-items-table`, `project-delete-button`).
+
 ## Fix Priorities
 
 1. **Selector changes**: Update locators to match current UI (check snapshot for current element text/roles)
-2. **Timing issues**: Add appropriate waits or increase timeouts
-3. **Assertion updates**: Fix expected values to match current behavior
-4. **Missing waits**: Add `helperClient.waitFor*()` calls before UI verification
-5. **Page object updates**: If a page object method is broken, fix it in the page object file
+2. **Add `data-testid` to frontend code**: When no reliable locator exists, add test IDs to React components rather than using fragile CSS selectors
+3. **Timing issues**: Add appropriate waits or increase timeouts
+4. **Assertion updates**: Fix expected values to match current behavior
+5. **Missing waits**: Add `helperClient.waitFor*()` calls before UI verification
+6. **Page object updates**: If a page object method is broken, fix it in the page object file
 
 ## Key Principles
 

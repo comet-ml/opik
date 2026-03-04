@@ -6,16 +6,16 @@ It can be run at any time to check the status of running or completed benchmarks
 
 Usage:
     # Check results for a specific run
-    modal run check_results.py --run-id run_20250423_153045
+    modal run benchmarks/check_results.py --run-id run_20250423_153045
 
     # Watch for new results (live monitoring)
-    modal run check_results.py --run-id run_20250423_153045 --watch
+    modal run benchmarks/check_results.py --run-id run_20250423_153045 --watch
 
     # List all available runs
-    modal run check_results.py --list-runs
+    modal run benchmarks/check_results.py --list-runs
 
     # Generate detailed report with all metrics
-    modal run check_results.py --run-id run_20250423_153045 --detailed
+    modal run benchmarks/check_results.py --run-id run_20250423_153045 --detailed
 """
 
 import argparse
@@ -57,7 +57,7 @@ console: Console | None = None
 def list_available_runs() -> list[dict]:
     """List all available benchmark runs in the Volume."""
     sys.path.insert(0, "/root/benchmarks")
-    from benchmarks.modal_utils.storage import list_available_runs_from_volume
+    from benchmarks.engines.modal.volume import list_available_runs_from_volume
 
     return list_available_runs_from_volume()
 
@@ -74,7 +74,7 @@ def load_run_results(run_id: str) -> dict:
         - call_ids: List of function call IDs
     """
     sys.path.insert(0, "/root/benchmarks")
-    from benchmarks.modal_utils.storage import load_run_results_from_volume
+    from benchmarks.engines.modal.volume import load_run_results_from_volume
 
     return load_run_results_from_volume(run_id)
 
@@ -135,7 +135,7 @@ def main(
 
 def _list_runs() -> None:
     """Display list of all available runs."""
-    from benchmarks.modal_utils.display import display_runs_table
+    from benchmarks.utils.display import display_runs_table
 
     assert console is not None
     console.print("\n[bold]📋 Available Benchmark Runs[/bold]\n")
@@ -343,7 +343,7 @@ def _generate_results_display(
     run_id: str, detailed: bool, is_live: bool, raw: bool
 ) -> Any:
     """Generate rich display of results."""
-    from benchmarks.modal_utils.display import generate_results_display
+    from benchmarks.utils.display import generate_results_display
 
     results = load_run_results.remote(run_id)
 
@@ -357,22 +357,22 @@ if __name__ == "__main__":
         epilog="""
 Examples:
   # List all available runs
-  modal run check_results.py --list-runs
+  modal run benchmarks/check_results.py --list-runs
 
   # Check results for a specific run
-  modal run check_results.py --run-id run_20250423_153045
+  modal run benchmarks/check_results.py --run-id run_20250423_153045
 
   # Watch for new results (live monitoring)
-  modal run check_results.py --run-id run_20250423_153045 --watch
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --watch
 
   # Show detailed metrics breakdown
-  modal run check_results.py --run-id run_20250423_153045 --detailed
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --detailed
 
   # Show full error messages for failed tasks
-  modal run check_results.py --run-id run_20250423_153045 --show-errors
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --show-errors
 
   # Show full logs and details for a specific task (exact task ID)
-  modal run check_results.py --run-id run_20250423_153045 --task "ai2_arc_evolutionary_optimizer_openai/gpt-4o-mini"
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --task "ai2_arc_evolutionary_optimizer_openai/gpt-4o-mini"
         """,
     )
     parser.add_argument(
@@ -420,3 +420,13 @@ Examples:
     )
 
     args = parser.parse_args()
+    main(
+        run_id=args.run_id,
+        list_runs=args.list_runs,
+        watch=args.watch,
+        detailed=args.detailed,
+        raw=args.raw,
+        show_errors=args.show_errors,
+        task=args.task,
+        watch_interval=args.watch_interval,
+    )

@@ -3,6 +3,7 @@ from .opik_tracer import (
     LANGGRAPH_INTERRUPT_OUTPUT_KEY,
     LANGGRAPH_RESUME_INPUT_KEY,
     LANGGRAPH_INTERRUPT_METADATA_KEY,
+    LANGGRAPH_PARENT_COMMAND_METADATA_KEY,
 )
 from .langgraph_async_context_bridge import extract_current_langgraph_span_data
 from .langgraph_tracer_injector import track_langgraph
@@ -14,4 +15,5 @@ __all__ = [
     "LANGGRAPH_INTERRUPT_OUTPUT_KEY",
     "LANGGRAPH_RESUME_INPUT_KEY",
     "LANGGRAPH_INTERRUPT_METADATA_KEY",
+    "LANGGRAPH_PARENT_COMMAND_METADATA_KEY",
 ]

@@ -1,6 +1,7 @@
 package com.comet.opik.domain.experiments.aggregations;
 
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
@@ -17,9 +18,15 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.domain.DatasetItemResultMapper;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.DatasetItemSearchCriteriaMapper;
+import com.comet.opik.domain.ExperimentGroupMappers;
 import com.comet.opik.domain.ExperimentSearchCriteriaBinder;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.GroupingQueryBuilder;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.MapArrays;
+import com.comet.opik.domain.experiments.aggregations.ExperimentEntityData.ExperimentItemData;
+import com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.SpanData;
+import com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.TraceData;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
@@ -30,6 +37,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
+import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.Statement;
@@ -39,6 +47,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -52,21 +61,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import static com.comet.opik.domain.ExperimentGroupMappers.bindGroupCriteria;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.FeedbackScoreAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.SpanAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.TraceAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.BatchResult;
-import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesUtils.MapArrays;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentEntityData.ExperimentData;
-import static com.comet.opik.domain.experiments.aggregations.ExperimentEntityData.ExperimentItemData;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.FeedbackScoreData;
-import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.SpanData;
-import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceData.TraceData;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -96,7 +102,7 @@ public interface ExperimentAggregatesDAO {
 
     Mono<ProjectStats> getExperimentItemsStatsFromAggregates(@NonNull UUID datasetId,
             @NonNull UUID versionId, @NonNull Set<UUID> experimentIds,
-            List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters);
+            List<ExperimentsComparisonFilter> filters);
 }
 
 @Singleton
@@ -104,8 +110,9 @@ public interface ExperimentAggregatesDAO {
 @Slf4j
 class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
-    public static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
+    private static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
     };
+
     public static final String EMPTY_ARRAY_STR = "[]";
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
@@ -123,6 +130,36 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FilterStrategy.EXPERIMENT_SCORES,
             FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
 
+    private static final List<FilterQueryBuilder.FilterStrategyParam> DATASET_ITEM_FILTER_STRATEGY_PARAMS = List.of(
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM, "experiment_item_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
+                    "feedback_scores_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+                    "feedback_scores_empty_filters"),
+            new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"));
+
+    private static final List<FilterStrategy> DATASET_ITEM_BIND_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+            FilterStrategy.DATASET_ITEM);
+
+    private static final List<FilterQueryBuilder.FilterStrategyParam> EXPERIMENT_ITEMS_STATS_FILTER_STRATEGY_PARAMS = List
+            .of(
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.EXPERIMENT_ITEM,
+                            "experiment_item_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES,
+                            "feedback_scores_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+                            "feedback_scores_empty_filters"),
+                    new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"));
+
+    private static final List<FilterStrategy> EXPERIMENT_ITEMS_STATS_BIND_STRATEGIES = List.of(
+            FilterStrategy.EXPERIMENT_ITEM,
+            FilterStrategy.FEEDBACK_SCORES,
+            FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY,
+            FilterStrategy.DATASET_ITEM);
+
     public static final String SELECT_EXPERIMENT_BY_ID = """
             SELECT
                 id,
@@ -136,6 +173,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 metadata,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 optimization_id,
                 dataset_version_id,
@@ -174,6 +212,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 dataset_version_id,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 experiment_scores
             FROM experiments
@@ -188,16 +227,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_PROJECT_ID = """
             WITH experiment_trace_items AS (
-                SELECT
-                    DISTINCT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             )
             SELECT DISTINCT project_id
-            FROM traces FINAL
+            FROM traces
+            INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
             WHERE workspace_id = :workspace_id
-            AND id IN (SELECT trace_id FROM experiment_trace_items)
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -209,7 +247,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String GET_TRACE_AGGREGATIONS = """
             WITH experiment_trace_items AS (
                 SELECT DISTINCT trace_id
-                FROM experiment_items FINAL
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             ), traces_data AS (
@@ -220,7 +258,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 INNER JOIN experiment_trace_items ON traces.id = experiment_trace_items.trace_id
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id IN (SELECT trace_id FROM experiment_trace_items)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             )
@@ -251,8 +288,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_SPAN_AGGREGATIONS = """
             WITH experiment_items AS (
-                SELECT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             ), spans_data AS (
@@ -312,8 +349,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      */
     private static final String GET_FEEDBACK_SCORE_AGGREGATIONS = """
             WITH experiment_items AS (
-                SELECT trace_id
-                FROM experiment_items FINAL
+                SELECT DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
             ), feedback_scores_combined AS (
@@ -404,6 +441,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 dataset_version_id,
                 tags,
                 type,
+                evaluation_method,
                 status,
                 experiment_scores,
                 trace_count,
@@ -434,6 +472,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 :dataset_version_id,
                 :tags,
                 :type,
+                :evaluation_method,
                 :status,
                 mapFromArrays(:experiment_scores_keys, :experiment_scores_values),
                 :trace_count,
@@ -490,10 +529,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 id as trace_id,
                 project_id,
                 duration,
+                metadata,
                 input,
                 output,
-                input_slim as input_truncated,
-                output_slim as output_truncated,
+                input_slim,
+                output_slim,
                 visibility_mode
             FROM traces FINAL
             WHERE workspace_id = :workspace_id
@@ -696,8 +736,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 trace_id,
                 input,
                 output,
-                input_truncated,
-                output_truncated,
+                input_slim,
+                output_slim,
+                metadata,
                 duration,
                 total_estimated_cost,
                 usage,
@@ -721,8 +762,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     :trace_id<item.index>,
                     :input<item.index>,
                     :output<item.index>,
-                    :input_truncated<item.index>,
-                    :output_truncated<item.index>,
+                    :input_slim<item.index>,
+                    :output_slim<item.index>,
+                    :metadata<item.index>,
                     :duration<item.index>,
                     :total_estimated_cost<item.index>,
                     if(:has_usage<item.index>, mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>), CAST(map() AS Map(String, Int64)) ),
@@ -783,6 +825,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(experiment_scores_filters)> AND <experiment_scores_filters> <endif>
             <if(experiment_scores_empty_filters)> AND <experiment_scores_empty_filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
+            <if(has_target_projects)> AND project_id IN :target_project_ids <endif>
             <if(project_deleted)> AND (has(ep.project_ids, '') OR empty(ep.project_ids)) <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -856,7 +899,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
                         AND ea.dataset_id = div.dataset_id
-                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :versionId)
+                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :dataset_id
                     <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
@@ -873,7 +916,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
             <if(experiment_item_filters)>AND <experiment_item_filters><endif>
             <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND length(mapKeys(eia.feedback_scores)) = 0<endif>
+            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
@@ -905,14 +948,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     div_dedup.last_updated_at AS item_last_updated_at,
                     div_dedup.created_by AS item_created_by,
                     div_dedup.last_updated_by AS item_last_updated_by,
-                    div_dedup.dataset_version_id AS dataset_version_id
+                    div_dedup.dataset_version_id AS dataset_version_id,
+                    div_dedup.description AS description
                 FROM (
                     SELECT div.*
                     FROM dataset_item_versions div
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
                         AND ea.dataset_id = div.dataset_id
-                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :versionId)
+                        AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
                     WHERE div.workspace_id = :workspace_id
                     AND div.dataset_id = :dataset_id
                     <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
@@ -969,13 +1013,18 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 di.item_created_by AS created_by,
                 di.item_last_updated_by AS last_updated_by,
                 groupArray((eia.id, eia.experiment_id, eia.dataset_item_id, eia.trace_id,
-                           <if(truncate)> eia.input_truncated <else> eia.input <endif>,
-                           <if(truncate)> eia.output_truncated <else> eia.output <endif>,
+                           <if(truncate)> eia.input_slim <else> eia.input <endif>,
+                           <if(truncate)> eia.output_slim <else> eia.output <endif>,
                            JSONExtract(eia.feedback_scores_array, 'Array(Tuple(entity_id String, name String, category_name String, value Decimal64(9), reason String, source String, created_at String, last_updated_at String, created_by String, last_updated_by String, value_by_author Map(String, Tuple(value Decimal64(9), reason String, category_name String, source String, last_updated_at String))))'),
                            eia.created_at, eia.last_updated_at, eia.created_by, eia.last_updated_by,
                            ca.comments_array,
-                           toFloat64(eia.duration), eia.total_estimated_cost, eia.usage,
-                           eia.visibility_mode)) AS experiment_items_array
+                           toFloat64(eia.duration),
+                           eia.total_estimated_cost,
+                           eia.usage,
+                           eia.visibility_mode,
+                           eia.metadata,
+                           di.description
+                )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
             INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
             LEFT JOIN dataset_item_versions_resolved AS di ON di.id = eia.dataset_item_id
@@ -985,7 +1034,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
             <if(experiment_item_filters)>AND <experiment_item_filters><endif>
             <if(feedback_scores_filters)>AND <feedback_scores_filters><endif>
-            <if(feedback_scores_empty_filters)>AND length(mapKeys(eia.feedback_scores)) = 0<endif>
+            <if(feedback_scores_empty_filters)>AND <feedback_scores_empty_filters><endif>
             <if(dataset_item_filters)>
             AND <dataset_item_filters>
             <endif>
@@ -1144,10 +1193,25 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                             0L);
                                 }
 
-                                // Get project_id for experiments with items
+                                // Get project_id for experiments with items; wrap in Optional so that
+                                // the Mono always emits and we can branch on presence in flatMap
+                                // (avoids switchIfEmpty on Mono<Void>, which always fires)
                                 return getProjectId(experimentId)
-                                        .flatMap(projectId -> {
+                                        .map(Optional::of)
+                                        .defaultIfEmpty(Optional.empty())
+                                        .flatMap(projectIdOpt -> {
+                                            if (projectIdOpt.isEmpty()) {
+                                                // Fallback: items exist but all referenced traces were deleted
+                                                return insertExperimentAggregate(
+                                                        experimentData,
+                                                        createEmptyTraceAggregations(experimentId),
+                                                        createEmptySpanAggregations(experimentId),
+                                                        createEmptyFeedbackScoreAggregations(experimentId),
+                                                        itemsCount);
+                                            }
+
                                             // Fetch aggregations using project_id for filtering
+                                            var projectId = projectIdOpt.get();
                                             return Mono.zip(
                                                     getTraceAggregations(experimentId, projectId),
                                                     getSpanAggregations(experimentId, projectId),
@@ -1173,7 +1237,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     public Mono<BatchResult> populateExperimentItemAggregates(UUID experimentId, UUID cursorId, int limit) {
 
         return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get("workspaceId");
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             return getExperimentItems(experimentId, cursorId, limit)
                     .collectList()
@@ -1240,40 +1304,36 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private Mono<TraceAggregations> getTraceAggregations(UUID experimentId, UUID projectId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_TRACE_AGGREGATIONS,
-                    "getTraceAggregations", workspaceId, experimentId.toString());
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId);
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapTraceAggregations(row)));
-        }).singleOrEmpty());
+        return queryExperimentAggregation(
+                GET_TRACE_AGGREGATIONS, "getTraceAggregations", experimentId, projectId,
+                this::mapTraceAggregations);
     }
 
     private Mono<SpanAggregations> getSpanAggregations(UUID experimentId, UUID projectId) {
-        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_SPAN_AGGREGATIONS,
-                    "getSpanAggregations", workspaceId, experimentId.toString());
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId)
-                    .bind("experiment_id", experimentId)
-                    .bind("project_id", projectId);
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapSpanAggregations(row)));
-        }).singleOrEmpty());
+        return queryExperimentAggregation(
+                GET_SPAN_AGGREGATIONS, "getSpanAggregations", experimentId, projectId,
+                this::mapSpanAggregations);
     }
 
-    private Mono<FeedbackScoreAggregations> getFeedbackScoreAggregations(UUID experimentId,
-            UUID projectId) {
+    private Mono<FeedbackScoreAggregations> getFeedbackScoreAggregations(UUID experimentId, UUID projectId) {
+        return queryExperimentAggregation(
+                GET_FEEDBACK_SCORE_AGGREGATIONS, "getFeedbackScoreAggregations", experimentId, projectId,
+                this::mapFeedbackScoreAggregations);
+    }
+
+    /**
+     * Executes a single-row aggregation query scoped to a workspace, experiment, and project.
+     * Handles the repeated context-aware execution, parameter binding, and singleOrEmpty pattern
+     * shared by getTraceAggregations, getSpanAggregations, and getFeedbackScoreAggregations.
+     */
+    private <T> Mono<T> queryExperimentAggregation(
+            String query,
+            String logName,
+            UUID experimentId,
+            UUID projectId,
+            Function<Row, T> rowMapper) {
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(GET_FEEDBACK_SCORE_AGGREGATIONS,
-                    "getFeedbackScoreAggregations", workspaceId, experimentId.toString());
+            var template = getSTWithLogComment(query, logName, workspaceId, experimentId.toString());
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
@@ -1281,7 +1341,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("project_id", projectId);
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> mapFeedbackScoreAggregations(row)));
+                    .flatMap(result -> result.map((row, metadata) -> rowMapper.apply(row)));
         }).singleOrEmpty());
     }
 
@@ -1313,29 +1373,30 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
             // Convert Maps to key/value arrays for ClickHouse mapFromArrays
             var experimentScoresArrays = mapToArrays(
-                    defaultIfNull(experimentData.experimentScores(), Map.of()),
+                    ObjectUtils.getIfNull(experimentData.experimentScores(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v.doubleValue());
             var durationPercentilesArrays = mapToArrays(
-                    defaultIfNull(traceAgg.durationPercentiles(), Map.of()),
+                    ObjectUtils.getIfNull(traceAgg.durationPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v);
             var totalEstimatedCostPercentilesArrays = mapToArrays(
-                    defaultIfNull(spanAgg.totalEstimatedCostPercentiles(), Map.of()),
+                    ObjectUtils.getIfNull(spanAgg.totalEstimatedCostPercentiles(), Map.of()),
                     String[]::new, Double[]::new,
                     v -> v);
             var usageAvgArrays = mapToArrays(
-                    defaultIfNull(spanAgg.usageAvg(), Map.of()),
+                    ObjectUtils.getIfNull(spanAgg.usageAvg(), Map.of()),
                     String[]::new, Double[]::new,
                     Double::doubleValue);
-            Map<String, Double> usageTotalTokensPercentiles = defaultIfNull(spanAgg.usageTotalTokensPercentiles(),
+            Map<String, Double> usageTotalTokensPercentiles = ObjectUtils.getIfNull(
+                    spanAgg.usageTotalTokensPercentiles(),
                     Map.of());
             var usageTotalTokensPercentilesArrays = mapToArrays(
                     usageTotalTokensPercentiles,
                     String[]::new, Double[]::new,
                     v -> v);
             var feedbackScoresAvgArrays = mapToArrays(
-                    defaultIfNull(feedbackAgg.feedbackScoresAvg(), Map.of()),
+                    ObjectUtils.getIfNull(feedbackAgg.feedbackScoresAvg(), Map.of()),
                     String[]::new, Double[]::new,
                     Double::doubleValue);
 
@@ -1349,12 +1410,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("last_updated_at", experimentData.lastUpdatedAt())
                     .bind("created_by", experimentData.createdBy())
                     .bind("last_updated_by", experimentData.lastUpdatedBy())
-                    .bind("metadata", defaultIfNull(experimentData.metadata(), ""))
-                    .bind("prompt_versions", defaultIfNull(experimentData.promptVersions(), Map.of()))
-                    .bind("optimization_id", defaultIfNull(experimentData.optimizationId(), ""))
-                    .bind("dataset_version_id", defaultIfNull(experimentData.datasetVersionId(), ""))
-                    .bind("tags", defaultIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
+                    .bind("metadata", ObjectUtils.getIfNull(experimentData.metadata(), ""))
+                    .bind("prompt_versions", ObjectUtils.getIfNull(experimentData.promptVersions(), Map.of()))
+                    .bind("optimization_id", ObjectUtils.getIfNull(experimentData.optimizationId(), ""))
+                    .bind("dataset_version_id", ObjectUtils.getIfNull(experimentData.datasetVersionId(), ""))
+                    .bind("tags", ObjectUtils.getIfNull(experimentData.tags(), List.of()).toArray(new String[0]))
                     .bind("type", experimentData.type())
+                    .bind("evaluation_method",
+                            ObjectUtils.getIfNull(experimentData.evaluationMethod(),
+                                    EvaluationMethod.UNKNOWN_VALUE))
                     .bind("status", experimentData.status())
                     .bind("experiment_scores_keys", experimentScoresArrays.keys())
                     .bind("experiment_scores_values", experimentScoresArrays.values())
@@ -1363,7 +1427,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("duration_percentiles_keys", durationPercentilesArrays.keys())
                     .bind("duration_percentiles_values", durationPercentilesArrays.values())
                     .bind("feedback_scores_percentiles",
-                            defaultIfNull(feedbackAgg.feedbackScoresPercentiles(), Map.of()))
+                            ObjectUtils.getIfNull(feedbackAgg.feedbackScoresPercentiles(), Map.of()))
                     .bind("total_estimated_cost_sum", spanAgg.totalEstimatedCostSum())
                     .bind("total_estimated_cost_avg", spanAgg.totalEstimatedCostAvg())
                     .bind("total_estimated_cost_percentiles_keys", totalEstimatedCostPercentilesArrays.keys())
@@ -1514,8 +1578,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("trace_id" + i, item.traceId())
                     .bind("input" + i, Optional.ofNullable(trace).map(TraceData::input).orElse(""))
                     .bind("output" + i, Optional.ofNullable(trace).map(TraceData::output).orElse(""))
-                    .bind("input_truncated" + i, Optional.ofNullable(trace).map(TraceData::inputTruncated).orElse(""))
-                    .bind("output_truncated" + i, Optional.ofNullable(trace).map(TraceData::outputTruncated).orElse(""))
+                    .bind("input_slim" + i, Optional.ofNullable(trace).map(TraceData::inputSlim).orElse(""))
+                    .bind("output_slim" + i, Optional.ofNullable(trace).map(TraceData::outputSlim).orElse(""))
+                    .bind("metadata" + i, Optional.ofNullable(trace).map(TraceData::metadata).orElse(""))
                     .bind("duration" + i, Optional.ofNullable(trace).map(TraceData::duration).orElse(BigDecimal.ZERO))
                     .bind("total_estimated_cost" + i,
                             Optional.ofNullable(span).map(SpanData::totalEstimatedCost).orElse(BigDecimal.ZERO))
@@ -1526,12 +1591,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                     .map(VisibilityMode::getValue)
                                     .orElse(VisibilityMode.DEFAULT.getValue()))
                     .bind("created_at" + i, item.createdAt().toString())
-                    .bind("last_updated_at" + i, Instant.now().toString())
+                    .bind("last_updated_at" + i, item.lastUpdatedAt().toString())
                     .bind("created_by" + i, item.createdBy())
                     .bind("last_updated_by" + i, item.lastUpdatedBy());
 
             // Bind array parameters only if maps are not empty
-
             var usageArrays = mapToArrays(usageMap, String[]::new, Long[]::new, Long::longValue);
             statement.bind("usage_keys" + i, usageArrays.keys());
             statement.bind("usage_values" + i, usageArrays.values());
@@ -1602,6 +1666,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         .filter(CollectionUtils::isNotEmpty)
                         .orElse(null))
                 .type(row.get("type", String.class))
+                .evaluationMethod(row.get("evaluation_method", String.class))
                 .status(row.get("status", String.class))
                 .experimentScores(parseExperimentScoresFromString(row.get("experiment_scores", String.class)))
                 .build();
@@ -1680,10 +1745,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .build();
     }
 
-    private <T> T defaultIfNull(T value, T defaultValue) {
-        return value != null ? value : defaultValue;
-    }
-
     /**
      * Query experiment_aggregates table directly and construct Experiment from stored aggregated values.
      * Used for testing and verification that aggregated data matches expected values.
@@ -1749,6 +1810,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         // type is Enum8, read as String and convert to ExperimentType
         ExperimentType type = ExperimentType.fromString(row.get("type", String.class));
 
+        // evaluation_method is Enum, read as String and convert to EvaluationMethod
+        EvaluationMethod evaluationMethod = EvaluationMethod.fromString(row.get("evaluation_method", String.class))
+                .orElse(null);
+
         // status is Enum8, read as String and convert to ExperimentStatus
         ExperimentStatus status = ExperimentStatus.fromString(row.get("status", String.class));
 
@@ -1765,6 +1830,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
         // experiment_scores is Map(String, Float64), convert to List<ExperimentScore>
         Map<String, Double> experimentScoresRaw = row.get("experiment_scores", Map.class);
+
         List<ExperimentScore> experimentScores = Optional.ofNullable(experimentScoresRaw)
                 .map(raw -> raw.entrySet().stream()
                         .map(e -> new ExperimentScore(e.getKey(), BigDecimal.valueOf(e.getValue())))
@@ -1776,6 +1842,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
         // duration_percentiles is Map(String, Float64), read as Map<String, Double>
         Map<String, Double> durationMap = row.get("duration_percentiles", Map.class);
+
         PercentageValues duration = Optional.ofNullable(durationMap)
                 .filter(map -> !map.isEmpty())
                 .map(map -> new PercentageValues(
@@ -1813,6 +1880,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 metadata,
                 tags,
                 type,
+                evaluationMethod,
                 optimizationId,
                 feedbackScores,
                 null, // comments - not in DB
@@ -1888,16 +1956,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .traceId(getUUID(row, "trace_id"))
                 .projectId(getUUID(row, "project_id"))
                 .duration(row.get("duration", BigDecimal.class))
+                .metadata(row.get("metadata", String.class))
                 .input(row.get("input", String.class))
                 .output(row.get("output", String.class))
-                .inputTruncated(row.get("input_truncated", String.class))
-                .outputTruncated(row.get("output_truncated", String.class))
+                .inputSlim(row.get("input_slim", String.class))
+                .outputSlim(row.get("output_slim", String.class))
                 .visibilityMode(visibilityMode)
                 .build();
     }
 
-    private SpanData mapSpanData(Row row) {
-        return SpanData.builder()
+    private ExperimentSourceData.SpanData mapSpanData(Row row) {
+        return ExperimentSourceData.SpanData.builder()
                 .traceId(getUUID(row, "trace_id"))
                 .usage(row.get("usage", Map.class))
                 .totalEstimatedCost(row.get("total_estimated_cost", BigDecimal.class))
@@ -1928,8 +1997,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     private Flux<? extends Result> countTotalFromAggregates(
-            ExperimentSearchCriteria experimentSearchCriteria, io.r2dbc.spi.Connection connection) {
-        log.info("Counting experiments from aggregates by '{}'", experimentSearchCriteria);
+            ExperimentSearchCriteria experimentSearchCriteria, Connection connection) {
+
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = buildCountTemplate(experimentSearchCriteria, workspaceId);
 
@@ -2039,42 +2108,32 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     @Override
     public Flux<ExperimentGroupItem> findGroups(ExperimentGroupCriteria criteria) {
-
         log.info("Finding experiment groups from aggregates by criteria: '{}'", criteria);
-
-        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = newGroupTemplate(FIND_GROUPS_FROM_AGGREGATES, criteria, workspaceId);
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId);
-
-            bindGroupCriteria(statement, criteria);
-
-            int groupsCount = criteria.groups().size();
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> mapExperimentGroupItem(row, groupsCount)));
-        }));
+        return streamGroupQuery(FIND_GROUPS_FROM_AGGREGATES, criteria,
+                ExperimentGroupMappers::toExperimentGroupItem);
     }
 
     @Override
     public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(ExperimentGroupCriteria criteria) {
-
         log.info("Finding experiment groups aggregations from aggregates by criteria: '{}'", criteria);
+        return streamGroupQuery(FIND_GROUPS_AGGREGATIONS_FROM_AGGREGATES, criteria,
+                ExperimentGroupMappers::toExperimentGroupAggregationItem);
+    }
 
+    private <T> Flux<T> streamGroupQuery(String queryTemplate, ExperimentGroupCriteria criteria,
+            BiFunction<Row, Integer, T> rowMapper) {
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
-            var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS_FROM_AGGREGATES, criteria, workspaceId);
+            var template = newGroupTemplate(queryTemplate, criteria, workspaceId);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
-            bindGroupCriteria(statement, criteria);
+            bindGroupCriteria(statement, criteria, filterQueryBuilder);
 
             int groupsCount = criteria.groups().size();
 
             return Flux.from(statement.execute())
-                    .flatMap(result -> result
-                            .map((row, rowMetadata) -> mapExperimentGroupAggregationItem(row, groupsCount)));
+                    .flatMap(result -> result.map((row, rowMetadata) -> rowMapper.apply(row, groupsCount)));
         }));
     }
 
@@ -2093,52 +2152,14 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     workspaceId,
                     criteria.datasetId().toString());
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            applyDatasetItemFiltersToTemplate(template, criteria);
 
-            // Add filters using filter query builder
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM))
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters", experimentItemFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED))
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-
-            // Add search if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                template.add("search", true);
-            }
-
-            String renderedSql = template.render();
-
-            var statement = connection.createStatement(renderedSql)
+            var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId)
                     .bind("dataset_id", criteria.datasetId().toString())
-                    .bind("versionId", versionId.toString());
+                    .bind("version_id", versionId.toString());
 
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-            }
-
-            if (CollectionUtils.isNotEmpty(criteria.filters())) {
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-            }
-
-            if (StringUtils.isNotBlank(criteria.search())) {
-                filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-            }
+            bindDatasetItemSearchParams(statement, criteria);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
@@ -2156,181 +2177,66 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         log.info("Getting dataset items with experiment items from aggregates for dataset: '{}'",
                 criteria.datasetId());
 
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+        var countMono = countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId);
+
+        var itemsMono = asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(
                     SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS,
                     "get_dataset_items_from_aggregates",
                     workspaceId,
                     criteria.datasetId().toString());
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            applyDatasetItemFiltersToTemplate(template, criteria);
 
-            // Add truncate flag
             template.add("truncate", criteria.truncate());
-
-            // Add filters using filter query builder
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT_ITEM))
-                    .ifPresent(experimentItemFilters -> template.add("experiment_item_filters", experimentItemFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(
-                            filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED))
-                    .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
-
-            Optional.ofNullable(criteria.filters())
-                    .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM))
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-
-            // Add search if present
-            if (StringUtils.isNotBlank(criteria.search())) {
-                template.add("search", true);
-            }
-
-            // Add pagination
             template.add("limit", true);
             template.add("offset", true);
 
-            String renderedQuery = template.render();
+            var statement = connection.createStatement(template.render())
+                    .bind("workspace_id", workspaceId)
+                    .bind("dataset_id", criteria.datasetId().toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("limit", size)
+                    .bind("offset", (page - 1) * size);
 
-            // First get the count
-            return countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId)
-                    .flatMap(total -> {
-                        // Then get the actual items - create statement here to ensure proper connection context
-                        var statement = connection.createStatement(renderedQuery)
-                                .bind("workspace_id", workspaceId)
-                                .bind("dataset_id", criteria.datasetId().toString())
-                                .bind("versionId", versionId.toString())
-                                .bind("limit", size)
-                                .bind("offset", (page - 1) * size);
+            bindDatasetItemSearchParams(statement, criteria);
 
-                        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                            statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-                        }
-
-                        if (CollectionUtils.isNotEmpty(criteria.filters())) {
-                            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.EXPERIMENT_ITEM);
-                            filterQueryBuilder.bind(statement, criteria.filters(),
-                                    FilterStrategy.FEEDBACK_SCORES_AGGREGATED);
-                            filterQueryBuilder.bind(statement, criteria.filters(), FilterStrategy.DATASET_ITEM);
-                        }
-
-                        if (StringUtils.isNotBlank(criteria.search())) {
-                            filterQueryBuilder.bindSearchTerms(statement, criteria.search());
-                        }
-
-                        return Flux.from(statement.execute())
-                                .flatMap(DatasetItemResultMapper::mapItem)
-                                .collectList()
-                                .map(items -> new DatasetItemPage(
-                                        items,
-                                        page,
-                                        items.size(),
-                                        total,
-                                        Set.of(), // columns - will be populated later if needed
-                                        List.of() // sortableBy - will be populated later if needed
-                        ));
-                    });
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result
+                            .map((row, rowMeta) -> DatasetItemResultMapper.buildItemFromRow(row, rowMeta)))
+                    .collectList();
         }));
+
+        return countMono.flatMap(total -> {
+            if (total == 0) {
+                return Mono.just(DatasetItemPage.empty(page, List.of()));
+            }
+            return itemsMono.map(items -> new DatasetItemPage(items, page, items.size(), total, Set.of(), List.of()));
+        });
+    }
+
+    private void applyDatasetItemFiltersToTemplate(ST template, DatasetItemSearchCriteria criteria) {
+        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+            template.add("experiment_ids", true);
+        }
+
+        DatasetItemSearchCriteriaMapper.applyToTemplate(template, criteria, DATASET_ITEM_FILTER_STRATEGY_PARAMS);
+    }
+
+    private void bindDatasetItemSearchParams(Statement statement, DatasetItemSearchCriteria criteria) {
+        if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+            statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+        }
+
+        DatasetItemSearchCriteriaMapper.bindSearchCriteria(statement, criteria, DATASET_ITEM_BIND_STRATEGIES,
+                filterQueryBuilder);
     }
 
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String workspaceId) {
-
         var template = getSTWithLogComment(query, "find_groups_from_aggregates", workspaceId, "");
-
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> template.add("types", types));
-        Optional.ofNullable(criteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
-                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
-        Optional.ofNullable(criteria.projectDeleted())
-                .filter(Boolean.TRUE::equals)
-                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
-
-        // Add grouping template params - this will add groupSelects and groupBy
+        ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
-
         return template;
-    }
-
-    private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(types -> types != null && !types.isEmpty())
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
-    }
-
-    private ExperimentGroupItem mapExperimentGroupItem(Row row, int groupsCount) {
-        var groupValues = IntStream.range(0, groupsCount)
-                .mapToObj(i -> "group_" + i)
-                .map(columnName -> row.get(columnName, String.class))
-                .toList();
-
-        return ExperimentGroupItem.builder()
-                .groupValues(groupValues)
-                .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
-                .build();
-    }
-
-    private ExperimentGroupAggregationItem mapExperimentGroupAggregationItem(Row row, int groupsCount) {
-        var groupValues = java.util.stream.IntStream.range(0, groupsCount)
-                .mapToObj(i -> "group_" + i)
-                .map(columnName -> row.get(columnName, String.class))
-                .toList();
-
-        // Map duration from Map<String, Double> to PercentageValues
-        Map<String, Double> durationMap = row.get("duration", Map.class);
-        PercentageValues duration = Optional.ofNullable(durationMap)
-                .filter(map -> !map.isEmpty())
-                .map(map -> new PercentageValues(
-                        BigDecimal.valueOf(map.getOrDefault("p50", 0.0)),
-                        BigDecimal.valueOf(map.getOrDefault("p90", 0.0)),
-                        BigDecimal.valueOf(map.getOrDefault("p99", 0.0))))
-                .orElse(null);
-
-        // Map feedback scores from Map<String, Double> to List<FeedbackScoreAverage>
-        Map<String, Double> feedbackScoresMap = row.get("feedback_scores", Map.class);
-        List<FeedbackScoreAverage> feedbackScores = Optional.ofNullable(feedbackScoresMap)
-                .map(map -> map.entrySet().stream()
-                        .map(e -> new FeedbackScoreAverage(
-                                e.getKey(),
-                                BigDecimal.valueOf(e.getValue())))
-                        .toList())
-                .orElse(null);
-
-        // Map experiment scores from Map<String, Double> to List<ExperimentScore>
-        Map<String, Double> experimentScoresMap = row.get("experiment_scores", Map.class);
-        List<FeedbackScoreAverage> experimentScores = Optional.ofNullable(experimentScoresMap)
-                .map(map -> map.entrySet().stream()
-                        .map(e -> new FeedbackScoreAverage(e.getKey(), BigDecimal.valueOf(e.getValue())))
-                        .toList())
-                .orElse(null);
-
-        return ExperimentGroupAggregationItem.builder()
-                .groupValues(groupValues)
-                .experimentCount(row.get("experiment_count", Long.class))
-                .traceCount(row.get("trace_count", Long.class))
-                .totalEstimatedCost(getBigDecimal(row, "total_estimated_cost"))
-                .totalEstimatedCostAvg(getBigDecimal(row, "total_estimated_cost_avg"))
-                .duration(duration)
-                .feedbackScores(feedbackScores)
-                .experimentScores(experimentScores)
-                .build();
     }
 
     @Override
@@ -2347,24 +2253,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     "getExperimentItemsStatsFromAggregates", workspaceId, datasetId);
 
             // Apply filters to template
-            Optional.ofNullable(filters).ifPresent(filtersParam -> {
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.EXPERIMENT_ITEM)
-                        .ifPresent(experimentItemFilters -> template.add("experiment_item_filters",
-                                experimentItemFilters));
-
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.FEEDBACK_SCORES)
-                        .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters",
-                                feedbackScoresFilters));
-
-                FilterQueryBuilder
-                        .toAnalyticsDbFilters(filtersParam, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
-                        .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
-                                feedbackScoresEmptyFilters));
-
-                FilterQueryBuilder.toAnalyticsDbFilters(filtersParam, FilterStrategy.DATASET_ITEM)
-                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
-                                datasetItemFilters));
-            });
+            FilterQueryBuilder.applyFiltersToTemplate(template, filters,
+                    EXPERIMENT_ITEMS_STATS_FILTER_STRATEGY_PARAMS);
 
             String sql = template.render();
 
@@ -2372,15 +2262,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("workspace_id", workspaceId)
                     .bind("dataset_id", datasetId.toString())
                     .bind("version_id", versionId.toString())
-                    .bind("experiment_ids", experimentIds.stream().map(UUID::toString).toArray(String[]::new));
+                    .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
 
             // Bind filter parameters
-            Optional.ofNullable(filters).ifPresent(filtersParam -> {
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.EXPERIMENT_ITEM);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.FEEDBACK_SCORES);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY);
-                FilterQueryBuilder.bind(statement, filtersParam, FilterStrategy.DATASET_ITEM);
-            });
+            FilterQueryBuilder.bindFilters(statement, filters, EXPERIMENT_ITEMS_STATS_BIND_STRATEGIES);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map(

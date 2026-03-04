@@ -264,7 +264,7 @@ class TraceServiceImpl implements TraceService {
             return failWithConflict(PROJECT_NAME_AND_WORKSPACE_NAME_MISMATCH);
         }
 
-        return Mono.error(ex);
+        return TagOperations.mapTagLimitError(ex);
     }
 
     private Mono<Project> getProjectById(TraceUpdate traceUpdate) {
@@ -341,6 +341,7 @@ class TraceServiceImpl implements TraceService {
                     .flatMap(traceToProjectMap -> {
                         var projectIds = Set.copyOf(traceToProjectMap.values());
                         return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                                .onErrorResume(TagOperations::mapTagLimitError)
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,

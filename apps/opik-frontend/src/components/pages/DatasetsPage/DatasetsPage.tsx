@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -42,6 +42,7 @@ import {
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (d: Dataset) => d.id;
 
@@ -86,25 +87,25 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     id: "most_recent_experiment_at",
     label: "Most recent experiment",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_experiment_at),
+    cell: TimeCell as never,
   },
   {
     id: "most_recent_optimization_at",
     label: "Most recent optimization",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_optimization_at),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -144,7 +145,6 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
   },
   {
     id: "created_by",
@@ -169,6 +169,10 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+
+  const {
+    permissions: { canDeleteDatasets },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -330,8 +334,12 @@ const DatasetsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DatasetsActionsPanel datasets={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteDatasets && (
+            <>
+              <DatasetsActionsPanel datasets={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

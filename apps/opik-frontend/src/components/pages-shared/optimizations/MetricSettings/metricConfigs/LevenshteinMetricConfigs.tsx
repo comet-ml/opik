@@ -32,7 +32,7 @@ const LevenshteinMetricConfigs = ({
           </div>
           <Input
             id="reference_key"
-            placeholder="e.g., answer"
+            placeholder="e.g., answer or $.scores[?(@.name=='Useful')].value"
             value={configs.reference_key}
             onChange={(e) =>
               onChange({ ...configs, reference_key: e.target.value })
