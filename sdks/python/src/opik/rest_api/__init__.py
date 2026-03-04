@@ -3,6 +3,7 @@
 # isort: skip_file
 
 from .types import (
+    Agent,
     AgentBlueprintHistory,
     AgentBlueprintHistoryType,
     AgentBlueprintPublic,
@@ -353,6 +354,15 @@ from .types import (
     LlmAsJudgeOutputSchemaType,
     LlmAsJudgeOutputSchemaWrite,
     LlmAsJudgeOutputSchemaWriteType,
+    LocalRunner,
+    LocalRunnerHeartbeatResponse,
+    LocalRunnerJob,
+    LocalRunnerJobPage,
+    LocalRunnerJobStatus,
+    LocalRunnerLogEntry,
+    LocalRunnerPage,
+    LocalRunnerPairResponse,
+    LocalRunnerStatus,
     LogItem,
     LogItemLevel,
     LogPage,
@@ -384,6 +394,7 @@ from .types import (
     OptimizationWrite,
     OptimizationWriteStatus,
     PageColumns,
+    Param,
     PercentageValueStatPublic,
     PercentageValues,
     PercentageValuesDetailed,
@@ -563,6 +574,7 @@ from .errors import (
     BadRequestError,
     ConflictError,
     ForbiddenError,
+    GoneError,
     InternalServerError,
     NotFoundError,
     NotImplementedError,
@@ -591,6 +603,7 @@ from . import (
     projects,
     prompts,
     redirect,
+    runners,
     service_toggles,
     spans,
     system_usage,
@@ -619,6 +632,7 @@ from .projects import (
     ProjectWriteVisibility,
 )
 from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
+from .runners import LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
     GetSpanStatsRequestType,
@@ -627,6 +641,7 @@ from .spans import (
 )
 
 __all__ = [
+    "Agent",
     "AgentBlueprintHistory",
     "AgentBlueprintHistoryType",
     "AgentBlueprintPublic",
@@ -947,6 +962,7 @@ __all__ = [
     "GetSpanStatsRequestType",
     "GetSpansByProjectRequestType",
     "GetWebhookExamplesRequestAlertType",
+    "GoneError",
     "GroupContent",
     "GroupContentWithAggregations",
     "GroupDetail",
@@ -997,6 +1013,16 @@ __all__ = [
     "LlmAsJudgeOutputSchemaType",
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
+    "LocalRunner",
+    "LocalRunnerHeartbeatResponse",
+    "LocalRunnerJob",
+    "LocalRunnerJobPage",
+    "LocalRunnerJobResultRequestStatus",
+    "LocalRunnerJobStatus",
+    "LocalRunnerLogEntry",
+    "LocalRunnerPage",
+    "LocalRunnerPairResponse",
+    "LocalRunnerStatus",
     "LogItem",
     "LogItemLevel",
     "LogPage",
@@ -1033,6 +1059,7 @@ __all__ = [
     "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
+    "Param",
     "PercentageValueStatPublic",
     "PercentageValues",
     "PercentageValuesDetailed",
@@ -1239,6 +1266,7 @@ __all__ = [
     "projects",
     "prompts",
     "redirect",
+    "runners",
     "service_toggles",
     "spans",
     "system_usage",
