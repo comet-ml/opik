@@ -24,6 +24,7 @@ import {
   DatasetItem,
   DatasetItemWithDraft,
   DATASET_ITEM_DRAFT_STATUS,
+  DATASET_ITEM_SOURCE,
   DATASET_STATUS,
   DATASET_TYPE,
   Evaluator,
@@ -76,6 +77,7 @@ import {
   useIsAllItemsSelected,
   useSetIsAllItemsSelected,
   useDeletedIds,
+  useAddItem,
 } from "@/store/EvaluationSuiteDraftStore";
 
 const getRowId = (d: DatasetItem) => d.id;
@@ -200,6 +202,7 @@ function EvaluationSuiteItemsTab({
 
   const isDraftMode = useIsDraftMode();
   const deletedIds = useDeletedIds();
+  const addItem = useAddItem();
 
   const { data, isPending, isPlaceholderData, isFetching } =
     useEvaluationSuiteItemsWithDraft(
@@ -572,13 +575,25 @@ function EvaluationSuiteItemsTab({
   );
 
   const handleNewDatasetItemClick = useCallback(() => {
+    if (isEvaluationSuite) {
+      const now = new Date().toISOString();
+      const tempId = addItem({
+        data: {},
+        source: DATASET_ITEM_SOURCE.manual,
+        created_at: now,
+        last_updated_at: now,
+      });
+      setActiveRowId(tempId);
+      return;
+    }
+
     if (data?.total && data.total > 0) {
       setOpenAddSidebar(true);
     } else {
       setOpenDialog(true);
       resetDialogKeyRef.current += 1;
     }
-  }, [data?.total]);
+  }, [isEvaluationSuite, addItem, setActiveRowId, data?.total]);
 
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
 

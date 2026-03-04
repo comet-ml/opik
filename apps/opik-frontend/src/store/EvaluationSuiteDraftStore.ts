@@ -22,7 +22,7 @@ interface EvaluationSuiteDraftState {
   itemEditedEvaluators: Map<string, Map<string, Partial<EvaluatorDisplayRow>>>;
   itemDeletedEvaluatorIds: Map<string, Set<string>>;
 
-  addItem: (item: Omit<DatasetItem, "id">) => void;
+  addItem: (item: Omit<DatasetItem, "id">) => string;
   bulkAddItems: (items: Omit<DatasetItem, "id">[]) => void;
   editItem: (id: string, changes: Partial<DatasetItem>) => void;
   deleteItem: (id: string) => void;
@@ -114,6 +114,8 @@ const useEvaluationSuiteDraftStore = create<EvaluationSuiteDraftState>(
         newAddedItems.set(tempId, newItem);
         return { addedItems: newAddedItems, isAllItemsSelected: false };
       });
+
+      return tempId;
     },
 
     bulkAddItems: (items) => {

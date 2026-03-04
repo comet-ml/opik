@@ -1,7 +1,12 @@
 import React, { useCallback, useMemo } from "react";
 import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
-import { DatasetItem, DatasetItemColumn, Evaluator } from "@/types/datasets";
+import {
+  DatasetItemColumn,
+  DatasetItemWithDraft,
+  DATASET_ITEM_DRAFT_STATUS,
+  Evaluator,
+} from "@/types/datasets";
 import {
   DEFAULT_EXECUTION_POLICY,
   ExecutionPolicy,
@@ -33,7 +38,7 @@ interface EvaluationSuiteItemPanelProps {
   columns: DatasetItemColumn[];
   onClose: () => void;
   isOpen: boolean;
-  rows: DatasetItem[];
+  rows: DatasetItemWithDraft[];
   setActiveRowId: (id: string) => void;
   suitePolicy?: ExecutionPolicy;
 }
@@ -50,6 +55,7 @@ interface EvaluationSuiteItemPanelLayoutProps {
   itemEvaluators?: Evaluator[];
   suitePolicy: ExecutionPolicy;
   savedItemPolicy?: ExecutionPolicy;
+  isNewItem: boolean;
 }
 
 const EvaluationSuiteItemPanelLayout: React.FC<
@@ -61,6 +67,7 @@ const EvaluationSuiteItemPanelLayout: React.FC<
   itemEvaluators,
   suitePolicy,
   savedItemPolicy,
+  isNewItem,
 }) => {
   const { isPending, handleDelete, horizontalNavigation } =
     useDatasetItemEditorAutosaveContext();
@@ -81,41 +88,44 @@ const EvaluationSuiteItemPanelLayout: React.FC<
     handleDelete(onClose);
   }, [handleDelete, onClose]);
 
-  const handleClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
   const headerContent = useMemo(
-    () => (
-      <div className="flex flex-auto items-center justify-end pl-6">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-sm">
-              <span className="sr-only">Actions menu</span>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuItem onClick={handleShare}>
-              <Share className="mr-2 size-4" />
-              Share item
-            </DropdownMenuItem>
-            <TooltipWrapper content={datasetItemId} side="left">
-              <DropdownMenuItem onClick={handleCopyId}>
-                <Copy className="mr-2 size-4" />
-                Copy item ID
+    () =>
+      isNewItem ? null : (
+        <div className="flex flex-auto items-center justify-end pl-6">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm">
+                <span className="sr-only">Actions menu</span>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={handleShare}>
+                <Share className="mr-2 size-4" />
+                Share item
               </DropdownMenuItem>
-            </TooltipWrapper>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleDeleteItemConfirm}>
-              <Trash className="mr-2 size-4" />
-              Delete item
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    ),
-    [datasetItemId, handleShare, handleCopyId, handleDeleteItemConfirm],
+              <TooltipWrapper content={datasetItemId} side="left">
+                <DropdownMenuItem onClick={handleCopyId}>
+                  <Copy className="mr-2 size-4" />
+                  Copy item ID
+                </DropdownMenuItem>
+              </TooltipWrapper>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleDeleteItemConfirm}>
+                <Trash className="mr-2 size-4" />
+                Delete item
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    [
+      isNewItem,
+      datasetItemId,
+      handleShare,
+      handleCopyId,
+      handleDeleteItemConfirm,
+    ],
   );
 
   return (
@@ -124,8 +134,8 @@ const EvaluationSuiteItemPanelLayout: React.FC<
       entity="item"
       open={isOpen}
       headerContent={headerContent}
-      onClose={handleClose}
-      horizontalNavigation={horizontalNavigation}
+      onClose={onClose}
+      horizontalNavigation={isNewItem ? undefined : horizontalNavigation}
     >
       {isPending ? (
         <div className="flex size-full items-center justify-center">
@@ -135,12 +145,18 @@ const EvaluationSuiteItemPanelLayout: React.FC<
         <div className="relative size-full overflow-y-auto">
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
             <div className="comet-body-accented">
-              Evaluation suite item{" "}
-              <TooltipWrapper content={datasetItemId}>
-                <span className="comet-body-s text-muted-slate">
-                  {truncateId(datasetItemId)}
-                </span>
-              </TooltipWrapper>
+              {isNewItem ? (
+                "New evaluation suite item"
+              ) : (
+                <>
+                  Evaluation suite item{" "}
+                  <TooltipWrapper content={datasetItemId}>
+                    <span className="comet-body-s text-muted-slate">
+                      {truncateId(datasetItemId)}
+                    </span>
+                  </TooltipWrapper>
+                </>
+              )}
             </div>
           </div>
 
@@ -178,6 +194,7 @@ const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
     [rows, datasetItemId],
   );
 
+  const isNewItem = activeRow?.draftStatus === DATASET_ITEM_DRAFT_STATUS.added;
   const itemEvaluators = activeRow?.evaluators;
   const itemExecutionPolicy = activeRow?.execution_policy;
 
@@ -196,6 +213,7 @@ const EvaluationSuiteItemPanel: React.FC<EvaluationSuiteItemPanelProps> = ({
         itemEvaluators={itemEvaluators}
         suitePolicy={suitePolicy}
         savedItemPolicy={itemExecutionPolicy}
+        isNewItem={isNewItem}
       />
     </DatasetItemEditorAutosaveProvider>
   );
