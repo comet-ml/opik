@@ -491,7 +491,10 @@ public class SpanService {
                             spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
                                     .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
                                     .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
-                                    .then(Mono.defer(() -> spanDAO.deleteByIds(spanIds, projectId)))
+                                    .then(Mono.defer(() -> {
+                                        log.info("Deleting spans by spanIds, count '{}'", spanIds.size());
+                                        return spanDAO.deleteByIds(spanIds, projectId);
+                                    }))
                                     .thenReturn(spanIds))
                     .doOnSuccess(spanIds -> eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName)))
                     .then();

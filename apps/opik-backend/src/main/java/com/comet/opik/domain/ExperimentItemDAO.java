@@ -583,8 +583,6 @@ class ExperimentItemDAO {
             return Flux.empty();
         }
 
-        log.info("Getting experiment refs by trace ids, count '{}', statuses '{}'", traceIds.size(), statuses);
-
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     Statement statement = connection.createStatement(GET_EXPERIMENT_REFS_BY_TRACE_IDS)
@@ -604,8 +602,6 @@ class ExperimentItemDAO {
         if (itemIds.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
-
-        log.info("Getting experiment refs by item ids, count '{}', statuses '{}'", itemIds.size(), statuses);
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
@@ -627,8 +623,6 @@ class ExperimentItemDAO {
             return Flux.empty();
         }
 
-        log.info("Getting experiment refs by span ids, count '{}', statuses '{}'", spanIds.size(), statuses);
-
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
                     Statement statement = connection.createStatement(GET_EXPERIMENT_REFS_BY_SPAN_IDS)
@@ -648,8 +642,6 @@ class ExperimentItemDAO {
         if (experimentIds.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
-
-        log.info("Filtering experiment ids by status, count '{}', statuses '{}'", experimentIds.size(), statuses);
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
