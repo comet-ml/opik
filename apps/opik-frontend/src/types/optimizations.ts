@@ -28,6 +28,7 @@ export enum METRIC_TYPE {
   JSON_SCHEMA_VALIDATOR = "json_schema_validator",
   G_EVAL = "geval",
   LEVENSHTEIN = "levenshtein_ratio",
+  NUMERICAL_SIMILARITY = "numerical_similarity",
   CODE = "code",
 }
 
@@ -50,6 +51,10 @@ export interface LevenshteinMetricParameters {
   reference_key?: string;
 }
 
+export interface NumericalSimilarityMetricParameters {
+  reference_key?: string;
+}
+
 export interface CodeMetricParameters {
   code: string;
 }
@@ -59,6 +64,7 @@ export type MetricParameters =
   | JsonSchemaValidatorMetricParameters
   | GEvalMetricParameters
   | LevenshteinMetricParameters
+  | NumericalSimilarityMetricParameters
   | CodeMetricParameters;
 
 export interface StudioMetric {

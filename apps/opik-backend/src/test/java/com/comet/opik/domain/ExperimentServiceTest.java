@@ -74,6 +74,9 @@ class ExperimentServiceTest {
     @Mock
     private FeatureFlags featureFlags;
 
+    @Mock
+    private ExperimentGroupEnricher experimentGroupEnricher;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -91,7 +94,8 @@ class ExperimentServiceTest {
                 promptService,
                 sortingFactory,
                 responseBuilder,
-                featureFlags);
+                featureFlags,
+                experimentGroupEnricher);
     }
 
     @Nested

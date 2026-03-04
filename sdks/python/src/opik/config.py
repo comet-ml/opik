@@ -111,6 +111,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
+    default_llm: str = "openai/gpt-5-nano"
+    """Default LLM model name used by evaluation model factories when model is not provided."""
+
     api_key: Optional[str] = None
     """Opik API key. This is not required if you are running against open source Opik installation"""
 
@@ -212,6 +215,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
     """
 
+    guardrails_url_override: Optional[str] = None
+    """
+    URL for the guardrails backend service.
+    When set, overrides the default guardrails URL derived from url_override.
+    """
+
     maximal_queue_size: int = 1_000_000
     """
     Specifies the maximum number of messages that can be queued for delivery when a connection error occurs or rate limiting is in effect.
@@ -292,6 +301,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def guardrails_backend_host(self) -> str:
+        if self.guardrails_url_override is not None:
+            return self.guardrails_url_override
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @pydantic.model_validator(mode="after")

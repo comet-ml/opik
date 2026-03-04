@@ -179,6 +179,27 @@ page.getByPlaceholder('Project name')
 page.locator('.project-row .delete-btn')
 ```
 
+### Adding `data-testid` to Frontend Code
+
+When no reliable locator exists (no semantic role, no unique text, no existing test ID), you are **allowed and encouraged** to add `data-testid` attributes directly to the React frontend source code in `apps/opik-frontend/src/`.
+
+**When to add a `data-testid`:**
+- An element has no accessible role or unique visible text
+- Multiple similar elements exist and you need to target a specific one
+- The element's text is dynamic or locale-dependent
+- CSS class selectors would be the only alternative
+
+**How to add it:**
+1. Find the React component in `apps/opik-frontend/src/`
+2. Add `data-testid="descriptive-name"` to the element
+3. Use kebab-case naming: `data-testid="dataset-items-table"`, `data-testid="trace-detail-sidebar"`
+4. Reference it in the page object: `page.getByTestId('dataset-items-table')`
+
+**Naming convention for test IDs:**
+- Use `{feature}-{element}` pattern: `project-name-input`, `dataset-delete-button`
+- Be specific enough to be unique on the page
+- Avoid generic names like `button` or `container`
+
 ## Waiting Strategies
 
 ### For UI state changes

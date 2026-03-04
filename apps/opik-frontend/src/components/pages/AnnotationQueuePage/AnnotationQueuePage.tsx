@@ -123,8 +123,8 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
               id={annotationQueue.project_id}
               name={
                 annotationQueue.scope === ANNOTATION_QUEUE_SCOPE.TRACE
-                  ? "Traces"
-                  : "Threads"
+                  ? "Go to traces"
+                  : "Go to threads"
               }
               search={annotationQueueSearch}
               tooltipContent={`View all ${annotationQueue.scope}s for this queue`}
@@ -133,7 +133,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
           {annotationQueue?.project_id && (
             <NavigationTag
               id={annotationQueue.project_id}
-              name={annotationQueue.project_name}
+              name={`Go to ${annotationQueue.project_name}`}
               resource={RESOURCE_TYPE.project}
             />
           )}

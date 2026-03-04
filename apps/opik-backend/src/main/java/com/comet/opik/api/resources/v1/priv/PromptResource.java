@@ -8,6 +8,8 @@ import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -19,10 +21,12 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -33,6 +37,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -194,6 +199,51 @@ public class PromptResource {
         promptService.delete(batchDelete.ids());
         log.info("Deleted prompts by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(), workspaceId);
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/retrieve-by-commits")
+    @Operation(operationId = "getPromptsByCommits", summary = "Get prompts by commits", description = "Get prompts by prompt version commits", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(array = @ArraySchema(schema = @Schema(implementation = PromptVersionLink.class)))),
+    })
+    @JsonView({Prompt.View.Public.class})
+    public Response getPromptsByCommits(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionCommitsRequest.class))) @Valid PromptVersionCommitsRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompts by commits, count '{}', on workspace_id '{}'",
+                request.commits().size(), workspaceId);
+
+        var prompts = promptService.getByCommits(request.commits());
+
+        log.info("Got prompts by commits, count '{}', on workspace_id '{}'",
+                prompts.size(), workspaceId);
+
+        return Response.ok(prompts).build();
+    }
+
+    @GET
+    @Path("/by-commit/{commit}")
+    @Operation(operationId = "getPromptByCommit", summary = "Get prompt by commit", description = "Get prompt by commit", responses = {
+            @ApiResponse(responseCode = "200", description = "OK", content = @Content(schema = @Schema(implementation = Prompt.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+    })
+    @JsonView({Prompt.View.Detail.class})
+    public Response getPromptByCommit(
+            @PathParam("commit") @Pattern(regexp = ValidationUtils.COMMIT_PATTERN) String commit) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
+
+        Prompt result = promptService.getByCommit(commit);
+
+        log.info("Got prompt by commit '{}' on workspace_id '{}'", commit, workspaceId);
+
+        return Response.ok(result).build();
     }
 
     @POST

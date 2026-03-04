@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.Experiment.ExperimentPage;
 import com.comet.opik.api.Experiment.PromptVersionLink;
@@ -15,7 +16,6 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -60,7 +60,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
@@ -161,6 +160,7 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
+                evaluation_method,
                 optimization_id,
                 status,
                 experiment_scores,
@@ -183,6 +183,7 @@ class ExperimentDAO {
                 new.prompt_id,
                 new.prompt_versions,
                 new.type,
+                new.evaluation_method,
                 new.optimization_id,
                 new.status,
                 new.experiment_scores,
@@ -201,6 +202,7 @@ class ExperimentDAO {
                 :prompt_id AS prompt_id,
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
+                :evaluation_method AS evaluation_method,
                 :optimization_id AS optimization_id,
                 :status AS status,
                 :experiment_scores AS experiment_scores,
@@ -485,6 +487,7 @@ class ExperimentDAO {
                 e.prompt_versions as prompt_versions,
                 e.optimization_id as optimization_id,
                 e.type as type,
+                e.evaluation_method as evaluation_method,
                 e.status as status,
                 e.experiment_scores as experiment_scores,
                 e.dataset_version_id as dataset_version_id,
@@ -1147,6 +1150,7 @@ class ExperimentDAO {
                 prompt_id,
                 prompt_versions,
                 type,
+                evaluation_method,
                 optimization_id,
                 status,
                 experiment_scores,
@@ -1159,13 +1163,15 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
+                """ + TagOperations.tagUpdateFragment("tags") + """
+                as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
                 prompt_id,
                 prompt_versions,
                 <if(type)> :type <else> type <endif> as type,
+                evaluation_method,
                 optimization_id,
                 <if(status)> :status <else> status <endif> as status,
                 <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
@@ -1176,8 +1182,7 @@ class ExperimentDAO {
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -1200,6 +1205,8 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
+                .bind("evaluation_method",
+                        Optional.ofNullable(experiment.evaluationMethod()).orElse(EvaluationMethod.DATASET).getValue())
                 .bind("optimization_id", Optional.ofNullable(experiment.optimizationId())
                         .map(UUID::toString)
                         .orElse(""))
@@ -1334,9 +1341,9 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
-                    .duration(getDuration(row))
-                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
-                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .duration(ExperimentGroupMappers.getDuration(row))
+                    .totalEstimatedCost(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost_avg"))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -1345,6 +1352,8 @@ class ExperimentDAO {
                             .map(UUID::fromString)
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
+                    .evaluationMethod(
+                            EvaluationMethod.fromString(row.get("evaluation_method", String.class)).orElse(null))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
                     .experimentScores(getExperimentScores(row))
                     .datasetVersionId(Optional.ofNullable(row.get("dataset_version_id", String.class))
@@ -1353,32 +1362,6 @@ class ExperimentDAO {
                             .orElse(null))
                     .build();
         });
-    }
-
-    private static BigDecimal getCostValue(Row row, String fieldName) {
-        return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
-                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(null);
-    }
-
-    private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .map(durations -> new PercentageValues(
-                        convertToBigDecimal(durations.get("p50")),
-                        convertToBigDecimal(durations.get("p90")),
-                        convertToBigDecimal(durations.get("p99"))))
-                .orElse(null);
-    }
-
-    private static BigDecimal convertToBigDecimal(Number value) {
-        if (value instanceof BigDecimal) {
-            return (BigDecimal) value;
-        } else if (value instanceof Double) {
-            return BigDecimal.valueOf((Double) value);
-        } else {
-            return BigDecimal.ZERO;
-        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
@@ -1827,36 +1810,14 @@ class ExperimentDAO {
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "");
 
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> template.add("types", types));
-        Optional.ofNullable(criteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
-                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
-        Optional.ofNullable(criteria.projectDeleted())
-                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
-
+        ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
 
         return template;
     }
 
     private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                });
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
+        ExperimentGroupMappers.bindGroupCriteria(statement, criteria, filterQueryBuilder);
     }
 
     /**
@@ -1942,48 +1903,13 @@ class ExperimentDAO {
     }
 
     private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            return ExperimentGroupItem.builder()
-                    .groupValues(groupValues)
-                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
-                    .build();
-        });
+        return result.map((row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupItem(row, groupsCount));
     }
 
     private Publisher<ExperimentGroupAggregationItem> mapExperimentGroupAggregationItem(Result result,
             int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            var experimentCount = row.get("experiment_count", Long.class);
-            var traceCount = row.get("trace_count", Long.class);
-            var totalEstimatedCost = getCostValue(row, "total_estimated_cost");
-            var totalEstimatedCostAvg = getCostValue(row, "total_estimated_cost_avg");
-            var duration = getDuration(row);
-            var feedbackScores = getFeedbackScores(row, "feedback_scores");
-            var experimentScores = getFeedbackScores(row, "experiment_scores");
-
-            return ExperimentGroupAggregationItem.builder()
-                    .groupValues(groupValues)
-                    .experimentCount(experimentCount)
-                    .traceCount(traceCount)
-                    .totalEstimatedCost(totalEstimatedCost)
-                    .totalEstimatedCostAvg(totalEstimatedCostAvg)
-                    .duration(duration)
-                    .feedbackScores(feedbackScores)
-                    .experimentScores(experimentScores)
-                    .build();
-        });
+        return result.map(
+                (row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupAggregationItem(row, groupsCount));
     }
 
     @WithSpan
@@ -2034,12 +1960,7 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
-            template.add("tags", true);
-            template.add("merge_tags", mergeTags);
-        }
+        TagOperations.configureTagTemplate(template, experimentUpdate, mergeTags);
 
         if (experimentUpdate.type() != null) {
             template.add("type", experimentUpdate.type().getValue());
@@ -2065,11 +1986,7 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
-            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
-        }
+        TagOperations.bindTagParams(statement, experimentUpdate);
 
         if (experimentUpdate.type() != null) {
             statement.bind("type", experimentUpdate.type().getValue());

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+
 import Loader from "@/components/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
@@ -85,12 +84,8 @@ const CompareOptimizationsPage: React.FC = () => {
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
 
   return (
-    <PageBodyScrollContainer>
-      <PageBodyStickyContainer
-        className="pb-4 pt-6"
-        direction="horizontal"
-        limitWidth
-      >
+    <div className="flex h-full flex-col pt-6">
+      <div className="shrink-0 pb-4">
         <CompareOptimizationsHeader
           title={title}
           status={optimization?.status}
@@ -99,26 +94,18 @@ const CompareOptimizationsPage: React.FC = () => {
           canRerun={canRerun}
           bestExperiment={bestExperiment}
         />
-      </PageBodyStickyContainer>
+      </div>
 
-      <PageBodyStickyContainer
-        className="pb-6"
-        direction="horizontal"
-        limitWidth
-      >
+      <div className="shrink-0 pb-6">
         <OptimizationProgressChartContainer
           experiments={experiments}
           bestEntityId={bestExperiment?.id}
           objectiveName={optimization?.objective_name}
           status={optimization?.status}
         />
-      </PageBodyStickyContainer>
+      </div>
 
-      <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
-        direction="bidirectional"
-        limitWidth
-      >
+      <div className="-mt-4 flex shrink-0 flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4">
         <div className="flex items-center gap-2">
           <CompareOptimizationsToolbar
             isStudioOptimization={isStudioOptimization}
@@ -140,13 +127,9 @@ const CompareOptimizationsPage: React.FC = () => {
             onColumnsOrderChange={setColumnsOrder}
           />
         )}
-      </PageBodyStickyContainer>
+      </div>
 
-      <PageBodyStickyContainer
-        className="flex flex-row gap-x-4 pb-6"
-        direction="horizontal"
-        limitWidth
-      >
+      <div className="flex min-h-[500px] flex-1 flex-row gap-x-4 pb-6">
         <CompareOptimizationsMainContent
           view={view}
           isStudioOptimization={isStudioOptimization}
@@ -173,14 +156,8 @@ const CompareOptimizationsPage: React.FC = () => {
           scoreMap={scoreMap}
           status={optimization?.status}
         />
-      </PageBodyStickyContainer>
-
-      <PageBodyStickyContainer
-        className="h-4"
-        direction="horizontal"
-        limitWidth
-      />
-    </PageBodyScrollContainer>
+      </div>
+    </div>
   );
 };
 

@@ -238,6 +238,7 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                    .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
                         if (batchUpdate.update().traceId() != null) {
@@ -294,7 +295,7 @@ public class SpanService {
 
             return failWithConflict(TRACE_ID_MISMATCH);
         }
-        return Mono.error(ex);
+        return TagOperations.mapTagLimitError(ex);
     }
 
     private Mono<Long> updateOrFail(SpanUpdate spanUpdate, UUID id, Span existingSpan, Project project) {

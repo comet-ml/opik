@@ -23,5 +23,6 @@ public record SpanSearchCriteria(
         List<SortingField> sortingFields,
         Set<SpanField> exclude,
         UUID uuidFromTime,
-        UUID uuidToTime) {
+        UUID uuidToTime,
+        String searchText) {
 }

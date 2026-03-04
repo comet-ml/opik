@@ -1,0 +1,90 @@
+---
+description: Configure Temporal Python OpenTelemetry tracing and export to Opik.
+headline: Temporal | Opik Documentation
+og:description: Temporal Python SDK uses TracingInterceptor; this guide clarifies required setup and Opik endpoint modes.
+og:site_name: Opik Documentation
+og:title: Temporal Integration - Opik
+title: Observability for Temporal with Opik
+---
+
+[Temporal](https://temporal.io/) Python SDK integrates with OpenTelemetry through `TracingInterceptor`.
+
+## When this guide applies
+
+Use this if your Temporal Python client/worker should emit trace spans to Opik.
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers: `Authorization`, `Comet-Workspace`
+        Optional headers: `projectName`
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers: none by default
+        Optional headers: `projectName`, auth headers if enabled
+    </Tab>
+</Tabs>
+
+## Example (Temporal Python SDK interceptor)
+
+Intent:
+Attach Temporal's OTEL interceptor so workflow/activity spans are emitted by client and worker.
+
+Applies when:
+You use Temporal Python SDK with custom client/worker bootstrap code.
+
+Required inputs:
+- Temporal client and worker setup
+- interceptor attached to both paths where needed
+- OTEL endpoint/header env vars
+
+Optional inputs:
+- explicit resource/service-name attributes
+- collector-based enrichment/sampling
+
+Minimal valid setup:
+
+```python
+from temporalio.client import Client
+from temporalio.worker import Worker
+from temporalio.contrib.opentelemetry import TracingInterceptor
+
+tracing_interceptor = TracingInterceptor()
+
+# In async context:
+# client = await Client.connect("localhost:7233", interceptors=[tracing_interceptor])
+# worker = Worker(client, task_queue="my-task-queue", workflows=[...], activities=[...], interceptors=[tracing_interceptor])
+```
+
+## Validation
+
+1. Start worker and client with `TracingInterceptor`.
+2. Execute a workflow with at least one activity.
+3. Confirm workflow/activity spans land in the expected Opik project.
+
+## Source references
+
+- [Temporal Python SDK OpenTelemetry support](https://github.com/temporalio/sdk-python?tab=readme-ov-file#opentelemetry-support)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)

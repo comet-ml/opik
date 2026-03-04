@@ -115,8 +115,8 @@ If you're making changes to specific integrations (e.g., OpenAI, Anthropic):
 Ensure your code adheres to our linting standards:
 
 ```bash
-cd sdks/python
-pre-commit run --all-files
+cd "$(git rev-parse --show-toplevel)"
+make precommit-sdks
 ```
 
 ### 7. Update Documentation (If Applicable)
