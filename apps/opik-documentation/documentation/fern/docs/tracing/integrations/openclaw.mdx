@@ -18,27 +18,34 @@ This integration captures:
 
 ## Prerequisites
 
-- OpenClaw with plugin support enabled.
+- [OpenClaw](https://github.com/openclaw/openclaw) version `2026.3.2` or newer.
 - Opik project/workspace details (for cloud or enterprise deployments).
 
-## Install the plugin
+## Step 1: Install the plugin
 
 ```bash
 openclaw plugins install @opik/opik-openclaw
-openclaw plugins enable opik
 ```
 
-## Configure the plugin
-
-### Interactive setup
+## Step 2: Configure the plugin
 
 ```bash
 openclaw opik configure
 ```
 
-This command validates your Opik URL, validates API key access (when required), and writes plugin-scoped config.
+This command validates your Opik URL, validates API key access (when required), enables the plugin, and writes plugin-scoped config.
 
-### Manual config
+## Step 3: Check status and restart the OpenClaw gateway
+
+```bash
+openclaw opik status
+openclaw gateway restart
+```
+
+## Advanced configuration (manual JSON)
+
+Use this only when you need explicit checked-in or templated plugin configuration.
+For the latest plugin-specific options, see [opik-openclaw](https://github.com/comet-ml/opik-openclaw).
 
 Add this to your OpenClaw config:
 
@@ -71,15 +78,13 @@ Environment variable fallbacks are also supported:
 
 ## Validate setup
 
-1. Check plugin config:
+1. Check plugin status:
 
 ```bash
 openclaw opik status
 ```
 
-2. Restart or run your OpenClaw gateway process.
-3. Send a message through OpenClaw.
-4. Verify traces appear in the configured Opik project.
+2. Send a message through OpenClaw and verify traces appear in the configured Opik project dashboard.
 
 ## Known limitation
 
