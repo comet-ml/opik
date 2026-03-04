@@ -3,6 +3,8 @@ evaluation_method='evaluation_suite' when creating the experiment."""
 
 import unittest.mock as mock
 
+import pytest
+
 from opik.evaluation import evaluator as evaluator_module
 
 
@@ -19,6 +21,7 @@ def _create_mock_dataset(name="test-dataset"):
     mock_dataset.__internal_api__stream_items_as_dataclasses__ = mock.MagicMock(
         return_value=iter([])
     )
+    mock_dataset.dataset_type = "evaluation_suite"
     return mock_dataset
 
 
@@ -87,3 +90,16 @@ def test_evaluate_suite__passes_evaluation_method_not_dataset():
     call_kwargs = mock_client.create_experiment.call_args[1]
     assert call_kwargs["evaluation_method"] != "dataset"
     assert call_kwargs["evaluation_method"] == "evaluation_suite"
+
+
+def test_evaluate_suite__raises_when_dataset_is_not_evaluation_suite():
+    mock_dataset = _create_mock_dataset()
+    mock_dataset.dataset_type = "dataset"
+
+    with pytest.raises(ValueError, match="not configured as an evaluation suite"):
+        evaluator_module.evaluate_suite(
+            dataset=mock_dataset,
+            task=lambda item: {"input": item, "output": "response"},
+            experiment_name="test-experiment",
+            verbose=0,
+        )

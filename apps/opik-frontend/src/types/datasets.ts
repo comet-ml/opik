@@ -132,6 +132,7 @@ export interface Experiment {
   trace_count: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
+  evaluation_method?: string;
   created_at: string;
   last_updated_at: string;
   comments?: CommentItems;

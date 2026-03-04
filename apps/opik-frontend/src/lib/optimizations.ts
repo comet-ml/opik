@@ -174,7 +174,7 @@ export const getOptimizationDefaultConfigByProvider = (
 };
 
 export const checkIsEvaluationSuite = (experiments: Experiment[]): boolean => {
-  return experiments.some((e) => (e.experiment_scores?.length ?? 0) > 0);
+  return experiments.some((e) => e.evaluation_method === "evaluation_suite");
 };
 
 export const convertOptimizationVariableFormat = (
