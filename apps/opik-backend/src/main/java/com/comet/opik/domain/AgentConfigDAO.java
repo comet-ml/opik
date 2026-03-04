@@ -7,6 +7,7 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RowUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Builder;
@@ -444,25 +445,23 @@ interface AgentConfigDAO {
         @Override
         public AgentBlueprint map(ResultSet rs, StatementContext ctx) throws SQLException {
             List<String> envs = null;
-            try {
+            if (RowUtils.hasColumn(rs, "envs")) {
                 String envsString = rs.getString("envs");
                 if (StringUtils.isNotBlank(envsString)) {
                     envs = Arrays.asList(envsString.split(","));
                 }
-            } catch (SQLException e) {
-                // envs column doesn't exist in non-history queries, which is expected
             }
 
             List<AgentConfigValue> values = null;
-            try {
+            if (RowUtils.hasColumn(rs, "delta_values")) {
                 String deltaValuesJson = rs.getString("delta_values");
                 if (StringUtils.isNotBlank(deltaValuesJson)) {
-                    values = JsonUtils.getMapper().readValue(deltaValuesJson, VALUES_TYPE_REF);
+                    try {
+                        values = JsonUtils.getMapper().readValue(deltaValuesJson, VALUES_TYPE_REF);
+                    } catch (JsonProcessingException e) {
+                        throw new SQLException("Failed to parse delta_values JSON", e);
+                    }
                 }
-            } catch (SQLException e) {
-                // delta_values column doesn't exist in non-history queries, which is expected
-            } catch (JsonProcessingException e) {
-                throw new SQLException("Failed to parse delta_values JSON", e);
             }
 
             var typeMapper = ctx.findColumnMapperFor(BlueprintType.class);
