@@ -30,6 +30,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
     collaboratorsTabEnabled: core.serialization.boolean(),
+    runnersEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -56,5 +57,6 @@ export declare namespace ServiceTogglesConfig {
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
         collaboratorsTabEnabled: boolean;
+        runnersEnabled: boolean;
     }
 }

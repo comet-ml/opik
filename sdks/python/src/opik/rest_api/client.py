@@ -26,6 +26,7 @@ from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
+from .runners.client import AsyncRunnersClient, RunnersClient
 from .redirect.client import AsyncRedirectClient, RedirectClient
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
@@ -121,6 +122,7 @@ class OpikApi:
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = WelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspaces = WorkspacesClient(client_wrapper=self._client_wrapper)
+        self.runners = RunnersClient(client_wrapper=self._client_wrapper)
         self.redirect = RedirectClient(client_wrapper=self._client_wrapper)
 
     @property
@@ -262,6 +264,7 @@ class AsyncOpikApi:
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)
         self.welcome_wizard = AsyncWelcomeWizardClient(client_wrapper=self._client_wrapper)
         self.workspaces = AsyncWorkspacesClient(client_wrapper=self._client_wrapper)
+        self.runners = AsyncRunnersClient(client_wrapper=self._client_wrapper)
         self.redirect = AsyncRedirectClient(client_wrapper=self._client_wrapper)
 
     @property
