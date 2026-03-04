@@ -23,5 +23,4 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
-    runnersEnabled: boolean;
 }

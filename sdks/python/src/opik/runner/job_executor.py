@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from .. import id_helpers
 from ..rest_api.client import OpikApi
 from ..rest_api.types.log_entry import LogEntry
+from .agents_registry import AgentInfo
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class JobExecutor:
     def execute(
         self,
         job: Dict[str, Any],
-        agents: Dict[str, Dict[str, Any]],
+        agents: Dict[str, AgentInfo],
     ) -> None:
         job_id = job["id"]
         agent_name = job["agent_name"]
@@ -85,8 +86,8 @@ class JobExecutor:
         self,
         job_id: str,
         agent_name: str,
-        agents: Dict[str, Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        agents: Dict[str, AgentInfo],
+    ) -> Optional[AgentInfo]:
         agent = agents.get(agent_name)
         if agent is None:
             LOGGER.error("Unknown agent '%s' for job %s", agent_name, job_id)
@@ -97,10 +98,9 @@ class JobExecutor:
             )
             return None
 
-        source_file = agent["source_file"]
-        if not os.path.isfile(source_file):
+        if not os.path.isfile(agent.source_file):
             error_msg = (
-                f"Agent '{agent_name}' source file not found: '{source_file}'. "
+                f"Agent '{agent_name}' source file not found: '{agent.source_file}'. "
                 "Re-run the agent script to update registration."
             )
             LOGGER.error(error_msg)
@@ -115,7 +115,7 @@ class JobExecutor:
 
     def _spawn_process(
         self,
-        agent: Dict[str, Any],
+        agent: AgentInfo,
         job_id: str,
         inputs: Dict[str, Any],
         trace_id: str,
@@ -123,14 +123,14 @@ class JobExecutor:
     ) -> Optional[subprocess.Popen[bytes]]:
         env = {
             **os.environ,
-            "OPIK_AGENT": agent["name"],
+            "OPIK_AGENT": agent.name,
             "OPIK_RESULT_FILE": result_file,
             "OPIK_TRACE_ID": trace_id,
         }
 
         try:
             return subprocess.Popen(
-                [agent["executable"], agent["source_file"]],
+                [agent.executable, agent.source_file],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -150,7 +150,7 @@ class JobExecutor:
         self,
         proc: subprocess.Popen[bytes],
         job: Dict[str, Any],
-        agent: Dict[str, Any],
+        agent: AgentInfo,
         trace_id: str,
         result_file: str,
     ) -> None:
@@ -171,7 +171,7 @@ class JobExecutor:
 
         timeout = job.get("timeout")
         if timeout is None:
-            timeout = agent.get("timeout")
+            timeout = agent.timeout
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:

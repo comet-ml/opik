@@ -7,15 +7,17 @@ from typing import Dict
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from . import agents_registry, job_executor
+from .agents_registry import AgentInfo
 
 LOGGER = logging.getLogger(__name__)
 
 POLL_IDLE_INTERVAL_SECONDS = 0.5
 
 
-def _agents_to_payload(agents: Dict) -> Dict:
+def _agents_to_payload(agents: Dict[str, AgentInfo]) -> Dict:
     return {
-        a["name"]: {k: v for k, v in a.items() if k != "name"} for a in agents.values()
+        name: {k: v for k, v in a.to_dict().items() if k != "name"}
+        for name, a in agents.items()
     }
 
 
@@ -79,7 +81,6 @@ class RunnerLoop:
                     continue
 
                 backoff = 1.0
-                job["runner_id"] = self._runner_id
                 agents = agents_registry.load_agents()
 
                 thread = threading.Thread(

@@ -20,11 +20,11 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        params = agents["my_func"]["params"]
-        assert params == [
-            {"name": "query", "type": "str"},
-            {"name": "count", "type": "int"},
-            {"name": "ratio", "type": "float"},
+        params = agents["my_func"].params
+        assert [(p.name, p.type) for p in params] == [
+            ("query", "str"),
+            ("count", "int"),
+            ("ratio", "float"),
         ]
 
     def test_untyped_params_default_to_str(self):
@@ -33,7 +33,7 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        assert agents["my_func"]["params"][0]["type"] == "str"
+        assert agents["my_func"].params[0].type == "str"
 
     def test_bool_dict_list_none_types(self):
         def my_func(flag: bool, data: dict, items: list) -> None:
@@ -41,7 +41,7 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        types = [p["type"] for p in agents["my_func"]["params"]]
+        types = [p.type for p in agents["my_func"].params]
         assert types == ["bool", "dict", "list"]
 
     def test_rejects_positional_only(self):
@@ -66,8 +66,8 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        params = agents["my_func"]["params"]
-        assert params == [{"name": "query", "type": "str"}]
+        params = agents["my_func"].params
+        assert [(p.name, p.type) for p in params] == [("query", "str")]
 
     def test_unwraps_generic_list(self):
         from typing import List
@@ -77,7 +77,7 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        assert agents["my_func"]["params"][0]["type"] == "list"
+        assert agents["my_func"].params[0].type == "list"
 
     def test_unwraps_builtin_generic(self):
         def my_func(items: list[str], data: dict[str, int]) -> None:
@@ -85,7 +85,7 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        types = [p["type"] for p in agents["my_func"]["params"]]
+        types = [p.type for p in agents["my_func"].params]
         assert types == ["list", "dict"]
 
     def test_unwraps_optional_to_inner_type(self):
@@ -96,7 +96,7 @@ class TestParamExtraction:
 
         entrypoint_handler.handle_entrypoint(my_func, name="my_func")
         agents = agents_registry.load_agents()
-        types = [p["type"] for p in agents["my_func"]["params"]]
+        types = [p.type for p in agents["my_func"].params]
         assert types == ["str", "int"]
 
     def test_rejects_unsupported_type(self):
@@ -119,10 +119,10 @@ class TestRegistration:
         agents = agents_registry.load_agents()
         agent = agents["my_agent"]
 
-        assert agent["name"] == "my_agent"
-        assert agent["executable"] == sys.executable
-        assert agent["description"] == "An agent that answers questions."
-        assert agent["language"] == "python"
+        assert agent.name == "my_agent"
+        assert agent.executable == sys.executable
+        assert agent.description == "An agent that answers questions."
+        assert agent.language == "python"
 
     def test_registers_empty_description_when_no_docstring(self):
         def agent_fn(query: str) -> str:
@@ -130,7 +130,7 @@ class TestRegistration:
 
         entrypoint_handler.handle_entrypoint(agent_fn, name="my_agent")
         agents = agents_registry.load_agents()
-        assert agents["my_agent"]["description"] == ""
+        assert agents["my_agent"].description == ""
 
     def test_registers_timeout_when_provided(self):
         def agent_fn(query: str) -> str:
@@ -138,7 +138,7 @@ class TestRegistration:
 
         entrypoint_handler.handle_entrypoint(agent_fn, name="my_agent", timeout=30)
         agents = agents_registry.load_agents()
-        assert agents["my_agent"]["timeout"] == 30
+        assert agents["my_agent"].timeout == 30
 
     def test_registers_project_when_provided(self):
         def agent_fn(query: str) -> str:
@@ -148,7 +148,7 @@ class TestRegistration:
             agent_fn, name="my_agent", project_name="my-project"
         )
         agents = agents_registry.load_agents()
-        assert agents["my_agent"]["project"] == "my-project"
+        assert agents["my_agent"].project == "my-project"
 
     def test_no_project_when_not_provided(self):
         def agent_fn(query: str) -> str:
@@ -156,7 +156,7 @@ class TestRegistration:
 
         entrypoint_handler.handle_entrypoint(agent_fn, name="my_agent")
         agents = agents_registry.load_agents()
-        assert "project" not in agents["my_agent"]
+        assert agents["my_agent"].project is None
 
 
 class TestDispatch:

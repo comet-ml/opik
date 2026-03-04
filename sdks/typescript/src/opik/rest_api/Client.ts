@@ -69,7 +69,6 @@ export class OpikApiClient {
     protected _traces: TracesClient | undefined;
     protected _welcomeWizard: WelcomeWizardClient | undefined;
     protected _workspaces: WorkspacesClient | undefined;
-    protected _runners: RunnersClient | undefined;
     protected _redirect: RedirectClient | undefined;
 
     constructor(options: OpikApiClient.Options = {}) {
@@ -178,10 +177,6 @@ export class OpikApiClient {
 
     public get workspaces(): WorkspacesClient {
         return (this._workspaces ??= new WorkspacesClient(this._options));
-    }
-
-    public get runners(): RunnersClient {
-        return (this._runners ??= new RunnersClient(this._options));
     }
 
     public get redirect(): RedirectClient {

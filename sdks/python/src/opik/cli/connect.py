@@ -30,7 +30,7 @@ def connect(
     name: Optional[str],
 ) -> None:
     """Connect a local runner to Opik and start processing jobs."""
-    runner_state = state.load_runner_state()
+    runner_state = state.RunnerState.load()
     if runner_state is not None:
         pid = runner_state.pid
         if _is_process_alive(pid):
@@ -38,7 +38,7 @@ def connect(
                 f"Runner already running (PID {pid}). Use 'opik disconnect' first."
             )
             raise SystemExit(1)
-        state.clear_runner_state()
+        state.RunnerState.clear()
 
     config = OpikConfig()
     api_key = ctx.obj.get("api_key") if ctx.obj else None
@@ -59,11 +59,12 @@ def connect(
 
     try:
         runner_name = name or f"{platform.node()}-{uuid.uuid4().hex[:6]}"
-        resp = api.runners.connect_runner(
+        # Server returns 201 with runner_id in the Location header, no JSON body.
+        resp = api.runners.with_raw_response.connect_runner(
             runner_name=runner_name,
             pairing_code=pair_code,
         )
-        runner_id = resp["runner_id"]
+        runner_id = resp.headers["location"].rsplit("/", 1)[-1]
 
         runner_state = state.RunnerState(
             runner_id=runner_id,
@@ -71,13 +72,13 @@ def connect(
             name=name or "",
             base_url=config.url_override,
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         agents = agents_registry.load_agents()
         if agents:
             payload = {
-                a["name"]: {k: v for k, v in a.items() if k != "name"}
-                for a in agents.values()
+                name: {k: v for k, v in a.to_dict().items() if k != "name"}
+                for name, a in agents.items()
             }
             api.runners.register_agents(runner_id, request=payload)
 
@@ -94,7 +95,7 @@ def connect(
         raise SystemExit(1)
     finally:
         http_client.close()
-        state.clear_runner_state()
+        state.RunnerState.clear()
         click.echo("Runner disconnected.")
 
 

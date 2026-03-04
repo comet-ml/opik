@@ -88,7 +88,6 @@ class TestMainLoop:
             assert mock_execute.called
             executed_job = mock_execute.call_args[0][0]
             assert executed_job["id"] == "j-1"
-            assert executed_job["runner_id"] == "r-1"
 
     def test_run__poll_error__backs_off(self, mock_api, shutdown_event):
         loop = runner_loop.RunnerLoop(
@@ -145,14 +144,11 @@ class TestHeartbeatLoop:
         loop._heartbeat_interval_seconds = 0.05
 
         agents_registry.register_agent(
-            {
-                "name": "a",
-                "executable": "/bin/python",
-                "source_file": "/a.py",
-                "description": "",
-                "language": "python",
-                "params": [],
-            }
+            agents_registry.AgentInfo(
+                name="a",
+                executable="/bin/python",
+                source_file="/a.py",
+            )
         )
 
         call_count = 0

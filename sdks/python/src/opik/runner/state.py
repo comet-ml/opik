@@ -25,28 +25,27 @@ class RunnerState:
     name: str
     base_url: str
 
+    def save(self) -> None:
+        constants.ensure_opik_home()
+        state_path = constants.runner_state_file()
+        with open(state_path, "w") as f:
+            json.dump(dataclasses.asdict(self), f, indent=2)
 
-def save_runner_state(state: RunnerState) -> None:
-    constants.ensure_opik_home()
-    state_path = constants.runner_state_file()
-    with open(state_path, "w") as f:
-        json.dump(dataclasses.asdict(state), f, indent=2)
+    @classmethod
+    def load(cls) -> Optional["RunnerState"]:
+        state_path = constants.runner_state_file()
+        if not os.path.exists(state_path):
+            return None
+        try:
+            with open(state_path, "r") as f:
+                data = json.load(f)
+            return cls(**data)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None
 
-
-def load_runner_state() -> Optional[RunnerState]:
-    state_path = constants.runner_state_file()
-    if not os.path.exists(state_path):
-        return None
-    try:
-        with open(state_path, "r") as f:
-            data = json.load(f)
-        return RunnerState(**data)
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return None
-
-
-def clear_runner_state() -> None:
-    try:
-        os.remove(constants.runner_state_file())
-    except FileNotFoundError:
-        pass
+    @staticmethod
+    def clear() -> None:
+        try:
+            os.remove(constants.runner_state_file())
+        except FileNotFoundError:
+            pass

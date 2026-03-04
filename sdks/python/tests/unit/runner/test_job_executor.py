@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from opik.runner import job_executor
+from opik.runner.agents_registry import AgentInfo
 
 
 @pytest.fixture
@@ -21,14 +22,11 @@ def mock_api():
 @pytest.fixture
 def agents():
     return {
-        "echo_agent": {
-            "name": "echo_agent",
-            "executable": sys.executable,
-            "source_file": "",
-            "description": "",
-            "language": "python",
-            "params": [{"name": "msg", "type": "str"}],
-        }
+        "echo_agent": AgentInfo(
+            name="echo_agent",
+            executable=sys.executable,
+            source_file="",
+        )
     }
 
 
@@ -72,11 +70,11 @@ class TestExecuteSuccess:
         )
 
         agents = {
-            "echo_agent": {
-                "name": "echo_agent",
-                "executable": sys.executable,
-                "source_file": script,
-            }
+            "echo_agent": AgentInfo(
+                name="echo_agent",
+                executable=sys.executable,
+                source_file=script,
+            )
         }
 
         job = {
@@ -106,7 +104,7 @@ class TestExecuteSuccess:
         )
 
         agents = {
-            "a": {"name": "a", "executable": sys.executable, "source_file": script}
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-trace", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
 
@@ -130,7 +128,7 @@ class TestExecuteSuccess:
         )
 
         agents = {
-            "a": {"name": "a", "executable": sys.executable, "source_file": script}
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-2", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
 
@@ -149,7 +147,7 @@ class TestExecuteFailure:
         )
 
         agents = {
-            "bad": {"name": "bad", "executable": sys.executable, "source_file": script}
+            "bad": AgentInfo(name="bad", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-3", "agent_name": "bad", "inputs": {}, "runner_id": "r-1"}
 
@@ -169,11 +167,11 @@ class TestExecuteFailure:
 
     def test_execute__missing_source_file__reports_failed(self, mock_api, executor):
         agents = {
-            "missing": {
-                "name": "missing",
-                "executable": sys.executable,
-                "source_file": "/nonexistent/agent.py",
-            }
+            "missing": AgentInfo(
+                name="missing",
+                executable=sys.executable,
+                source_file="/nonexistent/agent.py",
+            )
         }
         job = {
             "id": "j-missing",
@@ -191,11 +189,11 @@ class TestExecuteFailure:
 
     def test_execute__spawn_error__reports_failed(self, mock_api, executor):
         agents = {
-            "bad": {
-                "name": "bad",
-                "executable": "/nonexistent/python",
-                "source_file": "/x.py",
-            }
+            "bad": AgentInfo(
+                name="bad",
+                executable="/nonexistent/python",
+                source_file="/x.py",
+            )
         }
         job = {"id": "j-5", "agent_name": "bad", "inputs": {}, "runner_id": "r-1"}
 
@@ -217,12 +215,12 @@ class TestExecuteFailure:
         )
 
         agents = {
-            "slow": {
-                "name": "slow",
-                "executable": sys.executable,
-                "source_file": script,
-                "timeout": 1,
-            }
+            "slow": AgentInfo(
+                name="slow",
+                executable=sys.executable,
+                source_file=script,
+                timeout=1,
+            )
         }
         job = {
             "id": "j-timeout-fallback",
@@ -250,7 +248,7 @@ class TestExecuteFailure:
         )
 
         agents = {
-            "a": {"name": "a", "executable": sys.executable, "source_file": script}
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-cancel", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
         cancelled_jobs.add("j-cancel")
@@ -272,11 +270,11 @@ class TestExecuteFailure:
         )
 
         agents = {
-            "slow": {
-                "name": "slow",
-                "executable": sys.executable,
-                "source_file": script,
-            }
+            "slow": AgentInfo(
+                name="slow",
+                executable=sys.executable,
+                source_file=script,
+            )
         }
         job = {
             "id": "j-6",
@@ -308,7 +306,7 @@ class TestLogStreaming:
         )
 
         agents = {
-            "a": {"name": "a", "executable": sys.executable, "source_file": script}
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-7", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
 
@@ -337,7 +335,7 @@ class TestLogStreaming:
         )
 
         agents = {
-            "a": {"name": "a", "executable": sys.executable, "source_file": script}
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
         job = {"id": "j-8", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
 

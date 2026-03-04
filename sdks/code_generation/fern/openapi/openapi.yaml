@@ -4968,278 +4968,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
-  /v1/private/runners/jobs/{jobId}/logs:
-    get:
-      tags:
-      - Runners
-      summary: Get log entries for a job
-      operationId: getJobLogs_1
-      parameters:
-      - name: jobId
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: offset
-        in: query
-        schema:
-          minimum: 0
-          type: integer
-          format: int32
-          default: 0
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-    post:
-      tags:
-      - Runners
-      summary: Append log entries for a running job
-      operationId: appendJobLogs_1
-      parameters:
-      - name: jobId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/LogEntry"
-        required: true
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/jobs/{jobId}/cancel:
-    post:
-      tags:
-      - Runners
-      summary: Cancel a pending or running job
-      operationId: cancelJob_1
-      parameters:
-      - name: jobId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/connect:
-    post:
-      tags:
-      - Runners
-      summary: Exchange a pairing code or API key for runner credentials
-      operationId: connectRunner_1
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConnectRequest"
-        required: true
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/jobs:
-    post:
-      tags:
-      - Runners
-      summary: Create a job and enqueue it for execution
-      operationId: createJob_1
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateJobRequest"
-        required: true
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/pair:
-    post:
-      tags:
-      - Runners
-      summary: Generate a pairing code for the current workspace
-      operationId: generatePairingCode_1
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/jobs/{jobId}:
-    get:
-      tags:
-      - Runners
-      summary: Get a single job's status and results
-      operationId: getJob_1
-      parameters:
-      - name: jobId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/{runnerId}:
-    get:
-      tags:
-      - Runners
-      summary: Get a single runner with its registered agents
-      operationId: getRunner_1
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/{runnerId}/heartbeat:
-    post:
-      tags:
-      - Runners
-      summary: Refresh runner heartbeat
-      operationId: heartbeat_1
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/{runnerId}/jobs:
-    get:
-      tags:
-      - Runners
-      summary: List jobs for a runner
-      operationId: listJobs_1
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: project
-        in: query
-        schema:
-          type: string
-      - name: page
-        in: query
-        schema:
-          minimum: 0
-          type: integer
-          format: int32
-          default: 0
-      - name: size
-        in: query
-        schema:
-          minimum: 1
-          type: integer
-          format: int32
-          default: 25
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners:
-    get:
-      tags:
-      - Runners
-      summary: List all runners in the current workspace
-      operationId: listRunners_1
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/{runnerId}/jobs/next:
-    get:
-      tags:
-      - Runners
-      summary: Long-poll for the next pending job
-      operationId: nextJob_1
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/{runnerId}/agents:
-    put:
-      tags:
-      - Runners
-      summary: Register or update the runner's agent list
-      operationId: registerAgents_1
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties:
-                $ref: "#/components/schemas/JsonNode"
-        required: true
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
-  /v1/private/runners/jobs/{jobId}/result:
-    post:
-      tags:
-      - Runners
-      summary: Report job completion or failure
-      operationId: reportJobResult_1
-      parameters:
-      - name: jobId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/JobResultRequest"
-        required: true
-      responses:
-        default:
-          description: default response
-          content:
-            application/json: {}
   /v1/private/toggles:
     get:
       tags:
@@ -8358,10 +8086,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8371,6 +8095,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8890,10 +8618,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8903,6 +8627,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9240,10 +8968,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9253,6 +8977,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9686,10 +9414,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9699,6 +9423,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9780,10 +9508,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9793,6 +9517,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -15546,10 +15274,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15666,10 +15394,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15761,10 +15489,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
     Prompt_Detail:
       required:
       - name
@@ -15785,10 +15513,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15925,10 +15653,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -16049,56 +15777,6 @@ components:
         Note: Prompt versions are immutable by design.
         Only organizational properties (such as tags etc.) can be updated.
         Core properties like template, metadata etc. cannot be modified after creation.
-    LogEntry:
-      required:
-      - stream
-      - text
-      type: object
-      properties:
-        stream:
-          minLength: 1
-          type: string
-        text:
-          minLength: 1
-          type: string
-    ConnectRequest:
-      required:
-      - runner_name
-      type: object
-      properties:
-        pairing_code:
-          type: string
-        runner_name:
-          minLength: 1
-          type: string
-    CreateJobRequest:
-      required:
-      - agent_name
-      type: object
-      properties:
-        agent_name:
-          minLength: 1
-          type: string
-        inputs:
-          $ref: "#/components/schemas/JsonNode"
-        project:
-          type: string
-        runner_id:
-          type: string
-    JobResultRequest:
-      required:
-      - status
-      type: object
-      properties:
-        status:
-          minLength: 1
-          type: string
-        result:
-          $ref: "#/components/schemas/JsonNode"
-        error:
-          type: string
-        trace_id:
-          type: string
     ServiceTogglesConfig:
       required:
       - alertsEnabled
@@ -16118,7 +15796,6 @@ components:
       - opikAIEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
-      - runnersEnabled
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -16169,8 +15846,6 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
-          type: boolean
-        runnersEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

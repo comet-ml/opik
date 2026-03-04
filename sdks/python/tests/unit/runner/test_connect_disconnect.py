@@ -31,7 +31,9 @@ class TestConnect:
         mock_httpx_client.get.return_value = MagicMock()
 
         api = MagicMock()
-        api.runners.connect_runner.return_value = {"runner_id": "r-abc"}
+        raw_resp = MagicMock()
+        raw_resp.headers = {"location": "/v1/private/local-runners/r-abc"}
+        api.runners.with_raw_response.connect_runner.return_value = raw_resp
         mock_api_cls.return_value = api
 
         mock_loop.RunnerLoop.return_value.run = MagicMock()
@@ -39,7 +41,7 @@ class TestConnect:
         result = cli_runner.invoke(cli, ["connect", "--name", "my-runner"])
         assert result.exit_code == 0
         assert "r-abc" in result.output
-        api.runners.connect_runner.assert_called_once()
+        api.runners.with_raw_response.connect_runner.assert_called_once()
         mock_loop.RunnerLoop.return_value.run.assert_called_once()
 
     @patch("opik.cli.connect.runner_loop")
@@ -58,13 +60,15 @@ class TestConnect:
         mock_httpx_client.get.return_value = MagicMock()
 
         api = MagicMock()
-        api.runners.connect_runner.return_value = {"runner_id": "r-xyz"}
+        raw_resp = MagicMock()
+        raw_resp.headers = {"location": "/v1/private/local-runners/r-xyz"}
+        api.runners.with_raw_response.connect_runner.return_value = raw_resp
         mock_api_cls.return_value = api
         mock_loop.RunnerLoop.return_value.run = MagicMock()
 
         result = cli_runner.invoke(cli, ["connect", "--pair", "ABCD"])
         assert result.exit_code == 0
-        call_kwargs = api.runners.connect_runner.call_args[1]
+        call_kwargs = api.runners.with_raw_response.connect_runner.call_args[1]
         assert call_kwargs["pairing_code"] == "ABCD"
 
     @patch("opik.cli.connect._is_process_alive", return_value=True)
@@ -74,7 +78,7 @@ class TestConnect:
         runner_state = state.RunnerState(
             runner_id="r-1", pid=99999, name="r", base_url="http://x"
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         result = cli_runner.invoke(cli, ["connect"])
         assert result.exit_code != 0
@@ -90,7 +94,7 @@ class TestConnect:
         runner_state = state.RunnerState(
             runner_id="r-old", pid=1, name="r", base_url="http://x"
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         config = MagicMock()
         config.url_override = "https://api.test"
@@ -101,7 +105,9 @@ class TestConnect:
         mock_httpx_client.get.return_value = MagicMock()
 
         api = MagicMock()
-        api.runners.connect_runner.return_value = {"runner_id": "r-new"}
+        raw_resp = MagicMock()
+        raw_resp.headers = {"location": "/v1/private/local-runners/r-new"}
+        api.runners.with_raw_response.connect_runner.return_value = raw_resp
         mock_api_cls.return_value = api
         mock_loop.RunnerLoop.return_value.run = MagicMock()
 
@@ -124,7 +130,7 @@ class TestConnect:
         mock_httpx_client.get.return_value = MagicMock()
 
         api = MagicMock()
-        api.runners.connect_runner.side_effect = httpx.ConnectError(
+        api.runners.with_raw_response.connect_runner.side_effect = httpx.ConnectError(
             "Connection refused"
         )
         mock_api_cls.return_value = api
@@ -147,12 +153,12 @@ class TestDisconnect:
         runner_state = state.RunnerState(
             runner_id="r-1", pid=12345, name="r", base_url="http://x"
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         result = cli_runner.invoke(cli, ["disconnect"])
         assert result.exit_code == 0
         mock_signal.assert_called_once_with(12345)
-        assert state.load_runner_state() is None
+        assert state.RunnerState.load() is None
 
     @patch(
         "opik.runner.state.send_shutdown_signal",
@@ -164,12 +170,12 @@ class TestDisconnect:
         runner_state = state.RunnerState(
             runner_id="r-1", pid=99999, name="r", base_url="http://x"
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         result = cli_runner.invoke(cli, ["disconnect"])
         assert result.exit_code == 0
         assert "no longer running" in result.output.lower()
-        assert state.load_runner_state() is None
+        assert state.RunnerState.load() is None
 
     @patch(
         "opik.runner.state.send_shutdown_signal",
@@ -181,9 +187,9 @@ class TestDisconnect:
         runner_state = state.RunnerState(
             runner_id="r-1", pid=99999, name="r", base_url="http://x"
         )
-        state.save_runner_state(runner_state)
+        runner_state.save()
 
         result = cli_runner.invoke(cli, ["disconnect"])
         assert result.exit_code == 0
         assert "could not signal" in result.output.lower()
-        assert state.load_runner_state() is not None
+        assert state.RunnerState.load() is not None

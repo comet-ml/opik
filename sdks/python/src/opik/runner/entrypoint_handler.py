@@ -2,9 +2,10 @@ import inspect
 import logging
 import sys
 import typing
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, List, Optional, Union
 
-from . import agents_registry, dispatch
+from . import dispatch
+from .agents_registry import AgentInfo, Param, register_agent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,20 +23,17 @@ def handle_entrypoint(
     """Register a tracked function as a runner agent and dispatch if invoked by the runner subprocess."""
     params = _extract_params(func)
 
-    info: Dict[str, Any] = {
-        "name": name,
-        "executable": sys.executable,
-        "source_file": inspect.getfile(func),
-        "description": func.__doc__ or "",
-        "language": "python",
-        "params": params,
-    }
-    if timeout is not None:
-        info["timeout"] = timeout
-    if project_name is not None:
-        info["project"] = project_name
+    info = AgentInfo(
+        name=name,
+        executable=sys.executable,
+        source_file=inspect.getfile(func),
+        description=func.__doc__ or "",
+        params=params,
+        timeout=timeout,
+        project=project_name,
+    )
 
-    agents_registry.register_agent(info)
+    register_agent(info)
 
     if dispatch.should_dispatch(name):
         dispatch.run_dispatch(func)
@@ -44,9 +42,9 @@ def handle_entrypoint(
     return func
 
 
-def _extract_params(func: Callable[..., Any]) -> List[Dict[str, Any]]:
+def _extract_params(func: Callable[..., Any]) -> List[Param]:
     sig = inspect.signature(func)
-    params = []
+    params: List[Param] = []
 
     for param_name, param in sig.parameters.items():
         if param.kind == inspect.Parameter.POSITIONAL_ONLY:
@@ -76,12 +74,7 @@ def _extract_params(func: Callable[..., Any]) -> List[Dict[str, Any]]:
                 f"Allowed types: {', '.join(sorted(ALLOWED_TYPE_NAMES))}"
             )
 
-        params.append(
-            {
-                "name": param_name,
-                "type": type_name or "str",
-            }
-        )
+        params.append(Param(name=param_name, type=type_name or "str"))
 
     return params
 
