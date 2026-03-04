@@ -394,6 +394,7 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -420,6 +421,8 @@ class TracesClient:
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -449,6 +452,7 @@ class TracesClient:
             strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -942,6 +946,7 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -956,6 +961,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -979,6 +986,7 @@ class TracesClient:
             project_id=project_id,
             project_name=project_name,
             filters=filters,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -1020,6 +1028,7 @@ class TracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1034,6 +1043,8 @@ class TracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1057,6 +1068,7 @@ class TracesClient:
             project_id=project_id,
             project_name=project_name,
             filters=filters,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -1148,6 +1160,7 @@ class TracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1172,6 +1185,8 @@ class TracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1200,6 +1215,7 @@ class TracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -1991,6 +2007,7 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2017,6 +2034,8 @@ class AsyncTracesClient:
         sorting : typing.Optional[str]
 
         exclude : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -2049,6 +2068,7 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             sorting=sorting,
             exclude=exclude,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -2580,6 +2600,7 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2594,6 +2615,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -2620,6 +2643,7 @@ class AsyncTracesClient:
             project_id=project_id,
             project_name=project_name,
             filters=filters,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -2664,6 +2688,7 @@ class AsyncTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2678,6 +2703,8 @@ class AsyncTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -2704,6 +2731,7 @@ class AsyncTracesClient:
             project_id=project_id,
             project_name=project_name,
             filters=filters,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -2801,6 +2829,7 @@ class AsyncTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2825,6 +2854,8 @@ class AsyncTracesClient:
         filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -2856,6 +2887,7 @@ class AsyncTracesClient:
             strip_attachments=strip_attachments,
             filters=filters,
             sorting=sorting,
+            search=search,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
