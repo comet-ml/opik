@@ -10,6 +10,7 @@ from opik_optimizer_framework.optimizers.gepa_v2.gepa_adapter import (
     GEPAProgressCallback,
     _candidate_key,
     _extract_per_item_feedback,
+    _extract_template_variables,
     build_seed_candidate,
     rebuild_prompt_messages,
 )
@@ -66,14 +67,19 @@ def _make_trial(candidate_id, score, step_index=0):
 
 
 def _make_raw_result(item_scores):
+    """Build a mock EvaluationResult.
+
+    item_scores: list of (item_id, assertions) where assertions is a list of
+    (name, value, reason) tuples.
+    """
     test_results = []
-    for item_id, score, reasons in item_scores:
+    for item_id, assertions in item_scores:
         score_results = []
-        for reason in reasons:
-            sr = SimpleNamespace(value=score, reason=reason, scoring_failed=False, name="assertion")
+        for name, value, reason in assertions:
+            sr = SimpleNamespace(value=value, reason=reason, scoring_failed=False, name=name)
             score_results.append(sr)
         if not score_results:
-            score_results.append(SimpleNamespace(value=score, reason=None, scoring_failed=False, name="metric"))
+            score_results.append(SimpleNamespace(value=0.0, reason=None, scoring_failed=False, name="metric"))
         tc = SimpleNamespace(
             dataset_item_id=item_id,
             task_output={"output": f"output-{item_id}"},
@@ -111,6 +117,29 @@ class TestBuildSeedCandidate:
         assert build_seed_candidate([]) == {}
 
 
+class TestExtractTemplateVariables:
+    def test_extracts_variables_from_messages(self):
+        messages = [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Question: {question}\nContext: {context}"},
+        ]
+        assert _extract_template_variables(messages) == ["question", "context"]
+
+    def test_deduplicates_variables(self):
+        messages = [
+            {"role": "system", "content": "Answer {question}"},
+            {"role": "user", "content": "{question}"},
+        ]
+        assert _extract_template_variables(messages) == ["question"]
+
+    def test_empty_messages(self):
+        assert _extract_template_variables([]) == []
+
+    def test_no_variables(self):
+        messages = [{"role": "user", "content": "plain text"}]
+        assert _extract_template_variables(messages) == []
+
+
 class TestRebuildPromptMessages:
     def test_uses_candidate_values(self):
         base = [
@@ -134,16 +163,24 @@ class TestRebuildPromptMessages:
 
 
 class TestExtractPerItemFeedback:
-    def test_extracts_scores_and_reasons(self):
+    def test_extracts_scores_and_assertions(self):
         raw = _make_raw_result([
-            ("item-1", 1.0, ["The response is relevant"]),
-            ("item-2", 0.0, ["The response is not relevant"]),
+            ("item-1", [("relevance", 1.0, "The response is relevant")]),
+            ("item-2", [
+                ("relevance", 0.0, "The response is not relevant"),
+                ("tone", 1.0, "Tone is appropriate"),
+            ]),
         ])
         feedback = _extract_per_item_feedback(raw)
         assert "item-1" in feedback
         assert feedback["item-1"]["score"] == 1.0
-        assert feedback["item-1"]["reasons"] == ["The response is relevant"]
+        assert len(feedback["item-1"]["assertions"]) == 1
+        assert feedback["item-1"]["assertions"][0]["name"] == "relevance"
+        assert feedback["item-1"]["assertions"][0]["value"] == 1.0
+        assert feedback["item-1"]["assertions"][0]["reason"] == "The response is relevant"
+        # min(0.0, 1.0) = 0.0
         assert feedback["item-2"]["score"] == 0.0
+        assert len(feedback["item-2"]["assertions"]) == 2
 
     def test_handles_none_result(self):
         assert _extract_per_item_feedback(None) == {}
@@ -162,7 +199,10 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.75)
-        raw_result = _make_raw_result([("id-1", 1.0, ["Good"]), ("id-2", 0.0, ["Bad"])])
+        raw_result = _make_raw_result([
+            ("id-1", [("relevance", 1.0, "Good")]),
+            ("id-2", [("relevance", 0.0, "Bad")]),
+        ])
         mock_eval_adapter.evaluate_with_details.return_value = (trial, raw_result)
 
         adapter = _build_adapter(mock_eval_adapter)
@@ -673,7 +713,7 @@ class TestGEPAProgressCallback:
 
 
 class TestMakeReflectiveDataset:
-    def test_uses_reasons_from_evaluation_suite(self):
+    def test_shows_only_failed_assertions_in_feedback(self):
         adapter = _build_adapter(MagicMock())
 
         eval_batch = SimpleNamespace(
@@ -684,9 +724,10 @@ class TestMakeReflectiveDataset:
                     "input": {"question": "Q1", "answer": "A1"},
                     "output": "hello",
                     "score": 0.0,
-                    "reasons": [
-                        "The response does not address the security concern",
-                        "No immediate steps to secure account were mentioned",
+                    "assertions": [
+                        {"name": "security concern", "value": 0.0, "reason": "The response does not address the security concern"},
+                        {"name": "immediate steps", "value": 0.0, "reason": "No immediate steps to secure account were mentioned"},
+                        {"name": "tone", "value": 1.0, "reason": "Tone is appropriate"},
                     ],
                 }
             ],
@@ -701,21 +742,26 @@ class TestMakeReflectiveDataset:
         assert "user_0" in result
         assert len(result["user_0"]) == 1
         feedback = result["user_0"][0]["Feedback"]
-        assert "Evaluator feedback:" in feedback
+        assert "Failed assertions:" in feedback
         assert "security concern" in feedback
+        assert "immediate steps" in feedback
+        # Passing assertion should NOT appear in feedback
+        assert "tone" not in feedback.lower().split("failed assertions:")[1]
 
-    def test_falls_back_to_expected_answer_when_no_reasons(self):
+    def test_all_passed_feedback(self):
         adapter = _build_adapter(MagicMock())
 
         eval_batch = SimpleNamespace(
             outputs=[{"output": "hello"}],
-            scores=[0.5],
+            scores=[1.0],
             trajectories=[
                 {
-                    "input": {"question": "Q1", "answer": "expected answer"},
+                    "input": {"question": "Q1"},
                     "output": "hello",
-                    "score": 0.5,
-                    "reasons": [],
+                    "score": 1.0,
+                    "assertions": [
+                        {"name": "relevance", "value": 1.0, "reason": "Relevant"},
+                    ],
                 }
             ],
         )
@@ -727,7 +773,46 @@ class TestMakeReflectiveDataset:
         )
 
         feedback = result["user_0"][0]["Feedback"]
-        assert "Expected answer: expected answer" in feedback
+        assert "All assertions passed" in feedback
+
+    def test_extracts_inputs_from_template_variables(self):
+        mock_eval = MagicMock()
+        adapter = FrameworkGEPAAdapter(
+            base_messages=[
+                {"role": "system", "content": "You are helpful."},
+                {"role": "user", "content": "Question: {question}\nContext: {context}"},
+            ],
+            baseline_config={"prompt_messages": [], "model": "test"},
+            evaluation_adapter=mock_eval,
+        )
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "answer"}],
+            scores=[0.5],
+            trajectories=[
+                {
+                    "input": {"id": "1", "question": "What is X?", "context": "X is a thing", "metadata": "ignore"},
+                    "output": "answer",
+                    "score": 0.5,
+                    "assertions": [],
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"system_0": "helpful", "user_1": "{question}"},
+            eval_batch=eval_batch,
+            components_to_update=["user_1"],
+        )
+
+        inputs = result["user_1"][0]["Inputs"]
+        assert "question" in inputs
+        assert inputs["question"] == "What is X?"
+        assert "context" in inputs
+        assert inputs["context"] == "X is a thing"
+        # metadata and id should not be in inputs
+        assert "metadata" not in inputs
+        assert "id" not in inputs
 
     def test_auto_detects_components(self):
         adapter = _build_adapter(MagicMock())
@@ -740,7 +825,7 @@ class TestMakeReflectiveDataset:
                     "input": {"question": "Q1"},
                     "output": "hello",
                     "score": 0.5,
-                    "reasons": [],
+                    "assertions": [],
                 }
             ],
         )
@@ -1076,7 +1161,7 @@ class TestEvaluationAdapterCache:
         mock_validate.return_value = (True, None)
 
         trial = _make_trial("c-1", 0.85)
-        raw_result = _make_raw_result([("item-1", 1.0, ["Good"])])
+        raw_result = _make_raw_result([("item-1", [("relevance", 1.0, "Good")])])
         mock_materialize.return_value = MagicMock(candidate_id="c-1")
         mock_run_exp.return_value = (trial, raw_result)
 

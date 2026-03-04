@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
@@ -28,6 +29,18 @@ if TYPE_CHECKING:
 
 
 DatasetItem = dict[str, Any]
+
+
+def _extract_template_variables(messages: list[dict[str, str]]) -> list[str]:
+    """Extract {variable} placeholder names from prompt messages."""
+    variables: list[str] = []
+    seen: set[str] = set()
+    for msg in messages:
+        for match in re.findall(r"\{(\w+)\}", msg.get("content", "")):
+            if match not in seen:
+                seen.add(match)
+                variables.append(match)
+    return variables
 
 
 def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
@@ -61,7 +74,7 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     Returns a dict keyed by dataset_item_id with:
       - output: the LLM output text
       - score: aggregate score (1.0 if all assertions passed, 0.0 otherwise)
-      - reasons: list of reason strings from ScoreResult objects
+      - assertions: list of dicts with name, value, reason per assertion
     """
     feedback: dict[str, dict[str, Any]] = {}
     if raw_result is None or not hasattr(raw_result, "test_results"):
@@ -72,20 +85,23 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
         task_output = getattr(test_result.test_case, "task_output", {}) or {}
         output_text = str(task_output.get("output", ""))
 
-        reasons = []
+        assertions = []
         scores = []
         for sr in test_result.score_results:
-            scores.append(float(getattr(sr, "value", 0.0)))
-            reason = getattr(sr, "reason", None)
-            if reason:
-                reasons.append(reason)
+            value = float(getattr(sr, "value", 0.0))
+            scores.append(value)
+            assertions.append({
+                "name": getattr(sr, "name", ""),
+                "value": value,
+                "reason": getattr(sr, "reason", None) or "",
+            })
 
         item_score = min(scores) if scores else 0.0
 
         feedback[str(item_id)] = {
             "output": output_text,
             "score": item_score,
-            "reasons": reasons,
+            "assertions": assertions,
         }
 
     return feedback
@@ -351,7 +367,7 @@ class FrameworkGEPAAdapter:
                         "input": inst,
                         "output": output_text,
                         "score": score,
-                        "reasons": item_feedback.get("reasons", []),
+                        "assertions": item_feedback.get("assertions", []),
                     }
                 )
 
@@ -452,8 +468,9 @@ class FrameworkGEPAAdapter:
     ) -> dict[str, list[dict[str, Any]]]:
         """Build the feedback dataset for GEPA's reflection LLM.
 
-        Uses ``reason`` fields from the evaluation suite's ScoreResult objects
-        (e.g., LLM judge assertion explanations) to provide rich feedback.
+        Uses structured assertion results from the evaluation suite to provide
+        actionable feedback — only failed assertions are shown with their names.
+        Input fields are extracted dynamically from the prompt template variables.
         """
         if not components_to_update:
             components_to_update = [
@@ -463,6 +480,33 @@ class FrameworkGEPAAdapter:
             ]
 
         trajectories = eval_batch.trajectories or []
+        template_vars = _extract_template_variables(self._base_messages)
+
+        def _build_inputs(dataset_item: dict[str, Any]) -> dict[str, str]:
+            inputs: dict[str, str] = {}
+            for var in template_vars:
+                val = dataset_item.get(var)
+                if val is not None:
+                    inputs[var] = str(val)
+            if not inputs:
+                for k, v in dataset_item.items():
+                    if k not in ("id", "assertions", "metadata") and isinstance(v, str):
+                        inputs[k] = v
+            return inputs
+
+        def _build_feedback(
+            score: float, assertions: list[dict[str, Any]],
+        ) -> str:
+            failed = [
+                a for a in assertions
+                if a["value"] < 1.0 and a.get("reason")
+            ]
+            if failed:
+                lines = [f"Score={score:.1f}. Failed assertions:"]
+                for a in failed:
+                    lines.append(f"- {a['name']}: {a['reason']}")
+                return "\n".join(lines)
+            return f"Score={score:.1f}. All assertions passed."
 
         def _records() -> list[dict[str, Any]]:
             result = []
@@ -470,35 +514,13 @@ class FrameworkGEPAAdapter:
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
-                reasons = traj.get("reasons", [])
-
-                if reasons:
-                    feedback = (
-                        f"Score={score:.4f}. "
-                        f"Evaluator feedback: {'; '.join(reasons)}"
-                    )
-                else:
-                    expected = (
-                        dataset_item.get("answer")
-                        or dataset_item.get("label")
-                        or dataset_item.get("expected_output")
-                        or ""
-                    )
-                    feedback = (
-                        f"Score={score:.4f}. "
-                        f"Expected answer: {expected}"
-                    )
+                assertions = traj.get("assertions", [])
 
                 result.append(
                     {
-                        "Inputs": {
-                            "text": dataset_item.get("input")
-                            or dataset_item.get("question")
-                            or dataset_item.get("text")
-                            or "",
-                        },
+                        "Inputs": _build_inputs(dataset_item),
                         "Generated Outputs": output_text,
-                        "Feedback": feedback,
+                        "Feedback": _build_feedback(score, assertions),
                     }
                 )
             return result
