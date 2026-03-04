@@ -137,7 +137,11 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                             retry_after=rate_limiter.retry_after(),
                         )
             elif exception.status_code == 401:
-                LOGGER.error("Unauthorized request: %s", exception.body)
+                LOGGER.error(
+                    "Unauthorized message type '%s' processing request: %s",
+                    message.message_type,
+                    exception.body,
+                )
                 # register a message type as unauthorized to avoid re-sending it to the backend
                 self._unauthorized_message_types_registry.add(message.message_type)
             else:
