@@ -225,7 +225,10 @@ def _deduplicate_by_base(entries: list[ModelEntry]) -> list[ModelEntry]:
     result = []
     for group in groups.values():
         non_dated = [e for e in group if not re.search(r'-\d{8}$', e.value)]
-        result.append(non_dated[0] if non_dated else group[0])
+        if non_dated:
+            result.append(non_dated[0])
+        else:
+            result.append(max(group, key=lambda e: re.search(r'-(\d{8})$', e.value).group(1)))
     return result
 
 
@@ -689,7 +692,6 @@ def regenerate_models_data_ts(
 
         start_idx = content.index(section_marker)
         bracket_start = content.index("[", start_idx + len("[PROVIDER_TYPE."))
-        # Find matching closing bracket
         depth = 0
         pos = bracket_start
         while pos < len(content):
@@ -809,6 +811,7 @@ def sync_simple_provider(
     model_entries = []
     used_enum_names: set[str] = set()
     skipped_values: set[str] = set()
+    collisions: list[tuple[str, str]] = []
 
     # Process existing values first to claim their enum names, then new values
     existing_first = sorted(v for v in all_values if v in value_to_existing_name)
@@ -817,10 +820,9 @@ def sync_simple_provider(
     for value in existing_first + new_values:
         enum_name = value_to_existing_name.get(value) or model_to_enum_name(value, provider)
 
-        # Skip new values whose auto-derived name collides with an existing entry
-        # (e.g. claude-haiku-4-5 vs claude-haiku-4-5-20251001 both → CLAUDE_HAIKU_4_5)
         if enum_name in used_enum_names:
             skipped_values.add(value)
+            collisions.append((value, enum_name))
             continue
         used_enum_names.add(enum_name)
 
@@ -848,7 +850,7 @@ def sync_simple_provider(
     else:
         new_java = regenerate_java_1arg(java_content, [(e, v) for e, v in entries])
 
-    return new_java, model_entries, added, stale
+    return new_java, model_entries, added, stale, collisions
 
 
 def sync_vertexai(
@@ -1024,22 +1026,22 @@ def main():
     )
     all_changes["openrouter"] = {"entries": or_entries, "added": or_added, "stale": or_stale}
 
-    new_oa_java, oa_entries, oa_added, oa_stale = sync_simple_provider(
+    new_oa_java, oa_entries, oa_added, oa_stale, oa_collisions = sync_simple_provider(
         "openai", openai_models, oa_java, generate_openai_label, "2arg",
     )
-    all_changes["openai"] = {"entries": oa_entries, "added": oa_added, "stale": oa_stale}
+    all_changes["openai"] = {"entries": oa_entries, "added": oa_added, "stale": oa_stale, "collisions": oa_collisions}
 
-    new_an_java, an_entries, an_added, an_stale = sync_simple_provider(
+    new_an_java, an_entries, an_added, an_stale, an_collisions = sync_simple_provider(
         "anthropic", anthropic_models, an_java, generate_anthropic_label, "1arg",
         label_overrides=anthropic_labels,
     )
-    all_changes["anthropic"] = {"entries": an_entries, "added": an_added, "stale": an_stale}
+    all_changes["anthropic"] = {"entries": an_entries, "added": an_added, "stale": an_stale, "collisions": an_collisions}
 
-    new_ge_java, ge_entries, ge_added, ge_stale = sync_simple_provider(
+    new_ge_java, ge_entries, ge_added, ge_stale, ge_collisions = sync_simple_provider(
         "gemini", gemini_models, ge_java, generate_gemini_label, "2arg",
         label_overrides=gemini_labels,
     )
-    all_changes["gemini"] = {"entries": ge_entries, "added": ge_added, "stale": ge_stale}
+    all_changes["gemini"] = {"entries": ge_entries, "added": ge_added, "stale": ge_stale, "collisions": ge_collisions}
 
     new_va_java, va_entries, va_added, va_stale = sync_vertexai(
         vertexai_models, va_java,
@@ -1085,6 +1087,11 @@ def main():
             print(f"- Deprecated {len(dep_in_enum)} model(s) (past deprecation_date, excluded from dropdown):")
             for m in dep_in_enum:
                 print(f"  \u2717 {m}")
+        collisions = changes.get("collisions", [])
+        if collisions:
+            print(f"- Skipped {len(collisions)} model(s) (enum name collision with existing entry):")
+            for value, enum_name in collisions:
+                print(f"  ! {value} → {enum_name}")
         if not added and not stale and not dep_in_enum:
             print(f"- No changes (total: {len(entries)}, dropdown: {len(dropdown)})")
         else:

@@ -5,6 +5,10 @@ on:
     - cron: '30 0 * * 1-5' # 30 min after model prices sync, Monday to Friday
   workflow_dispatch: # Allows manual trigger
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   sync-models:
     runs-on: ubuntu-latest
@@ -49,6 +53,14 @@ jobs:
           if [ $EXIT_CODE -eq 1 ]; then
             echo "No new models found, skipping PR creation."
           fi
+
+      - name: Print summary
+        if: always() && steps.sync.outputs.summary != ''
+        run: |
+          echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.sync.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Check for changes
         if: steps.sync.outputs.exit_code == '0'
