@@ -41,24 +41,29 @@ the assistant's response could be better:
 <side_info>
 ```
 
-Your task is to write a new instruction for the assistant.
+Your task is to write an improved instruction for the assistant.
 
-Read the inputs carefully and identify the input format and infer detailed task \
-description about the task I wish to solve with the assistant.
+PRIORITY: Focus on fixing the failed assertions. Each failure tells you exactly \
+what the assistant's response was missing. Add concrete, actionable rules that \
+directly address these failure patterns.
 
-Read all the assistant responses and the corresponding feedback. Identify all \
-niche and domain specific factual information about the task and include it in \
-the instruction, as a lot of it may not be available to the assistant in the \
-future. The assistant may have utilized a generalizable strategy to solve the \
-task, if so, include that in the instruction as well.
+PRESERVE: If the current instruction already produces passing results for some \
+inputs, keep the strategies that work. Do not remove or weaken instructions that \
+are already effective.
 
-IMPORTANT: The instruction must generalize well to unseen inputs. You may use \
-examples from the feedback to illustrate patterns, but do NOT include \
-instructions that are hyper-specific to individual data points (e.g., "if the \
-user asks about order #12345, say X" or "when topic is exactly Y, respond with \
-Z"). Focus on general strategies, domain knowledge, and response patterns that \
-apply broadly. Specifics about the domain are fine; specifics about individual \
-test cases are not.
+Extract domain-specific factual knowledge from the feedback — the assistant may \
+not have access to this information in the future.
+
+The instruction must generalize to unseen inputs. Focus on general strategies \
+and domain patterns, not individual test cases. Do NOT include instructions \
+hyper-specific to individual data points (e.g., "if the user asks about order \
+#12345, say X").
+
+If the current instruction is only a template variable (e.g., "{question}"), \
+return it unchanged — do not append instructions to user input templates.
+
+Keep the instruction concise — under 500 words. Prefer direct rules over \
+verbose explanations.
 
 Provide the new instructions within ``` blocks."""
 

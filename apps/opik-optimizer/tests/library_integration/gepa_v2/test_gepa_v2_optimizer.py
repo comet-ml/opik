@@ -120,6 +120,23 @@ class TestBuildSeedCandidate:
         seed = build_seed_candidate(messages)
         assert seed == {"instructions": "Be helpful.", "user_1": "Hello {name}"}
 
+    def test_excludes_template_only_messages(self):
+        messages = [
+            {"role": "system", "content": "Be helpful."},
+            {"role": "user", "content": "{question}"},
+        ]
+        seed = build_seed_candidate(messages)
+        assert seed == {"system_0": "Be helpful."}
+        assert "user_1" not in seed
+
+    def test_keeps_messages_with_text_around_template(self):
+        messages = [
+            {"role": "system", "content": "Be helpful."},
+            {"role": "user", "content": "Question: {question}\nContext: {context}"},
+        ]
+        seed = build_seed_candidate(messages)
+        assert "user_1" in seed
+
     def test_empty_messages(self):
         assert build_seed_candidate([]) == {}
 
@@ -175,6 +192,33 @@ class TestExtractPerItemFeedback:
         # min(0.0, 1.0) = 0.0
         assert feedback["item-2"]["score"] == 0.0
         assert len(feedback["item-2"]["assertions"]) == 2
+
+    def test_keeps_worst_run_per_item(self):
+        raw = SimpleNamespace(test_results=[
+            SimpleNamespace(
+                test_case=SimpleNamespace(
+                    dataset_item_id="item-1",
+                    task_output={"output": "good run"},
+                ),
+                score_results=[
+                    SimpleNamespace(name="a", value=1.0, reason="ok"),
+                    SimpleNamespace(name="b", value=1.0, reason="ok"),
+                ],
+            ),
+            SimpleNamespace(
+                test_case=SimpleNamespace(
+                    dataset_item_id="item-1",
+                    task_output={"output": "bad run"},
+                ),
+                score_results=[
+                    SimpleNamespace(name="a", value=0.0, reason="fail"),
+                    SimpleNamespace(name="b", value=1.0, reason="ok"),
+                ],
+            ),
+        ])
+        feedback = _extract_per_item_feedback(raw)
+        assert feedback["item-1"]["output"] == "bad run"
+        assert sum(1 for a in feedback["item-1"]["assertions"] if a["value"] < 1.0) == 1
 
     def test_handles_none_result(self):
         assert _extract_per_item_feedback(None) == {}
@@ -736,11 +780,11 @@ class TestMakeReflectiveDataset:
         assert "user_0" in result
         assert len(result["user_0"]) == 1
         feedback = result["user_0"][0]["Feedback"]
-        assert "Failed assertions:" in feedback
+        assert "FAILED assertions" in feedback
         assert "security concern" in feedback
         assert "immediate steps" in feedback
-        # Passing assertion should NOT appear in feedback
-        assert "tone" not in feedback.lower().split("failed assertions:")[1]
+        assert "PASSED assertions" in feedback
+        assert "tone" in feedback
 
     def test_all_passed_feedback(self):
         adapter = _build_adapter(MagicMock())
@@ -767,7 +811,8 @@ class TestMakeReflectiveDataset:
         )
 
         feedback = result["user_0"][0]["Feedback"]
-        assert "All assertions passed" in feedback
+        assert "PASSED assertions" in feedback
+        assert "FAILED" not in feedback
 
     def test_passes_dataset_item_fields_as_inputs(self):
         adapter = _build_adapter(MagicMock())

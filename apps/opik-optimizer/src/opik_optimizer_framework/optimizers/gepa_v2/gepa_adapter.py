@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
 
@@ -30,18 +31,31 @@ if TYPE_CHECKING:
 DatasetItem = dict[str, Any]
 
 
+_TEMPLATE_ONLY_RE = re.compile(r"^\s*\{\w+\}\s*$")
+
+
 def _message_key(msg: dict[str, str], idx: int) -> str:
     return msg.get("name") or f"{msg['role']}_{idx}"
+
+
+def _is_template_only(content: str) -> bool:
+    """True if content is a single template variable like ``{question}``."""
+    return bool(_TEMPLATE_ONLY_RE.match(content))
 
 
 def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
     """Build the initial GEPA seed candidate from the framework's prompt_messages list.
 
     Uses ``msg["name"]`` as key when provided, falls back to ``{role}_{index}``.
+    Messages that are pure template variables (e.g. ``{question}``) are excluded —
+    they are pass-through inputs and should not be optimized.
     """
     seed: dict[str, str] = {}
     for idx, msg in enumerate(prompt_messages):
-        seed[_message_key(msg, idx)] = msg.get("content", "")
+        content = msg.get("content", "")
+        if _is_template_only(content):
+            continue
+        seed[_message_key(msg, idx)] = content
     return seed
 
 
@@ -60,6 +74,10 @@ def rebuild_prompt_messages(
 def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     """Extract per-item feedback from the raw EvaluationResult.
 
+    When multiple runs exist for the same item (runs_per_item > 1), keeps
+    the run with the most failed assertions — this gives the reflection LLM
+    the most actionable feedback.
+
     Returns a dict keyed by dataset_item_id with:
       - output: the LLM output text
       - score: aggregate score (1.0 if all assertions passed, 0.0 otherwise)
@@ -70,7 +88,7 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
         return feedback
 
     for test_result in raw_result.test_results:
-        item_id = test_result.test_case.dataset_item_id
+        item_id = str(test_result.test_case.dataset_item_id)
         task_output = getattr(test_result.test_case, "task_output", {}) or {}
         output_text = str(task_output.get("output", ""))
 
@@ -85,9 +103,18 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
                 "reason": getattr(sr, "reason", None) or "",
             })
 
+        num_failed = sum(1 for a in assertions if a["value"] < 1.0)
         item_score = min(scores) if scores else 0.0
 
-        feedback[str(item_id)] = {
+        existing = feedback.get(item_id)
+        if existing is not None:
+            existing_failures = sum(
+                1 for a in existing["assertions"] if a["value"] < 1.0
+            )
+            if num_failed <= existing_failures:
+                continue
+
+        feedback[item_id] = {
             "output": output_text,
             "score": item_score,
             "assertions": assertions,
@@ -484,16 +511,20 @@ class FrameworkGEPAAdapter:
         def _build_feedback(
             score: float, assertions: list[dict[str, Any]],
         ) -> str:
-            failed = [
-                a for a in assertions
-                if a["value"] < 1.0 and a.get("reason")
-            ]
+            failed = [a for a in assertions if a["value"] < 1.0]
+            passed = [a for a in assertions if a["value"] >= 1.0]
+
+            lines = [f"Score={score:.1f}."]
             if failed:
-                lines = [f"Score={score:.1f}. Failed assertions:"]
+                lines.append("FAILED assertions (fix these):")
                 for a in failed:
-                    lines.append(f"- {a['name']}: {a['reason']}")
-                return "\n".join(lines)
-            return f"Score={score:.1f}. All assertions passed."
+                    reason = a.get("reason", "")
+                    lines.append(f"- {a['name']}: {reason}" if reason else f"- {a['name']}")
+            if passed:
+                lines.append("PASSED assertions (preserve these):")
+                for a in passed:
+                    lines.append(f"- {a['name']}")
+            return "\n".join(lines)
 
         records = []
         for traj in trajectories:
@@ -501,11 +532,17 @@ class FrameworkGEPAAdapter:
             output_text = traj.get("output", "")
             score = traj.get("score", 0.0)
             assertions = traj.get("assertions", [])
+            num_failed = sum(1 for a in assertions if a["value"] < 1.0)
             records.append({
                 "Inputs": _build_inputs(dataset_item),
                 "Generated Outputs": output_text,
                 "Feedback": _build_feedback(score, assertions),
+                "_num_failed": num_failed,
             })
+
+        records.sort(key=lambda r: r["_num_failed"], reverse=True)
+        for r in records:
+            del r["_num_failed"]
 
         return {component: list(records) for component in components_to_update}
 
