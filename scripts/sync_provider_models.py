@@ -245,7 +245,7 @@ def build_deprecated_set(prices: dict) -> set[str]:
         try:
             if date.fromisoformat(dep) <= today:
                 deprecated.add(key)
-                for prefix in ("gemini/", "anthropic/", "openai/", "vertex_ai/"):
+                for prefix in ("gemini/", "anthropic/", "openai/", "vertex_ai/", "openrouter/"):
                     if key.startswith(prefix):
                         deprecated.add(key.removeprefix(prefix))
         except ValueError:

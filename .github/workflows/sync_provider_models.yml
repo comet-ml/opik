@@ -37,9 +37,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          set +e
+          set +e -o pipefail
           python scripts/sync_provider_models.py 2>sync_stderr.txt | tee sync_summary.txt
-          EXIT_CODE=$?
+          EXIT_CODE=${PIPESTATUS[0]}
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
 
