@@ -2,11 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import {
-  generateSearchByIDFilters,
-  generateVisibilityFilters,
-  processFilters,
-} from "@/lib/filters";
+import { generateVisibilityFilters, processFilters } from "@/lib/filters";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
@@ -44,17 +40,13 @@ const getTracesList = async (
     exclude,
   }: UseTracesListParams,
 ) => {
-  const searchByIDFilters = generateSearchByIDFilters(search);
-
   const { data } = await api.get<UseTracesListResponse>(TRACES_REST_ENDPOINT, {
     signal,
     params: {
       project_id: projectId,
-      ...processFilters(filters, [
-        ...(searchByIDFilters ? searchByIDFilters : []),
-        ...generateVisibilityFilters(),
-      ]),
+      ...processFilters(filters, generateVisibilityFilters()),
       ...processSorting(sorting),
+      ...(search && { search }),
       size,
       page,
       truncate,
