@@ -2,9 +2,13 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.events.ExperimentItemsCreated;
+import com.comet.opik.api.events.ExperimentItemsDeleted;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -18,6 +22,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,6 +45,7 @@ public class ExperimentItemService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull EventBus eventBus;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
@@ -54,9 +60,14 @@ public class ExperimentItemService {
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
 
+            var experimentIds = experimentItemsWithValidIds.stream()
+                    .map(ExperimentItem::experimentId)
+                    .collect(Collectors.toUnmodifiableSet());
+
             return resolveProjectIdFromProjectName(experimentItemsWithValidIds)
                     .flatMap(this::populateProjectIdFromTraces)
                     .flatMap(experimentItemDAO::insert)
+                    .doOnSuccess(__ -> eventBus.post(new ExperimentItemsCreated(experimentIds, workspaceId, userName)))
                     .then();
         });
     }
@@ -251,6 +262,53 @@ public class ExperimentItemService {
                 "Argument 'ids' must not be empty");
 
         log.info("Deleting experiment items, count '{}'", ids.size());
-        return experimentItemDAO.delete(ids).then();
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return experimentItemDAO.getExperimentRefsByItemIds(ids, EnumSet.allOf(ExperimentStatus.class))
+                    .map(ExperimentTraceRef::experimentId)
+                    .collect(Collectors.toUnmodifiableSet())
+                    .flatMap(experimentIds -> experimentItemDAO.delete(ids)
+                            .doOnSuccess(__ -> {
+                                if (!experimentIds.isEmpty()) {
+                                    eventBus.post(new ExperimentItemsDeleted(experimentIds, workspaceId, userName));
+                                }
+                            }))
+                    .then();
+        });
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsByTraceIds(traceIds, statuses);
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (itemIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsByItemIds(itemIds, statuses);
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (spanIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsBySpanIds(spanIds, statuses);
+    }
+
+    public Flux<UUID> filterExperimentIdsByStatus(@NonNull Set<UUID> experimentIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (experimentIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.filterExperimentIdsByStatus(experimentIds, statuses);
     }
 }

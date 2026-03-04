@@ -6,10 +6,13 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.api.events.FeedbackScoresCreated;
+import com.comet.opik.api.events.FeedbackScoresDeleted;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.annotation.Nullable;
@@ -66,6 +69,10 @@ public interface FeedbackScoreService {
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
     Mono<Void> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
+
+    Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId);
+
+    Mono<Void> deleteBySpanIds(Set<UUID> spanIds, UUID projectId);
 }
 
 @Slf4j
@@ -79,6 +86,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull EventBus eventBus;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -86,33 +94,69 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> scoreTrace(@NonNull UUID traceId, @NonNull FeedbackScore score) {
-        return traceDAO.getProjectIdFromTrace(traceId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
-                .flatMap(projectId -> getAuthor()
-                        .flatMap(author -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId,
-                                author.orElse(null))))
-                .then();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return traceDAO.getProjectIdFromTrace(traceId)
+                    .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
+                    .flatMap(projectId -> getAuthor()
+                            .flatMap(author -> dao.scoreEntity(EntityType.TRACE, traceId, score, projectId,
+                                    author.orElse(null))))
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresCreated(Set.of(traceId), EntityType.TRACE, workspaceId, userName)))
+                    .then();
+        });
     }
 
     @Override
     public Mono<Void> scoreSpan(@NonNull UUID spanId, @NonNull FeedbackScore score) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-        return spanDAO.getProjectIdFromSpan(spanId)
-                .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
-                .flatMap(projectId -> getAuthor()
-                        .flatMap(author -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId,
-                                author.orElse(null))))
-                .then();
+            return spanDAO.getProjectIdFromSpan(spanId)
+                    .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
+                    .flatMap(projectId -> getAuthor()
+                            .flatMap(author -> dao.scoreEntity(EntityType.SPAN, spanId, score, projectId,
+                                    author.orElse(null))))
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresCreated(Set.of(spanId), EntityType.SPAN, workspaceId, userName)))
+                    .then();
+        });
     }
 
     @Override
     public Mono<Void> scoreBatchOfSpans(@NonNull List<FeedbackScoreBatchItem> scores) {
-        return processScoreBatch(EntityType.SPAN, scores);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            Set<UUID> entityIds = scores.stream().map(FeedbackScoreBatchItem::id).collect(Collectors.toSet());
+
+            return processScoreBatch(EntityType.SPAN, scores)
+                    .doOnSuccess(__ -> {
+                        if (!entityIds.isEmpty()) {
+                            eventBus.post(new FeedbackScoresCreated(entityIds, EntityType.SPAN, workspaceId, userName));
+                        }
+                    });
+        });
     }
 
     @Override
     public Mono<Void> scoreBatchOfTraces(@NonNull List<FeedbackScoreBatchItem> scores) {
-        return processScoreBatch(EntityType.TRACE, scores);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            Set<UUID> entityIds = scores.stream().map(FeedbackScoreBatchItem::id).collect(Collectors.toSet());
+
+            return processScoreBatch(EntityType.TRACE, scores)
+                    .doOnSuccess(__ -> {
+                        if (!entityIds.isEmpty()) {
+                            eventBus.post(
+                                    new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId, userName));
+                        }
+                    });
+        });
     }
 
     private Mono<Void> processScoreBatch(EntityType entityType, List<FeedbackScoreBatchItem> scores) {
@@ -175,12 +219,26 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score) {
-        return dao.deleteScoreFrom(EntityType.SPAN, id, score);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return dao.deleteScoreFrom(EntityType.SPAN, id, score)
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresDeleted(Set.of(id), EntityType.SPAN, workspaceId, userName)));
+        });
     }
 
     @Override
     public Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score) {
-        return dao.deleteScoreFrom(EntityType.TRACE, id, score);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return dao.deleteScoreFrom(EntityType.TRACE, id, score)
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresDeleted(Set.of(id), EntityType.TRACE, workspaceId, userName)));
+        });
     }
 
     @Override
@@ -278,6 +336,34 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())
                 .map(FeedbackScoreNames::new);
+    }
+
+    @Override
+    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return dao.deleteByEntityIds(EntityType.TRACE, traceIds, projectId)
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresDeleted(traceIds, EntityType.TRACE, workspaceId, userName)));
+        });
+    }
+
+    @Override
+    public Mono<Void> deleteBySpanIds(@NonNull Set<UUID> spanIds, @NonNull UUID projectId) {
+        if (spanIds.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return dao.deleteByEntityIds(EntityType.SPAN, spanIds, projectId)
+                    .doOnSuccess(__ -> eventBus.post(
+                            new FeedbackScoresDeleted(spanIds, EntityType.SPAN, workspaceId, userName)));
+        });
     }
 
     @Override

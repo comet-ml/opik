@@ -322,6 +322,7 @@ class TraceServiceImpl implements TraceService {
                                 .onErrorResume(this::handleDBError)
                                 .doOnSuccess(__ -> eventBus.post(new TracesUpdated(
                                         Set.of(project.id()),
+                                        Set.of(id),
                                         ctx.get(RequestContext.WORKSPACE_ID),
                                         ctx.get(RequestContext.USER_NAME)))))))
                 .then());
@@ -333,8 +334,20 @@ class TraceServiceImpl implements TraceService {
         log.info("Batch updating '{}' traces", batchUpdate.ids().size());
 
         boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
-        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' traces", batchUpdate.ids().size()));
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return dao.getProjectIdsByTraceIds(new ArrayList<>(batchUpdate.ids()))
+                    .flatMap(traceToProjectMap -> {
+                        var projectIds = Set.copyOf(traceToProjectMap.values());
+                        return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                                .doOnSuccess(__ -> {
+                                    log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
+                                    eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
+                                            userName));
+                                });
+                    });
+        });
     }
 
     private Mono<Void> insertUpdate(Project project, TraceUpdate traceUpdate, UUID id) {
