@@ -9,9 +9,9 @@ export enum EXPLAINER_ID {
   what_are_spans = "what_are_spans",
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
-  i_added_traces_to_a_dataset_now_what = "i_added_traces_to_a_dataset_now_what",
+  i_added_traces_to_an_evaluation_suite_now_what = "i_added_traces_to_an_evaluation_suite_now_what",
   how_to_choose_annotation_queue_type = "how_to_choose_annotation_queue_type",
-  why_would_i_want_to_add_traces_to_a_dataset = "why_would_i_want_to_add_traces_to_a_dataset",
+  why_would_i_want_to_add_traces_to_an_evaluation_suite = "why_would_i_want_to_add_traces_to_an_evaluation_suite",
   hows_the_cost_estimated = "hows_the_cost_estimated",
   hows_the_thread_cost_estimated = "hows_the_thread_cost_estimated",
   whats_that_prompt_select = "whats_that_prompt_select",
@@ -25,10 +25,10 @@ export enum EXPLAINER_ID {
   what_are_experiment_items = "what_are_experiment_items",
   whats_the_experiment_configuration = "whats_the_experiment_configuration",
   what_does_it_mean_to_compare_my_experiments = "what_does_it_mean_to_compare_my_experiments",
-  whats_the_dataset_item = "whats_the_dataset_item",
-  whats_a_dataset = "whats_a_dataset",
-  why_do_i_need_multiple_datasets = "why_do_i_need_multiple_datasets",
-  what_format_is_this_to_add_my_dataset_item = "what_format_is_this_to_add_my_dataset_item",
+  whats_the_evaluation_suite_item = "whats_the_evaluation_suite_item",
+  whats_an_evaluation_suite = "whats_an_evaluation_suite",
+  why_do_i_need_multiple_evaluation_suites = "why_do_i_need_multiple_evaluation_suites",
+  what_format_is_this_to_add_my_evaluation_suite_item = "what_format_is_this_to_add_my_evaluation_suite_item",
   whats_the_prompt_library = "whats_the_prompt_library",
   how_do_i_use_this_prompt = "how_do_i_use_this_prompt",
   why_do_i_have_experiments_in_the_prompt_library = "why_do_i_have_experiments_in_the_prompt_library",
@@ -39,8 +39,8 @@ export enum EXPLAINER_ID {
   whats_these_configuration_things = "whats_these_configuration_things",
   why_do_i_need_an_ai_provider = "why_do_i_need_an_ai_provider",
   why_do_i_need_the_collaborators_tab = "why_do_i_need_the_collaborators_tab",
-  what_does_the_dataset_do_here = "what_does_the_dataset_do_here",
-  how_do_i_use_the_dataset_in_the_playground = "how_do_i_use_the_dataset_in_the_playground",
+  what_does_the_evaluation_suite_do_here = "what_does_the_evaluation_suite_do_here",
+  how_do_i_use_the_evaluation_suite_in_the_playground = "how_do_i_use_the_evaluation_suite_in_the_playground",
   whats_llm_as_a_judge = "whats_llm_as_a_judge",
   whats_a_code_metric = "whats_a_code_metric",
   what_are_feedback_definitions = "what_are_feedback_definitions",
@@ -84,7 +84,7 @@ export enum EXPLAINER_ID {
   what_are_dashboards = "what_are_dashboards",
   whats_the_optimization_config = "whats_the_optimization_config",
   whats_the_algorithm_section = "whats_the_algorithm_section",
-  whats_the_dataset_section = "whats_the_dataset_section",
+  whats_the_evaluation_suite_section = "whats_the_evaluation_suite_section",
   whats_the_metric_section = "whats_the_metric_section",
   whats_the_metric_settings = "whats_the_metric_settings",
   whats_the_algorithm_settings = "whats_the_algorithm_settings",
@@ -100,6 +100,8 @@ export enum EXPLAINER_ID {
   optimizer_enable_llm_crossover = "optimizer_enable_llm_crossover",
   optimizer_output_style_guidance = "optimizer_output_style_guidance",
   optimizer_infer_output_style = "optimizer_infer_output_style",
+  // Evaluation suite explainers
+  what_are_evaluation_suite_evaluators = "what_are_evaluation_suite_evaluators",
   // Dashboard widget explainers
   feedback_score_groupby_requires_single_metric = "feedback_score_groupby_requires_single_metric",
   duration_groupby_requires_single_metric = "duration_groupby_requires_single_metric",
@@ -153,18 +155,18 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Automatically score your production traces by defining LLM-as-a-Judge or code metrics.",
     docLink: "/production/rules",
   },
-  [EXPLAINER_ID.i_added_traces_to_a_dataset_now_what]: {
-    id: EXPLAINER_ID.i_added_traces_to_a_dataset_now_what,
-    title: "Traces added to dataset",
+  [EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what]: {
+    id: EXPLAINER_ID.i_added_traces_to_an_evaluation_suite_now_what,
+    title: "Traces added to evaluation suite",
     description:
-      "Run experiments using your dataset to evaluate your LLM's performance and get insights into how your model behaves in live scenarios.",
+      "Run experiments using your evaluation suite to evaluate your LLM's performance and get insights into how your model behaves in live scenarios.",
     docLink: "/evaluation/overview",
     docHash: "#running-an-evaluation",
   },
-  [EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset]: {
-    id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_a_dataset,
+  [EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_evaluation_suite]: {
+    id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_evaluation_suite,
     description:
-      "Add traces to a dataset to evaluate and benchmark LLM outputs using real production data. You can then use these datasets in experiments to track how your LLM app's performance evolves over time.",
+      "Add traces to an evaluation suite to evaluate and benchmark LLM outputs using real production data. You can then use these evaluation suites in experiments to track how your LLM app's performance evolves over time.",
   },
   [EXPLAINER_ID.hows_the_cost_estimated]: {
     id: EXPLAINER_ID.hows_the_cost_estimated,
@@ -245,7 +247,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_experiment_items]: {
     id: EXPLAINER_ID.what_are_experiment_items,
     description:
-      "Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace.",
+      "Experiment items are individual evaluations that connect an evaluation suite sample with its LLM output, feedback scores, and trace.",
     docLink: "/evaluation/overview",
     docHash: "#analyzing-evaluation-results",
   },
@@ -259,33 +261,33 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments]: {
     id: EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments,
     description:
-      "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same dataset to get started.",
+      "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same evaluation suite to get started.",
     docLink: "/evaluation/overview",
     docHash: "#analyzing-evaluation-results",
     type: "help",
   },
-  [EXPLAINER_ID.whats_the_dataset_item]: {
-    id: EXPLAINER_ID.whats_the_dataset_item,
+  [EXPLAINER_ID.whats_the_evaluation_suite_item]: {
+    id: EXPLAINER_ID.whats_the_evaluation_suite_item,
     description:
-      "Dataset items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
+      "Evaluation suite items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
     docLink: "/evaluation/concepts",
     docHash: "#experiments",
     type: "help",
   },
-  [EXPLAINER_ID.whats_a_dataset]: {
-    id: EXPLAINER_ID.whats_a_dataset,
+  [EXPLAINER_ID.whats_an_evaluation_suite]: {
+    id: EXPLAINER_ID.whats_an_evaluation_suite,
     description:
-      "A dataset is a collection of input-output examples used to evaluate your LLM application's performance.",
+      "An evaluation suite is a collection of input-output examples used to evaluate your LLM application's performance.",
     docLink: "/evaluation/concepts",
-    docHash: "#datasets",
+    docHash: "#evaluation-suites",
   },
-  [EXPLAINER_ID.why_do_i_need_multiple_datasets]: {
-    id: EXPLAINER_ID.why_do_i_need_multiple_datasets,
+  [EXPLAINER_ID.why_do_i_need_multiple_evaluation_suites]: {
+    id: EXPLAINER_ID.why_do_i_need_multiple_evaluation_suites,
     description:
-      "Create different datasets to evaluate your LLM application in different contexts, scenarios, or environments.",
+      "Create different evaluation suites to evaluate your LLM application in different contexts, scenarios, or environments.",
   },
-  [EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item]: {
-    id: EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item,
+  [EXPLAINER_ID.what_format_is_this_to_add_my_evaluation_suite_item]: {
+    id: EXPLAINER_ID.what_format_is_this_to_add_my_evaluation_suite_item,
     description:
       'Define input-output examples for evaluating your LLM. Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
   },
@@ -348,15 +350,15 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_do_i_need_the_collaborators_tab,
     description: "Manage access to your workspace.",
   },
-  [EXPLAINER_ID.what_does_the_dataset_do_here]: {
-    id: EXPLAINER_ID.what_does_the_dataset_do_here,
+  [EXPLAINER_ID.what_does_the_evaluation_suite_do_here]: {
+    id: EXPLAINER_ID.what_does_the_evaluation_suite_do_here,
     description:
-      "Run a prompt on your dataset to preview its performance. You can select metrics, filter the data, or adjust the page size. The experiment runs only on the items currently shown.",
+      "Run a prompt on your evaluation suite to preview its performance. You can select metrics, filter the data, or adjust the page size. The experiment runs only on the items currently shown.",
   },
-  [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
-    id: EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground,
+  [EXPLAINER_ID.how_do_i_use_the_evaluation_suite_in_the_playground]: {
+    id: EXPLAINER_ID.how_do_i_use_the_evaluation_suite_in_the_playground,
     description:
-      "Use mustache syntax to reference dataset variables in your prompt. Example: ",
+      "Use mustache syntax to reference evaluation suite variables in your prompt. Example: ",
   },
   [EXPLAINER_ID.whats_llm_as_a_judge]: {
     id: EXPLAINER_ID.whats_llm_as_a_judge,
@@ -381,7 +383,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_format_should_the_prompt_be]: {
     id: EXPLAINER_ID.what_format_should_the_prompt_be,
     description:
-      "Use mustache syntax to reference dataset variables in your prompt. Example: {{question}}.",
+      "Use mustache syntax to reference evaluation suite variables in your prompt. Example: {{question}}.",
   },
   [EXPLAINER_ID.whats_an_optimization_run]: {
     id: EXPLAINER_ID.whats_an_optimization_run,
@@ -445,7 +447,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_trial_items]: {
     id: EXPLAINER_ID.what_are_trial_items,
     description:
-      "Trial items are dataset samples processed during a trial. Each one generates an output and score that contribute to the trial's results.",
+      "Trial items are evaluation suite samples processed during a trial. Each one generates an output and score that contribute to the trial's results.",
     docLink: "/agent_optimization/opik_optimizer/concepts",
   },
   [EXPLAINER_ID.whats_the_evaluation_run_configuration]: {
@@ -608,8 +610,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_the_algorithm_section,
     description: "How Opik explores and improves prompt variations.",
   },
-  [EXPLAINER_ID.whats_the_dataset_section]: {
-    id: EXPLAINER_ID.whats_the_dataset_section,
+  [EXPLAINER_ID.whats_the_evaluation_suite_section]: {
+    id: EXPLAINER_ID.whats_the_evaluation_suite_section,
     description: "Data Opik uses to evaluate prompt variations.",
   },
   [EXPLAINER_ID.whats_the_metric_section]: {
@@ -640,7 +642,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.metric_reference_key]: {
     id: EXPLAINER_ID.metric_reference_key,
     description:
-      "The key in the dataset item to compare against. Supports JSONPath for nested values (e.g., $.scores[?(@.name=='Useful')].value).",
+      "The key in the evaluation suite item to compare against. Supports JSONPath for nested values (e.g., $.scores[?(@.name=='Useful')].value).",
   },
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
@@ -672,6 +674,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.optimizer_infer_output_style,
     description:
       "Automatically detect and maintain output style from examples.",
+  },
+  // Evaluation suite explainers
+  [EXPLAINER_ID.what_are_evaluation_suite_evaluators]: {
+    id: EXPLAINER_ID.what_are_evaluation_suite_evaluators,
+    description:
+      "Define evaluators that will be run on all the items in the evaluation suite. Each evaluator checks a specific behavior or quality criterion.",
   },
   // Dashboard widget explainers
   [EXPLAINER_ID.feedback_score_groupby_requires_single_metric]: {

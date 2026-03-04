@@ -13,7 +13,7 @@ import isEqual from "fast-deep-equal";
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
+import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -80,7 +80,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   const { toast } = useToast();
 
   const [datasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_KEY,
+    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
     {
       defaultValue: null,
     },
