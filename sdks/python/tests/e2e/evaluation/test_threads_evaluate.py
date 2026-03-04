@@ -60,15 +60,6 @@ def active_thread_and_project_name(
     return thread_id, temporary_project_name
 
 
-def _all_threads_closed(
-    project_name: str, threads_client_: threads_client.ThreadsClient
-) -> bool:
-    threads = threads_client_.search_threads(
-        project_name=project_name, filter_string='status = "active"'
-    )
-    return len(threads) == 0
-
-
 def _one_thread_is_active(
     project_name: str, threads_client_: threads_client.ThreadsClient
 ) -> bool:
@@ -76,6 +67,15 @@ def _one_thread_is_active(
         project_name=project_name, filter_string='status = "active"'
     )
     return len(threads) == 1
+
+
+def _all_threads_closed(
+    project_name: str, threads_client_: threads_client.ThreadsClient
+) -> bool:
+    threads = threads_client_.search_threads(
+        project_name=project_name, filter_string='status = "active"'
+    )
+    return len(threads) == 0
 
 
 @pytest.fixture
@@ -97,14 +97,12 @@ def test_evaluate_threads__happy_path(
     ):
         raise AssertionError(f"Failed to create threads in project '{project_name}'")
 
-    # close threads before evaluating - otherwise backend will return 409 error on logging scores
+    # evaluate_threads requires closed threads (SDK constraint)
     opik_client.rest_client.traces.close_trace_thread(
         project_name=project_name, thread_id=active_thread
     )
-
-    # wait for closed threads to propagate
     if not synchronization.until(
-        lambda: _all_threads_closed(project_name, threads_client_), max_try_seconds=30
+        lambda: _all_threads_closed(project_name, threads_client_), max_try_seconds=10
     ):
         raise AssertionError(
             f"Failed to get closed threads from project '{project_name}'"
@@ -191,15 +189,13 @@ def test_evaluate_threads__no_truncation_for_long_traces(
             f"Failed to create thread in project '{temporary_project_name}'"
         )
 
-    # Close thread before evaluating
+    # evaluate_threads requires closed threads (SDK constraint)
     opik_client.rest_client.traces.close_trace_thread(
         project_name=temporary_project_name, thread_id=thread_id
     )
-
-    # Wait for thread to be closed
     if not synchronization.until(
         lambda: _all_threads_closed(temporary_project_name, threads_client_),
-        max_try_seconds=30,
+        max_try_seconds=10,
     ):
         raise AssertionError(
             f"Failed to close thread in project '{temporary_project_name}'"

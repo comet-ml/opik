@@ -159,32 +159,19 @@ This workflow will:
 
 - **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TYPE}: {TASK-SUMMARY}` extracted from branch description and change analysis
   - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`
-- **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public:
-  ```markdown
-  ## Details
-  {implementation_summary_from_git_analysis}
-  
-  ## Change checklist
-  <!-- Please check the type of changes made -->
-  - [ ] User facing
-  - [ ] Documentation update
-  
-  ## Issues
-  - Resolves # <!-- the GitHub issue this PR resolves (e.g. `#1234`) -->
-  - OPIK-{ticket_number} <!-- The Jira ticket (e.g. `OPIK-1234`) -->
-  - NA <!-- If no ticket, such as hotfixes etc. -->
-  
-  ## Testing
-  {testing_scenarios_covered_by_tests_and_steps_to_reproduce}
-  
-  ## Documentation
-  {list_of_docs_updated_or_summary_of_new_configuration_introduced_or_links_to_web_documentation_reference_relevant_to_this_PR}
+- **Description**: Read the PR template from `.github/pull_request_template.md` at runtime and use it as the source of truth. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public.
+  ```bash
+  # Read the actual PR template — do NOT hardcode it
+  cat .github/pull_request_template.md
   ```
-- **Template Fields**:
-  - **Details**: Implementation summary from git analysis
+  - **Fill every `##` section** in the template — the PR linter requires all sections to be present
+  - If a section is not applicable, write "N/A" rather than removing it
+- **Section guidance**:
+  - **Details**: Implementation summary from git analysis (replace the HTML comment placeholder)
   - **Change checklist**: Auto-check based on file types changed (user-facing for UI changes, documentation for docs)
-  - **Issues**: Link to Jira ticket (e.g., OPIK-2180) or GitHub issue, or "NA" for hotfixes
-  - **Testing**: Extract from commit messages or set based on test files changed
+  - **Issues**: Link to Jira ticket (e.g., `OPIK-2180`) or GitHub issue, or "NA" for hotfixes
+  - **AI-WATERMARK**: Fill with `AI-WATERMARK: yes`, then list: Tools (e.g., "Claude Code"), Model(s), Scope (e.g., "full implementation" or "assisted"), Human verification (e.g., "code review + manual testing")
+  - **Testing**: Extract from commit messages or set based on test files changed (replace the HTML comment placeholder)
   - **Documentation**: List docs updated or set "N/A" if no documentation changes
 
 ---

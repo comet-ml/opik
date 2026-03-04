@@ -236,17 +236,7 @@ export class DatasetsClient {
         request: OpikApi.FindDatasetsRequest = {},
         requestOptions?: DatasetsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DatasetPagePublic>> {
-        const {
-            page,
-            size,
-            withExperimentsOnly,
-            withOptimizationsOnly,
-            promptId,
-            name,
-            type: type_,
-            sorting,
-            filters,
-        } = request;
+        const { page, size, withExperimentsOnly, withOptimizationsOnly, promptId, name, sorting, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
@@ -254,13 +244,6 @@ export class DatasetsClient {
             with_optimizations_only: withOptimizationsOnly,
             prompt_id: promptId,
             name,
-            type:
-                type_ != null
-                    ? serializers.FindDatasetsRequestType.jsonOrThrow(type_, {
-                          unrecognizedObjectKeys: "strip",
-                          omitUndefined: true,
-                      })
-                    : undefined,
             sorting,
             filters,
         };
