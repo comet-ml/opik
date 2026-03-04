@@ -49,8 +49,19 @@ This workflow will:
 
 ### 3. Collect Pending Comments
 
-- **Fetch review comments**: Use GitHub MCP to retrieve PR review comments and/or discussion threads
-- **Fetch PR reviews**: Get all reviews to understand the review context
+- **Fetch review comments**: Use GitHub MCP to retrieve PR review comments and/or discussion threads. When using `gh api` for any list endpoint, **always** use `--paginate` to ensure all results are fetched:
+  ```bash
+  # Review comments (inline code comments)
+  gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+
+  # Issue comments (general PR comments)
+  gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
+
+  # PR reviews
+  gh api repos/comet-ml/opik/pulls/{pr_number}/reviews --paginate
+  ```
+  > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the agent silently gets only the first page and may miss real review feedback.
+- **Fetch PR reviews**: Get all reviews to understand the review context (use `--paginate` as shown above)
 - **Determine pending/unaddressed items**:
   - Prefer unresolved review threads when available
   - Otherwise, treat comments as pending if they are not from the latest code line (not "outdated") or explicitly unresolved, and have no author follow-up confirmation
