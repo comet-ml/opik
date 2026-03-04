@@ -21,26 +21,28 @@ This integration captures:
 - [OpenClaw](https://github.com/openclaw/openclaw) version `2026.3.2` or newer.
 - Opik project/workspace details (for cloud or enterprise deployments).
 
-## Step 1: Install the plugin
+## Setup
 
-```bash
-openclaw plugins install @opik/opik-openclaw
-```
+<Steps>
+  <Step title="1. Install the plugin">
+    ```bash
+    openclaw plugins install @opik/opik-openclaw
+    ```
+  </Step>
+  <Step title="2. Configure the plugin">
+    ```bash
+    openclaw opik configure
+    ```
 
-## Step 2: Configure the plugin
-
-```bash
-openclaw opik configure
-```
-
-This command validates your Opik URL, validates API key access (when required), enables the plugin, and writes plugin-scoped config.
-
-## Step 3: Check status and restart the OpenClaw gateway
-
-```bash
-openclaw opik status
-openclaw gateway restart
-```
+    This command validates your Opik URL, validates API key access (when required), enables the plugin, and writes plugin-scoped config.
+  </Step>
+  <Step title="3. Check status and restart the OpenClaw gateway">
+    ```bash
+    openclaw opik status
+    openclaw gateway restart
+    ```
+  </Step>
+</Steps>
 
 ## Advanced configuration (manual JSON)
 
@@ -78,13 +80,16 @@ Environment variable fallbacks are also supported:
 
 ## Validate setup
 
-1. Check plugin status:
-
-```bash
-openclaw opik status
-```
-
-2. Send a message through OpenClaw and verify traces appear in the configured Opik project dashboard.
+<Steps>
+  <Step title="1. Check plugin status">
+    ```bash
+    openclaw opik status
+    ```
+  </Step>
+  <Step title="2. Send a message and verify traces in Opik">
+    Send a message through OpenClaw and verify traces appear in the configured Opik project dashboard.
+  </Step>
+</Steps>
 
 ## Known limitation
 
