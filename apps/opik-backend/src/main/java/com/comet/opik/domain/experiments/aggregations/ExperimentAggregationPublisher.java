@@ -26,7 +26,8 @@ public interface ExperimentAggregationPublisher {
         public void publish(@NonNull Set<UUID> experimentIds, @NonNull String workspaceId,
                 @NonNull String userName) {
             // TODO: implement debounce mechanism before enqueuing to Redis stream
-            log.debug("Experiment aggregation publish skipped for experiments '{}': debounce mechanism not yet implemented",
+            log.debug(
+                    "Experiment aggregation publish skipped for experiments '{}': debounce mechanism not yet implemented",
                     experimentIds);
         }
     }
