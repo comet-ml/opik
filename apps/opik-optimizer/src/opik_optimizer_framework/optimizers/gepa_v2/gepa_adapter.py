@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
@@ -31,27 +30,18 @@ if TYPE_CHECKING:
 DatasetItem = dict[str, Any]
 
 
-def _extract_template_variables(messages: list[dict[str, str]]) -> list[str]:
-    """Extract {variable} placeholder names from prompt messages."""
-    variables: list[str] = []
-    seen: set[str] = set()
-    for msg in messages:
-        for match in re.findall(r"\{(\w+)\}", msg.get("content", "")):
-            if match not in seen:
-                seen.add(match)
-                variables.append(match)
-    return variables
+def _message_key(msg: dict[str, str], idx: int) -> str:
+    return msg.get("name") or f"{msg['role']}_{idx}"
 
 
 def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
     """Build the initial GEPA seed candidate from the framework's prompt_messages list.
 
-    Keys are formatted as ``{role}_{index}`` to match the rebuild logic.
+    Uses ``msg["name"]`` as key when provided, falls back to ``{role}_{index}``.
     """
     seed: dict[str, str] = {}
     for idx, msg in enumerate(prompt_messages):
-        key = f"{msg['role']}_{idx}"
-        seed[key] = msg.get("content", "")
+        seed[_message_key(msg, idx)] = msg.get("content", "")
     return seed
 
 
@@ -62,8 +52,7 @@ def rebuild_prompt_messages(
     """Rebuild prompt messages from GEPA candidate, falling back to originals."""
     messages: list[dict[str, str]] = []
     for idx, msg in enumerate(base_messages):
-        key = f"{msg['role']}_{idx}"
-        content = candidate.get(key, msg.get("content", ""))
+        content = candidate.get(_message_key(msg, idx), msg.get("content", ""))
         messages.append({"role": msg["role"], "content": content})
     return messages
 
@@ -165,18 +154,21 @@ class FrameworkGEPAAdapter:
        ``_current_step < 0`` and labels it ``eval_purpose="initialization"``.
     """
 
-    propose_new_texts = None
-
     def __init__(
         self,
         base_messages: list[dict[str, str]],
         baseline_config: CandidateConfig,
         evaluation_adapter: EvaluationAdapter,
+        reflection_lm: Any = None,
+        reflection_prompt_template: str | None = None,
     ) -> None:
         self._base_messages = base_messages
         self._baseline_config = baseline_config
         self._evaluation_adapter = evaluation_adapter
+        self._reflection_lm = reflection_lm
+        self._reflection_prompt_template = reflection_prompt_template
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
+        self._reflection_log: list[dict[str, Any]] = []
 
         # Candidate tracking
         self._known_candidates: dict[str, str] = {}
@@ -429,8 +421,9 @@ class FrameworkGEPAAdapter:
             parent_candidate_ids,
         )
 
+        _FULL_EVAL_PURPOSES = {"baseline", "initialization", "validation"}
         experiment_type = (
-            "mini-batch" if eval_purpose == "exploration:minibatch" else None
+            None if eval_purpose in _FULL_EVAL_PURPOSES else "mini-batch"
         )
 
         trial, raw_result = self._evaluation_adapter.evaluate_with_details(
@@ -468,9 +461,10 @@ class FrameworkGEPAAdapter:
     ) -> dict[str, list[dict[str, Any]]]:
         """Build the feedback dataset for GEPA's reflection LLM.
 
-        Uses structured assertion results from the evaluation suite to provide
-        actionable feedback — only failed assertions are shown with their names.
-        Input fields are extracted dynamically from the prompt template variables.
+        Each entry contains:
+        - Inputs: the task input (dataset item fields, excluding internal keys)
+        - Generated Outputs: the agent's response
+        - Feedback: only failed assertions with names and reasons
         """
         if not components_to_update:
             components_to_update = [
@@ -480,19 +474,12 @@ class FrameworkGEPAAdapter:
             ]
 
         trajectories = eval_batch.trajectories or []
-        template_vars = _extract_template_variables(self._base_messages)
 
         def _build_inputs(dataset_item: dict[str, Any]) -> dict[str, str]:
-            inputs: dict[str, str] = {}
-            for var in template_vars:
-                val = dataset_item.get(var)
-                if val is not None:
-                    inputs[var] = str(val)
-            if not inputs:
-                for k, v in dataset_item.items():
-                    if k not in ("id", "assertions", "metadata") and isinstance(v, str):
-                        inputs[k] = v
-            return inputs
+            return {
+                k: str(v) for k, v in dataset_item.items()
+                if k != "id"
+            }
 
         def _build_feedback(
             score: float, assertions: list[dict[str, Any]],
@@ -508,22 +495,97 @@ class FrameworkGEPAAdapter:
                 return "\n".join(lines)
             return f"Score={score:.1f}. All assertions passed."
 
-        def _records() -> list[dict[str, Any]]:
-            result = []
-            for traj in trajectories:
-                dataset_item = traj.get("input", {})
-                output_text = traj.get("output", "")
-                score = traj.get("score", 0.0)
-                assertions = traj.get("assertions", [])
+        records = []
+        for traj in trajectories:
+            dataset_item = traj.get("input", {})
+            output_text = traj.get("output", "")
+            score = traj.get("score", 0.0)
+            assertions = traj.get("assertions", [])
+            records.append({
+                "Inputs": _build_inputs(dataset_item),
+                "Generated Outputs": output_text,
+                "Feedback": _build_feedback(score, assertions),
+            })
 
-                result.append(
-                    {
-                        "Inputs": _build_inputs(dataset_item),
-                        "Generated Outputs": output_text,
-                        "Feedback": _build_feedback(score, assertions),
-                    }
-                )
-            return result
-
-        records = _records()
         return {component: list(records) for component in components_to_update}
+
+    def _get_reflection_lm_callable(self) -> Any:
+        """Return a callable LanguageModel from the stored reflection_lm.
+
+        Handles both string model names (wrapped via litellm) and callables.
+        """
+        if callable(self._reflection_lm):
+            return self._reflection_lm
+        if isinstance(self._reflection_lm, str):
+            import litellm
+            model_name = self._reflection_lm
+
+            def _lm(prompt: str | list[dict[str, str]]) -> str:
+                if isinstance(prompt, str):
+                    completion = litellm.completion(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                else:
+                    completion = litellm.completion(model=model_name, messages=prompt)
+                return completion.choices[0].message.content
+            return _lm
+        raise ValueError(f"reflection_lm must be a string or callable, got {type(self._reflection_lm)}")
+
+    def propose_new_texts(
+        self,
+        candidate: dict[str, str],
+        reflective_dataset: Mapping[str, Sequence[Mapping[str, Any]]],
+        components_to_update: list[str],
+    ) -> dict[str, str]:
+        """Propose improved texts using the reflection LLM.
+
+        Adds the parameter name to <curr_param> so the reflection LLM knows
+        which component it's optimizing. Logs all reflection calls for debugging.
+        """
+        from gepa.strategies.instruction_proposal import InstructionProposalSignature
+
+        if self._reflection_lm is None:
+            raise ValueError(
+                "reflection_lm is required for propose_new_texts. "
+                "Pass it via FrameworkGEPAAdapter constructor."
+            )
+
+        lm = self._get_reflection_lm_callable()
+        new_texts: dict[str, str] = {}
+        for name in components_to_update:
+            if name not in reflective_dataset or not reflective_dataset.get(name):
+                logger.info("Component '%s' not in reflective dataset, skipping.", name)
+                continue
+
+            current_instruction = f"Parameter: {name}\n{candidate[name]}"
+            dataset_with_feedback = reflective_dataset[name]
+
+            log_entry: dict[str, Any] = {
+                "component": name,
+                "current_instruction": current_instruction,
+                "dataset_with_feedback": [dict(d) for d in dataset_with_feedback],
+            }
+
+            result = InstructionProposalSignature.run(
+                lm=lm,
+                input_dict={
+                    "current_instruction_doc": current_instruction,
+                    "dataset_with_feedback": dataset_with_feedback,
+                    "prompt_template": self._reflection_prompt_template,
+                },
+            )
+            new_text = result["new_instruction"]
+            prefix = f"Parameter: {name}\n"
+            if new_text.startswith(prefix):
+                new_text = new_text[len(prefix):]
+            new_texts[name] = new_text
+
+            log_entry["proposed_text"] = new_text
+            self._reflection_log.append(log_entry)
+            logger.info(
+                "Reflection for '%s': proposed %d chars (was %d)",
+                name, len(new_text), len(candidate[name]),
+            )
+
+        return new_texts

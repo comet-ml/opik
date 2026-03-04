@@ -60,12 +60,6 @@ Z"). Focus on general strategies, domain knowledge, and response patterns that \
 apply broadly. Specifics about the domain are fine; specifics about individual \
 test cases are not.
 
-CRITICAL: The current instruction may contain template variables — runtime \
-placeholders that get replaced with actual data when the assistant processes \
-each input. You MUST preserve ALL template variables exactly as they appear in \
-your new instruction. Do not remove, rename, or replace them. Your instruction \
-should be written around these variables.
-
 Provide the new instructions within ``` blocks."""
 
 
@@ -76,6 +70,9 @@ class GepaV2Optimizer:
     Passes the same dataset for both training and validation and a reflection
     prompt that encourages generalizable instructions.
     """
+
+    def __init__(self) -> None:
+        self.adapter: FrameworkGEPAAdapter | None = None
 
     def run(
         self,
@@ -123,7 +120,10 @@ class GepaV2Optimizer:
             base_messages=context.prompt_messages,
             baseline_config=context.baseline_config,
             evaluation_adapter=evaluation_adapter,
+            reflection_lm=context.model,
+            reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
         )
+        self.adapter = adapter
 
         if baseline_trial is not None:
             adapter.register_baseline(seed_candidate, baseline_trial.candidate_id)
@@ -147,8 +147,8 @@ class GepaV2Optimizer:
             skip_perfect_score=True,
             perfect_score=1,
             seed=seed,
-            reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
-            cache_evaluation=True,
+            reflection_prompt_template=None,
+            cache_evaluation=False,
         )
 
         logger.info(

@@ -10,7 +10,6 @@ from opik_optimizer_framework.optimizers.gepa_v2.gepa_adapter import (
     GEPAProgressCallback,
     _candidate_key,
     _extract_per_item_feedback,
-    _extract_template_variables,
     build_seed_candidate,
     rebuild_prompt_messages,
 )
@@ -113,31 +112,16 @@ class TestBuildSeedCandidate:
         seed = build_seed_candidate(messages)
         assert seed == {"system_0": "Be helpful.", "user_1": "Hello {name}"}
 
+    def test_uses_name_field_when_provided(self):
+        messages = [
+            {"role": "system", "content": "Be helpful.", "name": "instructions"},
+            {"role": "user", "content": "Hello {name}"},
+        ]
+        seed = build_seed_candidate(messages)
+        assert seed == {"instructions": "Be helpful.", "user_1": "Hello {name}"}
+
     def test_empty_messages(self):
         assert build_seed_candidate([]) == {}
-
-
-class TestExtractTemplateVariables:
-    def test_extracts_variables_from_messages(self):
-        messages = [
-            {"role": "system", "content": "You are helpful."},
-            {"role": "user", "content": "Question: {question}\nContext: {context}"},
-        ]
-        assert _extract_template_variables(messages) == ["question", "context"]
-
-    def test_deduplicates_variables(self):
-        messages = [
-            {"role": "system", "content": "Answer {question}"},
-            {"role": "user", "content": "{question}"},
-        ]
-        assert _extract_template_variables(messages) == ["question"]
-
-    def test_empty_messages(self):
-        assert _extract_template_variables([]) == []
-
-    def test_no_variables(self):
-        messages = [{"role": "user", "content": "plain text"}]
-        assert _extract_template_variables(messages) == []
 
 
 class TestRebuildPromptMessages:
@@ -160,6 +144,16 @@ class TestRebuildPromptMessages:
         result = rebuild_prompt_messages(base, candidate)
         assert result[0]["content"] == "improved"
         assert result[1]["content"] == "original user"
+
+    def test_uses_name_field_when_provided(self):
+        base = [
+            {"role": "system", "content": "original", "name": "instructions"},
+            {"role": "user", "content": "original user"},
+        ]
+        candidate = {"instructions": "improved", "user_1": "improved user"}
+        result = rebuild_prompt_messages(base, candidate)
+        assert result[0]["content"] == "improved"
+        assert result[1]["content"] == "improved user"
 
 
 class TestExtractPerItemFeedback:
@@ -775,23 +769,15 @@ class TestMakeReflectiveDataset:
         feedback = result["user_0"][0]["Feedback"]
         assert "All assertions passed" in feedback
 
-    def test_extracts_inputs_from_template_variables(self):
-        mock_eval = MagicMock()
-        adapter = FrameworkGEPAAdapter(
-            base_messages=[
-                {"role": "system", "content": "You are helpful."},
-                {"role": "user", "content": "Question: {question}\nContext: {context}"},
-            ],
-            baseline_config={"prompt_messages": [], "model": "test"},
-            evaluation_adapter=mock_eval,
-        )
+    def test_passes_dataset_item_fields_as_inputs(self):
+        adapter = _build_adapter(MagicMock())
 
         eval_batch = SimpleNamespace(
             outputs=[{"output": "answer"}],
             scores=[0.5],
             trajectories=[
                 {
-                    "input": {"id": "1", "question": "What is X?", "context": "X is a thing", "metadata": "ignore"},
+                    "input": {"id": "1", "question": "What is X?", "context": "X is a thing", "extra": 42},
                     "output": "answer",
                     "score": 0.5,
                     "assertions": [],
@@ -800,18 +786,15 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"system_0": "helpful", "user_1": "{question}"},
+            candidate={"user_0": "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_1"],
+            components_to_update=["user_0"],
         )
 
-        inputs = result["user_1"][0]["Inputs"]
-        assert "question" in inputs
+        inputs = result["user_0"][0]["Inputs"]
         assert inputs["question"] == "What is X?"
-        assert "context" in inputs
         assert inputs["context"] == "X is a thing"
-        # metadata and id should not be in inputs
-        assert "metadata" not in inputs
+        assert inputs["extra"] == "42"
         assert "id" not in inputs
 
     def test_auto_detects_components(self):
@@ -1072,7 +1055,7 @@ class TestGepaV2Optimizer:
         call_kwargs = mock_optimize.call_args.kwargs
         assert len(call_kwargs["trainset"]) == 3
 
-    def test_reflection_template_passed(self):
+    def test_reflection_template_passed_to_adapter(self):
         from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import (
             GENERALIZATION_REFLECTION_TEMPLATE,
         )
@@ -1093,14 +1076,18 @@ class TestGepaV2Optimizer:
                 state=state,
             )
 
+        # Template passed as None to gepa.optimize (adapter handles it via propose_new_texts)
         call_kwargs = mock_optimize.call_args.kwargs
-        assert call_kwargs["reflection_prompt_template"] == GENERALIZATION_REFLECTION_TEMPLATE
-        assert "<curr_param>" in call_kwargs["reflection_prompt_template"]
-        assert "<side_info>" in call_kwargs["reflection_prompt_template"]
-        assert "generalize" in call_kwargs["reflection_prompt_template"].lower()
-        assert "template variables" in call_kwargs["reflection_prompt_template"].lower()
+        assert call_kwargs["reflection_prompt_template"] is None
 
-    def test_cache_evaluation_enabled(self):
+        # Template passed to the adapter instead
+        gepa_adapter = optimizer.adapter
+        assert gepa_adapter._reflection_prompt_template == GENERALIZATION_REFLECTION_TEMPLATE
+        assert "<curr_param>" in gepa_adapter._reflection_prompt_template
+        assert "<side_info>" in gepa_adapter._reflection_prompt_template
+        assert "generalize" in gepa_adapter._reflection_prompt_template.lower()
+
+    def test_cache_evaluation_disabled(self):
         context = _make_context()
         state = OptimizationState()
         adapter = MagicMock()
@@ -1118,7 +1105,7 @@ class TestGepaV2Optimizer:
             )
 
         call_kwargs = mock_optimize.call_args.kwargs
-        assert call_kwargs["cache_evaluation"] is True
+        assert call_kwargs["cache_evaluation"] is False
 
 
 # -- registration test --------------------------------------------------------

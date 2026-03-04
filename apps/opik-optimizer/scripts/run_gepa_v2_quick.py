@@ -26,10 +26,12 @@ PROMPT_MESSAGES = [
     {
         "role": "system",
         "content": "You are a customer support agent. Answer questions briefly.",
+        "name": "system_prompt",
     },
     {
         "role": "user",
         "content": "{question}",
+        "name": "user_message",
     },
 ]
 
@@ -131,7 +133,12 @@ def _build_suite(client):
 
 
 def main():
-    from opik_optimizer_framework import OptimizationContext, run_optimization
+    import json as _json
+    from opik_optimizer_framework import OptimizationContext
+    from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
+    from opik_optimizer_framework.event_emitter import EventEmitter
+    from opik_optimizer_framework.types import OptimizationState
+    from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import GepaV2Optimizer
 
     if OPIK_URL:
         os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
@@ -162,7 +169,7 @@ def main():
         metric_parameters={},
         optimizer_type=optimizer_type,
         optimizer_parameters={
-            "max_candidates": 3,
+            "max_candidates": 10,
             "reflection_minibatch_size": 3,
             "candidate_selection_strategy": "pareto",
             "seed": 42,
@@ -174,31 +181,80 @@ def main():
         },
     )
 
+    # Run optimization directly so we can capture the adapter's reflection log
+    items_by_id = {str(item["id"]): item for item in dataset_items}
+    dataset_item_ids = list(items_by_id.keys())
+    state = OptimizationState()
+    event_emitter = EventEmitter(optimization_id=optimization_id)
+
+    eval_adapter = EvaluationAdapter(
+        client=client,
+        dataset_name=SUITE_NAME,
+        optimization_id=optimization_id,
+        metric_type=OBJECTIVE_NAME,
+        metric_parameters={},
+        state=state,
+        event_emitter=event_emitter,
+        optimizer_type=optimizer_type,
+    )
+
+    baseline_trial = eval_adapter.evaluate(
+        config=context.baseline_config,
+        dataset_item_ids=dataset_item_ids,
+        eval_purpose="baseline",
+    )
+    initial_score = baseline_trial.score if baseline_trial else 0.0
+    logger.info("Baseline score: %.4f", initial_score)
+
+    optimizer = GepaV2Optimizer()
     logger.info("Starting optimization")
     try:
-        result = run_optimization(context=context, client=client, dataset_items=dataset_items)
+        all_items = list(items_by_id.values())
+        train_items = all_items
+        val_items = all_items
+        optimizer.run(
+            context=context,
+            training_set=train_items,
+            validation_set=val_items,
+            evaluation_adapter=eval_adapter,
+            state=state,
+            baseline_trial=baseline_trial,
+        )
         _update_optimization_status(client, optimization_id, "completed")
     except Exception:
         logger.exception("Optimization failed")
         _update_optimization_status(client, optimization_id, "error")
-        client.end()
-        sys.exit(1)
+        # Still dump whatever reflection log we got
+    finally:
+        # Dump reflection log
+        reflection_log = []
+        if optimizer.adapter is not None:
+            reflection_log = optimizer.adapter._reflection_log
+
+        log_path = f"reflection_log_{int(time.time())}.json"
+        with open(log_path, "w") as f:
+            _json.dump(reflection_log, f, indent=2, default=str)
+        logger.info("Reflection log saved to %s (%d entries)", log_path, len(reflection_log))
+
+    best = state.best_trial
+    score = best.score if best else 0.0
 
     print("\n" + "=" * 60)
     print("OPTIMIZATION COMPLETE")
     print("=" * 60)
     print(f"  Optimization ID : {optimization_id}")
-    print(f"  Final score     : {result.score:.4f}")
-    print(f"  Initial score   : {result.initial_score}")
-    print(f"  Total trials    : {len(result.all_trials)}")
+    print(f"  Final score     : {score:.4f}")
+    print(f"  Initial score   : {initial_score}")
+    print(f"  Total trials    : {len(state.trials)}")
+    print(f"  Reflection log  : {log_path}")
 
-    if result.best_trial:
+    if best:
         print(f"\n  Best trial:")
-        print(f"    Score         : {result.best_trial.score:.4f}")
-        print(f"    Experiment    : {result.best_trial.experiment_name}")
+        print(f"    Score         : {best.score:.4f}")
+        print(f"    Experiment    : {best.experiment_name}")
 
     print(f"\n  Trajectory:")
-    for trial in result.all_trials:
+    for trial in state.trials:
         parents = trial.parent_candidate_ids or []
         print(
             f"    step={trial.step_index:2d}  score={trial.score:.4f}  "
