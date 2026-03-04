@@ -6,10 +6,12 @@ from typing import Any
 def _load_registry() -> dict[str, type]:
     from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
     from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
+    from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import GepaV2Optimizer
 
     return {
         "SimpleOptimizer": SimpleOptimizer,
         "GepaOptimizer": GepaOptimizer,
+        "GepaV2Optimizer": GepaV2Optimizer,
     }
 
 

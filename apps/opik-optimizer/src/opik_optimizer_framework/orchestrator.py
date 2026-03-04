@@ -50,6 +50,7 @@ def run_optimization(
         metric_parameters=context.metric_parameters,
         state=state,
         event_emitter=event_emitter,
+        optimizer_type=context.optimizer_type,
     )
 
     optimizer = create_optimizer(context.optimizer_type)

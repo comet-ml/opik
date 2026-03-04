@@ -24,6 +24,8 @@ def run_experiment(
     num_items: int | None = None,
     capture_traces: bool | None = None,
     eval_purpose: str | None = None,
+    experiment_type: str | None = None,
+    optimizer_type: str | None = None,
     task_threads: int = 4,
 ) -> TrialResult:
     """Execute an experiment, returning only the TrialResult."""
@@ -39,6 +41,8 @@ def run_experiment(
         num_items=num_items,
         capture_traces=capture_traces,
         eval_purpose=eval_purpose,
+        experiment_type=experiment_type,
+        optimizer_type=optimizer_type,
         task_threads=task_threads,
     )
     return trial
@@ -56,6 +60,8 @@ def run_experiment_with_details(
     num_items: int | None = None,
     capture_traces: bool | None = None,
     eval_purpose: str | None = None,
+    experiment_type: str | None = None,
+    optimizer_type: str | None = None,
     task_threads: int = 4,
 ) -> tuple[TrialResult, Any]:
     """Execute an experiment and return both the TrialResult and the raw EvaluationResult.
@@ -69,14 +75,19 @@ def run_experiment_with_details(
 
     dataset = client.get_dataset(dataset_name)
 
+    config_for_metadata = dict(candidate.config)
+    config_for_metadata["prompt"] = config_for_metadata.get("prompt_messages", [])
+
     experiment_config = {
         "metric": metric_type,
         "dataset": dataset_name,
         "candidate_id": candidate.candidate_id,
         "step_index": candidate.step_index,
         "parent_candidate_ids": candidate.parent_candidate_ids,
-        "configuration": candidate.config,
+        "configuration": config_for_metadata,
     }
+    if optimizer_type is not None:
+        experiment_config["optimizer"] = optimizer_type
     if batch_index is not None:
         experiment_config["batch_index"] = batch_index
     if num_items is not None:
@@ -94,6 +105,7 @@ def run_experiment_with_details(
         dataset_item_ids=dataset_item_ids,
         experiment_config=experiment_config,
         task_threads=task_threads,
+        experiment_type=experiment_type,
     )
 
     score = _extract_score(result)
