@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { FIELD_TYPE, DatasetField } from "./useDatasetItemData";
+import { DatasetItemColumn } from "@/types/datasets";
+import { DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 
 export const getFieldType = (
   value: unknown,
@@ -86,41 +88,95 @@ export const createDynamicSchema = (fields: DatasetField[]) => {
   return z.object(schemaShape);
 };
 
+const tryParseJsonStructure = (
+  value: string,
+): { parsed: unknown; isStructure: boolean } => {
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === "object" && parsed !== null) {
+      return { parsed, isStructure: true };
+    }
+  } catch {
+    // not valid JSON
+  }
+  return { parsed: undefined, isStructure: false };
+};
+
+const coerceToColumnType = (
+  value: unknown,
+  columnTypes: DYNAMIC_COLUMN_TYPE[],
+): unknown => {
+  if (typeof value !== "string") return value;
+
+  const str = value as string;
+
+  for (const colType of columnTypes) {
+    if (colType === DYNAMIC_COLUMN_TYPE.string) continue;
+
+    if (
+      colType === DYNAMIC_COLUMN_TYPE.object ||
+      colType === DYNAMIC_COLUMN_TYPE.array
+    ) {
+      const { parsed, isStructure } = tryParseJsonStructure(str);
+      if (isStructure) return parsed;
+    }
+
+    if (
+      colType === DYNAMIC_COLUMN_TYPE.number &&
+      str.trim() !== "" &&
+      !isNaN(Number(str))
+    ) {
+      return Number(str);
+    }
+
+    if (colType === DYNAMIC_COLUMN_TYPE.boolean) {
+      const lower = str.toLowerCase();
+      if (lower === "true") return true;
+      if (lower === "false") return false;
+    }
+  }
+
+  return str;
+};
+
 /**
- * Transforms form data before saving by parsing JSON strings back to objects/arrays.
- * This is necessary because COMPLEX fields are stringified for display in CodeMirror,
- * but need to be saved as proper JSON objects/arrays.
- * Only parses fields explicitly marked as COMPLEX to avoid accidentally converting
- * plain text strings that happen to be valid JSON.
+ * Transforms form data before saving, using column type metadata to preserve
+ * the correct JSON types in the API payload.
+ *
+ * Priority:
+ * 1. If the user typed a valid JSON object/array, always use that (user intent).
+ * 2. Try to coerce the value to the column's known non-string type (number, boolean).
+ * 3. Fall back to string.
  */
 export const prepareFormDataForSave = (
   formData: Record<string, unknown>,
-  fields: DatasetField[],
+  columns: DatasetItemColumn[],
 ): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
 
-  // Create a map of field keys to their types for quick lookup
-  const fieldTypeMap = new Map<string, FIELD_TYPE>();
-  fields.forEach((field) => {
-    fieldTypeMap.set(field.key, field.type);
+  const columnTypeMap = new Map<string, DYNAMIC_COLUMN_TYPE[]>();
+  columns.forEach((col) => {
+    columnTypeMap.set(col.name, col.types);
   });
 
   for (const [key, value] of Object.entries(formData)) {
-    const fieldType = fieldTypeMap.get(key);
-
-    // Only parse JSON strings for fields explicitly marked as COMPLEX
-    if (fieldType === FIELD_TYPE.COMPLEX && typeof value === "string") {
-      try {
-        const parsed = JSON.parse(value);
-        // Only use parsed value if it's an object or array
-        if (typeof parsed === "object" && parsed !== null) {
-          result[key] = parsed;
-          continue;
-        }
-      } catch {
-        // Not valid JSON, keep as string
+    // 1. If the user typed a valid JSON object/array, always use that
+    if (typeof value === "string") {
+      const { parsed, isStructure } = tryParseJsonStructure(value);
+      if (isStructure) {
+        result[key] = parsed;
+        continue;
       }
     }
+
+    // 2. Try to coerce based on column metadata
+    const colTypes = columnTypeMap.get(key);
+    if (colTypes && colTypes.length > 0) {
+      result[key] = coerceToColumnType(value, colTypes);
+      continue;
+    }
+
+    // 3. Fall back to value as-is
     result[key] = value;
   }
 
