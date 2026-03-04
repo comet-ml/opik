@@ -91,6 +91,19 @@ def _import_by_type(
                 client, source_dir, dry_run, name_pattern, debug
             )
 
+        # Flush the async ingestion queue before returning so that all
+        # enqueued traces/spans are persisted on the server.  Without this,
+        # the process can exit while the background worker is still sending
+        # data, silently dropping items (especially under rate-limiting).
+        if not dry_run:
+            flushed = client.flush()
+            if not flushed:
+                console.print(
+                    "[yellow]Warning: flush timed out — some traces/spans may not have been ingested. "
+                    "Re-run the import to retry.[/yellow]"
+                )
+                sys.exit(1)
+
         # Display summary
         print_import_summary(stats)
 
