@@ -606,7 +606,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
-from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility, FindDatasetsRequestType
+from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
@@ -939,7 +939,6 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
-    "FindDatasetsRequestType",
     "FindFeedbackDefinitionsRequestType",
     "FindFeedbackScoreNames1RequestType",
     "ForbiddenError",

@@ -359,6 +359,7 @@ export class SpansClient {
             stripAttachments,
             sorting,
             exclude,
+            search,
             fromTime,
             toTime,
         } = request;
@@ -380,6 +381,7 @@ export class SpansClient {
             strip_attachments: stripAttachments,
             sorting,
             exclude,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };
@@ -1070,7 +1072,7 @@ export class SpansClient {
         request: OpikApi.GetSpanStatsRequest = {},
         requestOptions?: SpansClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, traceId, type: type_, filters, fromTime, toTime } = request;
+        const { projectId, projectName, traceId, type: type_, filters, search, fromTime, toTime } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             project_name: projectName,
@@ -1083,6 +1085,7 @@ export class SpansClient {
                       })
                     : undefined,
             filters,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };
