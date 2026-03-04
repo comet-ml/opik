@@ -202,6 +202,7 @@ class FrameworkGEPAAdapter:
         self._candidate_parents: dict[str, list[str]] = {}
         self._baseline_candidate_id: str | None = None
         self._seed_candidate_key: str | None = None
+        self._full_dataset_size: int | None = None
 
         # GEPA index → framework candidate_id mapping
         self._gepa_idx_to_candidate_id: dict[int, str] = {}
@@ -437,20 +438,22 @@ class FrameworkGEPAAdapter:
 
         batch_index = self._current_step if self._current_step >= 0 else None
 
+        if self._full_dataset_size is None:
+            self._full_dataset_size = len(batch)
+
+        is_full_eval = len(batch) >= self._full_dataset_size
+        experiment_type = None if is_full_eval else "mini-batch"
+
         logger.debug(
             "[adapter.evaluate] eval_purpose=%s batch_index=%s num_items=%d "
-            "capture_traces=%s candidate_id=%s parent_ids=%s",
+            "capture_traces=%s candidate_id=%s parent_ids=%s is_full=%s",
             eval_purpose,
             batch_index,
             len(batch),
             effective_capture_traces,
             existing_candidate_id,
             parent_candidate_ids,
-        )
-
-        _FULL_EVAL_PURPOSES = {"baseline", "initialization", "validation"}
-        experiment_type = (
-            None if eval_purpose in _FULL_EVAL_PURPOSES else "mini-batch"
+            is_full_eval,
         )
 
         trial, raw_result = self._evaluation_adapter.evaluate_with_details(
