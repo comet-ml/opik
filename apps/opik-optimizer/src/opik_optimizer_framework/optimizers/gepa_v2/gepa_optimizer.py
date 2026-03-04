@@ -35,35 +35,50 @@ I provided an assistant with the following instructions to perform a task for me
 ```
 
 The following are examples of different task inputs provided to the assistant \
-along with the assistant's response for each of them, and some feedback on how \
-the assistant's response could be better:
+along with the assistant's response for each of them, and feedback showing \
+which assertions PASSED and which FAILED:
 ```
 <side_info>
 ```
 
 Your task is to write an improved instruction for the assistant.
 
-PRIORITY: Focus on fixing the failed assertions. Each failure tells you exactly \
-what the assistant's response was missing. Add concrete, actionable rules that \
-directly address these failure patterns.
+STEP 1 — DIAGNOSE: Read the FAILED assertions. Each one names a specific \
+behavior the assistant's response was missing. Identify the *patterns* across \
+failures — what categories of behavior keep failing?
 
-PRESERVE: If the current instruction already produces passing results for some \
-inputs, keep the strategies that work. Do not remove or weaken instructions that \
-are already effective.
+STEP 2 — KEEP WHAT WORKS: Look at the PASSED assertions. The current \
+instruction already produces these behaviors. Copy the specific rules from \
+the current instruction that drive these successes into your new version \
+verbatim, unless they directly conflict with a fix.
 
-Extract domain-specific factual knowledge from the feedback — the assistant may \
-not have access to this information in the future.
+STEP 3 — WRITE RULES THAT MATCH THE ASSERTION: Read each failing assertion \
+carefully. The assertion itself tells you how specific your rule needs to be:
 
-The instruction must generalize to unseen inputs. Focus on general strategies \
-and domain patterns, not individual test cases. Do NOT include instructions \
-hyper-specific to individual data points (e.g., "if the user asks about order \
-#12345, say X").
+- If the assertion checks for a SPECIFIC behavior (e.g., "acknowledges \
+specific frustration of 3 unreturned callbacks", "offers to verify gift card \
+code"), write a rule specific enough to guarantee that behavior. \
+Example: "When the customer mentions specific numbers (callbacks, amounts, \
+dates), repeat those exact numbers back in your response."
 
-If the current instruction is only a template variable (e.g., "{question}"), \
-return it unchanged — do not append instructions to user input templates.
+- If the assertion checks for a GENERAL quality (e.g., "professional tone", \
+"no false promises"), write a broader rule with a clear boundary. \
+Example: "Never commit to outcomes you cannot guarantee — say 'I will \
+escalate this' not 'I will fix this'."
 
-Keep the instruction concise — under 500 words. Prefer direct rules over \
-verbose explanations.
+The assistant is a language model that executes literal instructions. Abstract \
+advice like "be empathetic" does NOT reliably produce the right behavior. \
+Every rule must describe an observable action (what to say, what to include, \
+what to avoid).
+
+STEP 4 — GENERALIZE ACROSS INPUTS: Your rules must work for any input in \
+this domain, not just the examples shown. Do NOT reference specific test \
+inputs (e.g., "if the user asks about order #12345, say X"). Instead, turn \
+the pattern into a general trigger (e.g., "when a customer references a \
+specific order, always confirm the order number back").
+
+If the feedback reveals domain facts the assistant wouldn't know on its own \
+(e.g., company policies, product details), include those facts as rules.
 
 Provide the new instructions within ``` blocks."""
 
@@ -90,7 +105,6 @@ class GepaV2Optimizer:
     ) -> None:
         try:
             import gepa as _gepa
-            from gepa.utils.stop_condition import ScoreThresholdStopper
         except ImportError:
             raise ImportError(
                 "The 'gepa' package is required for GepaV2Optimizer. "
@@ -118,7 +132,7 @@ class GepaV2Optimizer:
 
         effective_n_samples = max(len(all_items), 1)
         max_metric_calls = params.get(
-            "max_metric_calls", max_candidates * effective_n_samples
+            "max_metric_calls", max_candidates * effective_n_samples * 5
         )
 
         adapter = FrameworkGEPAAdapter(
@@ -136,7 +150,11 @@ class GepaV2Optimizer:
         callback = GEPAProgressCallback(adapter=adapter)
 
         score_threshold = params.get("score_threshold", 1.0)
-        stop_callbacks = [ScoreThresholdStopper(threshold=score_threshold)]
+
+        def _trial_score_stopper(_state):
+            return adapter.best_full_eval_trial_score >= score_threshold
+
+        stop_callbacks = [_trial_score_stopper]
 
         result = _gepa.optimize(
             seed_candidate=seed_candidate,
@@ -149,7 +167,7 @@ class GepaV2Optimizer:
             max_metric_calls=max_metric_calls,
             stop_callbacks=stop_callbacks,
             callbacks=[callback],
-            skip_perfect_score=True,
+            skip_perfect_score=False,
             perfect_score=1,
             seed=seed,
             reflection_prompt_template=None,

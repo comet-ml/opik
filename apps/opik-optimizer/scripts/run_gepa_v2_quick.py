@@ -171,7 +171,6 @@ def main():
         optimizer_parameters={
             "max_candidates": 10,
             "reflection_minibatch_size": 3,
-            "candidate_selection_strategy": "pareto",
             "seed": 42,
         },
         baseline_config={

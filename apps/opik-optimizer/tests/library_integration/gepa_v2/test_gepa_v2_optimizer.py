@@ -189,8 +189,8 @@ class TestExtractPerItemFeedback:
         assert feedback["item-1"]["assertions"][0]["name"] == "relevance"
         assert feedback["item-1"]["assertions"][0]["value"] == 1.0
         assert feedback["item-1"]["assertions"][0]["reason"] == "The response is relevant"
-        # min(0.0, 1.0) = 0.0
-        assert feedback["item-2"]["score"] == 0.0
+        # mean(0.0, 1.0) = 0.5
+        assert feedback["item-2"]["score"] == 0.5
         assert len(feedback["item-2"]["assertions"]) == 2
 
     def test_keeps_worst_run_per_item(self):
@@ -219,6 +219,8 @@ class TestExtractPerItemFeedback:
         feedback = _extract_per_item_feedback(raw)
         assert feedback["item-1"]["output"] == "bad run"
         assert sum(1 for a in feedback["item-1"]["assertions"] if a["value"] < 1.0) == 1
+        assert feedback["item-1"]["total_runs"] == 2
+        assert feedback["item-1"]["passed_runs"] == 1
 
     def test_handles_none_result(self):
         assert _extract_per_item_feedback(None) == {}
@@ -925,8 +927,6 @@ class TestGepaV2Optimizer:
         assert isinstance(callbacks[0], GEPAProgressCallback)
 
     def test_stop_callbacks_passed(self):
-        from gepa.utils.stop_condition import ScoreThresholdStopper
-
         context = _make_context()
         state = OptimizationState()
         adapter = MagicMock()
@@ -947,7 +947,31 @@ class TestGepaV2Optimizer:
         stop_cbs = call_kwargs["stop_callbacks"]
         assert isinstance(stop_cbs, list)
         assert len(stop_cbs) == 1
-        assert isinstance(stop_cbs[0], ScoreThresholdStopper)
+        assert callable(stop_cbs[0])
+
+    def test_stop_callback_checks_trial_score(self):
+        context = _make_context()
+        state = OptimizationState()
+        adapter = MagicMock()
+
+        optimizer = GepaV2Optimizer()
+
+        with patch("gepa.optimize") as mock_optimize:
+            mock_optimize.return_value = SimpleNamespace(best_score=0.9, candidates=[])
+            optimizer.run(
+                context=context,
+                training_set=[{"id": "id-1", "question": "Q1", "answer": "A1"}],
+                validation_set=[{"id": "id-2", "question": "Q2", "answer": "A2"}],
+                evaluation_adapter=adapter,
+                state=state,
+            )
+
+        stopper = mock_optimize.call_args.kwargs["stop_callbacks"][0]
+        # Before any full eval, score is 0 → don't stop
+        assert stopper(MagicMock()) is False
+        # Simulate a perfect trial score
+        optimizer.adapter.best_full_eval_trial_score = 1.0
+        assert stopper(MagicMock()) is True
 
     def test_adapter_receives_evaluation_adapter(self):
         context = _make_context()
@@ -1038,8 +1062,8 @@ class TestGepaV2Optimizer:
         assert call_kwargs["reflection_minibatch_size"] == 5
         assert call_kwargs["candidate_selection_strategy"] == "epsilon_greedy"
         assert call_kwargs["seed"] == 99
-        # 10 max_candidates * 2 combined items (train + val, deduplicated)
-        assert call_kwargs["max_metric_calls"] == 20
+        # 10 max_candidates * 2 combined items * 5 multiplier
+        assert call_kwargs["max_metric_calls"] == 100
 
     def test_no_split_same_dataset_for_train_and_val(self):
         context = _make_context()

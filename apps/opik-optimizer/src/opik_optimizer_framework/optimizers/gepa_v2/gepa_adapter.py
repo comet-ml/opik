@@ -76,12 +76,16 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
 
     When multiple runs exist for the same item (runs_per_item > 1), keeps
     the run with the most failed assertions — this gives the reflection LLM
-    the most actionable feedback.
+    the most actionable feedback. Also tracks total_runs and passed_runs
+    so the reflection prompt can indicate whether a failure is consistent
+    or intermittent.
 
     Returns a dict keyed by dataset_item_id with:
       - output: the LLM output text
       - score: aggregate score (1.0 if all assertions passed, 0.0 otherwise)
       - assertions: list of dicts with name, value, reason per assertion
+      - total_runs: how many runs were executed for this item
+      - passed_runs: how many runs had all assertions pass
     """
     feedback: dict[str, dict[str, Any]] = {}
     if raw_result is None or not hasattr(raw_result, "test_results"):
@@ -104,21 +108,30 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
             })
 
         num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-        item_score = min(scores) if scores else 0.0
+        item_score = sum(scores) / len(scores) if scores else 0.0
+        run_passed = num_failed == 0
 
         existing = feedback.get(item_id)
         if existing is not None:
+            existing["total_runs"] += 1
+            if run_passed:
+                existing["passed_runs"] += 1
             existing_failures = sum(
                 1 for a in existing["assertions"] if a["value"] < 1.0
             )
             if num_failed <= existing_failures:
                 continue
-
-        feedback[item_id] = {
-            "output": output_text,
-            "score": item_score,
-            "assertions": assertions,
-        }
+            existing["output"] = output_text
+            existing["score"] = item_score
+            existing["assertions"] = assertions
+        else:
+            feedback[item_id] = {
+                "output": output_text,
+                "score": item_score,
+                "assertions": assertions,
+                "total_runs": 1,
+                "passed_runs": 1 if run_passed else 0,
+            }
 
     return feedback
 
@@ -203,6 +216,7 @@ class FrameworkGEPAAdapter:
         self._baseline_candidate_id: str | None = None
         self._seed_candidate_key: str | None = None
         self._full_dataset_size: int | None = None
+        self.best_full_eval_trial_score: float = 0.0
 
         # GEPA index → framework candidate_id mapping
         self._gepa_idx_to_candidate_id: dict[int, str] = {}
@@ -388,6 +402,8 @@ class FrameworkGEPAAdapter:
                         "output": output_text,
                         "score": score,
                         "assertions": item_feedback.get("assertions", []),
+                        "total_runs": item_feedback.get("total_runs", 1),
+                        "passed_runs": item_feedback.get("passed_runs", 0),
                     }
                 )
 
@@ -475,6 +491,8 @@ class FrameworkGEPAAdapter:
 
         if trial is not None:
             self._record_trial(key, trial, parent_candidate_ids, effective_capture_traces)
+            if is_full_eval and trial.score > self.best_full_eval_trial_score:
+                self.best_full_eval_trial_score = trial.score
 
         per_item = _extract_per_item_feedback(raw_result)
         self._last_per_item_feedback = per_item
@@ -512,12 +530,17 @@ class FrameworkGEPAAdapter:
             }
 
         def _build_feedback(
-            score: float, assertions: list[dict[str, Any]],
+            score: float,
+            assertions: list[dict[str, Any]],
+            total_runs: int,
+            passed_runs: int,
         ) -> str:
             failed = [a for a in assertions if a["value"] < 1.0]
             passed = [a for a in assertions if a["value"] >= 1.0]
 
             lines = [f"Score={score:.1f}."]
+            if total_runs > 1:
+                lines[0] += f" (passed {passed_runs}/{total_runs} runs)"
             if failed:
                 lines.append("FAILED assertions (fix these):")
                 for a in failed:
@@ -535,11 +558,13 @@ class FrameworkGEPAAdapter:
             output_text = traj.get("output", "")
             score = traj.get("score", 0.0)
             assertions = traj.get("assertions", [])
+            total_runs = traj.get("total_runs", 1)
+            passed_runs = traj.get("passed_runs", 0)
             num_failed = sum(1 for a in assertions if a["value"] < 1.0)
             records.append({
                 "Inputs": _build_inputs(dataset_item),
                 "Generated Outputs": output_text,
-                "Feedback": _build_feedback(score, assertions),
+                "Feedback": _build_feedback(score, assertions, total_runs, passed_runs),
                 "_num_failed": num_failed,
             })
 
