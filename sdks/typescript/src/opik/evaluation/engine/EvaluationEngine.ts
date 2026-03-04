@@ -34,6 +34,7 @@ interface ProgressTracker {
   complete(elapsedSeconds: number): void;
   recordFailure(): void;
   reportErrors(errors: EvaluationError[]): void;
+  restoreLogLevel(): void;
 }
 
 /**
@@ -115,55 +116,59 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const progress = this.createProgressTracker(items.length, totalRuns);
     const startTime = performance.now();
 
-    const testResults: EvaluationTestResult[] = [];
-    const errors: EvaluationError[] = [];
-    const experimentRefs: ExperimentItemReferences[] = [];
-    let completedRuns = 0;
+    try {
+      const testResults: EvaluationTestResult[] = [];
+      const errors: EvaluationError[] = [];
+      const experimentRefs: ExperimentItemReferences[] = [];
+      let completedRuns = 0;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const runsPerItem = this.getRunsPerItem(item);
-      const metrics = this.getItemMetrics(item);
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const runsPerItem = this.getRunsPerItem(item);
+        const metrics = this.getItemMetrics(item);
 
-      for (let runIndex = 0; runIndex < runsPerItem; runIndex++) {
-        try {
-          const testResult = await this.executeItemRun(
-            item,
-            metrics,
-            runIndex,
-            experimentRefs
-          );
-          testResults.push(testResult);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          errors.push({
-            datasetItemId: item.id,
-            runIndex,
-            message: errorMessage,
-            ...(error instanceof Error && { error }),
-          });
-          progress.recordFailure();
+        for (let runIndex = 0; runIndex < runsPerItem; runIndex++) {
+          try {
+            const testResult = await this.executeItemRun(
+              item,
+              metrics,
+              runIndex,
+              experimentRefs
+            );
+            testResults.push(testResult);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            errors.push({
+              datasetItemId: item.id,
+              runIndex,
+              message: errorMessage,
+              ...(error instanceof Error && { error }),
+            });
+            progress.recordFailure();
+          }
+          completedRuns++;
         }
-        completedRuns++;
+
+        progress.update(completedRuns, i);
       }
 
-      progress.update(completedRuns, i);
+      this.experiment.insert(experimentRefs);
+      await this.client.flush();
+
+      const elapsedSeconds = (performance.now() - startTime) / 1000;
+      progress.complete(elapsedSeconds);
+      progress.reportErrors(errors);
+
+      return EvaluationResultProcessor.processResults(
+        testResults,
+        this.experiment,
+        elapsedSeconds,
+        errors
+      );
+    } finally {
+      progress.restoreLogLevel();
     }
-
-    this.experiment.insert(experimentRefs);
-    await this.client.flush();
-
-    const elapsedSeconds = (performance.now() - startTime) / 1000;
-    progress.complete(elapsedSeconds);
-    progress.reportErrors(errors);
-
-    return EvaluationResultProcessor.processResults(
-      testResults,
-      this.experiment,
-      elapsedSeconds,
-      errors
-    );
   }
 
   private async getDatasetItems(): Promise<
@@ -230,7 +235,6 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           spinner.succeed(message);
         }
 
-        logger.settings.minLevel = savedLogLevel;
       },
       recordFailure: () => {
         failedRuns++;
@@ -241,6 +245,9 @@ export class EvaluationEngine<T = Record<string, unknown>> {
             `Dataset item ${err.datasetItemId} (run ${err.runIndex}): ${err.message}`
           );
         }
+      },
+      restoreLogLevel: () => {
+        logger.settings.minLevel = savedLogLevel;
       },
     };
   }
