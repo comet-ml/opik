@@ -478,8 +478,8 @@ class ExperimentDAO {
                     ei.experiment_id AS experiment_id,
                     ei.trace_id AS trace_id,
                     eif.dataset_item_id AS dataset_item_id,
-                    toUInt16OrDefault(JSON_VALUE(div.execution_policy, '$.pass_threshold'), toUInt16(0)) AS item_pass_threshold,
-                    toUInt16(arrayElement(:suite_thresholds, indexOf(:suite_version_ids, ef.dataset_version_id))) AS suite_pass_threshold
+                    JSONExtractUInt(div.execution_policy, 'pass_threshold') AS item_pass_threshold,
+                    arrayElement(:suite_thresholds, indexOf(:suite_version_ids, ef.dataset_version_id)) AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
                     SELECT id, dataset_item_id
@@ -498,7 +498,7 @@ class ExperimentDAO {
                     FROM dataset_item_versions
                     WHERE workspace_id = :workspace_id
                     AND (dataset_id, dataset_version_id) IN (
-                        SELECT dataset_id, dataset_version_id FROM experiments_final
+                        SELECT DISTINCT dataset_id, dataset_version_id FROM experiments_final
                         WHERE evaluation_method = 'evaluation_suite' AND length(dataset_version_id) > 0
                     )
                 ) div ON eif.dataset_item_id = div.dataset_item_id
@@ -1102,8 +1102,8 @@ class ExperimentDAO {
                     ei.experiment_id AS experiment_id,
                     ei.trace_id AS trace_id,
                     eif.dataset_item_id AS dataset_item_id,
-                    toUInt16OrDefault(JSON_VALUE(div.execution_policy, '$.pass_threshold'), toUInt16(0)) AS item_pass_threshold,
-                    toUInt16(arrayElement(:suite_thresholds, indexOf(:suite_version_ids, ef.dataset_version_id))) AS suite_pass_threshold
+                    JSONExtractUInt(div.execution_policy, 'pass_threshold') AS item_pass_threshold,
+                    arrayElement(:suite_thresholds, indexOf(:suite_version_ids, ef.dataset_version_id)) AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
                     SELECT id, dataset_item_id
@@ -1122,7 +1122,7 @@ class ExperimentDAO {
                     FROM dataset_item_versions
                     WHERE workspace_id = :workspace_id
                     AND (dataset_id, dataset_version_id) IN (
-                        SELECT dataset_id, dataset_version_id FROM experiments_final
+                        SELECT DISTINCT dataset_id, dataset_version_id FROM experiments_final
                         WHERE evaluation_method = 'evaluation_suite' AND length(dataset_version_id) > 0
                     )
                 ) div ON eif.dataset_item_id = div.dataset_item_id

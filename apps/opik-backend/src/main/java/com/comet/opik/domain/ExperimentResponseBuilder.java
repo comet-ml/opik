@@ -290,7 +290,7 @@ public class ExperimentResponseBuilder {
                 .feedbackScores(avgFeedbackScores)
                 .experimentScores(avgExperimentScores)
                 .passRateAvg(passRateAvg)
-                .passedCountSum(totalPassedCount > 0 ? totalPassedCount : null)
+                .passedCountSum(totalTotalCount > 0 ? totalPassedCount : null)
                 .totalCountSum(totalTotalCount > 0 ? totalTotalCount : null)
                 .build();
     }
