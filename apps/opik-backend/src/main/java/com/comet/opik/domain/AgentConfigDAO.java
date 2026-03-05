@@ -8,7 +8,6 @@ import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RowUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Builder;
 import lombok.NonNull;
@@ -456,7 +455,7 @@ interface AgentConfigDAO {
             if (RowUtils.hasColumn(rs, "delta_values")) {
                 String deltaValuesJson = rs.getString("delta_values");
                 if (StringUtils.isNotBlank(deltaValuesJson)) {
-                  values = JsonUtils.readValue(deltaValuesJson, VALUES_TYPE_REF);
+                    values = JsonUtils.readValue(deltaValuesJson, VALUES_TYPE_REF);
                 }
             }
 
