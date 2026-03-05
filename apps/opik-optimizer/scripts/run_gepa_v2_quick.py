@@ -77,7 +77,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response sincerely apologizes for the repeated failures in service",
-            "Response acknowledges the specific frustration of 3 unreturned callbacks",
+            "Response acknowledges the frustration of multiple unreturned callbacks",
             "Response offers a concrete resolution path like refund, escalation, or compensation",
             "Response does not make promises the agent cannot guarantee",
         ])],

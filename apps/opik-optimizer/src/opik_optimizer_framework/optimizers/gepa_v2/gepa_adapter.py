@@ -545,14 +545,14 @@ class FrameworkGEPAAdapter:
             for record, traj in zip(records, trajectories):
                 item_id = str(traj.get("input", {}).get("id", ""))
                 streak = self._batch_sampler.get_failure_streak(item_id)
-                if streak >= 2:
+                if streak >= 1:
                     stuck = self._batch_sampler.get_failed_assertions(item_id)
-                    record["Failure History"] = (
-                        f"This item has failed {streak} consecutive iterations. "
-                        f"Persistent failing assertions: {', '.join(stuck)}. "
-                        f"Previous prompt changes did NOT fix these — "
-                        f"try a fundamentally different approach."
-                    )
+                    if stuck:
+                        record["Failure History"] = (
+                            f"This item has failed {streak} consecutive iteration(s). "
+                            f"Still-failing assertions: {', '.join(stuck)}. "
+                            f"The current rules for these assertions are not working."
+                        )
 
         records.sort(key=lambda r: r["_max_failed"], reverse=True)
         for r in records:
