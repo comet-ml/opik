@@ -303,7 +303,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(typeof result.reason).toBe("string");
         expect(result.reason.length).toBeGreaterThan(0);
       }
-    }, 60000);
+    }, 120000);
   });
 
   describe("Metric Configuration", () => {
