@@ -484,9 +484,17 @@ class OpikTracer(BaseTracer):
         )
 
         if new_span_data.trace_id not in self._externally_created_traces_ids:
-            self._created_traces_data_map[run_id] = self._created_traces_data_map[
-                parent_run_id
-            ]
+            if parent_run_id in self._created_traces_data_map:
+                self._created_traces_data_map[run_id] = self._created_traces_data_map[
+                    parent_run_id
+                ]
+            else:
+                # Parent may be a stream-restart root run that was created as a regular
+                # span (not a skipped LangGraph root). Find the trace data by trace_id.
+                for td in self._created_traces_data_map.values():
+                    if td.id == new_span_data.trace_id:
+                        self._created_traces_data_map[run_id] = td
+                        break
 
         if not self._opik_context_read_only_mode:
             self._opik_context_storage.add_span_data(new_span_data)
