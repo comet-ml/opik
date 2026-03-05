@@ -13,7 +13,7 @@ from .agents_registry import AgentInfo, Param
 
 LOGGER = logging.getLogger(__name__)
 
-_REGISTRY: Dict[str, Dict[str, Any]] = {}
+REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 
 def entrypoint(
@@ -60,11 +60,11 @@ def entrypoint(
 
         source_file = os.path.abspath(inspect.getfile(fn))
 
-        params = _extract_params(fn)
+        params = extract_params(fn)
 
         docstring = inspect.getdoc(fn) or ""
 
-        _REGISTRY[agent_name] = {
+        REGISTRY[agent_name] = {
             "func": tracked_fn,
             "name": agent_name,
             "project": agent_project,
@@ -74,15 +74,13 @@ def entrypoint(
             "docstring": docstring,
         }
 
-        _self_register(agent_name, agent_project, source_file, params, docstring)
+        self_register(agent_name, agent_project, source_file, params, docstring)
 
         # Auto-dispatch: if runner is calling us to execute this specific agent
         target_agent = os.environ.get("OPIK_AGENT")
         if target_agent == agent_name:
-            _dispatch(tracked_fn)
+            dispatch_agent(tracked_fn)
 
-        tracked_fn._entrypoint_name = agent_name  # type: ignore[union-attr]
-        tracked_fn._entrypoint_project = agent_project  # type: ignore[union-attr]
         return tracked_fn
 
     if func is not None:
@@ -91,10 +89,10 @@ def entrypoint(
 
 
 def get_registry() -> Dict[str, Dict[str, Any]]:
-    return _REGISTRY
+    return REGISTRY
 
 
-def _extract_params(fn: Callable) -> List[Param]:
+def extract_params(fn: Callable) -> List[Param]:
     """Extract parameter names and type annotations from a function."""
     sig = inspect.signature(fn)
     params: List[Param] = []
@@ -108,7 +106,7 @@ def _extract_params(fn: Callable) -> List[Param]:
     return params
 
 
-def _self_register(
+def self_register(
     agent_name: str,
     project: str,
     source_file: str,
@@ -133,7 +131,7 @@ def _self_register(
         LOGGER.debug("Failed to self-register agent '%s'", agent_name, exc_info=True)
 
 
-def _dispatch(func: Callable) -> None:
+def dispatch_agent(func: Callable) -> None:
     """Execute the agent function with inputs from stdin, write result to file or stdout, exit."""
     try:
         raw = sys.stdin.read()
