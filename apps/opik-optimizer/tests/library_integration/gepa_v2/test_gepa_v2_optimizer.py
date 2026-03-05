@@ -1007,6 +1007,106 @@ class TestMakeReflectiveDataset:
         assert records[0]["Inputs"]["question"] == "hard"
         assert records[1]["Inputs"]["question"] == "easy"
 
+    def test_single_run_uses_flat_keys(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "hello"}],
+            scores=[0.5],
+            trajectories=[
+                {
+                    "input": {"question": "Q1"},
+                    "runs": [{"output": "hello", "score": 0.5, "assertions": [
+                        {"name": "clarity", "value": 0.0, "reason": "unclear"},
+                    ]}],
+                    "score": 0.5,
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        record = result["user_0"][0]
+        assert "Generated Outputs" in record
+        assert "Feedback" in record
+        assert "Runs" not in record
+        assert "Summary" not in record
+        assert record["Generated Outputs"] == "hello"
+
+    def test_multi_run_assertion_reason_labels_in_runs_field(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "r1"}],
+            scores=[0.0],
+            trajectories=[
+                {
+                    "input": {"question": "Q1"},
+                    "runs": [
+                        {
+                            "output": "r1",
+                            "score": 0.0,
+                            "assertions": [
+                                {"name": "Response addresses concern", "value": 0.0, "reason": "The response is too generic"},
+                                {"name": "Response is relevant", "value": 1.0, "reason": ""},
+                            ],
+                        },
+                        {
+                            "output": "r2",
+                            "score": 1.0,
+                            "assertions": [
+                                {"name": "Response addresses concern", "value": 1.0, "reason": ""},
+                                {"name": "Response is relevant", "value": 1.0, "reason": ""},
+                            ],
+                        },
+                    ],
+                    "score": 0.5,
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        runs_text = result["user_0"][0]["Runs"]
+        assert "- Assertion: Response addresses concern" in runs_text
+        assert "  Reason: The response is too generic" in runs_text
+        assert "- Response is relevant" in runs_text
+
+    def test_failed_assertion_without_reason(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "hello"}],
+            scores=[0.0],
+            trajectories=[
+                {
+                    "input": {"question": "Q1"},
+                    "runs": [{"output": "hello", "score": 0.0, "assertions": [
+                        {"name": "tone check", "value": 0.0, "reason": ""},
+                    ]}],
+                    "score": 0.0,
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        feedback = result["user_0"][0]["Feedback"]
+        assert "- Assertion: tone check" in feedback
+        assert "Reason" not in feedback
+
 
 # -- optimizer tests -----------------------------------------------------------
 
