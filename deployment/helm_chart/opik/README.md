@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.24](https://img.shields.io/badge/Version-1.10.24-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.24](https://img.shields.io/badge/AppVersion-1.10.24-informational?style=flat-square)
+![Version: 1.10.26](https://img.shields.io/badge/Version-1.10.26-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.26](https://img.shields.io/badge/AppVersion-1.10.26-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -377,8 +377,10 @@ Call opik api on http://localhost:5173/api
 | component.frontend.contentSecurityPolicy.img-src[4] | string | `"http:"` |  |
 | component.frontend.contentSecurityPolicy.manifest-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.media-src[0] | string | `"'self'"` |  |
-| component.frontend.contentSecurityPolicy.media-src[1] | string | `"https:"` |  |
-| component.frontend.contentSecurityPolicy.media-src[2] | string | `"http:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[1] | string | `"data:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[2] | string | `"blob:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[3] | string | `"https:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[4] | string | `"http:"` |  |
 | component.frontend.contentSecurityPolicy.object-src[0] | string | `"'none'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[1] | string | `"'unsafe-inline'"` |  |

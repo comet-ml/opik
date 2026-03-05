@@ -62,6 +62,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Runners
+  description: Local runner management endpoints
 - name: Manual Evaluation
   description: "Manual evaluation resources for traces, threads, and spans"
 - name: Ollama
@@ -1673,14 +1675,6 @@ paths:
         schema:
           type: string
           description: "Filter datasets by name (partial match, case insensitive)"
-      - name: type
-        in: query
-        schema:
-          type: string
-          description: Filter datasets by type (dataset or evaluation_suite)
-          enum:
-          - dataset
-          - evaluation_suite
       - name: sorting
         in: query
         schema:
@@ -3357,6 +3351,451 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/logs:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner job logs
+      description: Get log entries for a local runner job
+      operationId: getJobLogs
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: offset
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LocalRunnerLogEntry"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Runners
+      summary: Append local runner job logs
+      description: Append log entries for a running local runner job
+      operationId: appendJobLogs
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/LocalRunnerLogEntry"
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/cancel:
+    post:
+      tags:
+      - Runners
+      summary: Cancel local runner job
+      description: Cancel a pending or running local runner job
+      operationId: cancelJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/connections:
+    post:
+      tags:
+      - Runners
+      summary: Connect a local runner
+      description: Exchange a pairing code or API key for local runner credentials
+      operationId: connectRunner
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerConnectRequest"
+      responses:
+        "201":
+          description: Runner connected
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs:
+    post:
+      tags:
+      - Runners
+      summary: Create local runner job
+      description: Create a local runner job and enqueue it for execution
+      operationId: createJob
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocalRunnerJobRequest"
+      responses:
+        "201":
+          description: Job created
+          headers:
+            Location:
+              description: URI of the job
+              style: simple
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/pairs:
+    post:
+      tags:
+      - Runners
+      summary: Generate a pairing code
+      description: Generate a pairing code for a local runner in the current workspace
+      operationId: generatePairingCode
+      responses:
+        "201":
+          description: Pairing code generated
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerPairResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner job
+      description: Get a single local runner job's status and results
+      operationId: getJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/heartbeats:
+    post:
+      tags:
+      - Runners
+      summary: Local runner heartbeat
+      description: Refresh local runner heartbeat
+      operationId: heartbeat
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Heartbeat response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerHeartbeatResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "410":
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/jobs:
+    get:
+      tags:
+      - Runners
+      summary: List local runner jobs
+      description: List jobs for a local runner
+      operationId: listJobs
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: project
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        "200":
+          description: Jobs list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJobPage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners:
+    get:
+      tags:
+      - Runners
+      summary: List local runners
+      description: List all local runners in the current workspace
+      operationId: listRunners
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        "200":
+          description: Runners list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerPage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/jobs/next:
+    post:
+      tags:
+      - Runners
+      summary: Next local runner job
+      description: Long-poll for the next pending local runner job
+      operationId: nextJob
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJob"
+        "204":
+          description: No content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/agents:
+    put:
+      tags:
+      - Runners
+      summary: Register local runner agents
+      description: Register or update the local runner's agent list
+      operationId: registerAgents
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        description: Map of agent name to agent definition
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/results:
+    post:
+      tags:
+      - Runners
+      summary: Report local runner job result
+      description: Report local runner job completion or failure
+      operationId: reportJobResult
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerJobResultRequest"
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/manual-evaluation/spans:
     post:
       tags:
@@ -4317,6 +4756,45 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/prompts/by-commit/{commit}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt by commit
+      description: Get prompt by commit
+      operationId: getPromptByCommit
+      parameters:
+      - name: commit
+        in: path
+        required: true
+        schema:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/versions/{versionId}:
     get:
       tags:
@@ -4662,6 +5140,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -4918,6 +5401,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -5222,6 +5710,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5487,6 +5980,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5561,6 +6059,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -5691,6 +6194,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -6382,8 +6890,7 @@ components:
           minLength: 0
           type: string
         value:
-          maxLength: 512
-          minLength: 0
+          minLength: 1
           type: string
         type:
           type: string
@@ -6520,8 +7027,7 @@ components:
           minLength: 0
           type: string
         value:
-          maxLength: 512
-          minLength: 0
+          minLength: 1
           type: string
         type:
           type: string
@@ -13506,6 +14012,217 @@ components:
             type: string
         base_url:
           type: string
+    LocalRunnerLogEntry:
+      required:
+      - stream
+      - text
+      type: object
+      properties:
+        stream:
+          minLength: 1
+          type: string
+        text:
+          minLength: 1
+          type: string
+    LocalRunnerConnectRequest:
+      required:
+      - runner_name
+      type: object
+      properties:
+        pairing_code:
+          type: string
+        runner_name:
+          minLength: 1
+          type: string
+    CreateLocalRunnerJobRequest:
+      required:
+      - agent_name
+      type: object
+      properties:
+        agent_name:
+          minLength: 1
+          type: string
+        inputs:
+          $ref: "#/components/schemas/JsonNode"
+        project:
+          type: string
+        runner_id:
+          type: string
+          format: uuid
+        mask_id:
+          type: string
+          format: uuid
+    LocalRunnerPairResponse:
+      type: object
+      properties:
+        pairing_code:
+          type: string
+        runner_id:
+          type: string
+          format: uuid
+        expires_in_seconds:
+          type: integer
+          format: int32
+    LocalRunnerJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        runner_id:
+          type: string
+          format: uuid
+        agent_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          - cancelled
+        inputs:
+          $ref: "#/components/schemas/JsonNode"
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          type: string
+        project:
+          type: string
+        trace_id:
+          type: string
+          format: uuid
+        mask_id:
+          type: string
+          format: uuid
+        timeout:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    Agent:
+      type: object
+      properties:
+        name:
+          type: string
+        project:
+          type: string
+        description:
+          type: string
+        language:
+          type: string
+        executable:
+          type: string
+        source_file:
+          type: string
+        params:
+          type: array
+          items:
+            $ref: "#/components/schemas/Param"
+        timeout:
+          type: integer
+          format: int32
+    LocalRunner:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pairing
+          - connected
+          - disconnected
+        connected_at:
+          type: string
+          format: date-time
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+    Param:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          minLength: 1
+          type: string
+    LocalRunnerHeartbeatResponse:
+      type: object
+      properties:
+        cancelled_job_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    LocalRunnerJobPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalRunnerJob"
+    LocalRunnerPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalRunner"
+    LocalRunnerJobResultRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          - cancelled
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          type: string
+        trace_id:
+          type: string
+          format: uuid
     ManualEvaluationResponse:
       type: object
       properties:
@@ -14592,6 +15309,8 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion"
+        requested_version:
+          $ref: "#/components/schemas/PromptVersion"
     PromptVersion:
       required:
       - template
@@ -14828,6 +15547,8 @@ components:
           format: int64
           readOnly: true
         latest_version:
+          $ref: "#/components/schemas/PromptVersion_Detail"
+        requested_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
     PromptVersionPage_Public:
       type: object

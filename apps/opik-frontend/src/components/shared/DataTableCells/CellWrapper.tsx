@@ -40,7 +40,7 @@ const CellWrapper = <TData,>({
   return (
     <div
       className={cn(
-        "flex size-full py-2 px-3",
+        "flex size-full overflow-hidden py-2 px-3",
         stopClickPropagation && "cursor-auto",
         verticalAlignClass,
         horizontalAlignClass,
