@@ -986,8 +986,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "ID",
         type: COLUMN_TYPE.string,
       },
-      ...SHARED_COLUMNS,
-      { id: "error_type", label: "Error type", type: COLUMN_TYPE.string },
+      ...SHARED_COLUMNS.flatMap((col) =>
+        col.id === "error_info"
+          ? [
+              col,
+              {
+                id: "error_type",
+                label: "Error type",
+                type: COLUMN_TYPE.string,
+              },
+            ]
+          : [col],
+      ),
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
