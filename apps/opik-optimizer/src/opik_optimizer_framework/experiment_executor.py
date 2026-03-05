@@ -107,6 +107,11 @@ def run_experiment_with_details(
     if eval_purpose is not None:
         experiment_config["eval_purpose"] = eval_purpose
 
+    for key in candidate.config.get("optimizable_keys", []):
+        value = candidate.config.get(key)
+        if value is not None:
+            experiment_config[key] = value
+
     result = evaluate_optimization_suite_trial(
         optimization_id=optimization_id,
         dataset=dataset,
