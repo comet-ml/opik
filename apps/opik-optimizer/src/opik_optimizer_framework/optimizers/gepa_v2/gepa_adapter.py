@@ -437,6 +437,7 @@ class FrameworkGEPAAdapter:
         if self._batch_sampler is not None:
             if is_full_eval:
                 self._batch_sampler.update_scores(per_item)
+                self._batch_sampler.update_assertion_failures(per_item)
             else:
                 self._batch_sampler.mark_seen(dataset_item_ids)
 
@@ -539,6 +540,19 @@ class FrameworkGEPAAdapter:
                     "Summary": " ".join(summary_parts),
                     "_max_failed": max_failed,
                 })
+
+        if self._batch_sampler is not None:
+            for record, traj in zip(records, trajectories):
+                item_id = str(traj.get("input", {}).get("id", ""))
+                streak = self._batch_sampler.get_failure_streak(item_id)
+                if streak >= 2:
+                    stuck = self._batch_sampler.get_failed_assertions(item_id)
+                    record["Failure History"] = (
+                        f"This item has failed {streak} consecutive iterations. "
+                        f"Persistent failing assertions: {', '.join(stuck)}. "
+                        f"Previous prompt changes did NOT fix these — "
+                        f"try a fundamentally different approach."
+                    )
 
         records.sort(key=lambda r: r["_max_failed"], reverse=True)
         for r in records:

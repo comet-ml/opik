@@ -56,9 +56,11 @@ def run_optimization(
     optimizer = create_optimizer(context.optimizer_type)
 
     # Evaluate baseline (original prompt)
-    baseline_config = context.baseline_config
+    baseline_config = dict(context.baseline_config)
     if "prompt_messages" not in baseline_config:
         baseline_config = {**baseline_config, "prompt_messages": context.prompt_messages}
+    if context.optimizable_keys:
+        baseline_config["optimizable_keys"] = context.optimizable_keys
     baseline_trial = adapter.evaluate(
         config=baseline_config,
         dataset_item_ids=dataset_item_ids,

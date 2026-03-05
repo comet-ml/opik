@@ -96,7 +96,7 @@ def _build_adapter(mock_eval_adapter):
     """Create a FrameworkGEPAAdapter with a mocked EvaluationAdapter."""
     baseline_config = {"system_prompt": "Hi", "user_message": "Say {question}", "model": "test-model"}
     return FrameworkGEPAAdapter(
-        config_builder=_make_config_builder(baseline_config),
+        config_builder=_make_config_builder(baseline_config, ["system_prompt"]),
         evaluation_adapter=mock_eval_adapter,
     )
 
@@ -127,23 +127,26 @@ class TestBuildSeedCandidate:
 class TestMakeConfigBuilder:
     def test_merges_candidate_into_baseline(self):
         baseline = {"system_prompt": "original", "model": "gpt-4o"}
-        builder = _make_config_builder(baseline)
+        builder = _make_config_builder(baseline, ["system_prompt"])
         result = builder({SYSTEM_PROMPT_KEY: "improved"})
         assert result["system_prompt"] == "improved"
         assert result["model"] == "gpt-4o"
+        assert result["optimizable_keys"] == ["system_prompt"]
 
     def test_candidate_overrides_baseline(self):
         baseline = {"system_prompt": "original", "user_message": "{q}"}
-        builder = _make_config_builder(baseline)
+        builder = _make_config_builder(baseline, ["system_prompt"])
         result = builder({SYSTEM_PROMPT_KEY: "new"})
         assert result["system_prompt"] == "new"
         assert result["user_message"] == "{q}"
+        assert result["optimizable_keys"] == ["system_prompt"]
 
     def test_empty_candidate(self):
         baseline = {"system_prompt": "original", "model": "gpt-4o"}
-        builder = _make_config_builder(baseline)
+        builder = _make_config_builder(baseline, ["system_prompt"])
         result = builder({})
-        assert result == baseline
+        expected = {**baseline, "optimizable_keys": ["system_prompt"]}
+        assert result == expected
 
 
 class TestExtractPerItemFeedback:

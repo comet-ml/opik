@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gepa.core.data_loader import DataLoader
@@ -15,6 +15,9 @@ class FailureAwareBatchSampler:
     are guaranteed `min_failed_per_batch` slots.  Items never seen in any
     minibatch get `min_unseen_per_batch` slots.  Remaining slots are filled
     randomly.  Before any failure data exists, sampling is uniform random.
+
+    Also tracks per-item failure streaks and which assertions keep failing,
+    so the reflection prompt can include failure history for stuck items.
     """
 
     def __init__(
@@ -38,6 +41,9 @@ class FailureAwareBatchSampler:
         self._idx_to_item_id: dict[int, str] = {}
         self._item_id_to_idx: dict[str, int] = {}
 
+        self._item_failure_streaks: dict[str, int] = {}
+        self._item_failed_assertions: dict[str, list[str]] = {}
+
     def _ensure_mapping(self, loader: DataLoader) -> None:
         if self._idx_to_item_id:
             return
@@ -56,6 +62,35 @@ class FailureAwareBatchSampler:
 
     def mark_seen(self, item_ids: list[str]) -> None:
         self._seen_item_ids.update(item_ids)
+
+    def update_assertion_failures(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
+        for item_id, data in per_item_feedback.items():
+            failed_names: set[str] = set()
+            for run in data.get("runs", []):
+                for assertion in run.get("assertions", []):
+                    if assertion.get("value", 1.0) < 1.0:
+                        failed_names.add(assertion.get("name", ""))
+            failed_names.discard("")
+
+            if failed_names:
+                self._item_failure_streaks[item_id] = self._item_failure_streaks.get(item_id, 0) + 1
+                self._item_failed_assertions[item_id] = sorted(failed_names)
+            else:
+                self._item_failure_streaks.pop(item_id, None)
+                self._item_failed_assertions.pop(item_id, None)
+
+    def get_failure_streak(self, item_id: str) -> int:
+        return self._item_failure_streaks.get(item_id, 0)
+
+    def get_failed_assertions(self, item_id: str) -> list[str]:
+        return self._item_failed_assertions.get(item_id, [])
+
+    def get_stuck_items(self, min_streak: int = 3) -> dict[str, int]:
+        return {
+            item_id: streak
+            for item_id, streak in self._item_failure_streaks.items()
+            if streak >= min_streak
+        }
 
     def _score_for_idx(self, idx: int) -> float:
         item_id = self._idx_to_item_id.get(idx, "")

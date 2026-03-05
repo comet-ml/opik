@@ -182,6 +182,84 @@ class TestUpdateScores:
         sampler.update_scores({})
         assert not sampler._has_full_eval_data
 
+    def test_update_assertion_failures_increments_streak(self):
+        sampler = FailureAwareBatchSampler(minibatch_size=3)
+        feedback = {
+            "item-0": {
+                "score": 0.5,
+                "runs": [{"assertions": [
+                    {"name": "is empathetic", "value": 1.0},
+                    {"name": "mentions deadline", "value": 0.0},
+                ]}],
+            },
+            "item-1": {
+                "score": 1.0,
+                "runs": [{"assertions": [
+                    {"name": "is empathetic", "value": 1.0},
+                ]}],
+            },
+        }
+        sampler.update_assertion_failures(feedback)
+        assert sampler.get_failure_streak("item-0") == 1
+        assert sampler.get_failed_assertions("item-0") == ["mentions deadline"]
+        assert sampler.get_failure_streak("item-1") == 0
+
+        sampler.update_assertion_failures(feedback)
+        assert sampler.get_failure_streak("item-0") == 2
+
+    def test_streak_resets_on_pass(self):
+        sampler = FailureAwareBatchSampler(minibatch_size=3)
+        failing = {"item-0": {"score": 0.5, "runs": [{"assertions": [
+            {"name": "mentions deadline", "value": 0.0},
+        ]}]}}
+        sampler.update_assertion_failures(failing)
+        assert sampler.get_failure_streak("item-0") == 1
+
+        passing = {"item-0": {"score": 1.0, "runs": [{"assertions": [
+            {"name": "mentions deadline", "value": 1.0},
+        ]}]}}
+        sampler.update_assertion_failures(passing)
+        assert sampler.get_failure_streak("item-0") == 0
+        assert sampler.get_failed_assertions("item-0") == []
+
+    def test_get_stuck_items(self):
+        sampler = FailureAwareBatchSampler(minibatch_size=3)
+        feedback = {
+            "item-0": {"score": 0.0, "runs": [{"assertions": [
+                {"name": "a1", "value": 0.0},
+            ]}]},
+            "item-1": {"score": 0.0, "runs": [{"assertions": [
+                {"name": "a2", "value": 0.0},
+            ]}]},
+        }
+        for _ in range(3):
+            sampler.update_assertion_failures(feedback)
+
+        stuck = sampler.get_stuck_items(min_streak=3)
+        assert "item-0" in stuck
+        assert "item-1" in stuck
+        assert stuck["item-0"] == 3
+
+        assert sampler.get_stuck_items(min_streak=4) == {}
+
+    def test_multiple_assertions_tracked(self):
+        sampler = FailureAwareBatchSampler(minibatch_size=3)
+        feedback = {
+            "item-0": {"score": 0.0, "runs": [
+                {"assertions": [
+                    {"name": "a1", "value": 0.0},
+                    {"name": "a2", "value": 1.0},
+                ]},
+                {"assertions": [
+                    {"name": "a1", "value": 1.0},
+                    {"name": "a2", "value": 0.0},
+                    {"name": "a3", "value": 0.0},
+                ]},
+            ]},
+        }
+        sampler.update_assertion_failures(feedback)
+        assert sorted(sampler.get_failed_assertions("item-0")) == ["a1", "a2", "a3"]
+
     def test_custom_failure_threshold(self):
         sampler = FailureAwareBatchSampler(
             minibatch_size=3,

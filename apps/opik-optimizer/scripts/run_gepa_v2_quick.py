@@ -199,8 +199,9 @@ def main():
         optimizer_type=optimizer_type,
     )
 
+    baseline_config = {**context.baseline_config, "optimizable_keys": context.optimizable_keys}
     baseline_trial = eval_adapter.evaluate(
-        config=context.baseline_config,
+        config=baseline_config,
         dataset_item_ids=dataset_item_ids,
         eval_purpose="baseline",
     )
