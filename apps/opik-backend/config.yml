@@ -268,6 +268,14 @@ experimentDenormalization:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10)
   maxRetries: ${OPIK_REDIS_EXPERIMENT_DENORM_MAX_RETRIES:-3}
+  # Default: 100
+  # Description: Maximum number of ZSET entries to read per page when flushing pending experiments (10-1000)
+  jobBatchSize: ${OPIK_EXPERIMENT_DENORM_JOB_BATCH_SIZE:-100}
+
+# Scheduled job intervals (overrides @Every annotation defaults)
+# Keys are the simple class names of Job subclasses; values are duration strings (e.g. "5s", "1m")
+jobs:
+  ExperimentDenormalizationJob: ${EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,

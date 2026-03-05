@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -107,7 +108,8 @@ class ExperimentDenormalizationJobTest {
 
             when(redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY))
                     .thenReturn(scoredSortedSet);
-            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true)))
+            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true), anyInt(),
+                    anyInt()))
                     .thenReturn(Mono.just(List.of()));
 
             job.doJob(jobContext);
@@ -135,13 +137,14 @@ class ExperimentDenormalizationJobTest {
 
             when(redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY))
                     .thenReturn(scoredSortedSet);
-            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true)))
+            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true), anyInt(),
+                    anyInt()))
                     .thenReturn(Mono.just(List.of(member)));
 
             when(redisClient.<String, String>getMap(
-                    ExperimentDenormalizationConfig.PENDING_SET_KEY + ":" + member))
+                    ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member))
                     .thenReturn(bucket);
-            when(bucket.get("userName")).thenReturn(Mono.just(userName));
+            when(bucket.get(ExperimentDenormalizationConfig.USER_NAME_FIELD)).thenReturn(Mono.just(userName));
             when(bucket.delete()).thenReturn(Mono.just(true));
 
             doReturn(stream).when(redisClient).getStream(anyString(), any());
@@ -172,14 +175,15 @@ class ExperimentDenormalizationJobTest {
 
             when(redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY))
                     .thenReturn(scoredSortedSet);
-            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true)))
+            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true), anyInt(),
+                    anyInt()))
                     .thenReturn(Mono.just(List.of(member)));
 
             when(redisClient.<String, String>getMap(
-                    ExperimentDenormalizationConfig.PENDING_SET_KEY + ":" + member))
+                    ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member))
                     .thenReturn(bucket);
             // Simulate expired hash — bucket.get() returns empty
-            when(bucket.get("userName")).thenReturn(Mono.empty());
+            when(bucket.get(ExperimentDenormalizationConfig.USER_NAME_FIELD)).thenReturn(Mono.empty());
 
             when(scoredSortedSet.remove(member)).thenReturn(Mono.just(true));
 
@@ -211,17 +215,18 @@ class ExperimentDenormalizationJobTest {
 
             when(redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY))
                     .thenReturn(scoredSortedSet);
-            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true)))
+            when(scoredSortedSet.valueRange(any(Double.class), eq(true), any(Double.class), eq(true), anyInt(),
+                    anyInt()))
                     .thenReturn(Mono.just(List.of(member1, member2)));
 
             RMapReactive<String, String> bucket1 = mock(RMapReactive.class);
             RMapReactive<String, String> bucket2 = mock(RMapReactive.class);
 
             when(redisClient.<String, String>getMap(
-                    ExperimentDenormalizationConfig.PENDING_SET_KEY + ":" + member1))
+                    ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member1))
                     .thenReturn(bucket1);
             when(redisClient.<String, String>getMap(
-                    ExperimentDenormalizationConfig.PENDING_SET_KEY + ":" + member2))
+                    ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member2))
                     .thenReturn(bucket2);
 
             when(bucket1.get("userName")).thenReturn(Mono.just(userName));
@@ -266,6 +271,7 @@ class ExperimentDenormalizationJobTest {
         config.setClaimIntervalRatio(10);
         config.setPendingMessageDuration(Duration.minutes(10));
         config.setMaxRetries(3);
+        config.setJobBatchSize(100);
         return config;
     }
 }

@@ -4,7 +4,6 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +15,6 @@ import reactor.test.StepVerifier;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,7 +23,7 @@ class ExperimentAggregationPublisherTest {
 
     private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private static final String PENDING_SET_KEY = ExperimentDenormalizationConfig.PENDING_SET_KEY;
-    private static final String EXPERIMENT_KEY_PREFIX = PENDING_SET_KEY + ":";
+    private static final String EXPERIMENT_KEY_PREFIX = ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX;
 
     private RedissonReactiveClient redissonClient;
     private ExperimentAggregationPublisher.ExperimentAggregationPublisherImpl publisher;
@@ -61,18 +59,15 @@ class ExperimentAggregationPublisherTest {
         var userName = "test-user";
         var expectedMember = workspaceId + ":" + experimentId;
 
-        publisher.publish(Set.of(experimentId), workspaceId, userName);
+        publisher.publish(Set.of(experimentId), workspaceId, userName).block();
 
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> StepVerifier.create(index.contains(expectedMember))
-                        .assertNext(exists -> assertThat(exists)
-                                .as("ZSET should contain compound member 'workspaceId:experimentId'")
-                                .isTrue())
-                        .verifyComplete());
+        StepVerifier.create(index.contains(expectedMember))
+                .assertNext(exists -> assertThat(exists)
+                        .as("ZSET should contain compound member 'workspaceId:experimentId'")
+                        .isTrue())
+                .verifyComplete();
     }
 
     @Test
@@ -83,18 +78,15 @@ class ExperimentAggregationPublisherTest {
         var expectedMember = workspaceId + ":" + experimentId;
         long beforePublish = System.currentTimeMillis();
 
-        publisher.publish(Set.of(experimentId), workspaceId, "user");
+        publisher.publish(Set.of(experimentId), workspaceId, "user").block();
 
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> StepVerifier.create(index.getScore(expectedMember))
-                        .assertNext(score -> assertThat(score.longValue())
-                                .as("ZSET score should be in the future (now + debounceDelay)")
-                                .isGreaterThan(beforePublish))
-                        .verifyComplete());
+        StepVerifier.create(index.getScore(expectedMember))
+                .assertNext(score -> assertThat(score.longValue())
+                        .as("ZSET score should be in the future (now + debounceDelay)")
+                        .isGreaterThan(beforePublish))
+                .verifyComplete();
     }
 
     @Test
@@ -105,18 +97,15 @@ class ExperimentAggregationPublisherTest {
         var userName = "test-user";
         var expectedMember = workspaceId + ":" + experimentId;
 
-        publisher.publish(Set.of(experimentId), workspaceId, userName);
+        publisher.publish(Set.of(experimentId), workspaceId, userName).block();
 
         var bucket = redissonClient.<String, String>getMap(EXPERIMENT_KEY_PREFIX + expectedMember);
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> StepVerifier.create(bucket.get("userName"))
-                        .assertNext(stored -> assertThat(stored)
-                                .as("Hash should store userName")
-                                .isEqualTo(userName))
-                        .verifyComplete());
+        StepVerifier.create(bucket.get(ExperimentDenormalizationConfig.USER_NAME_FIELD))
+                .assertNext(stored -> assertThat(stored)
+                        .as("Hash should store userName")
+                        .isEqualTo(userName))
+                .verifyComplete();
     }
 
     @Test
@@ -127,7 +116,7 @@ class ExperimentAggregationPublisherTest {
 
         var experimentId = UUID.randomUUID();
 
-        publisher.publish(Set.of(experimentId), UUID.randomUUID().toString(), "user");
+        publisher.publish(Set.of(experimentId), UUID.randomUUID().toString(), "user").block();
 
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
@@ -141,7 +130,7 @@ class ExperimentAggregationPublisherTest {
     @Test
     @DisplayName("When experimentIds is empty, should skip publishing")
     void publish__whenEmptyExperimentIds__shouldSkipPublish() {
-        publisher.publish(Set.of(), UUID.randomUUID().toString(), "user");
+        publisher.publish(Set.of(), UUID.randomUUID().toString(), "user").block();
 
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
@@ -159,21 +148,18 @@ class ExperimentAggregationPublisherTest {
         var workspaceId1 = UUID.randomUUID().toString();
         var workspaceId2 = UUID.randomUUID().toString();
 
-        publisher.publish(Set.of(experimentId), workspaceId1, "user1");
-        publisher.publish(Set.of(experimentId), workspaceId2, "user2");
+        publisher.publish(Set.of(experimentId), workspaceId1, "user1").block();
+        publisher.publish(Set.of(experimentId), workspaceId2, "user2").block();
 
         var member1 = workspaceId1 + ":" + experimentId;
         var member2 = workspaceId2 + ":" + experimentId;
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> StepVerifier.create(index.size())
-                        .assertNext(size -> assertThat(size)
-                                .as("ZSET should have 2 entries — one per workspace")
-                                .isEqualTo(2))
-                        .verifyComplete());
+        StepVerifier.create(index.size())
+                .assertNext(size -> assertThat(size)
+                        .as("ZSET should have 2 entries — one per workspace")
+                        .isEqualTo(2))
+                .verifyComplete();
 
         StepVerifier.create(index.contains(member1))
                 .expectNext(true)
@@ -192,34 +178,23 @@ class ExperimentAggregationPublisherTest {
         var member = workspaceId + ":" + experimentId;
         var index = redissonClient.getScoredSortedSet(PENDING_SET_KEY);
 
-        publisher.publish(Set.of(experimentId), workspaceId, "user");
-
-        // Wait for the first publish to persist before reading the score
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .until(() -> Boolean.TRUE.equals(index.contains(member).block()));
+        publisher.publish(Set.of(experimentId), workspaceId, "user").block();
 
         var firstScore = index.getScore(member).block();
 
-        publisher.publish(Set.of(experimentId), workspaceId, "user");
+        publisher.publish(Set.of(experimentId), workspaceId, "user").block();
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    StepVerifier.create(index.size())
-                            .assertNext(size -> assertThat(size)
-                                    .as("ZSET should still have exactly 1 entry after second publish")
-                                    .isEqualTo(1))
-                            .verifyComplete();
+        StepVerifier.create(index.size())
+                .assertNext(size -> assertThat(size)
+                        .as("ZSET should still have exactly 1 entry after second publish")
+                        .isEqualTo(1))
+                .verifyComplete();
 
-                    StepVerifier.create(index.getScore(member))
-                            .assertNext(secondScore -> assertThat(secondScore)
-                                    .as("Score should be >= first score after second publish")
-                                    .isGreaterThanOrEqualTo(firstScore))
-                            .verifyComplete();
-                });
+        StepVerifier.create(index.getScore(member))
+                .assertNext(secondScore -> assertThat(secondScore)
+                        .as("Score should be >= first score after second publish")
+                        .isGreaterThanOrEqualTo(firstScore))
+                .verifyComplete();
     }
 
     @Test
@@ -230,20 +205,17 @@ class ExperimentAggregationPublisherTest {
         var member = workspaceId + ":" + experimentId;
         long expectedMaxTtlMs = config.getDebounceDelay().toMilliseconds() * 2;
 
-        publisher.publish(Set.of(experimentId), workspaceId, "user");
+        publisher.publish(Set.of(experimentId), workspaceId, "user").block();
 
         var bucket = redissonClient.getMap(EXPERIMENT_KEY_PREFIX + member);
 
-        Awaitility.await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> StepVerifier.create(bucket.remainTimeToLive())
-                        .assertNext(ttl -> assertThat(ttl)
-                                .as("Hash bucket TTL should be set and positive")
-                                .isGreaterThan(0L)
-                                .as("Hash bucket TTL should not exceed 2x debounceDelay")
-                                .isLessThanOrEqualTo(expectedMaxTtlMs))
-                        .verifyComplete());
+        StepVerifier.create(bucket.remainTimeToLive())
+                .assertNext(ttl -> assertThat(ttl)
+                        .as("Hash bucket TTL should be set and positive")
+                        .isGreaterThan(0L)
+                        .as("Hash bucket TTL should not exceed 2x debounceDelay")
+                        .isLessThanOrEqualTo(expectedMaxTtlMs))
+                .verifyComplete();
     }
 
     private static ExperimentDenormalizationConfig buildConfig(boolean enabled) {
@@ -261,6 +233,7 @@ class ExperimentAggregationPublisherTest {
         config.setClaimIntervalRatio(10);
         config.setPendingMessageDuration(Duration.minutes(10));
         config.setMaxRetries(3);
+        config.setJobBatchSize(100);
         return config;
     }
 }

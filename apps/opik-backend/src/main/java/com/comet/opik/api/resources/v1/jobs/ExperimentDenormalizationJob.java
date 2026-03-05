@@ -25,7 +25,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 /**
  * Scheduled job responsible for flushing debounced experiment aggregation events to the Redis stream.
  *
- * <p>Every 5 seconds this job:
+ * <p>Periodically (default 5s, configurable via {@code jobs.ExperimentDenormalizationJob} in config) this job:
  * <ol>
  *   <li>Queries the Redis ZSET index for members whose debounce window has elapsed.</li>
  *   <li>Each ZSET member encodes both workspaceId and experimentId as {@code "workspaceId:experimentId"},
@@ -41,14 +41,10 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@Every("5s")
+@Every
 public class ExperimentDenormalizationJob extends Job {
 
     private static final Lock SCAN_LOCK_KEY = new Lock("experiment_denormalization_job:scan_lock");
-
-    private static final String EXPERIMENT_KEY_PREFIX = ExperimentDenormalizationConfig.PENDING_SET_KEY + ":";
-    private static final String USER_NAME_FIELD = "userName";
-    private static final String MEMBER_SEPARATOR = ":";
 
     private final ExperimentDenormalizationConfig config;
     private final RedissonReactiveClient redisClient;
@@ -78,8 +74,8 @@ public class ExperimentDenormalizationJob extends Job {
                 Mono.defer(() -> getExperimentsReadyToProcess()
                         .flatMap(this::processExperiment)
                         .onErrorContinue((throwable, experimentId) -> log.error(
-                                "Failed to process pending experiment '{}': {}",
-                                experimentId, throwable.getMessage(), throwable))
+                                "Failed to process pending experiment '{}'",
+                                experimentId, throwable))
                         .doOnComplete(
                                 () -> log.debug(
                                         "Experiment denormalization job finished processing all ready experiments"))
@@ -97,17 +93,27 @@ public class ExperimentDenormalizationJob extends Job {
     }
 
     /**
-     * Queries the ZSET index for experiment IDs whose debounce window has elapsed (score &lt;= now).
-     * This is O(log(N)+M) where N is the total number of pending experiments and M is the number ready.
+     * Queries the ZSET index in pages for experiment IDs whose debounce window has elapsed (score &lt;= now).
+     * Uses offset/count pagination to avoid materializing the entire ZSET into memory.
+     * Since each processed experiment is removed from the ZSET, we always query from offset 0.
      */
     private Flux<String> getExperimentsReadyToProcess() {
         long nowMillis = Instant.now().toEpochMilli();
+        int batchSize = config.getJobBatchSize();
+        var index = redisClient.<String>getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY);
 
-        log.debug("Checking for experiments ready to process (up to timestamp: '{}')", nowMillis);
+        log.debug("Checking for experiments ready to process (up to timestamp: '{}', batchSize: '{}')",
+                nowMillis, batchSize);
 
-        return redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY)
-                .valueRange(Double.NEGATIVE_INFINITY, true, nowMillis, true)
-                .flatMapMany(collection -> Flux.fromIterable(collection).map(Object::toString));
+        return index.valueRange(Double.NEGATIVE_INFINITY, true, nowMillis, true, 0, batchSize)
+                .expand(collection -> {
+                    if (collection.size() < batchSize) {
+                        return Mono.empty();
+                    }
+                    return index.valueRange(Double.NEGATIVE_INFINITY, true, nowMillis, true, 0, batchSize);
+                })
+                .flatMapIterable(collection -> collection)
+                .map(Object::toString);
     }
 
     /**
@@ -117,17 +123,17 @@ public class ExperimentDenormalizationJob extends Job {
      * If the hash bucket has already expired (stale ZSET entry), only the ZSET entry is removed.
      */
     private Mono<Void> processExperiment(String member) {
-        int separatorIndex = member.indexOf(MEMBER_SEPARATOR);
+        int separatorIndex = member.indexOf(ExperimentDenormalizationConfig.MEMBER_SEPARATOR);
         String workspaceId = member.substring(0, separatorIndex);
         String experimentIdStr = member.substring(separatorIndex + 1);
 
-        log.info("Processing pending experiment: '{}' for workspace: '{}'", experimentIdStr, workspaceId);
+        log.debug("Processing pending experiment: '{}' for workspace: '{}'", experimentIdStr, workspaceId);
 
-        var bucket = redisClient.<String, String>getMap(EXPERIMENT_KEY_PREFIX + member);
+        var bucket = redisClient.<String, String>getMap(ExperimentDenormalizationConfig.EXPERIMENT_KEY_PREFIX + member);
         var index = redisClient.getScoredSortedSet(ExperimentDenormalizationConfig.PENDING_SET_KEY);
         var stream = redisClient.getStream(config.getStreamName(), config.getCodec());
 
-        return bucket.get(USER_NAME_FIELD)
+        return bucket.get(ExperimentDenormalizationConfig.USER_NAME_FIELD)
                 .flatMap(userName -> {
                     var message = ExperimentAggregationMessage.builder()
                             .experimentId(UUID.fromString(experimentIdStr))
@@ -136,7 +142,7 @@ public class ExperimentDenormalizationJob extends Job {
                             .build();
 
                     return stream.add(StreamAddArgs.entry(ExperimentDenormalizationConfig.PAYLOAD_FIELD, message))
-                            .doOnNext(id -> log.info(
+                            .doOnNext(id -> log.debug(
                                     "Enqueued aggregation message for experiment '{}' with stream id '{}'",
                                     experimentIdStr, id))
                             .then(bucket.delete())
@@ -147,9 +153,7 @@ public class ExperimentDenormalizationJob extends Job {
                     return index.remove(member);
                 }))
                 .then()
-                .doOnSuccess(__ -> log.info("Successfully processed and removed pending experiment: '{}'",
-                        experimentIdStr))
-                .doOnError(error -> log.error("Failed to process pending experiment '{}': {}",
-                        experimentIdStr, error.getMessage(), error));
+                .doOnSuccess(__ -> log.debug("Successfully processed and removed pending experiment: '{}'",
+                        experimentIdStr));
     }
 }

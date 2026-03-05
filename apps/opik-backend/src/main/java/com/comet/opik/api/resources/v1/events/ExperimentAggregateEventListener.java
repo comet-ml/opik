@@ -64,7 +64,8 @@ public class ExperimentAggregateEventListener {
             return;
         }
         if (FINISHED_STATUSES.contains(event.newStatus())) {
-            publisher.publish(Set.of(event.experimentId()), event.workspaceId(), event.userName());
+            publisher.publish(Set.of(event.experimentId()), event.workspaceId(), event.userName())
+                    .subscribe(null, e -> log.error("Error triggering aggregation for experiment updated", e));
         }
     }
 
@@ -185,7 +186,7 @@ public class ExperimentAggregateEventListener {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .filter(CollectionUtils::isNotEmpty)
-                .doOnNext(finishedIds -> publisher.publish(finishedIds, workspaceId, userName))
+                .flatMap(finishedIds -> publisher.publish(finishedIds, workspaceId, userName))
                 .then();
     }
 
@@ -206,7 +207,7 @@ public class ExperimentAggregateEventListener {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .filter(CollectionUtils::isNotEmpty)
-                .doOnNext(experimentIds -> publisher.publish(experimentIds, workspaceId, userName))
+                .flatMap(experimentIds -> publisher.publish(experimentIds, workspaceId, userName))
                 .then();
     }
 
@@ -227,7 +228,7 @@ public class ExperimentAggregateEventListener {
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
                 .filter(CollectionUtils::isNotEmpty)
-                .doOnNext(experimentIds -> publisher.publish(experimentIds, workspaceId, userName))
+                .flatMap(experimentIds -> publisher.publish(experimentIds, workspaceId, userName))
                 .then();
     }
 }
