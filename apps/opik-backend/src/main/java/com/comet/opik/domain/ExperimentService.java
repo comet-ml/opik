@@ -134,7 +134,8 @@ public class ExperimentService {
 
     private Mono<ExperimentPage> fetchExperimentPage(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria) {
-        return experimentDAO.find(page, size, experimentSearchCriteria)
+        return fetchSuiteLevelThresholds()
+                .flatMap(thresholds -> experimentDAO.find(page, size, experimentSearchCriteria, thresholds))
                 .flatMap(experimentPage -> enrichExperiments(experimentPage.content())
                         .map(experiments -> experimentPage.toBuilder().content(experiments).build()));
     }
@@ -295,11 +296,31 @@ public class ExperimentService {
         });
     }
 
+    private Mono<Map<String, Integer>> fetchSuiteLevelThresholds() {
+        return experimentDAO.getDatasetVersionIds()
+                .flatMap(versionIds -> {
+                    if (versionIds.isEmpty()) {
+                        return Mono.just(Map.of());
+                    }
+                    return Mono.deferContextual(ctx -> {
+                        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                        return Mono.fromCallable(() -> datasetVersionService.findByIds(versionIds, workspaceId))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .map(versions -> versions.stream()
+                                        .filter(v -> v.executionPolicy() != null)
+                                        .collect(Collectors.toMap(
+                                                v -> v.id().toString(),
+                                                v -> v.executionPolicy().passThreshold())));
+                    });
+                });
+    }
+
     @WithSpan
     public Mono<ExperimentGroupAggregationsResponse> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
         log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
 
-        return experimentDAO.findGroupsAggregations(criteria)
+        return fetchSuiteLevelThresholds()
+                .flatMapMany(thresholds -> experimentDAO.findGroupsAggregations(criteria, thresholds))
                 .collectList()
                 .flatMap(groupItems -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -365,7 +386,10 @@ public class ExperimentService {
     @WithSpan
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
-        return enrichExperiment(experimentDAO.getById(id), "Not found experiment with id '%s'".formatted(id));
+        return enrichExperiment(
+                fetchSuiteLevelThresholds()
+                        .flatMap(thresholds -> experimentDAO.getById(id, thresholds)),
+                "Not found experiment with id '%s'".formatted(id));
     }
 
     @WithSpan
