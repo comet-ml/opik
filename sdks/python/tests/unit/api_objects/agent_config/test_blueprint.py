@@ -135,20 +135,18 @@ class TestBlueprintPromptResolution:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="system_prompt", type="prompt", value="ver-111"
+                    key="system_prompt", type="prompt", value="abc12345"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-1"
         version_detail.template_structure = "text"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "my-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
@@ -162,25 +160,22 @@ class TestBlueprintPromptResolution:
             )
 
         assert bp["system_prompt"] is fake_prompt
-        mock_rest.prompts.get_prompt_version_by_id.assert_called_once_with("ver-111")
-        mock_rest.prompts.get_prompt_by_id.assert_called_once_with("prompt-1")
+        mock_rest.prompts.get_prompt_by_commit.assert_called_once_with("abc12345")
 
     def test_chat_prompt_field__resolves_to_chat_prompt_object(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="messages", type="prompt", value="ver-222"),
+                AgentConfigValuePublic(key="messages", type="prompt", value="bcd23456"),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-2"
         version_detail.template_structure = "chat"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "chat-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
@@ -198,19 +193,17 @@ class TestBlueprintPromptResolution:
     def test_base_prompt_annotation__chat_structure__resolves_to_chat_prompt(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="p", type="prompt", value="ver-333"),
+                AgentConfigValuePublic(key="p", type="prompt", value="cde34567"),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-3"
         version_detail.template_structure = "chat"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "any-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
@@ -228,19 +221,17 @@ class TestBlueprintPromptResolution:
     def test_base_prompt_annotation__text_structure__resolves_to_prompt(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="p", type="prompt", value="ver-444"),
+                AgentConfigValuePublic(key="p", type="prompt", value="def45678"),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-4"
         version_detail.template_structure = "text"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "any-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
@@ -259,15 +250,13 @@ class TestBlueprintPromptResolution:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="system_prompt", type="prompt", value="ver-bad"
+                    key="system_prompt", type="prompt", value="badbad00"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
-        mock_rest.prompts.get_prompt_version_by_id.side_effect = Exception(
-            "network error"
-        )
+        mock_rest.prompts.get_prompt_by_commit.side_effect = Exception("network error")
 
         with pytest.raises(Exception, match="network error"):
             Blueprint(
@@ -280,14 +269,16 @@ class TestBlueprintPromptResolution:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="prompt_commit", value="ver-pv-111"
+                    key="version", type="prompt_commit", value="pv111111"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
         fake_version_detail = mock.Mock(spec=PromptVersionDetail)
-        mock_rest.prompts.get_prompt_version_by_id.return_value = fake_version_detail
+        prompt_detail = mock.Mock()
+        prompt_detail.requested_version = fake_version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         bp = Blueprint(
             raw,
@@ -296,20 +287,19 @@ class TestBlueprintPromptResolution:
         )
 
         assert bp["version"] is fake_version_detail
-        mock_rest.prompts.get_prompt_version_by_id.assert_called_once_with("ver-pv-111")
-        mock_rest.prompts.get_prompt_by_id.assert_not_called()
+        mock_rest.prompts.get_prompt_by_commit.assert_called_once_with("pv111111")
 
     def test_prompt_version_field__resolution_fails__raises(self):
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="prompt_commit", value="ver-pv-bad"
+                    key="version", type="prompt_commit", value="badbad00"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
-        mock_rest.prompts.get_prompt_version_by_id.side_effect = Exception("not found")
+        mock_rest.prompts.get_prompt_by_commit.side_effect = Exception("not found")
 
         with pytest.raises(Exception, match="not found"):
             Blueprint(
@@ -318,30 +308,25 @@ class TestBlueprintPromptResolution:
                 rest_client_=mock_rest,
             )
 
-    def test_two_prompt_fields__makes_exactly_two_api_calls_per_prompt(self):
+    def test_two_prompt_fields__makes_exactly_one_api_call_per_prompt(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="p1", type="prompt", value="ver-1"),
-                AgentConfigValuePublic(key="p2", type="prompt", value="ver-2"),
+                AgentConfigValuePublic(key="p1", type="prompt", value="aaaaaaaa"),
+                AgentConfigValuePublic(key="p2", type="prompt", value="bbbbbbbb"),
             ]
         )
 
         mock_rest = mock.Mock()
 
-        def _version_side_effect(vid):
+        def _commit_side_effect(commit):
             v = mock.Mock()
-            v.prompt_id = f"prompt-{vid}"
             v.template_structure = "text"
-            return v
-
-        mock_rest.prompts.get_prompt_version_by_id.side_effect = _version_side_effect
-
-        def _detail_side_effect(pid):
             d = mock.Mock()
-            d.name = f"name-{pid}"
+            d.name = f"name-{commit}"
+            d.requested_version = v
             return d
 
-        mock_rest.prompts.get_prompt_by_id.side_effect = _detail_side_effect
+        mock_rest.prompts.get_prompt_by_commit.side_effect = _commit_side_effect
 
         with mock.patch(
             "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
@@ -353,8 +338,7 @@ class TestBlueprintPromptResolution:
                 rest_client_=mock_rest,
             )
 
-        assert mock_rest.prompts.get_prompt_version_by_id.call_count == 2
-        assert mock_rest.prompts.get_prompt_by_id.call_count == 2
+        assert mock_rest.prompts.get_prompt_by_commit.call_count == 2
 
 
 class TestBlueprintPromptResolutionWithoutFieldTypes:
@@ -362,20 +346,18 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="system_prompt", type="prompt", value="ver-111"
+                    key="system_prompt", type="prompt", value="abc12345"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-1"
         version_detail.template_structure = "text"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "my-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
@@ -389,19 +371,17 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
     def test_chat_prompt_type__resolves_to_chat_prompt_object(self):
         raw = _make_raw_blueprint(
             values=[
-                AgentConfigValuePublic(key="messages", type="prompt", value="ver-222"),
+                AgentConfigValuePublic(key="messages", type="prompt", value="bcd23456"),
             ]
         )
 
         mock_rest = mock.Mock()
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-2"
         version_detail.template_structure = "chat"
-        mock_rest.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "chat-prompt"
-        mock_rest.prompts.get_prompt_by_id.return_value = prompt_detail
+        prompt_detail.requested_version = version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
@@ -416,34 +396,33 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="version", type="prompt_commit", value="ver-pv-111"
+                    key="version", type="prompt_commit", value="pv111111"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
         fake_version_detail = mock.Mock(spec=PromptVersionDetail)
-        mock_rest.prompts.get_prompt_version_by_id.return_value = fake_version_detail
+        prompt_detail = mock.Mock()
+        prompt_detail.requested_version = fake_version_detail
+        mock_rest.prompts.get_prompt_by_commit.return_value = prompt_detail
 
         bp = Blueprint(raw, rest_client_=mock_rest)
 
         assert bp["version"] is fake_version_detail
-        mock_rest.prompts.get_prompt_version_by_id.assert_called_once_with("ver-pv-111")
-        mock_rest.prompts.get_prompt_by_id.assert_not_called()
+        mock_rest.prompts.get_prompt_by_commit.assert_called_once_with("pv111111")
 
     def test_prompt_resolution_fails__raises(self):
         raw = _make_raw_blueprint(
             values=[
                 AgentConfigValuePublic(
-                    key="system_prompt", type="prompt", value="ver-bad"
+                    key="system_prompt", type="prompt", value="badbad00"
                 ),
             ]
         )
 
         mock_rest = mock.Mock()
-        mock_rest.prompts.get_prompt_version_by_id.side_effect = Exception(
-            "network error"
-        )
+        mock_rest.prompts.get_prompt_by_commit.side_effect = Exception("network error")
 
         with pytest.raises(Exception, match="network error"):
             Blueprint(raw, rest_client_=mock_rest)

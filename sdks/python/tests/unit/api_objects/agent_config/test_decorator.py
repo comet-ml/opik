@@ -666,9 +666,9 @@ class TestConfigDecoratorTTLEnvVar:
 
 
 class TestConfigDecoratorPromptFields:
-    def test_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
+    def test_prompt_field__sent_to_backend_as_commit(self, mock_backend):
         fake_prompt = mock.Mock(spec=Prompt)
-        fake_prompt.__internal_api__version_id__ = "ver-abc"
+        fake_prompt.commit = "abc12345"
 
         @agent_config_decorator
         @dataclasses.dataclass
@@ -685,11 +685,11 @@ class TestConfigDecoratorPromptFields:
             v for v in blueprint.values if v.key == "MyConfig.system_prompt"
         )
         assert prompt_param.type == "prompt"
-        assert prompt_param.value == "ver-abc"
+        assert prompt_param.value == "abc12345"
 
-    def test_chat_prompt_field__sent_to_backend_as_version_id(self, mock_backend):
+    def test_chat_prompt_field__sent_to_backend_as_commit(self, mock_backend):
         fake_prompt = mock.Mock(spec=ChatPrompt)
-        fake_prompt.__internal_api__version_id__ = "ver-chat-1"
+        fake_prompt.commit = "bcd23456"
 
         @agent_config_decorator
         @dataclasses.dataclass
@@ -703,27 +703,21 @@ class TestConfigDecoratorPromptFields:
         call_kwargs = mock_backend.agent_configs.create_agent_config.call_args[1]
         blueprint = call_kwargs["blueprint"]
         param = next(v for v in blueprint.values if v.key == "MyConfig.messages")
-        assert param.value == "ver-chat-1"
+        assert param.value == "bcd23456"
 
     def test_existing_blueprint_prompt_field__resolves_and_applied_to_instance(
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [
-                mock.Mock(
-                    key="MyConfig.system_prompt", type="string", value="ver-backend"
-                )
-            ]
+            [mock.Mock(key="MyConfig.system_prompt", type="string", value="abc12345")]
         )
 
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-id-1"
         version_detail.template_structure = "text"
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "my-prompt"
-        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+        prompt_detail.requested_version = version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
             prompt_detail
         )
 
@@ -747,17 +741,15 @@ class TestConfigDecoratorPromptFields:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.messages", type="string", value="ver-chat")]
+            [mock.Mock(key="MyConfig.messages", type="string", value="bcd23456")]
         )
 
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-id-2"
         version_detail.template_structure = "chat"
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "chat-prompt"
-        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+        prompt_detail.requested_version = version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
             prompt_detail
         )
 
@@ -781,17 +773,15 @@ class TestConfigDecoratorPromptFields:
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
-            [mock.Mock(key="MyConfig.p", type="prompt", value="ver-base")]
+            [mock.Mock(key="MyConfig.p", type="prompt", value="cde34567")]
         )
 
         version_detail = mock.Mock()
-        version_detail.prompt_id = "prompt-base"
         version_detail.template_structure = "chat"
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = version_detail
-
         prompt_detail = mock.Mock()
         prompt_detail.name = "base-prompt"
-        mock_backend.client.rest_client.prompts.get_prompt_by_id.return_value = (
+        prompt_detail.requested_version = version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
             prompt_detail
         )
 
@@ -811,9 +801,9 @@ class TestConfigDecoratorPromptFields:
 
         assert instance.p is fake_chat_prompt
 
-    def test_prompt_version_field__sent_to_backend_as_version_id(self, mock_backend):
+    def test_prompt_version_field__sent_to_backend_as_commit(self, mock_backend):
         fake_version = mock.Mock(spec=PromptVersionDetail)
-        fake_version.id = "ver-pv-abc"
+        fake_version.commit = "pv123456"
 
         @agent_config_decorator
         @dataclasses.dataclass
@@ -828,7 +818,7 @@ class TestConfigDecoratorPromptFields:
         blueprint = call_kwargs["blueprint"]
         param = next(v for v in blueprint.values if v.key == "MyConfig.version")
         assert param.type == "prompt_commit"
-        assert param.value == "ver-pv-abc"
+        assert param.value == "pv123456"
 
     def test_existing_blueprint_prompt_version_field__resolves_to_prompt_version_detail(
         self, mock_backend
@@ -838,13 +828,17 @@ class TestConfigDecoratorPromptFields:
                 mock.Mock(
                     key="MyConfig.version",
                     type="prompt_commit",
-                    value="ver-pv-backend",
+                    value="pv111111",
                 )
             ]
         )
 
         fake_version_detail = mock.Mock(spec=PromptVersionDetail)
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.return_value = fake_version_detail
+        prompt_detail = mock.Mock()
+        prompt_detail.requested_version = fake_version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
+            prompt_detail
+        )
 
         @agent_config_decorator
         @dataclasses.dataclass
@@ -854,10 +848,9 @@ class TestConfigDecoratorPromptFields:
         instance = MyConfig()
 
         assert instance.version is fake_version_detail
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.assert_called_with(
-            "ver-pv-backend"
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.assert_called_with(
+            "pv111111"
         )
-        mock_backend.client.rest_client.prompts.get_prompt_by_id.assert_not_called()
 
     def test_existing_blueprint_prompt_version_field__resolution_fails__raises(
         self, mock_backend
@@ -867,11 +860,11 @@ class TestConfigDecoratorPromptFields:
                 mock.Mock(
                     key="MyConfig.version",
                     type="prompt_commit",
-                    value="ver-pv-bad",
+                    value="badbad00",
                 )
             ]
         )
-        mock_backend.client.rest_client.prompts.get_prompt_version_by_id.side_effect = (
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.side_effect = (
             Exception("not found")
         )
 

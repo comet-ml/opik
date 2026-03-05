@@ -252,17 +252,17 @@ class TestPythonValueToBackendValue:
         [Prompt, ChatPrompt, BasePrompt],
         ids=["Prompt", "ChatPrompt", "BasePrompt"],
     )
-    def test_prompt_value__returns_version_id(self, py_type):
+    def test_prompt_value__returns_commit(self, py_type):
         prompt = mock.Mock()
-        prompt.__internal_api__version_id__ = "ver-abc"
-        assert type_helpers.python_value_to_backend_value(prompt, py_type) == "ver-abc"
+        prompt.commit = "abc12345"
+        assert type_helpers.python_value_to_backend_value(prompt, py_type) == "abc12345"
 
-    def test_prompt_version_value__returns_id(self):
+    def test_prompt_version_value__returns_commit(self):
         version = mock.Mock(spec=PromptVersionDetail)
-        version.id = "ver-pv-123"
+        version.commit = "pv123456"
         assert (
             type_helpers.python_value_to_backend_value(version, PromptVersionDetail)
-            == "ver-pv-123"
+            == "pv123456"
         )
 
 

@@ -10,12 +10,11 @@ from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
 from . import type_helpers
 
 
-def _resolve_prompt_from_version_id(
-    rest_client_: rest_client.OpikApi, version_id: str
+def _resolve_prompt_from_commit(
+    rest_client_: rest_client.OpikApi, commit: str
 ) -> typing.Any:
-    version_detail = rest_client_.prompts.get_prompt_version_by_id(version_id)
-    prompt_detail = rest_client_.prompts.get_prompt_by_id(version_detail.prompt_id)
-
+    prompt_detail = rest_client_.prompts.get_prompt_by_commit(commit)
+    version_detail = prompt_detail.requested_version
     if version_detail.template_structure == "chat":
         return ChatPrompt.from_fern_prompt_version(
             name=prompt_detail.name, prompt_version=version_detail
@@ -25,10 +24,11 @@ def _resolve_prompt_from_version_id(
     )
 
 
-def _resolve_prompt_version_from_version_id(
-    rest_client_: rest_client.OpikApi, version_id: str
+def _resolve_prompt_version_from_commit(
+    rest_client_: rest_client.OpikApi, commit: str
 ) -> PromptVersionDetail:
-    return rest_client_.prompts.get_prompt_version_by_id(version_id)
+    prompt_detail = rest_client_.prompts.get_prompt_by_commit(commit)
+    return prompt_detail.requested_version
 
 
 def _convert_primitives(
@@ -83,9 +83,9 @@ def _resolve_prompts(
             continue
 
         if _is_prompt_field(param.key, param.type, field_types):
-            values[param.key] = _resolve_prompt_from_version_id(rest_client_, raw_value)
+            values[param.key] = _resolve_prompt_from_commit(rest_client_, raw_value)
         elif _is_prompt_version_field(param.key, param.type, field_types):
-            values[param.key] = _resolve_prompt_version_from_version_id(
+            values[param.key] = _resolve_prompt_version_from_commit(
                 rest_client_, raw_value
             )
 
