@@ -877,8 +877,11 @@ class AgentConfigsResourceTest {
         private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
                 "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
 
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
         @Test
-        @DisplayName("Success: get paginated history with tagged blueprints, excludes masks")
+        @DisplayName("Success: get paginated history with tagged blueprints and delta values, excludes masks")
         void getHistory() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
@@ -954,6 +957,20 @@ class AgentConfigsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(BLUEPRINT_IGNORED_FIELDS)
                     .isEqualTo(expectedBlueprints);
+
+            assertThat(historyPage.content().getFirst().values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build()));
+
+            assertThat(historyPage.content().get(1).values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()));
         }
 
         @Test

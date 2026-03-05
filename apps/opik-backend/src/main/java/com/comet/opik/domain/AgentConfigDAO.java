@@ -6,6 +6,9 @@ import com.comet.opik.infrastructure.db.BlueprintTypeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeArgumentFactory;
 import com.comet.opik.infrastructure.db.ValueTypeColumnMapper;
+import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.RowUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.Builder;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -310,26 +313,60 @@ interface AgentConfigDAO {
 
     @SqlQuery("""
             SELECT
-                b.id,
-                b.project_id,
-                b.type,
-                b.description,
-                b.created_by,
-                b.created_at,
-                b.last_updated_by,
-                b.last_updated_at,
-                GROUP_CONCAT(e.env_name) as envs
-            FROM agent_blueprints b
-            LEFT JOIN agent_config_envs e
-                ON e.workspace_id = b.workspace_id
-                AND e.project_id = b.project_id
-                AND e.blueprint_id = b.id
-            WHERE b.workspace_id = :workspace_id
-                AND b.project_id = :project_id
-                AND b.type = 'blueprint'
-            GROUP BY b.id, b.project_id, b.type, b.description, b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
-            ORDER BY b.id DESC
-            LIMIT :limit OFFSET :offset
+                bh.id,
+                bh.project_id,
+                bh.type,
+                bh.description,
+                bh.created_by,
+                bh.created_at,
+                bh.last_updated_by,
+                bh.last_updated_at,
+                bh.envs,
+                IF(MAX(v.id) IS NOT NULL,
+                    JSON_ARRAYAGG(JSON_OBJECT(
+                        'id', v.id,
+                        'project_id', v.project_id,
+                        'key', v.`key`,
+                        'value', v.value,
+                        'type', v.type,
+                        'description', v.description,
+                        'valid_from_blueprint_id', v.valid_from_blueprint_id,
+                        'valid_to_blueprint_id', v.valid_to_blueprint_id
+                    )),
+                    NULL
+                ) as delta_values
+            FROM (
+                SELECT
+                    b.id,
+                    b.project_id,
+                    b.workspace_id,
+                    b.type,
+                    b.description,
+                    b.created_by,
+                    b.created_at,
+                    b.last_updated_by,
+                    b.last_updated_at,
+                    GROUP_CONCAT(e.env_name) as envs
+                FROM agent_blueprints b
+                LEFT JOIN agent_config_envs e
+                    ON e.workspace_id = b.workspace_id
+                    AND e.project_id = b.project_id
+                    AND e.blueprint_id = b.id
+                WHERE b.workspace_id = :workspace_id
+                    AND b.project_id = :project_id
+                    AND b.type = 'blueprint'
+                GROUP BY b.id, b.project_id, b.workspace_id, b.type, b.description,
+                         b.created_by, b.created_at, b.last_updated_by, b.last_updated_at
+                ORDER BY b.id DESC
+                LIMIT :limit OFFSET :offset
+            ) bh
+            LEFT JOIN agent_config_values v
+                ON v.workspace_id = bh.workspace_id
+                AND v.project_id = bh.project_id
+                AND v.valid_from_blueprint_id = bh.id
+            GROUP BY bh.id, bh.project_id, bh.type, bh.description,
+                     bh.created_by, bh.created_at, bh.last_updated_by, bh.last_updated_at, bh.envs
+            ORDER BY bh.id DESC
             """)
     List<AgentBlueprint> getBlueprintHistory(
             @Bind("workspace_id") String workspaceId,
@@ -401,16 +438,25 @@ interface AgentConfigDAO {
 
     class BlueprintWithEnvsRowMapper implements RowMapper<AgentBlueprint> {
 
+        private static final TypeReference<List<AgentConfigValue>> VALUES_TYPE_REF = new TypeReference<>() {
+        };
+
         @Override
         public AgentBlueprint map(ResultSet rs, StatementContext ctx) throws SQLException {
             List<String> envs = null;
-            try {
+            if (RowUtils.hasColumn(rs, "envs")) {
                 String envsString = rs.getString("envs");
                 if (StringUtils.isNotBlank(envsString)) {
                     envs = Arrays.asList(envsString.split(","));
                 }
-            } catch (SQLException e) {
-                // envs column doesn't exist in non-history queries, which is expected
+            }
+
+            List<AgentConfigValue> values = null;
+            if (RowUtils.hasColumn(rs, "delta_values")) {
+                String deltaValuesJson = rs.getString("delta_values");
+                if (StringUtils.isNotBlank(deltaValuesJson)) {
+                    values = JsonUtils.readValue(deltaValuesJson, VALUES_TYPE_REF);
+                }
             }
 
             var typeMapper = ctx.findColumnMapperFor(BlueprintType.class);
@@ -425,6 +471,7 @@ interface AgentConfigDAO {
                     .type(type)
                     .description(rs.getString("description"))
                     .envs(envs)
+                    .values(values)
                     .createdBy(rs.getString("created_by"))
                     .createdAt(rs.getTimestamp("created_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))
