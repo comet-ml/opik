@@ -89,7 +89,7 @@ class TestExecuteSuccess:
         mock_api.runners.report_job_result.assert_called_once()
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
         assert call_kwargs["status"] == "completed"
-        assert call_kwargs["result"] == "echo: hello"
+        assert call_kwargs["result"] == {"result": "echo: hello"}
 
     def test_execute__successful_agent__includes_trace_id(
         self, mock_api, executor, tmp_path
@@ -114,6 +114,69 @@ class TestExecuteSuccess:
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
         assert call_kwargs["trace_id"] is not None
         assert len(call_kwargs["trace_id"]) > 0
+
+    def test_execute__mask_id__propagated_as_env_var(
+        self, mock_api, executor, tmp_path
+    ):
+        script = _write_agent_script(
+            tmp_path,
+            """
+            import json, sys, os
+            inputs = json.loads(sys.stdin.read())
+            mask = os.environ.get("OPIK_MASK_ID", "")
+            result_file = os.environ["OPIK_RESULT_FILE"]
+            with open(result_file, "w") as f:
+                json.dump({"result": f"mask={mask}"}, f)
+        """,
+        )
+
+        agents = {
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
+        }
+        job = LocalRunnerJob(
+            id="j-mask",
+            agent_name="a",
+            inputs={},
+            runner_id="r-1",
+            mask_id="mask-123",
+        )
+
+        executor.execute(job, agents)
+
+        call_kwargs = mock_api.runners.report_job_result.call_args[1]
+        assert call_kwargs["status"] == "completed"
+        assert "mask=mask-123" in str(call_kwargs["result"])
+
+    def test_execute__no_mask_id__env_var_not_set(
+        self, mock_api, executor, tmp_path
+    ):
+        script = _write_agent_script(
+            tmp_path,
+            """
+            import json, sys, os
+            inputs = json.loads(sys.stdin.read())
+            has_mask = "OPIK_MASK_ID" in os.environ
+            result_file = os.environ["OPIK_RESULT_FILE"]
+            with open(result_file, "w") as f:
+                json.dump({"result": f"has_mask={has_mask}"}, f)
+        """,
+        )
+
+        agents = {
+            "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
+        }
+        job = LocalRunnerJob(
+            id="j-no-mask",
+            agent_name="a",
+            inputs={},
+            runner_id="r-1",
+        )
+
+        executor.execute(job, agents)
+
+        call_kwargs = mock_api.runners.report_job_result.call_args[1]
+        assert call_kwargs["status"] == "completed"
+        assert "has_mask=False" in str(call_kwargs["result"])
 
     def test_execute__completed_job__removed_from_active_jobs(
         self, mock_api, executor, tmp_path
@@ -376,11 +439,11 @@ class TestJobProcess:
 
 
 class TestReadResult:
-    def test_read_result__valid_file__returns_result(self, tmp_path):
+    def test_read_result__valid_file__returns_full_dict(self, tmp_path):
         rf = str(tmp_path / "result.json")
         with open(rf, "w") as f:
             json.dump({"result": "hello"}, f)
-        assert job_executor._read_result(rf, "j-test") == "hello"
+        assert job_executor._read_result(rf, "j-test") == {"result": "hello"}
 
     def test_read_result__missing_file__returns_none(self, tmp_path):
         assert job_executor._read_result(str(tmp_path / "nope.json"), "j-test") is None
