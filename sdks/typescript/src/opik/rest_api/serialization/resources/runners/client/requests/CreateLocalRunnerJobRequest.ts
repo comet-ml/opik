@@ -13,6 +13,7 @@ export const CreateLocalRunnerJobRequest: core.serialization.Schema<
     inputs: JsonNode.optional(),
     project: core.serialization.string().optional(),
     runnerId: core.serialization.property("runner_id", core.serialization.string().optional()),
+    maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
 });
 
 export declare namespace CreateLocalRunnerJobRequest {
@@ -21,5 +22,6 @@ export declare namespace CreateLocalRunnerJobRequest {
         inputs?: JsonNode.Raw | null;
         project?: string | null;
         runner_id?: string | null;
+        mask_id?: string | null;
     }
 }
