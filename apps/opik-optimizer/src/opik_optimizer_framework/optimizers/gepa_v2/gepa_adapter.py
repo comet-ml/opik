@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from gepa.core.adapter import EvaluationBatch
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
     from opik_optimizer_framework.types import TrialResult
+    from .failure_aware_sampler import FailureAwareBatchSampler
 
 
 DatasetItem = dict[str, Any]
@@ -139,7 +140,7 @@ class FrameworkGEPAAdapter:
         evaluation_adapter: EvaluationAdapter,
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
-        batch_sampler: Any | None = None,
+        batch_sampler: FailureAwareBatchSampler | None = None,
     ) -> None:
         self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter

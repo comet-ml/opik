@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gepa.core.data_loader import DataLoader
@@ -35,8 +35,8 @@ class FailureAwareBatchSampler:
         self._seen_item_ids: set[str] = set()
         self._has_full_eval_data: bool = False
 
-        self._idx_to_item_id: dict[Any, str] = {}
-        self._item_id_to_idx: dict[str, Any] = {}
+        self._idx_to_item_id: dict[int, str] = {}
+        self._item_id_to_idx: dict[str, int] = {}
 
     def _ensure_mapping(self, loader: DataLoader) -> None:
         if self._idx_to_item_id:
@@ -48,7 +48,7 @@ class FailureAwareBatchSampler:
             self._idx_to_item_id[idx] = item_id
             self._item_id_to_idx[item_id] = idx
 
-    def update_scores(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
+    def update_scores(self, per_item_feedback: dict[str, dict[str, float]]) -> None:
         for item_id, data in per_item_feedback.items():
             self._item_scores[item_id] = data.get("score", 0.0)
         if per_item_feedback:
@@ -57,7 +57,11 @@ class FailureAwareBatchSampler:
     def mark_seen(self, item_ids: list[str]) -> None:
         self._seen_item_ids.update(item_ids)
 
-    def next_minibatch_ids(self, loader: DataLoader, state: GEPAState) -> list[Any]:
+    def _score_for_idx(self, idx: int) -> float:
+        item_id = self._idx_to_item_id.get(idx, "")
+        return self._item_scores.get(item_id, 0.0)
+
+    def next_minibatch_ids(self, loader: DataLoader, state: GEPAState) -> list[int]:
         self._ensure_mapping(loader)
         all_ids = list(loader.all_ids())
         n = min(self.minibatch_size, len(all_ids))
@@ -65,9 +69,9 @@ class FailureAwareBatchSampler:
         if not self._has_full_eval_data:
             return self.rng.sample(all_ids, n)
 
-        failed_ids: list[Any] = []
-        unseen_ids: list[Any] = []
-        other_ids: list[Any] = []
+        failed_ids: list[int] = []
+        unseen_ids: list[int] = []
+        other_ids: list[int] = []
 
         for idx in all_ids:
             item_id = self._idx_to_item_id.get(idx, "")
@@ -80,12 +84,15 @@ class FailureAwareBatchSampler:
             else:
                 other_ids.append(idx)
 
-        selected: list[Any] = []
+        # Sort failed items by score ascending (worst first)
+        failed_ids.sort(key=self._score_for_idx)
+
+        selected: list[int] = []
         remaining = n
 
         n_failed = min(self.min_failed_per_batch, len(failed_ids), remaining)
         if n_failed > 0:
-            selected.extend(self.rng.sample(failed_ids, n_failed))
+            selected.extend(failed_ids[:n_failed])
             remaining -= n_failed
 
         available_unseen = [u for u in unseen_ids if u not in selected]
