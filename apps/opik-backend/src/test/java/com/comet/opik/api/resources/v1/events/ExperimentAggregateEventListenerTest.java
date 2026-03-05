@@ -33,6 +33,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
@@ -45,6 +46,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,6 +73,7 @@ class ExperimentAggregateEventListenerTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(publisher.publish(any(), anyString(), anyString())).thenReturn(Mono.empty());
         listener = new ExperimentAggregateEventListener(experimentItemService, publisher, config);
     }
 

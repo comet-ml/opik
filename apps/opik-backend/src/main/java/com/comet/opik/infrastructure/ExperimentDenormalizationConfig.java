@@ -21,6 +21,9 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
     public static final String PENDING_SET_KEY = "experiment:denorm:pending";
+    public static final String EXPERIMENT_KEY_PREFIX = PENDING_SET_KEY + ":";
+    public static final String USER_NAME_FIELD = "userName";
+    public static final String MEMBER_SEPARATOR = ":";
 
     @JsonProperty
     private boolean enabled = false;
@@ -69,6 +72,13 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
 
     @JsonProperty
     @Min(1) @Max(10) private int maxRetries = 3;
+
+    @Valid @JsonProperty
+    @Min(10) @Max(1000) private int jobBatchSize = 100;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration jobInterval = Duration.seconds(5);
 
     @Override
     @JsonIgnore

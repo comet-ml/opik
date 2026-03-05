@@ -425,6 +425,8 @@ experimentDenormalization:
   claimIntervalRatio: 10
   pendingMessageDuration: 10m
   maxRetries: 3
+  jobBatchSize: 100
+  jobInterval: 5s
 
 # Configuration AWS S3
 s3Config:
