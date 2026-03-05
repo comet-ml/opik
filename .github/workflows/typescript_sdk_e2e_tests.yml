@@ -27,8 +27,6 @@ jobs:
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
     permissions:
       contents: read
-      checks: write
-      pull-requests: write
     runs-on: ubuntu-latest-m
     timeout-minutes: 30
     strategy:
@@ -77,12 +75,12 @@ jobs:
           # once OPIK-3910 is fixed we can revert to npm run test:integration
           npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
 
-      - name: Publish Test Report
-        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+      - name: Upload test results
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          check_name: "TS SDK E2E Tests - Node ${{matrix.node_version}}"
-          files: ${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
+          name: test-results-node${{matrix.node_version}}
+          path: ${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
 
       - name: Keep BE log in case of failure
         if: failure()
@@ -103,3 +101,25 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --stop --guardrails
+
+  publish-results:
+    name: Publish Test Results
+    needs: run-e2e
+    if: always()
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          path: test-results
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        with:
+          check_name: "TS SDK E2E Test Results"
+          files: test-results/**/*.xml
