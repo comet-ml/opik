@@ -19,6 +19,7 @@ import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 import {
   DEFAULT_CHART_TICK,
   DEFAULT_CHART_GRID_PROPS,
@@ -43,6 +44,7 @@ interface BarChartProps {
   showLegend?: boolean;
   maxBarSize?: number;
   className?: string;
+  labelActions?: Record<string, LegendLabelAction>;
 }
 
 const BarChart: React.FunctionComponent<BarChartProps> = ({
@@ -57,6 +59,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
   showLegend = true,
   maxBarSize = 52,
   className = "h-[var(--chart-height)] w-full",
+  labelActions,
 }) => {
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
@@ -126,6 +129,7 @@ const BarChart: React.FunctionComponent<BarChartProps> = ({
               <ChartHorizontalLegend
                 setActiveLine={setActiveLine}
                 chartId={chartId}
+                labelActions={labelActions}
               />
             }
           />

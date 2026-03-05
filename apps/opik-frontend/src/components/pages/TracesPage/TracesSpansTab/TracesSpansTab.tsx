@@ -88,6 +88,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import ErrorTypeAutocomplete from "@/components/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
@@ -495,6 +496,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               },
             }
           : {}),
+        error_type: {
+          keyComponent: ErrorTypeAutocomplete,
+          keyComponentProps: {
+            projectId,
+            type,
+          },
+        },
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {
             options: [
@@ -979,6 +987,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: COLUMN_TYPE.string,
       },
       ...SHARED_COLUMNS,
+      { id: "error_type", label: "Error type", type: COLUMN_TYPE.string },
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
