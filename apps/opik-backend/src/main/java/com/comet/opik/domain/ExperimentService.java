@@ -5,6 +5,7 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
@@ -134,8 +135,7 @@ public class ExperimentService {
 
     private Mono<ExperimentPage> fetchExperimentPage(
             int page, int size, ExperimentSearchCriteria experimentSearchCriteria) {
-        return fetchSuiteLevelThresholds()
-                .flatMap(thresholds -> experimentDAO.find(page, size, experimentSearchCriteria, thresholds))
+        return experimentDAO.find(page, size, experimentSearchCriteria)
                 .flatMap(experimentPage -> enrichExperiments(experimentPage.content())
                         .map(experiments -> experimentPage.toBuilder().content(experiments).build()));
     }
@@ -296,31 +296,11 @@ public class ExperimentService {
         });
     }
 
-    private Mono<Map<String, Integer>> fetchSuiteLevelThresholds() {
-        return experimentDAO.getDatasetVersionIds()
-                .flatMap(versionIds -> {
-                    if (versionIds.isEmpty()) {
-                        return Mono.just(Map.of());
-                    }
-                    return Mono.deferContextual(ctx -> {
-                        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                        return Mono.fromCallable(() -> datasetVersionService.findByIds(versionIds, workspaceId))
-                                .subscribeOn(Schedulers.boundedElastic())
-                                .map(versions -> versions.stream()
-                                        .filter(v -> v.executionPolicy() != null)
-                                        .collect(Collectors.toMap(
-                                                v -> v.id().toString(),
-                                                v -> v.executionPolicy().passThreshold())));
-                    });
-                });
-    }
-
     @WithSpan
     public Mono<ExperimentGroupAggregationsResponse> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
         log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
 
-        return fetchSuiteLevelThresholds()
-                .flatMapMany(thresholds -> experimentDAO.findGroupsAggregations(criteria, thresholds))
+        return experimentDAO.findGroupsAggregations(criteria)
                 .collectList()
                 .flatMap(groupItems -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -387,8 +367,7 @@ public class ExperimentService {
     public Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         return enrichExperiment(
-                fetchSuiteLevelThresholds()
-                        .flatMap(thresholds -> experimentDAO.getById(id, thresholds)),
+                experimentDAO.getById(id),
                 "Not found experiment with id '%s'".formatted(id));
     }
 
@@ -478,14 +457,21 @@ public class ExperimentService {
                 .flatMap(datasetId -> {
                     // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
                     if (!featureFlags.isDatasetVersioningEnabled()) {
-                        return processExperimentCreation(experiment, id, name, datasetId);
+                        var experimentWithDefault = experiment.toBuilder()
+                                .executionPolicy(ExecutionPolicy.DEFAULT)
+                                .build();
+                        return processExperimentCreation(experimentWithDefault, id, name, datasetId);
                     }
 
                     // Case 2: Feature toggle ON - resolve version and link experiment
                     return resolveDatasetVersion(experiment, datasetId)
-                            .flatMap(resolvedVersionId -> {
+                            .flatMap(resolvedVersion -> {
+                                var executionPolicy = resolvedVersion.executionPolicy() != null
+                                        ? resolvedVersion.executionPolicy()
+                                        : ExecutionPolicy.DEFAULT;
                                 var experimentWithVersion = experiment.toBuilder()
-                                        .datasetVersionId(resolvedVersionId)
+                                        .datasetVersionId(resolvedVersion.id())
+                                        .executionPolicy(executionPolicy)
                                         .build();
                                 return processExperimentCreation(experimentWithVersion, id, name, datasetId);
                             })
@@ -496,6 +482,7 @@ public class ExperimentService {
                                         datasetId);
                                 var experimentWithNullVersion = experiment.toBuilder()
                                         .datasetVersionId(null)
+                                        .executionPolicy(ExecutionPolicy.DEFAULT)
                                         .build();
                                 return processExperimentCreation(experimentWithNullVersion, id, name, datasetId);
                             }));
@@ -555,7 +542,7 @@ public class ExperimentService {
      * @param datasetId the dataset ID
      * @return Mono emitting the resolved version ID
      */
-    private Mono<UUID> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
+    private Mono<DatasetVersion> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
@@ -563,12 +550,10 @@ public class ExperimentService {
             if (experiment.datasetVersionId() != null) {
                 log.info("Validating explicitly provided dataset version ID '{}' for experiment on dataset '{}'",
                         experiment.datasetVersionId(), datasetId);
-                return Mono.fromCallable(() -> {
-                    // Validate the version exists and belongs to this dataset
+                return Mono.<DatasetVersion>fromCallable(() -> {
                     var version = datasetVersionService.getVersionById(workspaceId, datasetId,
                             experiment.datasetVersionId());
 
-                    // Verify the version actually belongs to the specified dataset
                     if (!version.datasetId().equals(datasetId)) {
                         throw new NotFoundException(
                                 "Version '%s' does not belong to dataset '%s'"
@@ -577,7 +562,7 @@ public class ExperimentService {
 
                     log.info("Using validated dataset version ID '{}' for experiment on dataset '{}'",
                             version.id(), datasetId);
-                    return version.id();
+                    return version;
                 }).subscribeOn(Schedulers.boundedElastic())
                         .onErrorResume(e -> {
                             if (e instanceof NotFoundException) {
@@ -590,14 +575,13 @@ public class ExperimentService {
             }
 
             // Case 2: No version specified - use latest version
-            return Mono.fromCallable(() -> {
+            return Mono.<DatasetVersion>fromCallable(() -> {
                 var latestVersion = datasetVersionService.getLatestVersion(datasetId, workspaceId);
                 if (latestVersion.isPresent()) {
                     log.info("No version specified, using latest version '{}' for experiment on dataset '{}'",
                             latestVersion.get().id(), datasetId);
-                    return latestVersion.get().id();
+                    return latestVersion.get();
                 }
-                // This should not happen after migration, but handle gracefully
                 log.warn("No latest version found for dataset '{}', experiment will have null dataset_version_id",
                         datasetId);
                 return null;
@@ -714,6 +698,11 @@ public class ExperimentService {
 
         return experimentDAO.getExperimentWorkspaces(experimentIds)
                 .all(experimentWorkspace -> workspaceId.equals(experimentWorkspace.workspaceId()));
+    }
+
+    public Mono<Map<UUID, ExecutionPolicy>> getExecutionPolicies(@NonNull Set<UUID> experimentIds) {
+        return experimentDAO.getExecutionPoliciesByIds(experimentIds)
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
     @WithSpan

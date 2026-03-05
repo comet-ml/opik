@@ -1,6 +1,7 @@
 package com.comet.opik.api;
 
 import com.comet.opik.api.validation.ExecutionPolicyValidation;
+import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -17,4 +18,11 @@ public record ExecutionPolicy(
         @Min(1) @Max(100) int passThreshold) {
 
     public static final ExecutionPolicy DEFAULT = new ExecutionPolicy(1, 1);
+
+    public static String serialize(ExecutionPolicy executionPolicy) {
+        if (executionPolicy == null) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(executionPolicy);
+    }
 }

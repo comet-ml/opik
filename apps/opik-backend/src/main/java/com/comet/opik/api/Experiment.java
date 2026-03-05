@@ -65,6 +65,8 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(description = "ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.") UUID datasetVersionId,
         @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Execution policy for evaluation suite experiments. Captured from dataset version at experiment creation time.") ExecutionPolicy executionPolicy,
+        @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the dataset version this experiment is linked to.") DatasetVersionSummary datasetVersionSummary,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.") BigDecimal passRate,
