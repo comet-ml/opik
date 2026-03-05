@@ -61,7 +61,7 @@ def _make_trial(candidate_id, score, step_index=0):
         metric_scores={"accuracy": score},
         experiment_id=f"exp-{candidate_id}",
         experiment_name=f"trial-{candidate_id}",
-        prompt_messages=[{"role": "user", "content": f"prompt-{candidate_id}"}],
+        config={"system_prompt": f"prompt-{candidate_id}", "user_message": "{question}", "model": "test-model"},
     )
 
 

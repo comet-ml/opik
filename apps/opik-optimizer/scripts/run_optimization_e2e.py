@@ -216,7 +216,8 @@ def main():
         print(f"    Score         : {result.best_trial.score:.4f}")
         print(f"    Experiment    : {result.best_trial.experiment_name}")
         print(f"    Prompt        :")
-        for msg in result.best_trial.prompt_messages:
+        config = result.best_trial.config
+        for msg in config.get("prompt_messages", []):
             print(f"      [{msg['role']}] {msg['content'][:80]}...")
 
     print(f"\n  Optimization trajectory:")

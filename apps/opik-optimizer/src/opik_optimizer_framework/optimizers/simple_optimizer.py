@@ -68,7 +68,7 @@ class SimpleOptimizer:
             else:
                 best = state.best_trial
                 if best is not None:
-                    base_messages = best.prompt_messages
+                    base_messages = best.config.get("prompt_messages", context.prompt_messages)
                     parent_ids = [best.candidate_id]
                 else:
                     base_messages = context.prompt_messages

@@ -16,7 +16,7 @@ def _make_trial(candidate_id: str, score: float, step_index: int = 0) -> TrialRe
         metric_scores={"accuracy": score},
         experiment_id=f"exp-{candidate_id}",
         experiment_name=f"trial-{candidate_id}",
-        prompt_messages=[{"role": "user", "content": f"prompt-{candidate_id}"}],
+        config={"prompt_messages": [{"role": "user", "content": f"prompt-{candidate_id}"}]},
     )
 
 

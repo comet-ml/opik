@@ -23,7 +23,7 @@ class TrialResult:
     metric_scores: dict[str, float]
     experiment_id: str | None
     experiment_name: str | None
-    prompt_messages: list[dict[str, str]]
+    config: CandidateConfig
     parent_candidate_ids: list[str] = field(default_factory=list)
 
 

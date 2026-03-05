@@ -13,7 +13,7 @@ def _make_trial() -> TrialResult:
         metric_scores={"accuracy": 0.85},
         experiment_id="exp-1",
         experiment_name="trial-1",
-        prompt_messages=[{"role": "user", "content": "test"}],
+        config={"prompt_messages": [{"role": "user", "content": "test"}]},
     )
 
 

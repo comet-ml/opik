@@ -6,7 +6,7 @@ from typing import Any
 import opik
 from opik.evaluation import evaluate_optimization_suite_trial
 
-from opik_optimizer_framework.tasks import create_task
+from opik_optimizer_framework.tasks import MESSAGE_KEYS, create_task
 from opik_optimizer_framework.types import Candidate, TrialResult
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,17 @@ def run_experiment_with_details(
 
     config_for_metadata = dict(candidate.config)
 
+    if "prompt" not in config_for_metadata:
+        prompt_msgs = config_for_metadata.get("prompt_messages")
+        if not prompt_msgs:
+            prompt_msgs = [
+                {"role": role, "content": str(config_for_metadata[key])}
+                for key, role in MESSAGE_KEYS
+                if config_for_metadata.get(key) is not None
+            ]
+        if prompt_msgs:
+            config_for_metadata["prompt"] = prompt_msgs
+
     experiment_config = {
         "metric": metric_type,
         "dataset": dataset_name,
@@ -118,7 +129,7 @@ def run_experiment_with_details(
         metric_scores={metric_type: score},
         experiment_id=getattr(result, "experiment_id", None),
         experiment_name=getattr(result, "experiment_name", None),
-        prompt_messages=candidate.config.get("prompt_messages", []),
+        config=candidate.config,
         parent_candidate_ids=candidate.parent_candidate_ids,
     )
     return trial, result

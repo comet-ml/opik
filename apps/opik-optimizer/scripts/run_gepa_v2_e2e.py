@@ -305,8 +305,10 @@ def main():
         print(f"    Score         : {result.best_trial.score:.4f}")
         print(f"    Experiment    : {result.best_trial.experiment_name}")
         print(f"    Prompt        :")
-        for msg in result.best_trial.prompt_messages:
-            print(f"      [{msg['role']}] {msg['content'][:100]}...")
+        config = result.best_trial.config
+        for key in ("system_prompt", "user_message"):
+            if key in config:
+                print(f"      {key}: {str(config[key])[:100]}...")
 
     print(f"\n  Optimization trajectory:")
     for trial in result.all_trials:
