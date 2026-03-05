@@ -790,10 +790,12 @@ class TestMakeReflectiveDataset:
         assert len(result["user_0"]) == 1
         feedback = result["user_0"][0]["Feedback"]
         assert "FAILED assertions" in feedback
-        assert "security concern" in feedback
-        assert "immediate steps" in feedback
+        assert "- Assertion: security concern" in feedback
+        assert "  Reason: The response does not address the security concern" in feedback
+        assert "- Assertion: immediate steps" in feedback
+        assert "  Reason: No immediate steps to secure account were mentioned" in feedback
         assert "PASSED assertions" in feedback
-        assert "tone" in feedback
+        assert "- tone" in feedback
 
     def test_all_passed_feedback(self):
         adapter = _build_adapter(MagicMock())
@@ -879,7 +881,7 @@ class TestMakeReflectiveDataset:
         assert "system_0" in result
         assert "user_1" in result
 
-    def test_multiple_runs_shown_separately(self):
+    def test_multiple_runs_consolidated_into_single_record(self):
         adapter = _build_adapter(MagicMock())
 
         eval_batch = SimpleNamespace(
@@ -912,14 +914,98 @@ class TestMakeReflectiveDataset:
         )
 
         records = result["user_0"]
+        assert len(records) == 1
+        record = records[0]
+        assert record["Inputs"]["question"] == "Q1"
+        assert "Runs" in record
+        assert "[Run 1/2]" in record["Runs"]
+        assert "[Run 2/2]" in record["Runs"]
+        assert "run1-output" in record["Runs"]
+        assert "run2-output" in record["Runs"]
+        assert "FAILED" in record["Runs"]
+        assert "PASSED" in record["Runs"]
+        assert "Summary" in record
+        assert "1/2 runs passed" in record["Summary"]
+        assert "Consistent failures" not in record["Summary"]
+
+    def test_consistent_failures_in_summary(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "r1"}],
+            scores=[0.0],
+            trajectories=[
+                {
+                    "input": {"question": "Q1"},
+                    "runs": [
+                        {
+                            "output": "r1",
+                            "score": 0.0,
+                            "assertions": [
+                                {"name": "tone", "value": 0.0, "reason": "bad"},
+                                {"name": "clarity", "value": 0.0, "reason": "unclear"},
+                            ],
+                        },
+                        {
+                            "output": "r2",
+                            "score": 0.0,
+                            "assertions": [
+                                {"name": "tone", "value": 0.0, "reason": "still bad"},
+                                {"name": "clarity", "value": 1.0, "reason": "ok"},
+                            ],
+                        },
+                    ],
+                    "score": 0.0,
+                }
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        record = result["user_0"][0]
+        assert "0/2 runs passed" in record["Summary"]
+        assert "Consistent failures: tone" in record["Summary"]
+        assert "clarity" not in record["Summary"]
+
+    def test_items_sorted_by_worst_run(self):
+        adapter = _build_adapter(MagicMock())
+
+        eval_batch = SimpleNamespace(
+            outputs=[{"output": "o1"}, {"output": "o2"}],
+            scores=[0.5, 0.0],
+            trajectories=[
+                {
+                    "input": {"question": "easy"},
+                    "runs": [{"output": "o1", "score": 1.0, "assertions": [
+                        {"name": "a", "value": 1.0, "reason": "ok"},
+                    ]}],
+                    "score": 1.0,
+                },
+                {
+                    "input": {"question": "hard"},
+                    "runs": [{"output": "o2", "score": 0.0, "assertions": [
+                        {"name": "a", "value": 0.0, "reason": "fail"},
+                        {"name": "b", "value": 0.0, "reason": "fail"},
+                    ]}],
+                    "score": 0.0,
+                },
+            ],
+        )
+
+        result = adapter.make_reflective_dataset(
+            candidate={"user_0": "Hi"},
+            eval_batch=eval_batch,
+            components_to_update=["user_0"],
+        )
+
+        records = result["user_0"]
         assert len(records) == 2
-        # Sorted by num_failed desc — failed run first
-        assert records[0]["Generated Outputs"] == "run2-output"
-        assert "Run 2/2" in records[0]["Feedback"]
-        assert "FAILED" in records[0]["Feedback"]
-        assert records[1]["Generated Outputs"] == "run1-output"
-        assert "Run 1/2" in records[1]["Feedback"]
-        assert "PASSED" in records[1]["Feedback"]
+        assert records[0]["Inputs"]["question"] == "hard"
+        assert records[1]["Inputs"]["question"] == "easy"
 
 
 # -- optimizer tests -----------------------------------------------------------

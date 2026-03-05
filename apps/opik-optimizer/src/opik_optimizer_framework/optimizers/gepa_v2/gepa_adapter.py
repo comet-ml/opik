@@ -485,8 +485,10 @@ class FrameworkGEPAAdapter:
     ) -> dict[str, list[dict[str, Any]]]:
         """Build the feedback dataset for GEPA's reflection LLM.
 
-        When runs_per_item > 1, each run is shown separately so the
-        reflection LLM can see what varies across attempts.
+        When runs_per_item > 1, all runs are consolidated into a single
+        record per input — this avoids repeating the same input N times
+        and lets the reflection LLM compare runs side-by-side.
+        Records are sorted by difficulty (most failures first).
         """
         if not components_to_update:
             components_to_update = [
@@ -511,7 +513,9 @@ class FrameworkGEPAAdapter:
                 lines.append("FAILED assertions (fix these):")
                 for a in failed:
                     reason = a.get("reason", "")
-                    lines.append(f"- {a['name']}: {reason}" if reason else f"- {a['name']}")
+                    lines.append(f"- Assertion: {a['name']}")
+                    if reason:
+                        lines.append(f"  Reason: {reason}")
             if passed:
                 lines.append("PASSED assertions (preserve these):")
                 for a in passed:
@@ -525,22 +529,53 @@ class FrameworkGEPAAdapter:
             total_runs = len(runs)
             inputs = _build_inputs(dataset_item)
 
-            for run_idx, run in enumerate(runs):
+            if total_runs <= 1:
+                run = runs[0] if runs else {}
                 assertions = run.get("assertions", [])
-                num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-                feedback = _build_run_feedback(assertions)
-                if total_runs > 1:
-                    feedback = f"Run {run_idx + 1}/{total_runs}. {feedback}"
+                max_failed = sum(1 for a in assertions if a["value"] < 1.0)
                 records.append({
                     "Inputs": inputs,
                     "Generated Outputs": run.get("output", ""),
-                    "Feedback": feedback,
-                    "_num_failed": num_failed,
+                    "Feedback": _build_run_feedback(assertions),
+                    "_max_failed": max_failed,
+                })
+            else:
+                run_sections = []
+                max_failed = 0
+                per_run_failed_names: list[set[str]] = []
+                num_passed_runs = 0
+
+                for run_idx, run in enumerate(runs):
+                    assertions = run.get("assertions", [])
+                    num_failed = sum(1 for a in assertions if a["value"] < 1.0)
+                    max_failed = max(max_failed, num_failed)
+                    failed_names = {a["name"] for a in assertions if a["value"] < 1.0}
+                    per_run_failed_names.append(failed_names)
+                    if num_failed == 0:
+                        num_passed_runs += 1
+
+                    section = f"[Run {run_idx + 1}/{total_runs}]\n"
+                    section += f"Output: {run.get('output', '')}\n"
+                    section += _build_run_feedback(assertions)
+                    run_sections.append(section)
+
+                consistent = set.intersection(*per_run_failed_names) if per_run_failed_names else set()
+                summary_parts = [f"{num_passed_runs}/{total_runs} runs passed."]
+                if consistent:
+                    summary_parts.append(
+                        f"Consistent failures: {', '.join(sorted(consistent))}"
+                    )
+
+                records.append({
+                    "Inputs": inputs,
+                    "Runs": "\n\n".join(run_sections),
+                    "Summary": " ".join(summary_parts),
+                    "_max_failed": max_failed,
                 })
 
-        records.sort(key=lambda r: r["_num_failed"], reverse=True)
+        records.sort(key=lambda r: r["_max_failed"], reverse=True)
         for r in records:
-            del r["_num_failed"]
+            del r["_max_failed"]
 
         return {component: list(records) for component in components_to_update}
 
