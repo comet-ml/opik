@@ -1318,9 +1318,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 datasetVersionId,
                 null, // executionPolicy - not in aggregates
                 null, // datasetVersionSummary - not in DB
-                null, // passRate - not in aggregates
-                null, // passedCount - not in aggregates
-                null); // totalCount - not in aggregates
+                // TODO: add pass_rate, passed_count, total_count to experiment_aggregates table and compute during aggregation
+                null, // passRate - not yet in aggregates
+                null, // passedCount - not yet in aggregates
+                null); // totalCount - not yet in aggregates
     }
 
     /**
