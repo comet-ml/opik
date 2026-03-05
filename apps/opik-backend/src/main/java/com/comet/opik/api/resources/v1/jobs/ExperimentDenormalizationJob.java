@@ -4,7 +4,6 @@ import com.comet.opik.api.events.ExperimentAggregationMessage;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
-import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -25,7 +24,7 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 /**
  * Scheduled job responsible for flushing debounced experiment aggregation events to the Redis stream.
  *
- * <p>Periodically (default 5s, configurable via {@code jobs.ExperimentDenormalizationJob} in config) this job:
+ * <p>Periodically (default 5s, configurable via {@code experimentDenormalization.jobInterval}) this job:
  * <ol>
  *   <li>Queries the Redis ZSET index for members whose debounce window has elapsed.</li>
  *   <li>Each ZSET member encodes both workspaceId and experimentId as {@code "workspaceId:experimentId"},
@@ -41,7 +40,6 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@Every
 public class ExperimentDenormalizationJob extends Job {
 
     private static final Lock SCAN_LOCK_KEY = new Lock("experiment_denormalization_job:scan_lock");

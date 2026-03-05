@@ -271,11 +271,9 @@ experimentDenormalization:
   # Default: 100
   # Description: Maximum number of ZSET entries to read per page when flushing pending experiments (10-1000)
   jobBatchSize: ${OPIK_EXPERIMENT_DENORM_JOB_BATCH_SIZE:-100}
-
-# Scheduled job intervals (overrides @Every annotation defaults)
-# Keys are the simple class names of Job subclasses; values are duration strings (e.g. "5s", "1m")
-jobs:
-  experimentDenormalizationJob: ${EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
+  # Default: 5s
+  # Description: Interval at which the denormalization job runs to flush pending experiments (min 1s)
+  jobInterval: ${EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,

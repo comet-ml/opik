@@ -76,6 +76,10 @@ public class ExperimentDenormalizationConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @Min(10) @Max(1000) private int jobBatchSize = 100;
 
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+    private Duration jobInterval = Duration.seconds(5);
+
     @Override
     @JsonIgnore
     public Codec getCodec() {

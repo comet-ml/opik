@@ -234,6 +234,7 @@ class ExperimentAggregationPublisherTest {
         config.setPendingMessageDuration(Duration.minutes(10));
         config.setMaxRetries(3);
         config.setJobBatchSize(100);
+        config.setJobInterval(Duration.seconds(5));
         return config;
     }
 }

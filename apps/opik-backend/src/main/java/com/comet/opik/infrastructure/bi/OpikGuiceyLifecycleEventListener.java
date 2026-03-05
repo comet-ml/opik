@@ -1,8 +1,10 @@
 package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
+import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.domain.alerts.MetricsAlertJob;
+import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.TraceThreadConfig;
 import com.google.inject.Injector;
@@ -42,6 +44,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
+                setExperimentDenormalizationJob();
                 scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
@@ -108,6 +111,41 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
             log.info("Trace thread closing job scheduled successfully");
         } catch (SchedulerException e) {
             log.error("Failed to schedule job '{}'", jobDetail.getKey(), e);
+        }
+    }
+
+    // This method sets up a job that periodically flushes debounced experiment aggregation events.
+    private void setExperimentDenormalizationJob() {
+        ExperimentDenormalizationConfig denormConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getExperimentDenormalization();
+
+        if (!denormConfig.isEnabled()) {
+            log.info("Experiment denormalization job is disabled, skipping job setup");
+            return;
+        }
+
+        Duration jobInterval = denormConfig.getJobInterval().toJavaDuration();
+
+        var jobDetail = JobBuilder.newJob(ExperimentDenormalizationJob.class)
+                .storeDurably()
+                .build();
+
+        var trigger = TriggerBuilder.newTrigger()
+                .forJob(jobDetail)
+                .startNow()
+                .withSchedule(
+                        org.quartz.SimpleScheduleBuilder.simpleSchedule()
+                                .withIntervalInMilliseconds(jobInterval.toMillis())
+                                .repeatForever())
+                .build();
+
+        try {
+            var scheduler = getScheduler();
+            scheduler.addJob(jobDetail, false);
+            scheduler.scheduleJob(trigger);
+            log.info("Experiment denormalization job scheduled successfully with interval '{}'", jobInterval);
+        } catch (SchedulerException e) {
+            log.error("Failed to schedule experiment denormalization job", e);
         }
     }
 

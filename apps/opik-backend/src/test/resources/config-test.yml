@@ -426,10 +426,7 @@ experimentDenormalization:
   pendingMessageDuration: 10m
   maxRetries: 3
   jobBatchSize: 100
-
-# Scheduled job intervals (overrides @Every annotation defaults)
-jobs:
-  experimentDenormalizationJob: 5s
+  jobInterval: 5s
 
 # Configuration AWS S3
 s3Config:
