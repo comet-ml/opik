@@ -142,11 +142,21 @@ describe("evaluatePrompt", () => {
     };
 
     // Setup mock client
+    const createMockSpan = () => ({
+      data: { id: "span-123" },
+      update: vi.fn(),
+      end: vi.fn(),
+      span: vi.fn().mockImplementation(createMockSpan),
+      score: vi.fn(),
+    });
+
     mockClient = {
       createExperiment: vi.fn().mockResolvedValue(mockExperiment),
       trace: vi.fn().mockReturnValue({
         data: { id: "trace-123" },
         update: vi.fn(),
+        span: vi.fn().mockImplementation(createMockSpan),
+        score: vi.fn(),
       }),
       flush: vi.fn().mockResolvedValue(undefined),
     } as unknown as Opik;

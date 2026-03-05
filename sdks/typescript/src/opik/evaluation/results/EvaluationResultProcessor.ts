@@ -1,6 +1,6 @@
 import { createLink, logger } from "@/utils/logger";
 import { Experiment } from "../../experiment/Experiment";
-import { EvaluationResult, EvaluationTestResult } from "../types";
+import { EvaluationError, EvaluationResult, EvaluationTestResult } from "../types";
 import chalk from "chalk";
 import boxen from "boxen";
 
@@ -142,7 +142,8 @@ export class EvaluationResultProcessor {
   public static async processResults(
     testResults: EvaluationTestResult[],
     experiment: Experiment,
-    totalTime: number = 0
+    totalTime: number = 0,
+    errors: EvaluationError[] = []
   ): Promise<EvaluationResult> {
     const averageScores = this.calculateAverageScores(testResults);
 
@@ -162,6 +163,7 @@ export class EvaluationResultProcessor {
       experimentId: experiment.id,
       experimentName: experimentName,
       testResults,
+      errors,
     };
   }
 }
