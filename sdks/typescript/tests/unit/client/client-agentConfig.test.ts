@@ -16,8 +16,10 @@ const mockBlueprintResponse: OpikApi.AgentBlueprintPublic = {
   createdBy: "user@example.com",
   createdAt: new Date("2024-01-01"),
   values: [
-    { key: "temperature", value: "0.8", type: "string" },
+    { key: "temperature", value: "0.8", type: "float" },
     { key: "model", value: "gpt-4", type: "string" },
+    { key: "maxTokens", value: "100", type: "integer" },
+    { key: "stream", value: "true", type: "boolean" },
   ],
 };
 
@@ -122,14 +124,31 @@ describe("AgentConfig domain object", () => {
       expect(createCall.blueprint.type).toBe("blueprint");
       expect(createCall.blueprint.values).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ key: "temperature", value: "0.8" }),
-          expect.objectContaining({ key: "model", value: "gpt-4" }),
+          expect.objectContaining({ key: "temperature", value: "0.8", type: "string" }),
+          expect.objectContaining({ key: "model", value: "gpt-4", type: "string" }),
         ])
       );
 
       expect(getBlueprintByIdSpy).toHaveBeenCalledOnce();
       expect(blueprint).toBeInstanceOf(Blueprint);
       expect(blueprint.id).toBe("blueprint-id-1");
+    });
+
+    it("should infer types when creating blueprint with native values", async () => {
+      const agentConfig = client.getAgentConfig();
+      await agentConfig.createBlueprint({
+        values: { temperature: 0.8, maxTokens: 100, stream: true, model: "gpt-4" },
+      });
+
+      const createCall = createAgentConfigSpy.mock.calls[0][0];
+      expect(createCall.blueprint.values).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "temperature", value: "0.8", type: "float" }),
+          expect.objectContaining({ key: "maxTokens", value: "100", type: "integer" }),
+          expect.objectContaining({ key: "stream", value: "true", type: "boolean" }),
+          expect.objectContaining({ key: "model", value: "gpt-4", type: "string" }),
+        ])
+      );
     });
 
     it("should use a client-side generated UUID in the POST body", async () => {
@@ -141,7 +160,6 @@ describe("AgentConfig domain object", () => {
       expect(typeof createCall.id).toBe("string");
       if (createCall.id) {
         expect(createCall.id.length).toBeGreaterThan(0);
-        // The blueprint is fetched back by the same ID
         expect(getBlueprintByIdSpy.mock.calls[0][0]).toBe(createCall.id);
       }
     });
@@ -162,6 +180,20 @@ describe("AgentConfig domain object", () => {
       expect(typeof maskId).toBe("string");
       expect(maskId).toBeDefined();
       expect(maskId.length).toBeGreaterThan(0);
+    });
+
+    it("should infer types for mask values", async () => {
+      const agentConfig = client.getAgentConfig();
+      await agentConfig.createMask({
+        values: { temperature: 0.5 },
+      });
+
+      const createCall = createAgentConfigSpy.mock.calls[0][0];
+      expect(createCall.blueprint.values).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "temperature", value: "0.5", type: "float" }),
+        ])
+      );
     });
   });
 
@@ -252,8 +284,8 @@ describe("AgentConfig domain object", () => {
 describe("Blueprint value object", () => {
   let blueprint: Blueprint;
 
-  beforeEach(() => {
-    blueprint = Blueprint.fromApiResponse(mockBlueprintResponse);
+  beforeEach(async () => {
+    blueprint = await Blueprint.fromApiResponse(mockBlueprintResponse);
   });
 
   it("should expose id, type, description, envs, createdBy, createdAt", () => {
@@ -265,22 +297,26 @@ describe("Blueprint value object", () => {
     expect(blueprint.createdAt).toEqual(new Date("2024-01-01"));
   });
 
-  it("should return key→value map from values getter", () => {
+  it("should return key→value map with deserialized types from values getter", () => {
     expect(blueprint.values).toEqual({
-      temperature: "0.8",
+      temperature: 0.8,
       model: "gpt-4",
+      maxTokens: 100,
+      stream: true,
     });
   });
 
   it("should return a fresh copy from values getter (not mutate internal state)", () => {
     const v1 = blueprint.values;
-    v1.temperature = "mutated";
-    expect(blueprint.values.temperature).toBe("0.8");
+    (v1 as Record<string, unknown>).temperature = "mutated";
+    expect(blueprint.values.temperature).toBe(0.8);
   });
 
-  it("should return value from get(key)", () => {
-    expect(blueprint.get("temperature")).toBe("0.8");
+  it("should return deserialized value from get(key)", () => {
+    expect(blueprint.get("temperature")).toBe(0.8);
     expect(blueprint.get("model")).toBe("gpt-4");
+    expect(blueprint.get("maxTokens")).toBe(100);
+    expect(blueprint.get("stream")).toBe(true);
   });
 
   it("should return undefined for missing key with no default", () => {
@@ -292,12 +328,12 @@ describe("Blueprint value object", () => {
   });
 
   it("should return all keys from keys()", () => {
-    expect(blueprint.keys()).toEqual(["temperature", "model"]);
+    expect(blueprint.keys()).toEqual(["temperature", "model", "maxTokens", "stream"]);
   });
 
-  it("should throw when API response has no id", () => {
-    expect(() =>
+  it("should throw when API response has no id", async () => {
+    await expect(
       Blueprint.fromApiResponse({ type: "blueprint", values: [] })
-    ).toThrow("missing required field 'id'");
+    ).rejects.toThrow("missing required field 'id'");
   });
 });

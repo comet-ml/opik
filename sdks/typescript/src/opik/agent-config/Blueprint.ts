@@ -1,4 +1,9 @@
+import type { OpikClient } from "@/client/Client";
 import type * as OpikApi from "@/rest_api/api";
+import { Prompt } from "@/prompt/Prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
+import { PromptVersion } from "@/prompt/PromptVersion";
+import { deserializeValue } from "./typeHelpers";
 
 export interface BlueprintData {
   id: string;
@@ -8,6 +13,7 @@ export interface BlueprintData {
   createdBy?: string;
   createdAt?: Date;
   values: OpikApi.AgentConfigValuePublic[];
+  opik?: OpikClient;
 }
 
 export class Blueprint {
@@ -18,6 +24,8 @@ export class Blueprint {
   readonly createdBy?: string;
   readonly createdAt?: Date;
   private readonly _rawValues: OpikApi.AgentConfigValuePublic[];
+  private readonly _opik?: OpikClient;
+  private readonly _resolvedValues: Record<string, unknown>;
 
   constructor(data: BlueprintData) {
     this.id = data.id;
@@ -27,13 +35,22 @@ export class Blueprint {
     this.createdBy = data.createdBy;
     this.createdAt = data.createdAt;
     this._rawValues = data.values;
+    this._opik = data.opik;
+
+    this._resolvedValues = {};
+    for (const v of this._rawValues) {
+      this._resolvedValues[v.key] = deserializeValue(v.value, v.type);
+    }
   }
 
-  static fromApiResponse(response: OpikApi.AgentBlueprintPublic): Blueprint {
+  static async fromApiResponse(
+    response: OpikApi.AgentBlueprintPublic,
+    opik?: OpikClient
+  ): Promise<Blueprint> {
     if (!response.id) {
       throw new Error("Invalid API response: missing required field 'id'");
     }
-    return new Blueprint({
+    const blueprint = new Blueprint({
       id: response.id,
       type: response.type,
       description: response.description,
@@ -41,22 +58,61 @@ export class Blueprint {
       createdBy: response.createdBy,
       createdAt: response.createdAt,
       values: response.values,
+      opik,
     });
+    await blueprint.resolvePrompts();
+    return blueprint;
   }
 
-  get values(): Record<string, string> {
-    const result: Record<string, string> = {};
+  private async resolvePrompts(): Promise<void> {
+    if (!this._opik) return;
+
     for (const v of this._rawValues) {
-      result[v.key] = v.value;
+      if (v.type !== "prompt" && v.type !== "prompt_commit") continue;
+
+      const promptDetail = await this._opik.api.prompts.getPromptByCommit(
+        v.value
+      );
+      const versionDetail = promptDetail.requestedVersion;
+      if (!versionDetail) continue;
+
+      // The endpoint may omit promptId on requestedVersion; fall back to the parent id
+      if (!versionDetail.promptId && promptDetail.id) {
+        versionDetail.promptId = promptDetail.id;
+      }
+
+      if (v.type === "prompt") {
+        if (versionDetail.templateStructure === "chat") {
+          this._resolvedValues[v.key] = ChatPrompt.fromApiResponse(
+            promptDetail,
+            versionDetail,
+            this._opik
+          );
+        } else {
+          this._resolvedValues[v.key] = Prompt.fromApiResponse(
+            promptDetail,
+            versionDetail,
+            this._opik
+          );
+        }
+      } else {
+        this._resolvedValues[v.key] = PromptVersion.fromApiResponse(
+          promptDetail.name,
+          versionDetail
+        );
+      }
     }
-    return result;
   }
 
-  get(key: string): string | undefined;
-  get(key: string, defaultValue: string): string;
-  get(key: string, defaultValue?: string): string | undefined {
-    const entry = this._rawValues.find((v) => v.key === key);
-    return entry !== undefined ? entry.value : defaultValue;
+  get values(): Record<string, unknown> {
+    return { ...this._resolvedValues };
+  }
+
+  get(key: string): unknown;
+  get<T>(key: string, defaultValue: T): T;
+  get(key: string, defaultValue?: unknown): unknown {
+    const val = this._resolvedValues[key];
+    return val !== undefined ? val : defaultValue;
   }
 
   keys(): string[] {

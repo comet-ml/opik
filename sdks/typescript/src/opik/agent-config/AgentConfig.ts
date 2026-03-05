@@ -4,9 +4,14 @@ import * as OpikApi from "@/rest_api/api";
 import { generateId } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
 import { Blueprint } from "./Blueprint";
+import {
+  inferBackendType,
+  serializeValue,
+  type SupportedValue,
+} from "./typeHelpers";
 
 export interface CreateBlueprintOptions {
-  values: Record<string, string>;
+  values: Record<string, SupportedValue>;
   description?: string;
 }
 
@@ -42,11 +47,13 @@ export class AgentConfig {
     const id = generateId();
     const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
       options.values
-    ).map(([key, value]) => ({
-      key,
-      value,
-      type: OpikApi.AgentConfigValueWriteType.String,
-    }));
+    )
+      .filter(([, v]) => v != null)
+      .map(([key, value]) => ({
+        key,
+        value: serializeValue(value),
+        type: inferBackendType(value),
+      }));
 
     logger.debug(`Creating ${type} for project "${this.projectName}"`);
 
@@ -62,7 +69,7 @@ export class AgentConfig {
     });
 
     const response = await this.opik.api.agentConfigs.getBlueprintById(id);
-    return Blueprint.fromApiResponse(response);
+    return await Blueprint.fromApiResponse(response, this.opik);
   }
 
   /**
@@ -89,11 +96,13 @@ export class AgentConfig {
     const id = generateId();
     const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
       options.values
-    ).map(([key, value]) => ({
-      key,
-      value,
-      type: OpikApi.AgentConfigValueWriteType.String,
-    }));
+    )
+      .filter(([, v]) => v != null)
+      .map(([key, value]) => ({
+        key,
+        value: serializeValue(value),
+        type: inferBackendType(value),
+      }));
 
     logger.debug(`Creating mask for project "${this.projectName}"`);
 
@@ -155,7 +164,7 @@ export class AgentConfig {
         );
       }
 
-      return Blueprint.fromApiResponse(response);
+      return await Blueprint.fromApiResponse(response, this.opik);
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
         return null;
