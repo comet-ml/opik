@@ -748,6 +748,33 @@ class LocalRunnersResourceTest {
         }
 
         @Test
+        void storesMaskId() {
+            var ctx = createIsolatedWorkspace();
+            UUID runnerId = connectRunner("cj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID maskId = randomUUID();
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.maskId()).isEqualTo(maskId);
+        }
+
+        @Test
+        void storesMaskIdNullWhenNotProvided() {
+            var ctx = createIsolatedWorkspace();
+            UUID runnerId = connectRunner("cj-no-mask-id", ctx.apiKey, ctx.workspace);
+
+            UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).runnerId(runnerId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+            assertThat(job.maskId()).isNull();
+        }
+
+        @Test
         void fallsBackToConfigTimeoutWhenNoAgentsRegistered() {
             var ctx = createIsolatedWorkspace();
             UUID runnerId = connectRunner("cj-no-agents", ctx.apiKey, ctx.workspace);
@@ -779,6 +806,20 @@ class LocalRunnersResourceTest {
                 assertThat(claimed.status().getValue()).isEqualTo("running");
                 assertThat(claimed.startedAt()).isNotNull();
             }
+        }
+
+        @Test
+        void returnsMaskIdWhenClaimed() {
+            var ctx = createIsolatedWorkspace();
+            UUID runnerId = connectRunner("nj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID maskId = randomUUID();
+
+            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(claimed.maskId()).isEqualTo(maskId);
         }
 
         @Test
@@ -822,6 +863,22 @@ class LocalRunnersResourceTest {
                     ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(2);
             assertThat(page.total()).isEqualTo(2);
+        }
+
+        @Test
+        void returnsMaskIdInList() {
+            var ctx = createIsolatedWorkspace();
+            UUID runnerId = connectRunner("lj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID maskId = randomUUID();
+
+            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
+                    ctx.apiKey, ctx.workspace);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().getFirst().maskId()).isEqualTo(maskId);
         }
 
         @Test

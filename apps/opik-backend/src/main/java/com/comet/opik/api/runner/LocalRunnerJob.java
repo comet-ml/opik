@@ -24,6 +24,7 @@ public record LocalRunnerJob(
         String error,
         String project,
         UUID traceId,
+        UUID maskId,
         int timeout,
         Instant createdAt,
         Instant startedAt,

@@ -317,6 +317,20 @@ public class LocalRunnersResourceClient {
                 .post(Entity.json(""));
     }
 
+    public LocalRunnerJob nextJob(UUID runnerId, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("jobs")
+                .path("next")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(""))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(LocalRunnerJob.class);
+        }
+    }
+
     public Response callNextJob(UUID runnerId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(runnerId.toString())
