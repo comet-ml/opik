@@ -36,7 +36,8 @@ I provided an assistant with the following instructions to perform a task for me
 
 The following are examples of different task inputs provided to the assistant \
 along with the assistant's response for each of them, and feedback showing \
-which assertions PASSED and which FAILED:
+which assertions PASSED and which FAILED. \
+Examples are sorted by priority — the ones with the most failures come first:
 ```
 <side_info>
 ```
