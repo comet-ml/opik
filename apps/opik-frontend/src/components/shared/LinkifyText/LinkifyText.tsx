@@ -9,7 +9,7 @@ const LINKIFY_OPTIONS: Opts = {
   defaultProtocol: "https",
   target: "_blank",
   rel: "noopener noreferrer",
-  className: "break-all text-blue-600 underline hover:text-blue-800",
+  className: "text-blue-600 underline hover:text-blue-800",
   ignoreTags: ["script", "style"],
   validate: {
     url: (value: string) => URL_PATTERN.test(value),
