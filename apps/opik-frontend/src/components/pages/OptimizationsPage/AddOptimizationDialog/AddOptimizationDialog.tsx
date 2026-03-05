@@ -360,8 +360,8 @@ const AddOptimizationDialog: React.FunctionComponent<
         <div className="pb-8">
           <SheetTitle>Start an optimization run</SheetTitle>
           <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a dataset, choose the optimizer you would like to use, and we
-            will improve your prompt for you
+            Select an evaluation suite, choose the optimizer you would like to
+            use, and we will improve your prompt for you
           </div>
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
@@ -371,7 +371,7 @@ const AddOptimizationDialog: React.FunctionComponent<
           </div>
           <div className="flex w-full max-w-[700px] flex-col gap-2 rounded-md border border-border p-6">
             <div className="comet-body-s text-foreground-secondary">
-              1. Select dataset
+              1. Select evaluation suite
             </div>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -379,7 +379,7 @@ const AddOptimizationDialog: React.FunctionComponent<
                   <LoadableSelectBox
                     options={options}
                     value={datasetName}
-                    placeholder="Select a dataset"
+                    placeholder="Select an evaluation suite"
                     onChange={setDatasetName}
                     onLoadMore={
                       total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

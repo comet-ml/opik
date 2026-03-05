@@ -142,7 +142,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
 export const FILTER_COLUMNS = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -190,7 +190,7 @@ const nameColumn = generateDataRowCellDef(
 const groupingColumn = generateGroupedRowCellDef<GroupedOptimization, unknown>(
   {
     id: GROUPING_COLUMN,
-    label: "Dataset",
+    label: "Evaluation suite",
     type: COLUMN_TYPE.string,
     cell: ResourceCell as never,
     customMeta: {
