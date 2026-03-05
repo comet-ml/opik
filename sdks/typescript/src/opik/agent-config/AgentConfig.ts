@@ -43,7 +43,7 @@ export class AgentConfig {
   private async createBlueprintInternal(
     options: CreateBlueprintOptions,
     type: OpikApi.AgentBlueprintWriteType
-  ): Promise<Blueprint> {
+  ): Promise<string> {
     const id = generateId();
     const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
       options.values
@@ -68,8 +68,7 @@ export class AgentConfig {
       },
     });
 
-    const response = await this.opik.api.agentConfigs.getBlueprintById(id);
-    return await Blueprint.fromApiResponse(response, this.opik);
+    return id;
   }
 
   /**
@@ -79,10 +78,12 @@ export class AgentConfig {
    * creates a new version; use `getBlueprint()` to retrieve the latest.
    */
   async createBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
-    return this.createBlueprintInternal(
+    const id = await this.createBlueprintInternal(
       options,
       OpikApi.AgentBlueprintWriteType.Blueprint
     );
+    const response = await this.opik.api.agentConfigs.getBlueprintById(id);
+    return await Blueprint.fromApiResponse(response, this.opik);
   }
 
   /**
@@ -93,31 +94,10 @@ export class AgentConfig {
    * blueprint with the mask's values overlaid on top of the base blueprint.
    */
   async createMask(options: CreateBlueprintOptions): Promise<string> {
-    const id = generateId();
-    const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
-      options.values
-    )
-      .filter(([, v]) => v != null)
-      .map(([key, value]) => ({
-        key,
-        value: serializeValue(value),
-        type: inferBackendType(value),
-      }));
-
-    logger.debug(`Creating mask for project "${this.projectName}"`);
-
-    await this.opik.api.agentConfigs.createAgentConfig({
-      id,
-      projectName: this.projectName,
-      blueprint: {
-        id,
-        type: OpikApi.AgentBlueprintWriteType.Mask,
-        description: options.description,
-        values,
-      },
-    });
-
-    return id;
+    return this.createBlueprintInternal(
+      options,
+      OpikApi.AgentBlueprintWriteType.Mask
+    );
   }
 
   /**
