@@ -102,9 +102,7 @@ jobs:
         - name: Keep BE log in case of failure
           if: failure()
           run: |
-            PROJECT_NAME=$(docker compose ls --format json 2>/dev/null | jq -r '.[].Name' | grep '^opik' | head -1)
-            CONTAINER="${PROJECT_NAME:-opik}-backend-1"
-            docker logs "$CONTAINER" > ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log 2>&1 || echo "Could not capture logs from $CONTAINER"
+            docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
 
         - name: Attach BE log
           if: failure()
