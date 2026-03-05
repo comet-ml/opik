@@ -147,9 +147,7 @@ class TestExecuteSuccess:
         assert call_kwargs["status"] == "completed"
         assert "mask=mask-123" in str(call_kwargs["result"])
 
-    def test_execute__no_mask_id__env_var_not_set(
-        self, mock_api, executor, tmp_path
-    ):
+    def test_execute__no_mask_id__env_var_not_set(self, mock_api, executor, tmp_path):
         script = _write_agent_script(
             tmp_path,
             """
