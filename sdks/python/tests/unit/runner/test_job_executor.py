@@ -380,13 +380,13 @@ class TestReadResult:
         rf = str(tmp_path / "result.json")
         with open(rf, "w") as f:
             json.dump({"result": "hello"}, f)
-        assert job_executor._read_result(rf) == "hello"
+        assert job_executor._read_result(rf, "j-test") == "hello"
 
     def test_read_result__missing_file__returns_none(self, tmp_path):
-        assert job_executor._read_result(str(tmp_path / "nope.json")) is None
+        assert job_executor._read_result(str(tmp_path / "nope.json"), "j-test") is None
 
     def test_read_result__corrupted_json__returns_none(self, tmp_path):
         rf = str(tmp_path / "bad.json")
         with open(rf, "w") as f:
             f.write("{bad")
-        assert job_executor._read_result(rf) is None
+        assert job_executor._read_result(rf, "j-test") is None
