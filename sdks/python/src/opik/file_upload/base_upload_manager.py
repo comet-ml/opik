@@ -42,5 +42,9 @@ class BaseFileUploadManager(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def failed_uploads(self, timeout: Optional[float]) -> int:
+        pass
+
+    @abc.abstractmethod
     def close(self) -> None:
         pass
