@@ -12,6 +12,7 @@ export interface LocalRunnerJob {
     error?: string;
     project?: string;
     traceId?: string;
+    maskId?: string;
     timeout?: number;
     createdAt?: Date;
     startedAt?: Date;

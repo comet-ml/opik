@@ -14049,6 +14049,9 @@ components:
         runner_id:
           type: string
           format: uuid
+        mask_id:
+          type: string
+          format: uuid
     LocalRunnerPairResponse:
       type: object
       properties:
@@ -14088,6 +14091,9 @@ components:
         project:
           type: string
         trace_id:
+          type: string
+          format: uuid
+        mask_id:
           type: string
           format: uuid
         timeout:
