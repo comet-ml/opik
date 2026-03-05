@@ -3,6 +3,10 @@ package com.comet.opik.utils;
 import io.r2dbc.spi.Row;
 import lombok.experimental.UtilityClass;
 
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+
 /**
  * Utility class for safely accessing database row values.
  * Contains shared methods for handling optional columns that may not exist in query results.
@@ -31,5 +35,15 @@ public final class RowUtils {
             // Column doesn't exist in this query result - return null
             return null;
         }
+    }
+
+    public static boolean hasColumn(ResultSet rs, String columnName) throws SQLException {
+        ResultSetMetaData meta = rs.getMetaData();
+        for (int i = 1; i <= meta.getColumnCount(); i++) {
+            if (columnName.equalsIgnoreCase(meta.getColumnLabel(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
