@@ -11,6 +11,7 @@ reflection prompt that encourages generalizable instructions.
 from __future__ import annotations
 
 import logging
+import random
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.types import (
@@ -19,6 +20,7 @@ from opik_optimizer_framework.types import (
     TrialResult,
 )
 
+from .failure_aware_sampler import FailureAwareBatchSampler
 from .gepa_adapter import (
     DatasetItem,
     FrameworkGEPAAdapter,
@@ -149,12 +151,23 @@ class GepaV2Optimizer:
             "max_metric_calls", max_candidates * effective_n_samples * 5
         )
 
+        sampler = FailureAwareBatchSampler(
+            minibatch_size=reflection_minibatch_size,
+            min_failed_per_batch=params.get(
+                "min_failed_per_batch", max(1, reflection_minibatch_size - 1),
+            ),
+            min_unseen_per_batch=params.get("min_unseen_per_batch", 0),
+            failure_threshold=params.get("failure_threshold", 1.0),
+            rng=random.Random(seed),
+        )
+
         config_builder = _make_config_builder(context.baseline_config)
         adapter = FrameworkGEPAAdapter(
             config_builder=config_builder,
             evaluation_adapter=evaluation_adapter,
             reflection_lm=context.model,
             reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
+            batch_sampler=sampler,
         )
         self.adapter = adapter
 
@@ -177,7 +190,7 @@ class GepaV2Optimizer:
             adapter=adapter,
             reflection_lm=context.model,
             candidate_selection_strategy=candidate_selection_strategy,
-            reflection_minibatch_size=reflection_minibatch_size,
+            batch_sampler=sampler,
             max_metric_calls=max_metric_calls,
             stop_callbacks=stop_callbacks,
             callbacks=[callback],

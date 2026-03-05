@@ -1267,7 +1267,7 @@ class TestGepaV2Optimizer:
             )
 
         call_kwargs = mock_optimize.call_args.kwargs
-        assert call_kwargs["reflection_minibatch_size"] == 5
+        assert call_kwargs["batch_sampler"].minibatch_size == 5
         assert call_kwargs["candidate_selection_strategy"] == "epsilon_greedy"
         assert call_kwargs["seed"] == 99
         # 10 max_candidates * 2 combined items * 5 multiplier

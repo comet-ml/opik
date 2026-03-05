@@ -139,11 +139,13 @@ class FrameworkGEPAAdapter:
         evaluation_adapter: EvaluationAdapter,
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
+        batch_sampler: Any | None = None,
     ) -> None:
         self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
         self._reflection_lm = reflection_lm
         self._reflection_prompt_template = reflection_prompt_template
+        self._batch_sampler = batch_sampler
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
         self._reflection_log: list[dict[str, Any]] = []
 
@@ -430,6 +432,12 @@ class FrameworkGEPAAdapter:
 
         per_item = _extract_per_item_feedback(raw_result)
         self._last_per_item_feedback = per_item
+
+        if self._batch_sampler is not None:
+            if is_full_eval:
+                self._batch_sampler.update_scores(per_item)
+            else:
+                self._batch_sampler.mark_seen(dataset_item_ids)
 
         return self._build_evaluation_batch(
             batch, per_item, trial, effective_capture_traces,
