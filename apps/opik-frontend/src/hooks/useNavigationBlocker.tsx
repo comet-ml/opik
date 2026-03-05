@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import isFunction from "lodash/isFunction";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export interface UseNavigationBlockerOptions {
   condition: boolean;
@@ -8,6 +17,8 @@ export interface UseNavigationBlockerOptions {
   description?: string;
   confirmText?: string;
   cancelText?: string;
+  onSaveAndLeave?: (proceed: () => void, cancel: () => void) => void;
+  saveAndLeaveText?: string;
 }
 
 export interface UseNavigationBlockerResult {
@@ -20,6 +31,8 @@ const useNavigationBlocker = ({
   description = "Are you sure you want to leave?",
   confirmText = "Leave",
   cancelText = "Stay",
+  onSaveAndLeave,
+  saveAndLeaveText = "Save and leave",
 }: UseNavigationBlockerOptions): UseNavigationBlockerResult => {
   const [showDialog, setShowDialog] = useState(false);
 
@@ -50,7 +63,6 @@ const useNavigationBlocker = ({
 
   const handleConfirmNavigation = useCallback(() => {
     setShowDialog(false);
-
     if (status === "blocked") {
       proceed();
     }
@@ -63,27 +75,60 @@ const useNavigationBlocker = ({
     setShowDialog(false);
   }, [status, reset]);
 
-  const handleDialogOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        handleCancelNavigation();
-      }
-    },
-    [handleCancelNavigation],
-  );
+  const handleSaveAndLeave = useCallback(() => {
+    if (!onSaveAndLeave) return;
+
+    setShowDialog(false);
+    onSaveAndLeave(
+      () => {
+        if (status === "blocked") {
+          proceed();
+        }
+      },
+      () => {
+        if (status === "blocked") {
+          reset();
+        }
+      },
+    );
+  }, [onSaveAndLeave, status, proceed, reset]);
+
+  const showSaveAndLeave = isFunction(onSaveAndLeave);
 
   const DialogComponent = (
-    <ConfirmDialog
+    <Dialog
       open={showDialog}
-      setOpen={handleDialogOpenChange}
-      onConfirm={handleConfirmNavigation}
-      onCancel={handleCancelNavigation}
-      title={title}
-      description={description}
-      confirmText={confirmText}
-      cancelText={cancelText}
-      confirmButtonVariant="destructive"
-    />
+      onOpenChange={(open) => !open && handleCancelNavigation()}
+    >
+      <DialogContent className="max-w-lg sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          {showSaveAndLeave && (
+            <>
+              <Button variant="destructive" onClick={handleConfirmNavigation}>
+                {confirmText}
+              </Button>
+              <div className="flex-auto"></div>
+            </>
+          )}
+          <Button variant="outline" onClick={handleCancelNavigation}>
+            {cancelText}
+          </Button>
+          {showSaveAndLeave ? (
+            <Button variant="default" onClick={handleSaveAndLeave}>
+              {saveAndLeaveText}
+            </Button>
+          ) : (
+            <Button variant="destructive" onClick={handleConfirmNavigation}>
+              {confirmText}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 
   return {
