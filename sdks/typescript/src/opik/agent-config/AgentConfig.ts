@@ -65,6 +65,12 @@ export class AgentConfig {
     return Blueprint.fromApiResponse(response);
   }
 
+  /**
+   * Creates a new blueprint for the project and returns it.
+   *
+   * A blueprint is a versioned snapshot of config key/value pairs. Each call
+   * creates a new version; use `getBlueprint()` to retrieve the latest.
+   */
   async createBlueprint(options: CreateBlueprintOptions): Promise<Blueprint> {
     return this.createBlueprintInternal(
       options,
@@ -72,6 +78,13 @@ export class AgentConfig {
     );
   }
 
+  /**
+   * Creates a mask — a partial override of config values used for A/B testing
+   * or feature flags. Returns the mask ID.
+   *
+   * Pass the returned mask ID to `getBlueprint({ maskId })` to retrieve a
+   * blueprint with the mask's values overlaid on top of the base blueprint.
+   */
   async createMask(options: CreateBlueprintOptions): Promise<string> {
     const id = generateId();
     const values: OpikApi.AgentConfigValueWrite[] = Object.entries(
@@ -98,6 +111,16 @@ export class AgentConfig {
     return id;
   }
 
+  /**
+   * Retrieves a blueprint. Returns `null` if none is found (no error thrown).
+   *
+   * Resolution order:
+   * - `id` — fetches the blueprint with that exact ID.
+   * - `env` — fetches the blueprint pinned to that environment label.
+   * - neither — fetches the latest blueprint for the project.
+   *
+   * Pass `maskId` to overlay a mask's values on top of the resolved blueprint.
+   */
   async getBlueprint(
     options: GetBlueprintOptions = {}
   ): Promise<Blueprint | null> {
@@ -144,6 +167,10 @@ export class AgentConfig {
     }
   }
 
+  /**
+   * Associates a blueprint with an environment label (e.g. `"prod"`, `"staging"`).
+   * After tagging, `getBlueprint({ env })` will return this blueprint.
+   */
   async tagBlueprintWithEnv(
     blueprintId: string,
     env: string
