@@ -268,6 +268,7 @@ class RawRunnersClient:
         inputs: typing.Optional[JsonNode] = OMIT,
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
+        mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -282,6 +283,8 @@ class RawRunnersClient:
         project : typing.Optional[str]
 
         runner_id : typing.Optional[str]
+
+        mask_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -298,6 +301,7 @@ class RawRunnersClient:
                 "inputs": inputs,
                 "project": project,
                 "runner_id": runner_id,
+                "mask_id": mask_id,
             },
             headers={
                 "content-type": "application/json",
@@ -1096,6 +1100,7 @@ class AsyncRawRunnersClient:
         inputs: typing.Optional[JsonNode] = OMIT,
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
+        mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1110,6 +1115,8 @@ class AsyncRawRunnersClient:
         project : typing.Optional[str]
 
         runner_id : typing.Optional[str]
+
+        mask_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1126,6 +1133,7 @@ class AsyncRawRunnersClient:
                 "inputs": inputs,
                 "project": project,
                 "runner_id": runner_id,
+                "mask_id": mask_id,
             },
             headers={
                 "content-type": "application/json",
