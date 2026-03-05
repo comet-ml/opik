@@ -27,6 +27,7 @@ from .evaluation import (
 )
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
+from .plugins.pytest.decorator import llm_episode
 from .types import LLMProvider
 from . import opik_context
 from .tracing_runtime_config import (
@@ -36,7 +37,18 @@ from .tracing_runtime_config import (
 )
 from .decorator.context_manager.span_context_manager import start_as_current_span
 from .decorator.context_manager.trace_context_manager import start_as_current_trace
-from .simulation import SimulatedUser, run_simulation
+from .simulation import (
+    SimulatedUser,
+    run_simulation,
+    EpisodeResult,
+    EpisodeAssertion,
+    EpisodeScore,
+    EpisodeBudgetMetric,
+    EpisodeBudgets,
+    build_trajectory_summary,
+    make_max_turns_assertion,
+    make_tool_call_budget,
+)
 from .api_objects.local_recording import record_traces_locally
 
 
@@ -62,6 +74,7 @@ __all__ = [
     "Span",
     "Dataset",
     "llm_unit",
+    "llm_episode",
     "configure",
     "Prompt",
     "ChatPrompt",
@@ -74,6 +87,14 @@ __all__ = [
     "start_as_current_trace",
     "SimulatedUser",
     "run_simulation",
+    "EpisodeResult",
+    "EpisodeAssertion",
+    "EpisodeScore",
+    "EpisodeBudgetMetric",
+    "EpisodeBudgets",
+    "build_trajectory_summary",
+    "make_max_turns_assertion",
+    "make_tool_call_budget",
     "record_traces_locally",
     "AgentConfig",
     "Blueprint",

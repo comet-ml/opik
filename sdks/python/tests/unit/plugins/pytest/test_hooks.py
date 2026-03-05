@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
+
 # TODO(#5219): move these tests to a public pytest plugin test harness/API.
 from opik.plugins.pytest import hooks, test_runs_storage
 
@@ -111,7 +113,12 @@ def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment__happ
     assert score["id"] == "trace-1"
     assert score["name"] == "Passed"
     assert score["value"] == 1.0
-    run_mock.assert_called_once_with(client=client, test_items=[item])
+    run_mock.assert_called_once_with(
+        client=client,
+        test_items=[item],
+        dataset_name="tests",
+        experiment_name_prefix="Test-Suite",
+    )
     client.flush.assert_called_once()
 
 
@@ -132,7 +139,8 @@ def test_pytest_sessionfinish__runner_error__flushes_client(monkeypatch):
         hooks.experiment_runner, "run", mock.Mock(side_effect=RuntimeError("boom"))
     )
 
-    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+    with pytest.raises(RuntimeError, match="boom"):
+        hooks.pytest_sessionfinish(session=session, exitstatus=0)
 
     client.log_traces_feedback_scores.assert_called_once()
     client.flush.assert_called_once()

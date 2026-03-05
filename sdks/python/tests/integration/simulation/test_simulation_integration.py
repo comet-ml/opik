@@ -93,20 +93,20 @@ class TestSimulationIntegration:
         assert "Thread thread-1 turn 1" in result1["conversation_history"][1]["content"]
         assert "Thread thread-2 turn 1" in result2["conversation_history"][1]["content"]
 
-    @patch("opik.simulation.simulated_user.OpikBaseModel")
-    def test_simulation_with_llm_user(self, mock_base_model):
+    @patch("opik.simulation.simulated_user.get_model")
+    def test_simulation_with_llm_user(self, mock_get_model):
         """Test simulation with LLM-based user simulator."""
         # Mock LLM responses
         mock_llm_instance = Mock()
-        mock_llm_instance.generate.side_effect = [
+        mock_llm_instance.generate_string.side_effect = [
             "What's the weather like?",
             "That's interesting, tell me more",
             "Thank you for the information",
         ]
-        mock_base_model.return_value = mock_llm_instance
+        mock_get_model.return_value = mock_llm_instance
 
         def mock_app(message, *, thread_id, **kwargs):
-            return {"role": "assistant", "content": f"Assistant: {message['content']}"}
+            return {"role": "assistant", "content": f"Assistant: {message}"}
 
         user_simulator = SimulatedUser(
             persona="You are curious about weather", model="gpt-4o-mini"
@@ -118,7 +118,7 @@ class TestSimulationIntegration:
         )
 
         # Verify LLM was called for each user message
-        assert mock_llm_instance.generate.call_count == 3
+        assert mock_llm_instance.generate_string.call_count == 3
 
         # Verify conversation structure
         history = result["conversation_history"]

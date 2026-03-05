@@ -1,8 +1,37 @@
 """Multi-turn simulation functionality."""
 
+import inspect
 from typing import Callable, Optional, Dict, Any, List
 from opik import id_helpers, track
 from .simulated_user import SimulatedUser
+
+
+def _accepts_keyword_argument(callable_obj: Callable[..., Any], arg_name: str) -> bool:
+    """Return True when callable accepts arg_name or arbitrary **kwargs."""
+    try:
+        signature = inspect.signature(callable_obj)
+    except (TypeError, ValueError):
+        return True
+
+    if arg_name in signature.parameters:
+        return True
+
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+
+def _call_user_simulator(
+    user_simulator: SimulatedUser,
+    conversation_history: List[Dict[str, str]],
+    simulation_state: Dict[str, Any],
+) -> str:
+    if _accepts_keyword_argument(user_simulator.generate_response, "simulation_state"):
+        return user_simulator.generate_response(
+            conversation_history, simulation_state=simulation_state
+        )
+    return user_simulator.generate_response(conversation_history)
 
 
 def run_simulation(
@@ -12,6 +41,9 @@ def run_simulation(
     max_turns: int = 5,
     thread_id: Optional[str] = None,
     project_name: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    simulation_state: Optional[Dict[str, Any]] = None,
+    track_app_calls: bool = True,
     **app_kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -30,6 +62,12 @@ def run_simulation(
         max_turns: Maximum number of conversation turns (default: 5)
         thread_id: Optional thread ID for grouping traces. Generated if not provided
         project_name: Optional project name for trace logging
+        tags: Optional list of tags to apply to simulation traces
+        simulation_state: Optional mutable dictionary shared across turns.
+            If provided, it is updated in-place and also returned in the result.
+        track_app_calls: Whether to auto-decorate the app with @track and pass
+            opik trace arguments on each turn. Set to False for pure/offline
+            simulations where per-turn tracing is not required.
         **app_kwargs: Additional keyword arguments passed to the app
 
     Returns:
@@ -37,22 +75,33 @@ def run_simulation(
         - thread_id: The thread ID used for this simulation
         - conversation_history: List of message dicts from the simulation
         - project_name: Project name if provided
+        - tags: Trace tags if provided
+        - simulation_state: Mutable run-level state object
     """
     # Generate thread_id if not provided
     if thread_id is None:
         thread_id = id_helpers.generate_id()
 
-    # Automatically decorate app if not already decorated
-    if not hasattr(app, "opik_tracked"):
+    # Automatically decorate app if not already decorated.
+    if track_app_calls and not hasattr(app, "opik_tracked"):
         app_name = app.__name__ if hasattr(app, "__name__") else "simulation_app"
         app = track(name=app_name)(app)
 
     # Track conversation for simulator (app manages its own history internally)
     conversation_history: List[Dict[str, str]] = []
+    state = simulation_state if simulation_state is not None else {}
+    state.setdefault("thread_id", thread_id)
+    state.setdefault("project_name", project_name)
+    state.setdefault("tags", tags)
+    state["conversation_history"] = conversation_history
 
     # Generate initial message if needed
     if initial_message is None:
-        initial_message = user_simulator.generate_response(conversation_history)
+        initial_message = _call_user_simulator(
+            user_simulator=user_simulator,
+            conversation_history=conversation_history,
+            simulation_state=state,
+        )
 
     # Simulation loop
     for turn in range(max_turns):
@@ -60,24 +109,34 @@ def run_simulation(
         if turn == 0:
             user_message_text = initial_message
         else:
-            user_message_text = user_simulator.generate_response(conversation_history)
+            user_message_text = _call_user_simulator(
+                user_simulator=user_simulator,
+                conversation_history=conversation_history,
+                simulation_state=state,
+            )
 
         # Create message dict for tracking
         user_message = {"role": "user", "content": user_message_text}
         conversation_history.append(user_message)
+        state["turn"] = turn + 1
+        state["last_user_message"] = user_message_text
 
         # Call app with SINGLE message string, thread_id parameter, and opik_args for tracing
         try:
+            app_call_kwargs: Dict[str, Any] = {**app_kwargs}
+            if track_app_calls:
+                trace_opik_args = {
+                    "thread_id": thread_id,
+                    "metadata": {"turn": turn + 1, "project_name": project_name},
+                }
+                if tags:
+                    trace_opik_args["tags"] = tags
+                app_call_kwargs["opik_args"] = {"trace": trace_opik_args}
+            if _accepts_keyword_argument(app, "simulation_state"):
+                app_call_kwargs["simulation_state"] = state
+
             assistant_message = app(
-                user_message_text,
-                thread_id=thread_id,
-                **app_kwargs,
-                opik_args={
-                    "trace": {
-                        "thread_id": thread_id,
-                        "metadata": {"turn": turn + 1, "project_name": project_name},
-                    }
-                },
+                user_message_text, thread_id=thread_id, **app_call_kwargs
             )
         except Exception as e:
             # Handle app errors gracefully
@@ -100,9 +159,12 @@ def run_simulation(
             }
 
         conversation_history.append(assistant_message)
+        state["last_assistant_message"] = assistant_message.get("content")
 
     return {
         "thread_id": thread_id,
         "conversation_history": conversation_history,
         "project_name": project_name,
+        "tags": tags,
+        "simulation_state": state,
     }
