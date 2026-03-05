@@ -87,6 +87,9 @@ def main():
             LLMJudge(
                 assertions=[
                     "Response is relevant to the user question",
+                    "Response includes at least one specific, actionable next step the customer can take",
+                    "Response explicitly references the specific details from the customer context (order numbers, tracking numbers, etc.)",
+                    "Response demonstrates empathy by acknowledging the customer's frustration or concern",
                 ]
             )
         ],
@@ -166,7 +169,7 @@ def main():
 
     # 4. Run the framework — evaluators come from the suite itself
     optimizer_parameters = {
-        "max_candidates": 4,
+        "max_candidates": 8,
         "reflection_minibatch_size": 2,
         "candidate_selection_strategy": "pareto",
         "seed": 42,

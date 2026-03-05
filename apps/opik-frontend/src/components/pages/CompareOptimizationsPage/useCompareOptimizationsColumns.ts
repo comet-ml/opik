@@ -1,6 +1,4 @@
 import { useMemo } from "react";
-import get from "lodash/get";
-import isObject from "lodash/isObject";
 
 import {
   COLUMN_ID_ID,
@@ -8,108 +6,108 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import {
-  OPTIMIZATION_EXAMPLES_KEY,
-  OPTIMIZATION_OPTIMIZER_KEY,
-  OPTIMIZATION_PROMPT_KEY,
-} from "@/constants/experiments";
-import { getOptimizerLabel } from "@/lib/optimizations";
-import { Experiment } from "@/types/datasets";
-import { Optimization } from "@/types/optimizations";
+import { AggregatedCandidate } from "@/types/optimizations";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
-import { toString } from "@/lib/utils";
 import { convertColumnDataToColumn } from "@/lib/table";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import TextCell from "@/components/shared/DataTableCells/TextCell";
-import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-
-type ScoreData = {
-  score: number;
-  percentage?: number;
-};
+import TrialStatusCell from "@/components/pages/CompareOptimizationsPage/TrialStatusCell";
+import {
+  TrialNumberCell,
+  TrialStepCell,
+  TrialAccuracyCell,
+  TrialCandidateCostCell,
+  TrialCandidateLatencyCell,
+} from "@/components/pages/CompareOptimizationsPage/TrialMetricCells";
 
 type UseCompareOptimizationsColumnsParams = {
-  optimization: Optimization | undefined;
-  scoreMap: Record<string, ScoreData>;
+  candidates: AggregatedCandidate[];
   columnsOrder: string[];
   selectedColumns: string[];
   sortableBy: string[];
+  isOptimizationFinished?: boolean;
+  bestCandidateId?: string;
 };
 
 export const useCompareOptimizationsColumns = ({
-  optimization,
-  scoreMap,
+  candidates,
   columnsOrder,
   selectedColumns,
   sortableBy,
+  isOptimizationFinished,
+  bestCandidateId,
 }: UseCompareOptimizationsColumnsParams) => {
-  const columnsDef: ColumnData<Experiment>[] = useMemo(() => {
-    if (!optimization?.objective_name) return [];
-
+  const columnsDef: ColumnData<AggregatedCandidate>[] = useMemo(() => {
     return [
       {
         id: COLUMN_NAME_ID,
-        label: "Trial",
+        label: "Trial #",
         type: COLUMN_TYPE.string,
-        cell: TextCell as never,
-        sortable: true,
+        size: 100,
+        cell: TrialNumberCell as never,
+      },
+      {
+        id: "step",
+        label: "Step",
+        type: COLUMN_TYPE.string,
+        size: 100,
+        accessorFn: (row) => row.stepIndex,
+        cell: TrialStepCell as never,
       },
       {
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
-        cell: IdCell as never,
       },
       {
-        id: "optimizer",
-        label: "Optimizer",
-        type: COLUMN_TYPE.string,
-        size: 200,
-        accessorFn: (row) => {
-          const metadataVal = get(
-            row.metadata ?? {},
-            OPTIMIZATION_OPTIMIZER_KEY,
-          );
-          if (metadataVal) {
-            return isObject(metadataVal)
-              ? JSON.stringify(metadataVal, null, 2)
-              : toString(metadataVal);
-          }
-          const studioVal = optimization?.studio_config?.optimizer?.type;
-          return studioVal ? getOptimizerLabel(studioVal) : "-";
-        },
-      },
-      {
-        id: "prompt",
-        label: "Prompt",
-        type: COLUMN_TYPE.string,
-        size: 400,
-        accessorFn: (row) => {
-          const val = get(row.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
-
-          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
-        },
-      },
-      {
-        id: "examples",
-        label: "Examples",
-        type: COLUMN_TYPE.string,
-        size: 400,
-        accessorFn: (row) => {
-          const val = get(row.metadata ?? {}, OPTIMIZATION_EXAMPLES_KEY, "-");
-
-          return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
-        },
-      },
-      {
-        id: `objective_name`,
-        label: optimization.objective_name,
+        id: "objective_name",
+        label: "Accuracy",
         type: COLUMN_TYPE.number,
-        header: FeedbackScoreHeader as never,
-        cell: ObjectiveScoreCell as never,
+        size: 160,
+        accessorFn: (row) => row.score,
+        cell: TrialAccuracyCell as never,
         customMeta: {
-          scoreMap,
+          candidates,
+        },
+      },
+      {
+        id: "runtime_cost",
+        label: "Runtime Cost",
+        type: COLUMN_TYPE.number,
+        size: 160,
+        accessorFn: (row) => row.runtimeCost,
+        cell: TrialCandidateCostCell as never,
+        customMeta: {
+          candidates,
+        },
+      },
+      {
+        id: "latency",
+        label: "Latency",
+        type: COLUMN_TYPE.number,
+        size: 160,
+        accessorFn: (row) => row.latencyP50,
+        cell: TrialCandidateLatencyCell as never,
+        customMeta: {
+          candidates,
+        },
+      },
+      {
+        id: "trace_count",
+        label: "Trial items",
+        type: COLUMN_TYPE.number,
+        size: 80,
+        accessorFn: (row) => row.totalDatasetItemCount,
+      },
+      {
+        id: "trial_status",
+        label: "Status",
+        type: COLUMN_TYPE.string,
+        size: 120,
+        accessorFn: () => undefined,
+        cell: TrialStatusCell as never,
+        customMeta: {
+          candidates,
+          isOptimizationFinished,
+          bestCandidateId,
         },
       },
       {
@@ -118,25 +116,19 @@ export const useCompareOptimizationsColumns = ({
         type: COLUMN_TYPE.time,
         cell: TimeCell as never,
       },
-      {
-        id: "created_by",
-        label: "Created by",
-        type: COLUMN_TYPE.string,
-      },
     ];
-  }, [
-    optimization?.objective_name,
-    scoreMap,
-    optimization?.studio_config?.optimizer?.type,
-  ]);
+  }, [candidates, isOptimizationFinished, bestCandidateId]);
 
   const columns = useMemo(() => {
     return [
-      ...convertColumnDataToColumn<Experiment, Experiment>(columnsDef, {
-        columnsOrder,
-        selectedColumns,
-        sortableColumns: sortableBy,
-      }),
+      ...convertColumnDataToColumn<AggregatedCandidate, AggregatedCandidate>(
+        columnsDef,
+        {
+          columnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
     ];
   }, [columnsDef, columnsOrder, selectedColumns, sortableBy]);
 

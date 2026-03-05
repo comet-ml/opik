@@ -1,19 +1,15 @@
 import React, { useCallback, useMemo } from "react";
 import isNull from "lodash/isNull";
-import isUndefined from "lodash/isUndefined";
 
-import { formatDate } from "@/lib/date";
-import { Experiment } from "@/types/datasets";
+import { AggregatedCandidate } from "@/types/optimizations";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
-import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import NoData from "@/components/shared/NoData/NoData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
-import OptimizationProgressChartContent, {
-  ChartData,
-} from "./OptimizationProgressChartContent";
+import OptimizationProgressChartContent from "./OptimizationProgressChartContent";
+import { buildCandidateChartData } from "./optimizationChartUtils";
 
 const OPTIMIZATION_TIPS = [
   "Running optimization trials...",
@@ -25,15 +21,24 @@ const OPTIMIZATION_TIPS = [
 ];
 
 type OptimizationProgressChartContainerProps = {
-  experiments: Experiment[];
-  bestEntityId?: string;
+  candidates: AggregatedCandidate[];
+  bestCandidateId?: string;
   objectiveName?: string;
   status?: OPTIMIZATION_STATUS;
+  selectedTrialId?: string;
+  onTrialSelect?: (trialId: string) => void;
 };
 
 const OptimizationProgressChartContainer: React.FC<
   OptimizationProgressChartContainerProps
-> = ({ experiments, bestEntityId, status, objectiveName = "" }) => {
+> = ({
+  candidates,
+  bestCandidateId,
+  status,
+  objectiveName = "",
+  selectedTrialId,
+  onTrialSelect,
+}) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
@@ -43,49 +48,37 @@ const OptimizationProgressChartContainer: React.FC<
     loop: true,
   });
 
-  const chartData = useMemo(() => {
-    const retVal: ChartData = {
-      data: [],
-      objectiveName,
-    };
+  const isOptimizationFinished =
+    !!status && !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
-    experiments
-      .slice()
-      .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at))
-      .forEach((experiment) => {
-        const value = getFeedbackScoreValue(
-          experiment.feedback_scores ?? [],
-          objectiveName,
-        );
+  const chartData = useMemo(
+    () => buildCandidateChartData(candidates, isOptimizationFinished),
+    [candidates, isOptimizationFinished],
+  );
 
-        retVal.data.push({
-          entityId: experiment.id,
-          entityName: experiment.name,
-          createdDate: formatDate(experiment.created_at),
-          value: isUndefined(value) ? null : value,
-          allFeedbackScores:
-            experiment.feedback_scores
-              ?.map((score) => ({ name: score.name, value: score.value }))
-              ?.filter((score) => score.name !== objectiveName) || [],
-        });
-      });
-
-    return retVal;
-  }, [experiments, objectiveName]);
-
-  const isPending = !chartData;
-  const noData = useMemo(() => {
-    if (isPending) return false;
-
-    return chartData.data.every((record) => isNull(record.value));
-  }, [chartData?.data, isPending]);
+  const noData = useMemo(
+    () => chartData.every((d) => isNull(d.value)),
+    [chartData],
+  );
 
   const renderContent = useCallback(() => {
-    if (isPending) {
+    if (!chartData.length) {
+      if (isInProgress) {
+        return (
+          <div className="flex min-h-32 flex-col items-center justify-center gap-2">
+            <Spinner size="small" />
+            <div className="comet-body-s text-muted-slate transition-opacity duration-300">
+              {currentTip}
+            </div>
+          </div>
+        );
+      }
+
       return (
-        <div className="flex size-full min-h-32 items-center justify-center">
-          <Spinner />
-        </div>
+        <NoData
+          className="min-h-32 text-light-slate"
+          message="No data to show"
+        />
       );
     }
 
@@ -112,13 +105,25 @@ const OptimizationProgressChartContainer: React.FC<
     return (
       <OptimizationProgressChartContent
         chartData={chartData}
-        bestEntityId={bestEntityId}
+        bestCandidateId={bestCandidateId}
+        objectiveName={objectiveName}
+        selectedTrialId={selectedTrialId}
+        onTrialSelect={onTrialSelect}
       />
     );
-  }, [isPending, noData, chartData, bestEntityId, isInProgress, currentTip]);
+  }, [
+    chartData,
+    noData,
+    bestCandidateId,
+    objectiveName,
+    isInProgress,
+    currentTip,
+    selectedTrialId,
+    onTrialSelect,
+  ]);
 
   return (
-    <Card className="h-[224px] min-w-[400px] flex-auto">
+    <Card className="h-[280px] min-w-[400px] flex-auto">
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress

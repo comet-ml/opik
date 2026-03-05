@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 class GepaOptimizer:
     """Optimizer that uses GEPA's genetic-Pareto algorithm."""
 
+    skip_baseline_eval = True
+
     def run(
         self,
         context: OptimizationContext,

@@ -42,6 +42,8 @@ public record Experiment(
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<Comment> comments,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long traceCount,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long datasetItemCount,
         @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) PercentageValues duration,

@@ -261,8 +261,8 @@ class TestFrameworkGEPAAdapterEvaluate:
         assert adapter._known_candidates[key] == "c-123"
 
     @patch("gepa.core.adapter.EvaluationBatch")
-    def test_eval_purpose_initialization_before_iterations(self, mock_eb_cls):
-        """Before any iteration starts (_current_step == -1), purpose is 'initialization'."""
+    def test_eval_purpose_baseline_before_iterations(self, mock_eb_cls):
+        """Before any iteration starts (_current_step == -1), purpose is 'baseline'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.9)
@@ -277,7 +277,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
-        assert call_kwargs["eval_purpose"] == "initialization"
+        assert call_kwargs["eval_purpose"] == "baseline"
 
     @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_exploration_minibatch(self, mock_eb_cls):

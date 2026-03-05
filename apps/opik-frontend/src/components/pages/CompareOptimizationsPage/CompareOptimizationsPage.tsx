@@ -1,31 +1,35 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import Loader from "@/components/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
+import TrialConfigurationSection from "@/components/pages-shared/experiments/TrialConfigurationSection";
 import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import { useCompareOptimizationsData } from "./useCompareOptimizationsData";
 import { useCompareOptimizationsColumns } from "./useCompareOptimizationsColumns";
 import CompareOptimizationsHeader from "./CompareOptimizationsHeader";
+import OptimizationKPICards from "./OptimizationKPICards";
 import CompareOptimizationsToolbar from "./CompareOptimizationsToolbar";
 import CompareOptimizationsTrialsControls from "./CompareOptimizationsTrialsControls";
 import CompareOptimizationsMainContent from "./CompareOptimizationsMainContent";
-import CompareOptimizationsSidebar from "./CompareOptimizationsSidebar";
 
 const CompareOptimizationsPage: React.FC = () => {
   const [view, setView] = useState<OPTIMIZATION_VIEW_TYPE>(
     OPTIMIZATION_VIEW_TYPE.TRIALS,
   );
+  const [selectedTrialId, setSelectedTrialId] = useState<string | undefined>();
 
   const {
     optimizationId,
     optimization,
     experiments,
+    candidates,
     rows,
     title,
     noDataText,
-    scoreMap,
-    bestExperiment,
+
+    bestCandidate,
+    baselineCandidate,
     baselineExperiment,
     sortableBy,
     isOptimizationPending,
@@ -48,13 +52,24 @@ const CompareOptimizationsPage: React.FC = () => {
     handleRefresh,
   } = useCompareOptimizationsData();
 
+  const isOptimizationFinished =
+    !!optimization?.status &&
+    !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
   const { columnsDef, columns } = useCompareOptimizationsColumns({
-    optimization,
-    scoreMap,
+    candidates,
     columnsOrder,
     selectedColumns,
     sortableBy,
+    isOptimizationFinished,
+    bestCandidateId: bestCandidate?.candidateId,
   });
+
+  const bestExperiment = useMemo(() => {
+    if (!bestCandidate || !experiments.length) return undefined;
+    const ids = new Set(bestCandidate.experimentIds);
+    return experiments.find((e) => ids.has(e.id));
+  }, [bestCandidate, experiments]);
 
   // set initial view based on optimization status when optimization changes
   useEffect(() => {
@@ -96,12 +111,32 @@ const CompareOptimizationsPage: React.FC = () => {
         />
       </div>
 
+      <div className="shrink-0 pb-4">
+        <OptimizationKPICards
+          experiments={experiments}
+          baselineCandidate={baselineCandidate}
+          bestCandidate={bestCandidate}
+        />
+      </div>
+
+      {bestExperiment && (
+        <div className="shrink-0 pb-4">
+          <TrialConfigurationSection
+            experiments={[bestExperiment]}
+            title="Best Configuration"
+            referenceExperiment={baselineExperiment}
+          />
+        </div>
+      )}
+
       <div className="shrink-0 pb-6">
         <OptimizationProgressChartContainer
-          experiments={experiments}
-          bestEntityId={bestExperiment?.id}
+          candidates={candidates}
+          bestCandidateId={bestCandidate?.candidateId}
           objectiveName={optimization?.objective_name}
           status={optimization?.status}
+          selectedTrialId={selectedTrialId}
+          onTrialSelect={setSelectedTrialId}
         />
       </div>
 
@@ -129,7 +164,7 @@ const CompareOptimizationsPage: React.FC = () => {
         )}
       </div>
 
-      <div className="flex min-h-[500px] flex-1 flex-row gap-x-4 pb-6">
+      <div className="min-h-[500px] flex-1 pb-6">
         <CompareOptimizationsMainContent
           view={view}
           isStudioOptimization={isStudioOptimization}
@@ -143,18 +178,11 @@ const CompareOptimizationsPage: React.FC = () => {
           onRowClick={handleRowClick}
           onSortChange={setSortedColumns}
           onColumnsWidthChange={setColumnsWidth}
-          highlightedTrialId={bestExperiment?.id}
+          highlightedTrialId={selectedTrialId ?? bestCandidate?.id}
           bestExperiment={bestExperiment}
           showLoadingOverlay={
             isExperimentsPlaceholderData && isExperimentsFetching
           }
-        />
-        <CompareOptimizationsSidebar
-          optimization={optimization}
-          bestExperiment={bestExperiment}
-          baselineExperiment={baselineExperiment}
-          scoreMap={scoreMap}
-          status={optimization?.status}
         />
       </div>
     </div>

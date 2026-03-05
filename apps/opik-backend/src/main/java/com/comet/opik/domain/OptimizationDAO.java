@@ -29,6 +29,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -114,6 +115,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
@@ -121,7 +123,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT
                     id,
                     optimization_id,
-                    experiment_scores
+                    experiment_scores,
+                    created_at AS experiment_created_at
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND optimization_id IN (SELECT id FROM optimization_final)
@@ -241,17 +244,50 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     ) AS experiment_scores
                 FROM experiment_scores_parsed
                 GROUP BY experiment_id
+            ), baseline_experiment AS (
+                SELECT
+                    optimization_id,
+                    argMin(id, experiment_created_at) AS experiment_id
+                FROM experiments_final
+                GROUP BY optimization_id
+            ), objective_scores_per_experiment AS (
+                SELECT
+                    ef.optimization_id,
+                    esp.experiment_id,
+                    esp.value AS objective_score
+                FROM experiment_scores_parsed esp
+                INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
+                INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                WHERE esp.name = o.objective_name
+            ), best_experiment_scores AS (
+                SELECT
+                    optimization_id,
+                    max(objective_score) AS best_score
+                FROM objective_scores_per_experiment
+                GROUP BY optimization_id
+            ), baseline_experiment_scores AS (
+                SELECT
+                    be.optimization_id,
+                    os.objective_score AS baseline_score
+                FROM baseline_experiment be
+                LEFT JOIN objective_scores_per_experiment os
+                    ON be.experiment_id = os.experiment_id
+                    AND be.optimization_id = os.optimization_id
             )
             SELECT
                 o.*,
                 o.id as id,
                 COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
                 maxMap(fs.feedback_scores) AS feedback_scores,
-                maxMap(es.experiment_scores) AS experiment_scores
+                maxMap(es.experiment_scores) AS experiment_scores,
+                any(bes.best_score) AS best_objective_score,
+                any(bls.baseline_score) AS baseline_objective_score
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
+            LEFT JOIN best_experiment_scores AS bes ON o.id = bes.optimization_id
+            LEFT JOIN baseline_experiment_scores AS bls ON o.id = bls.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -269,6 +305,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
@@ -563,6 +600,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
 
+        Optional.ofNullable(searchCriteria.datasetIds())
+                .filter(ids -> !ids.isEmpty())
+                .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
+
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
 
@@ -585,6 +626,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+
+        Optional.ofNullable(searchCriteria.datasetIds())
+                .filter(ids -> !ids.isEmpty())
+                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds));
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
@@ -670,6 +715,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .experimentScores(getFeedbackScores(row, "experiment_scores"))
                     .numTrials(row.get("num_trials", Long.class))
+                    .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
+                    .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
                     .build();
         });
     }

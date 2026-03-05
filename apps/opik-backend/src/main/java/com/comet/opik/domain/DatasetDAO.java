@@ -201,6 +201,9 @@ public interface DatasetDAO {
     @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name")
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
 
+    @SqlQuery("SELECT id FROM datasets WHERE workspace_id = :workspace_id AND name LIKE CONCAT('%', :name, '%')")
+    List<UUID> findIdsByPartialName(@Bind("workspace_id") String workspaceId, @Bind("name") String name);
+
     @SqlBatch("UPDATE datasets SET last_created_experiment_at = :experimentCreatedAt WHERE id = :datasetId AND workspace_id = :workspace_id")
     int[] recordExperiments(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<DatasetLastExperimentCreated> datasets);

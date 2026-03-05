@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import get from "lodash/get";
 import sortBy from "lodash/sortBy";
 import {
@@ -12,7 +12,6 @@ import { ColumnPinningState, createColumnHelper } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import {
-  CELL_VERTICAL_ALIGNMENT,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -29,25 +28,22 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
-import CompareExperimentsFeedbackScoreCell from "@/components/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
 import TrialPassedCell from "./TrialPassedCell";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import CompareExperimentsNameCell from "@/components/pages-shared/experiments/CompareExperimentsNameCell/CompareExperimentsNameCell";
-import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/CompareExperimentsNameHeader/CompareExperimentsNameHeader";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
-import { Experiment, ExperimentsCompare } from "@/types/datasets";
-import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
-  convertColumnDataToColumn,
-  hasAnyVisibleColumns,
-  migrateSelectedColumns,
-} from "@/lib/table";
+  Experiment,
+  ExperimentItem,
+  ExecutionPolicy,
+  ExperimentsCompare,
+} from "@/types/datasets";
+import { useTruncationEnabled } from "@/components/server-sync-provider";
+import { convertColumnDataToColumn, hasAnyVisibleColumns } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -55,33 +51,39 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import { calculateHeightStyle } from "@/components/shared/DataTable/utils";
-import { calculateLineHeight } from "@/lib/experiments";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-const getRowId = (d: ExperimentsCompare) => d.id;
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+type FlattenedTrialItem = {
+  id: string;
+  dataset_item_id: string;
+  data: object;
+  minibatchNumber: number;
+  experimentId: string;
+  experimentItem: ExperimentItem;
+  allRuns: ExperimentItem[];
+  executionPolicy?: ExecutionPolicy;
+};
 
-const calculateVerticalAlignment = (count: number) =>
-  count === 1 ? undefined : CELL_VERTICAL_ALIGNMENT.start;
+const getRowId = (d: FlattenedTrialItem) => d.id;
 
-const columnHelper = createColumnHelper<ExperimentsCompare>();
+const columnHelper = createColumnHelper<FlattenedTrialItem>();
 
 const REFETCH_INTERVAL = 30000;
-const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
 
-const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns";
-const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
+const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns-v5";
 const COLUMNS_WIDTH_KEY = "compare-trials-columns-width";
 const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
-const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
+const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns-v2";
 const COLUMNS_SCORES_ORDER_KEY = "compare-trials-scores-columns-order";
 const COLUMNS_OUTPUT_ORDER_KEY = "compare-trials-output-columns-order";
 const PAGINATION_SIZE_KEY = "compare-trials-pagination-size";
 const ROW_HEIGHT_KEY = "compare-trials-row-height";
 
-export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+export const FILTER_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
   {
     id: "output",
     label: "Evaluation task",
@@ -99,13 +101,23 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [];
+const COLUMN_MINIBATCH_ID = "minibatch_number";
 
-const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_MINIBATCH_ID];
+
+const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
+  {
+    id: COLUMN_MINIBATCH_ID,
+    label: "Minibatch #",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) => row.minibatchNumber,
+    size: 110,
+  },
   {
     id: COLUMN_ID_ID,
     label: "Dataset item ID",
     type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.dataset_item_id,
     cell: IdCell as never,
     size: 165,
   },
@@ -117,6 +129,7 @@ export type TrialItemsTabProps = {
   experimentsIds: string[];
   experiments?: Experiment[];
   isEvaluationSuite?: boolean;
+  showMinibatch?: boolean;
 };
 
 const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
@@ -125,6 +138,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   experimentsIds = [],
   experiments,
   isEvaluationSuite = false,
+  showMinibatch = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
@@ -185,13 +199,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   });
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    SELECTED_COLUMNS_KEY,
     {
-      defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID],
-      ),
+      defaultValue: DEFAULT_SELECTED_COLUMNS,
     },
   );
 
@@ -245,10 +255,96 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       },
     );
 
-  const experimentsCount = experimentsIds.length;
-  const rows = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
   const noDataText = "There is no data for the selected trials";
+
+  const experimentIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    experimentsIds.forEach((id, idx) => map.set(id, idx + 1));
+    return map;
+  }, [experimentsIds]);
+
+  const allFlatRows = useMemo(() => {
+    const apiRows: ExperimentsCompare[] = data?.content ?? [];
+    const flat: FlattenedTrialItem[] = [];
+
+    for (const row of apiRows) {
+      const itemsByExperiment = new Map<string, ExperimentItem[]>();
+      for (const item of row.experiment_items ?? []) {
+        const existing = itemsByExperiment.get(item.experiment_id) ?? [];
+        existing.push(item);
+        itemsByExperiment.set(item.experiment_id, existing);
+      }
+
+      for (const [experimentId, runs] of itemsByExperiment) {
+        flat.push({
+          id: `${row.id}_${experimentId}`,
+          dataset_item_id: row.id,
+          data: row.data,
+          minibatchNumber: experimentIndexMap.get(experimentId) ?? 0,
+          experimentId,
+          experimentItem: runs[0],
+          allRuns: runs,
+          executionPolicy: row.execution_policy,
+        });
+      }
+    }
+
+    flat.sort((a, b) => a.minibatchNumber - b.minibatchNumber);
+    return flat;
+  }, [data?.content, experimentIndexMap]);
+
+  const [passFilter, setPassFilter] = useState<"all" | "passed" | "failed">(
+    "all",
+  );
+
+  const { rows, passedCount, failedCount } = useMemo(() => {
+    if (!isEvaluationSuite) {
+      return { rows: allFlatRows, passedCount: 0, failedCount: 0 };
+    }
+
+    const isRunPassed = (item: ExperimentItem) => {
+      const scores = item.feedback_scores;
+      if (!scores?.length) return true;
+      return scores.every((s) => s.value >= 1.0);
+    };
+
+    const isItemPassed = (row: FlattenedTrialItem) => {
+      const passThreshold = row.executionPolicy?.pass_threshold ?? 1;
+      const runsPassed = row.allRuns.filter(isRunPassed).length;
+      return runsPassed >= passThreshold;
+    };
+
+    let passed = 0;
+    let failed = 0;
+
+    allFlatRows.forEach((row) => {
+      const hasScores = row.allRuns.some(
+        (r) => r.feedback_scores && r.feedback_scores.length > 0,
+      );
+      if (!hasScores) return;
+      if (isItemPassed(row)) {
+        passed++;
+      } else {
+        failed++;
+      }
+    });
+
+    if (passFilter === "all") {
+      return { rows: allFlatRows, passedCount: passed, failedCount: failed };
+    }
+
+    const filtered = allFlatRows.filter((row) => {
+      const hasScores = row.allRuns.some(
+        (r) => r.feedback_scores && r.feedback_scores.length > 0,
+      );
+      if (!hasScores) return false;
+      const itemPassed = isItemPassed(row);
+      return passFilter === "passed" ? itemPassed : !itemPassed;
+    });
+
+    return { rows: filtered, passedCount: passed, failedCount: failed };
+  }, [allFlatRows, passFilter, isEvaluationSuite]);
 
   const dynamicDatasetColumns = useMemo(() => {
     return (data?.columns ?? [])
@@ -292,16 +388,14 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             id,
             label,
             type: columnType,
-            accessorFn: (row) => get(row, ["data", label], ""),
+            accessorFn: (row: FlattenedTrialItem) =>
+              get(row, ["data", label], ""),
             cell: AutodetectCell as never,
-            verticalAlignment: calculateVerticalAlignment(experimentsCount),
-            overrideRowHeight:
-              experimentsCount === 1 ? undefined : ROW_HEIGHT.large,
             ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-          }) as ColumnData<ExperimentsCompare>,
+          }) as ColumnData<FlattenedTrialItem>,
       ),
     ];
-  }, [dynamicDatasetColumns, experimentsCount]);
+  }, [dynamicDatasetColumns]);
 
   const outputColumnsData = useMemo(() => {
     return [
@@ -311,21 +405,16 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             id,
             label,
             type: columnType,
-            cell: CompareExperimentsOutputCell as never,
-            customMeta: {
-              experiments,
-              experimentsIds,
-              outputKey: label,
-              openTrace: setTraceId,
-            },
+            accessorFn: (row: FlattenedTrialItem) =>
+              get(row.experimentItem.output, label, ""),
+            cell: AutodetectCell as never,
             ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
-          }) as ColumnData<ExperimentsCompare>,
+          }) as ColumnData<FlattenedTrialItem>,
       ),
     ];
-  }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
+  }, [dynamicOutputColumns]);
 
   const scoresColumnsData = useMemo(() => {
-    // For evaluation suite experiments, show a single "passed" column
     if (isEvaluationSuite) {
       return [
         {
@@ -337,24 +426,23 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             experimentsIds,
           },
         },
-      ] as ColumnData<ExperimentsCompare>[];
+      ] as ColumnData<FlattenedTrialItem>[];
     }
 
-    // Extract all unique feedback score names from experiments
     const feedbackScoreNames = new Set<string>();
 
     experiments?.forEach((experiment) => {
       experiment.feedback_scores?.forEach((score) => {
         feedbackScoreNames.add(score.name);
       });
+      experiment.experiment_scores?.forEach((score) => {
+        feedbackScoreNames.add(score.name);
+      });
     });
 
-    // Convert to array and sort: main objective first, then alphabetically
     const sortedScoreNames = Array.from(feedbackScoreNames).sort((a, b) => {
-      // Main objective always comes first
       if (a === objectiveName) return -1;
       if (b === objectiveName) return 1;
-      // Sort the rest alphabetically (case-insensitive)
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
 
@@ -366,28 +454,24 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           )
         : undefined;
 
-    // Get score value from the first experiment (same as CompareTrialsDetails)
-    const firstExperiment = experiments?.[0];
-
-    // Create column for each feedback score
     return sortedScoreNames.map((scoreName) => ({
       id: `score_${scoreName}`,
       label: scoreName,
-      type: COLUMN_TYPE.numberDictionary,
+      type: COLUMN_TYPE.number,
       header: FeedbackScoreHeader as never,
-      cell: CompareExperimentsFeedbackScoreCell as never,
+      accessorFn: (row: FlattenedTrialItem) => {
+        const score = row.experimentItem.feedback_scores?.find(
+          (s) => s.name === scoreName,
+        );
+        return score?.value;
+      },
       customMeta: {
-        experimentsIds,
         scoreName,
         colorMap,
-        scoreValue: firstExperiment?.feedback_scores?.find(
-          (s) => s.name === scoreName,
-        )?.value,
       },
-    })) as ColumnData<ExperimentsCompare>[];
+    })) as ColumnData<FlattenedTrialItem>[];
   }, [experiments, experimentsIds, objectiveName, isEvaluationSuite]);
 
-  // Auto-select all score columns when they become available
   useEffect(() => {
     const scoreColumnIds = scoresColumnsData.map((col) => col.id);
     const missingScoreColumns = scoreColumnIds.filter(
@@ -399,13 +483,18 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     }
   }, [scoresColumnsData, selectedColumns, setSelectedColumns]);
 
+  const activeDefaultColumns = useMemo(
+    () =>
+      showMinibatch
+        ? DEFAULT_COLUMNS
+        : DEFAULT_COLUMNS.filter((c) => c.id !== COLUMN_MINIBATCH_ID),
+    [showMinibatch],
+  );
+
   const columns = useMemo(() => {
     const retVal = [
-      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
-        DEFAULT_COLUMNS.map((col) => ({
-          ...col,
-          verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        })),
+      ...convertColumnDataToColumn<FlattenedTrialItem, FlattenedTrialItem>(
+        activeDefaultColumns,
         {
           selectedColumns,
           columnsOrder,
@@ -422,42 +511,12 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
-            ExperimentsCompare,
-            ExperimentsCompare
+            FlattenedTrialItem,
+            FlattenedTrialItem
           >(datasetColumnsData, {
             selectedColumns,
             columnsOrder,
           }),
-        }),
-      );
-    }
-
-    if (experimentsCount > 1) {
-      retVal.push(
-        columnHelper.group({
-          id: "experiments",
-          meta: {
-            header: "Experiments",
-          },
-          header: SectionHeader,
-          columns: convertColumnDataToColumn<
-            ExperimentsCompare,
-            ExperimentsCompare
-          >(
-            [
-              {
-                id: COLUMN_EXPERIMENT_NAME_ID,
-                label: "Name",
-                header: CompareExperimentsNameHeader as never,
-                cell: CompareExperimentsNameCell as never,
-                customMeta: {
-                  experiments,
-                  experimentsIds,
-                },
-              },
-            ],
-            {},
-          ),
         }),
       );
     }
@@ -471,8 +530,8 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
-            ExperimentsCompare,
-            ExperimentsCompare
+            FlattenedTrialItem,
+            FlattenedTrialItem
           >(outputColumnsData, {
             selectedColumns,
             columnsOrder: outputColumnsOrder,
@@ -490,8 +549,8 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
-            ExperimentsCompare,
-            ExperimentsCompare
+            FlattenedTrialItem,
+            FlattenedTrialItem
           >(scoresColumnsData, {
             selectedColumns,
             columnsOrder: scoresColumnsOrder,
@@ -502,14 +561,12 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
     return retVal;
   }, [
-    experimentsCount,
+    activeDefaultColumns,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,
     scoresColumnsData,
     columnsOrder,
-    experiments,
-    experimentsIds,
     outputColumnsOrder,
     scoresColumnsOrder,
   ]);
@@ -537,16 +594,8 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   );
 
   const getRowHeightStyle = useCallback(
-    (height: ROW_HEIGHT) => {
-      let retVal = calculateHeightStyle(height);
-
-      if (experimentsCount > 1) {
-        retVal = calculateLineHeight(height, experimentsCount);
-      }
-
-      return retVal;
-    },
-    [experimentsCount],
+    (height: ROW_HEIGHT) => calculateHeightStyle(height),
+    [],
   );
 
   const columnSections = useMemo(() => {
@@ -598,6 +647,27 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             onChange={setFilters}
             layout="icon"
           />
+          {isEvaluationSuite && (
+            <ToggleGroup
+              type="single"
+              value={passFilter}
+              onValueChange={(v) => {
+                if (v) setPassFilter(v as "all" | "passed" | "failed");
+              }}
+              variant="default"
+              size="sm"
+            >
+              <ToggleGroupItem value="all">
+                All ({allFlatRows.length})
+              </ToggleGroupItem>
+              <ToggleGroupItem value="passed">
+                Passed ({passedCount})
+              </ToggleGroupItem>
+              <ToggleGroupItem value="failed">
+                Failed ({failedCount})
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <DataTableRowHeightSelector
@@ -605,7 +675,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={[...DEFAULT_COLUMNS, ...datasetColumnsData]}
+            columns={[...activeDefaultColumns, ...datasetColumnsData]}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

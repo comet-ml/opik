@@ -1,11 +1,10 @@
 import React, { useMemo } from "react";
 import isUndefined from "lodash/isUndefined";
-import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { JsonParam, useQueryParam } from "use-query-params";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import PromptTab from "@/components/pages/CompareTrialsPage/PromptTab/PromptTab";
 import TrialItemsTab from "@/components/pages/CompareTrialsPage/TrialsItemsTab/TrialItemsTab";
-import ConfigurationTab from "@/components/pages/CompareTrialsPage/ConfigurationTab/ConfigurationTab";
+import TrialConfigurationSection from "@/components/pages-shared/experiments/TrialConfigurationSection";
+import TrialKPICards from "@/components/pages/CompareTrialsPage/TrialKPICards";
 import CompareTrialsDetails from "@/components/pages/CompareTrialsPage/CompareTrialsDetails/CompareTrialsDetails";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -16,19 +15,17 @@ import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useAppStore from "@/store/AppStore";
 import { checkIsEvaluationSuite } from "@/lib/optimizations";
+import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { OPTIMIZER_TYPE } from "@/types/optimizations";
 
 const CompareTrialsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
     permissions: { canViewDatasets },
   } = usePermissions();
-
-  const [tab = "prompt", setTab] = useQueryParam("tab", StringParam, {
-    updateType: "replaceIn",
-  });
 
   const [experimentsIds = []] = useQueryParam("trials", JsonParam, {
     updateType: "replaceIn",
@@ -87,6 +84,51 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     return checkIsEvaluationSuite(allExperiments);
   }, [memorizedExperiments, optimizationExperimentsData?.content]);
 
+  const { baselineExperimentId, baselineScore } = useMemo(() => {
+    const allExperiments = optimizationExperimentsData?.content ?? [];
+    if (!allExperiments.length || !optimization?.objective_name) {
+      return { baselineExperimentId: undefined, baselineScore: undefined };
+    }
+    const sorted = allExperiments
+      .slice()
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const baseline = sorted[0];
+    const score = getFeedbackScoreValue(
+      baseline.feedback_scores ?? [],
+      optimization.objective_name,
+    );
+    return {
+      baselineExperimentId: baseline.id,
+      baselineScore: score ?? undefined,
+    };
+  }, [optimizationExperimentsData?.content, optimization?.objective_name]);
+
+  const parentExperiment = useMemo(() => {
+    const allExperiments = optimizationExperimentsData?.content ?? [];
+    if (!memorizedExperiments.length || !allExperiments.length)
+      return undefined;
+
+    const currentMeta = memorizedExperiments[0]?.metadata as
+      | Record<string, unknown>
+      | undefined;
+    const parentCandidateIds = currentMeta?.parent_candidate_ids as
+      | string[]
+      | undefined;
+
+    if (!parentCandidateIds?.length) return undefined;
+
+    const parentCandidateId = parentCandidateIds[0];
+    return allExperiments.find((exp) => {
+      const meta = exp.metadata as Record<string, unknown> | undefined;
+      return meta?.candidate_id === parentCandidateId;
+    });
+  }, [memorizedExperiments, optimizationExperimentsData?.content]);
+
+  const isGepa =
+    optimization?.studio_config?.optimizer?.type === OPTIMIZER_TYPE.GEPA ||
+    (optimization?.metadata as Record<string, unknown> | undefined)
+      ?.optimizer === "GepaOptimizer";
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -95,55 +137,55 @@ const CompareTrialsPage: React.FunctionComponent = () => {
           experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
           isEvaluationSuite={isEvaluationSuite}
+          baselineExperimentId={baselineExperimentId}
+          baselineScore={baselineScore}
         />
       </PageBodyStickyContainer>
-      <Tabs
-        defaultValue="input"
-        value={tab as string}
-        onValueChange={setTab}
-        className="min-w-min"
-      >
-        <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="prompt">
-              Prompt
-            </TabsTrigger>
-            {canViewDatasets && (
-              <TabsTrigger variant="underline" value="items">
-                Trial items
-              </TabsTrigger>
-            )}
-            <TabsTrigger variant="underline" value="config">
-              Configuration
-            </TabsTrigger>
-          </TabsList>
+
+      {!isPending && memorizedExperiments.length > 0 && (
+        <PageBodyStickyContainer
+          direction="horizontal"
+          limitWidth
+          className="mb-6"
+        >
+          <TrialKPICards
+            experiments={memorizedExperiments}
+            allOptimizationExperiments={
+              optimizationExperimentsData?.content ?? []
+            }
+            objectiveName={optimization?.objective_name}
+          />
         </PageBodyStickyContainer>
-        <TabsContent value="prompt">
-          <PromptTab
+      )}
+
+      {!isPending && memorizedExperiments.length > 0 && (
+        <PageBodyStickyContainer
+          direction="horizontal"
+          limitWidth
+          className="mb-6"
+        >
+          <TrialConfigurationSection
+            experiments={memorizedExperiments}
+            referenceExperiment={parentExperiment}
+          />
+        </PageBodyStickyContainer>
+      )}
+
+      {canViewDatasets && (
+        <>
+          <PageBodyStickyContainer direction="horizontal" limitWidth>
+            <h2 className="comet-title-s mb-4">Evaluation Results</h2>
+          </PageBodyStickyContainer>
+          <TrialItemsTab
+            objectiveName={optimization?.objective_name}
+            datasetId={datasetId}
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
-            isPending={isPending}
+            isEvaluationSuite={isEvaluationSuite}
+            showMinibatch={isGepa}
           />
-        </TabsContent>
-        {canViewDatasets && (
-          <TabsContent value="items">
-            <TrialItemsTab
-              objectiveName={optimization?.objective_name}
-              datasetId={datasetId}
-              experimentsIds={experimentsIds}
-              experiments={memorizedExperiments}
-              isEvaluationSuite={isEvaluationSuite}
-            />
-          </TabsContent>
-        )}
-        <TabsContent value="config">
-          <ConfigurationTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isPending={isPending}
-          />
-        </TabsContent>
-      </Tabs>
+        </>
+      )}
     </PageBodyScrollContainer>
   );
 };

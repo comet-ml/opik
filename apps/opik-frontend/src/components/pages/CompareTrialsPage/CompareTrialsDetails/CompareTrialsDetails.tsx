@@ -11,12 +11,28 @@ import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { Tag, TagProps } from "@/components/ui/tag";
+import {
+  formatAsDuration,
+  formatAsCurrency,
+} from "@/lib/optimization-formatters";
+import { getFeedbackScoreValue } from "@/lib/feedback-scores";
+
+type TrialStatus = "baseline" | "passed" | "lost";
+
+const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
+  baseline: "gray",
+  passed: "blue",
+  lost: "pink",
+};
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
   experimentsIds: string[];
   experiments: Experiment[];
   isEvaluationSuite?: boolean;
+  baselineExperimentId?: string;
+  baselineScore?: number;
 };
 
 const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
@@ -24,6 +40,8 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   experiments,
   experimentsIds,
   isEvaluationSuite = false,
+  baselineExperimentId,
+  baselineScore,
 }) => {
   const {
     permissions: { canViewDatasets },
@@ -39,6 +57,36 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   const title = !isCompare
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
+
+  const trialStatus: TrialStatus | undefined = useMemo(() => {
+    if (isCompare || !experiment) return undefined;
+    if (experiment.id === baselineExperimentId) return "baseline";
+    const objectiveName = optimization?.objective_name;
+    if (!objectiveName) return undefined;
+    const score = getFeedbackScoreValue(
+      experiment.feedback_scores ?? [],
+      objectiveName,
+    );
+    if (score == null || baselineScore == null) return undefined;
+    return score >= baselineScore ? "passed" : "lost";
+  }, [
+    isCompare,
+    experiment,
+    baselineExperimentId,
+    baselineScore,
+    optimization?.objective_name,
+  ]);
+
+  const kpiSummary = useMemo(() => {
+    if (isCompare || !experiment) return null;
+    const cost = experiment.total_estimated_cost;
+    const latency = experiment.duration?.p50;
+    const parts: string[] = [];
+    if (cost != null) parts.push(`Cost: ${formatAsCurrency(cost)}`);
+    if (latency != null)
+      parts.push(`Latency: ${formatAsDuration(latency / 1000)}`);
+    return parts.length > 0 ? parts.join("  ·  ") : null;
+  }, [isCompare, experiment]);
 
   const scores = useMemo(() => {
     if (isCompare || !experiment?.feedback_scores) return [];
@@ -108,8 +156,22 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
 
   return (
     <div className="pb-4 pt-6">
-      <div className="mb-4 flex min-h-8 items-center justify-between">
+      <div className="mb-4 flex min-h-8 items-center gap-3">
         <h1 className="comet-title-l truncate break-words">{title}</h1>
+        {trialStatus && (
+          <Tag
+            variant={STATUS_VARIANT_MAP[trialStatus]}
+            size="md"
+            className="shrink-0 capitalize"
+          >
+            {trialStatus}
+          </Tag>
+        )}
+        {kpiSummary && (
+          <span className="comet-body-s shrink-0 text-muted-slate">
+            {kpiSummary}
+          </span>
+        )}
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (

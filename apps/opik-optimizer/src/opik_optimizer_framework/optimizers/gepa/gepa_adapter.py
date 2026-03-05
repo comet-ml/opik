@@ -405,7 +405,7 @@ class FrameworkGEPAAdapter:
     def _determine_eval_purpose(self) -> str:
         """Determine the evaluation purpose based on current adapter state."""
         if self._current_step < 0:
-            return "initialization"
+            return "baseline"
         if self._pending_eval_capture_traces is not None:
             if self._pending_eval_capture_traces:
                 return "exploration:minibatch"
@@ -425,6 +425,9 @@ class FrameworkGEPAAdapter:
             self._candidate_parents[trial.candidate_id] = (
                 parent_candidate_ids or []
             )
+            # First candidate registered becomes the baseline root
+            if self._baseline_candidate_id is None:
+                self._baseline_candidate_id = trial.candidate_id
         logger.debug(
             "[adapter.evaluate] result: trial_id=%s score=%.4f "
             "candidate_id=%s is_new_candidate=%s stored_parents=%s",

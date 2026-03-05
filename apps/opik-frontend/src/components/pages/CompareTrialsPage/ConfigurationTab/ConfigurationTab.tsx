@@ -27,7 +27,10 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { OPTIMIZATION_METADATA_EXCLUDED_KEY } from "@/constants/experiments";
+import {
+  OPTIMIZATION_PROMPT_KEY,
+  OPTIMIZATION_EXAMPLES_KEY,
+} from "@/constants/experiments";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-config-columns-width";
@@ -103,7 +106,10 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     >((acc, experiment) => {
       acc[experiment.id] = isObject(experiment.metadata)
         ? flattie(
-            omit(experiment.metadata, [OPTIMIZATION_METADATA_EXCLUDED_KEY]),
+            omit(experiment.metadata, [
+              OPTIMIZATION_PROMPT_KEY,
+              OPTIMIZATION_EXAMPLES_KEY,
+            ]),
             ".",
             true,
           )

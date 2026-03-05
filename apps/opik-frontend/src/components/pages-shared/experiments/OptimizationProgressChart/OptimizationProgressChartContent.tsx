@@ -1,335 +1,257 @@
-import React, { useState, useMemo, useCallback } from "react";
-import useChartConfig from "@/hooks/useChartConfig";
-import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
-import { LineDot } from "recharts/types/cartesian/Line";
-import debounce from "lodash/debounce";
-
-import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
-import OptimizationProgressTooltip from "./OptimizationProgressTooltip";
-import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
+import React, { useMemo, useCallback, useRef } from "react";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartLegend,
-} from "@/components/ui/chart";
+  Dot,
+  XAxis,
+  CartesianGrid,
+  YAxis,
+  ComposedChart,
+  Scatter,
+  Customized,
+} from "recharts";
+
+import { ChartContainer } from "@/components/ui/chart";
 import {
   DEFAULT_CHART_GRID_PROPS,
   DEFAULT_CHART_TICK,
 } from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import {
-  extractSecondaryScoreNames,
-  getScoreValue,
-  generateDistinctColorMap,
+  TRIAL_STATUS_COLORS,
+  CandidateDataPoint,
+  buildParentChildEdges,
 } from "./optimizationChartUtils";
 
-export type DataRecord = {
-  entityId: string;
-  entityName: string;
-  createdDate: string;
-  value: number | null;
-  allFeedbackScores?: { name: string; value: number }[];
-};
-
-export type ChartData = {
-  data: DataRecord[];
-  objectiveName: string;
-};
-
 type OptimizationProgressChartContentProps = {
-  bestEntityId?: string;
-  chartData: ChartData;
+  chartData: CandidateDataPoint[];
+  bestCandidateId?: string;
+  objectiveName: string;
+  selectedTrialId?: string;
+  onTrialSelect?: (trialId: string) => void;
 };
+
+const CHART_CONFIG = {
+  score: { label: "Score", color: "var(--color-blue)" },
+};
+
+type DotPosition = { cx: number; cy: number };
 
 const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
-> = ({ chartData, bestEntityId }) => {
-  const { objectiveName, data } = chartData;
-  const [activeLine, setActiveLine] = useState<string | null>(null);
-  const [position, setPosition] = useState<
-    { x: number; y: number } | undefined
-  >();
+> = ({
+  chartData,
+  bestCandidateId,
+  objectiveName,
+  selectedTrialId,
+  onTrialSelect,
+}) => {
+  const steps = useMemo(() => {
+    const s = new Set(chartData.map((d) => d.stepIndex));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [chartData]);
 
-  // Extract all score names (main objective + secondary scores)
-  const secondaryScoreNames = useMemo(
-    () => extractSecondaryScoreNames(data, objectiveName),
-    [data, objectiveName],
+  const positionedData = useMemo(() => {
+    return chartData.map((d) => ({
+      ...d,
+      x: d.stepIndex,
+    }));
+  }, [chartData]);
+
+  const values = useMemo(
+    () => positionedData.map((d) => d.value),
+    [positionedData],
   );
-
-  const allScoreNames = useMemo(
-    () => [objectiveName, ...secondaryScoreNames],
-    [objectiveName, secondaryScoreNames],
-  );
-
-  // Generate distinct color map for all scores
-  const customColorMap = useMemo(
-    () => generateDistinctColorMap(objectiveName, secondaryScoreNames),
-    [objectiveName, secondaryScoreNames],
-  );
-
-  const config = useChartConfig(allScoreNames, undefined, customColorMap);
-
-  const mainObjectiveColor = config[objectiveName].color as string;
-
-  // Collect all values (main objective + secondary scores) for Y-axis scaling
-  const values = useMemo(() => {
-    const allValues: DataRecord["value"][] = [];
-    data.forEach((record) => {
-      // Main objective value
-      allValues.push(record.value);
-      // Secondary scores values
-      secondaryScoreNames.forEach((scoreName) => {
-        allValues.push(getScoreValue(record, scoreName));
-      });
-    });
-    return allValues;
-  }, [data, secondaryScoreNames]);
 
   const {
     width: tickWidth,
     ticks,
     domain,
     yTickFormatter,
-    interval: tickInterval,
   } = useChartTickDefaultConfig(values, {
     maxTickPrecision: 2,
     targetTickCount: 3,
     showMinMaxDomain: true,
   });
 
-  const renderHeader = useCallback(
-    ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
+  const edges = useMemo(() => buildParentChildEdges(chartData), [chartData]);
+
+  // Ref to collect dot pixel positions during Scatter rendering.
+  // Scatter renders before Customized (JSX order), so positions are
+  // available when renderEdges executes in the same render pass.
+  const dotPositionsRef = useRef<Map<string, DotPosition>>(new Map());
+
+  const renderScatterDot = useCallback(
+    (props: {
+      cx: number;
+      cy: number;
+      payload: (typeof positionedData)[0];
+      [key: string]: unknown;
+    }) => {
+      const { cx, cy, payload } = props;
+      const color = TRIAL_STATUS_COLORS[payload.status];
+      const isBest = payload.candidateId === bestCandidateId;
+      const isSelected = payload.candidateId === selectedTrialId;
+      const radius = isBest ? 8 : 6;
+
+      const handleClick = () => onTrialSelect?.(payload.candidateId);
+
+      dotPositionsRef.current.set(payload.candidateId, { cx, cy });
 
       return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 truncate">
-            {entityName}
-          </div>
-          <div className="comet-body-xs mb-1 text-light-slate">
-            {createdDate}
-          </div>
-        </>
-      );
-    },
-    [],
-  );
-
-  // There is no way to subscribe to any event when the chart is rendered
-  // onAnimationEnd is called before dots are rendered
-  // we use this function to update the position of the popover
-  const updatePositionDebounced = useMemo(
-    () =>
-      debounce((val: { x: number; y: number }) => {
-        if (val) {
-          const { x, y } = val;
-          setPosition((state) => {
-            if (state?.x !== x || state?.y !== y) {
-              return {
-                x,
-                y,
-              };
-            }
-
-            return state;
-          });
-        }
-      }, 100),
-    [],
-  );
-
-  const renderPopover = () => {
-    if (!position) return null;
-
-    const topCorrection = 12;
-
-    const bgStyles: React.CSSProperties = {
-      backgroundColor: `color-mix(in srgb, ${mainObjectiveColor} 10%, white 100%)`,
-    };
-
-    return (
-      <div
-        style={
-          {
-            "--main-objective-color": mainObjectiveColor,
-            top: position.y,
-            left: position.x,
-            transform: `translate(-50%, calc(-100% - ${topCorrection}px))`,
-          } as React.CSSProperties
-        }
-        className="pointer-events-none absolute z-10"
-      >
-        <div
-          className="comet-body-s rounded px-2 py-1 text-[--main-objective-color]"
-          style={bgStyles}
+        <g
+          key={payload.candidateId}
+          onClick={handleClick}
+          style={{ cursor: "pointer" }}
         >
-          Best prompt
-        </div>
-        <div
-          className="mx-auto -mt-1.5 size-2.5 rotate-45 rounded-[2px]"
-          style={bgStyles}
-        ></div>
-      </div>
-    );
-  };
-
-  // Render dot for main objective (primary score)
-  const renderMainDot: LineDot = (props) => {
-    const { key, ...rest } = props;
-    const color = config[props.name as string].color;
-    const height = 80;
-    const radius = 8;
-    if (props.payload.entityId === bestEntityId) {
-      updatePositionDebounced({ x: props.cx, y: props.cy });
-      return (
-        <React.Fragment key={key}>
-          <Dot {...rest} fill={color} strokeWidth={0} r={radius} />
+          {isSelected && (
+            <Dot
+              cx={cx}
+              cy={cy}
+              fill="none"
+              stroke={color}
+              strokeWidth={2}
+              r={radius + 4}
+              strokeOpacity={0.4}
+            />
+          )}
           <Dot
-            r={5}
+            cx={cx}
+            cy={cy}
             fill={color}
-            cx={props.cx}
-            cy={props.cy}
             strokeWidth={1.5}
             stroke="white"
+            r={radius}
           />
-          <rect
-            x={props.cx - 0.75}
-            y={props.cy + radius}
-            width="1.5"
-            height={height - props.cy}
-            fill={color}
-          />
-        </React.Fragment>
+          {isBest && (
+            <>
+              <rect
+                x={cx - 46}
+                y={cy - radius - 22}
+                width={92}
+                height={18}
+                rx={4}
+                fill="hsl(var(--foreground))"
+                opacity={0.85}
+              />
+              <text
+                x={cx}
+                y={cy - radius - 10}
+                textAnchor="middle"
+                fontSize={11}
+                fill="hsl(var(--background))"
+                fontWeight={600}
+              >
+                Best candidate
+              </text>
+            </>
+          )}
+        </g>
       );
-    }
+    },
+    [bestCandidateId, selectedTrialId, onTrialSelect],
+  );
+
+  const renderEdges = useCallback(() => {
+    const positions = dotPositionsRef.current;
+    if (positions.size === 0) return null;
 
     return (
-      <Dot key={key} {...rest} fill={color} strokeWidth={1.5} stroke="white" />
-    );
-  };
+      <g>
+        {edges.map((edge) => {
+          const parentPos = positions.get(edge.parentCandidateId);
+          const childPos = positions.get(edge.childCandidateId);
+          if (!parentPos || !childPos) return null;
 
-  // Render smaller, less prominent dots for secondary scores
-  const renderSecondaryDot: LineDot = (props) => {
-    const { key, ...rest } = props;
-    const color = config[props.name as string].color;
-    const smallRadius = 5; // Slightly larger for better visibility
+          const midX = (parentPos.cx + childPos.cx) / 2;
+          const d = `M ${parentPos.cx},${parentPos.cy} C ${midX},${parentPos.cy} ${midX},${childPos.cy} ${childPos.cx},${childPos.cy}`;
 
-    return (
-      <Dot
-        key={key}
-        {...rest}
-        fill={color}
-        strokeWidth={1.2}
-        stroke="white"
-        r={smallRadius}
-      />
+          return (
+            <path
+              key={`${edge.parentCandidateId}-${edge.childCandidateId}`}
+              d={d}
+              fill="none"
+              stroke="hsl(var(--muted-foreground))"
+              strokeWidth={1}
+              strokeOpacity={0.4}
+            />
+          );
+        })}
+      </g>
     );
-  };
+  }, [edges]);
+
+  const xDomain = useMemo(() => {
+    if (steps.length === 0) return [0, 1];
+    const max = steps[steps.length - 1];
+    return [0, max + 0.3];
+  }, [steps]);
 
   return (
     <div className="relative">
-      {renderPopover()}
-      <ChartContainer config={config} className="h-40 w-full">
-        <AreaChart
-          data={chartData.data}
-          margin={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      <ChartContainer config={CHART_CONFIG} className="h-48 w-full">
+        <ComposedChart
+          data={positionedData}
+          margin={{ top: 20, bottom: 10, left: 10, right: 10 }}
         >
           <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
           <XAxis
+            dataKey="x"
+            type="number"
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            interval={tickInterval}
-            tickFormatter={(value) => data[value]?.entityName}
+            ticks={steps}
+            tickFormatter={(value) => `Step ${value}`}
+            domain={xDomain}
+            padding={{ left: 20 }}
           />
           <YAxis
             width={tickWidth}
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            interval={tickInterval}
             ticks={ticks}
             tickFormatter={yTickFormatter}
             domain={domain}
           />
-          <ChartTooltip
+
+          {/* Scatter renders BEFORE Customized so dot positions are
+              captured in the ref before renderEdges reads them. */}
+          <Scatter
+            name={objectiveName}
+            dataKey="value"
+            shape={renderScatterDot as never}
             isAnimationActive={false}
-            content={
-              <OptimizationProgressTooltip
-                objectiveName={objectiveName}
-                renderHeader={renderHeader}
-              />
-            }
-          />
-          <ChartLegend
-            content={
-              <ChartHorizontalLegend
-                setActiveLine={setActiveLine}
-                chartId="optimization-progress-chart"
-              />
-            }
-          />
-          <defs>
-            <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-              <stop
-                offset="5%"
-                stopColor={mainObjectiveColor}
-                stopOpacity={0.2}
-              />
-              <stop
-                offset="75%"
-                stopColor={mainObjectiveColor}
-                stopOpacity={0}
-              />
-            </linearGradient>
-          </defs>
-
-          {/* Main objective line with prominent styling */}
-          <Area
-            type="linear"
-            key={objectiveName}
-            dataKey={(record) => record.value}
-            name={config[objectiveName].label as string}
-            stroke={mainObjectiveColor}
-            fillOpacity={
-              activeLine === null || activeLine === objectiveName ? 1 : 0.2
-            }
-            fill="url(#area)"
-            dot={renderMainDot}
-            activeDot={{ strokeWidth: 2, stroke: "white" }}
-            strokeWidth={2.5}
-            strokeOpacity={
-              activeLine === null || activeLine === objectiveName ? 1 : 0.2
-            }
-            animationDuration={100}
-            connectNulls={false}
           />
 
-          {/* Secondary score lines with subtle styling */}
-          {secondaryScoreNames.map((scoreName) => {
-            const scoreColor = config[scoreName].color as string;
-            const isHighlighted = activeLine === scoreName;
-            const isDimmed = activeLine !== null && activeLine !== scoreName;
-            return (
-              <Area
-                type="linear"
-                key={scoreName}
-                dataKey={(record) => getScoreValue(record, scoreName)}
-                name={config[scoreName].label as string}
-                stroke={scoreColor}
-                fillOpacity={0}
-                fill="transparent"
-                dot={renderSecondaryDot}
-                activeDot={{ strokeWidth: 1.5, stroke: "white", r: 5 }}
-                strokeWidth={isHighlighted ? 1.5 : 1.0}
-                strokeOpacity={isDimmed ? 0.15 : isHighlighted ? 0.8 : 0.5}
-                animationDuration={100}
-                connectNulls={false}
-              />
-            );
-          })}
-        </AreaChart>
+          {/* Edges render on top of dots in SVG paint order, but they are
+              thin translucent lines so the dots remain clearly visible. */}
+          <Customized component={renderEdges} />
+        </ComposedChart>
       </ChartContainer>
+
+      <div className="mt-1 flex items-center justify-center gap-4">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: TRIAL_STATUS_COLORS.baseline }}
+          />
+          <span className="comet-body-xs text-muted-slate">Baseline</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: TRIAL_STATUS_COLORS.passed }}
+          />
+          <span className="comet-body-xs text-muted-slate">Passed</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="size-2.5 rounded-full"
+            style={{ backgroundColor: TRIAL_STATUS_COLORS.lost }}
+          />
+          <span className="comet-body-xs text-muted-slate">Lost</span>
+        </div>
+      </div>
     </div>
   );
 };

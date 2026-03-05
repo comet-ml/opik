@@ -95,6 +95,7 @@ public class OptimizationsResource {
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("dataset_id") UUID datasetId,
             @QueryParam("name") @Schema(description = "Filter optimizations by name (partial match, case insensitive)") String name,
+            @QueryParam("dataset_name") @Schema(description = "Filter optimizations by dataset name (partial match)") String datasetName,
             @QueryParam("dataset_deleted") Boolean datasetDeleted,
             @QueryParam("filters") String filters) {
 
@@ -104,6 +105,7 @@ public class OptimizationsResource {
         var searchCriteria = OptimizationSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
+                .datasetName(datasetName)
                 .datasetDeleted(datasetDeleted)
                 .filters(parsedFilters)
                 .entityType(EntityType.TRACE)
