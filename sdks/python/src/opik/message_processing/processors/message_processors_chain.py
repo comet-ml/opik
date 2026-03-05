@@ -8,6 +8,7 @@ from . import (
     message_processors,
     online_message_processor,
 )
+from .. import permissions
 from ..emulation import local_emulator_message_processor
 from ..replay import replay_manager
 
@@ -19,6 +20,7 @@ def create_message_processors_chain(
     rest_client: rest_api_client.OpikApi,
     file_upload_manager: base_upload_manager.BaseFileUploadManager,
     fallback_replay_manager: replay_manager.ReplayManager,
+    unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -37,6 +39,8 @@ def create_message_processors_chain(
             processor.
         fallback_replay_manager: Replay manager instance used to configure the online message
             processor.
+        unauthorized_message_types_registry: Unauthorized message types registry instance used
+            to configure the online message processor.
 
     Returns:
         A chained message processor containing the online and local emulator processors.
@@ -45,6 +49,7 @@ def create_message_processors_chain(
         rest_client=rest_client,
         file_upload_manager=file_upload_manager,
         fallback_replay_manager=fallback_replay_manager,
+        unauthorized_message_types_registry=unauthorized_message_types_registry,
     )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
