@@ -9,13 +9,13 @@ export interface LLMJudgeConfig {
     customParameters?: Record<string, unknown>;
   };
   messages: Array<{
-    role: "SYSTEM" | "USER";
+    role: "SYSTEM" | "USER" | "AI" | "TOOL_EXECUTION_RESULT" | "CUSTOM";
     content: string;
   }>;
   variables: Record<string, string>;
   schema: Array<{
     name: string;
-    type: "BOOLEAN";
+    type: "BOOLEAN" | "INTEGER" | "DOUBLE";
     description: string;
   }>;
 }
