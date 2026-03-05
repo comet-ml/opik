@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
@@ -12,8 +13,10 @@ import {
   BreakdownConfig,
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
-import { isFilterValid } from "@/lib/filters";
+import { isFilterValid, createFilter } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import useAppStore from "@/store/AppStore";
 import { CHART_TYPE } from "@/constants/chart";
 import {
   INTERVAL_DESCRIPTIONS,
@@ -27,11 +30,25 @@ import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
-import { BREAKDOWN_FIELD } from "./breakdown";
+import {
+  BREAKDOWN_FIELD,
+  BREAKDOWN_GROUP_NAMES,
+  buildBreakdownDrilldownFilter,
+} from "./breakdown";
+
+const SPAN_METRIC_NAMES = new Set([
+  METRIC_NAME_TYPE.SPAN_COUNT,
+  METRIC_NAME_TYPE.SPAN_DURATION,
+  METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
+  METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
+]);
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const globalConfig = useDashboardStore(
     useShallow((state) => {
       const config = selectMixedConfig(state);
@@ -240,6 +257,73 @@ const ProjectMetricsWidget: React.FunctionComponent<
     ],
   );
 
+  const getLabelAction = useCallback(
+    (label: string) => {
+      if (!projectId || !effectiveBreakdown || !metricName) return undefined;
+
+      if (label === BREAKDOWN_GROUP_NAMES.OTHERS_DISPLAY) {
+        return { tooltip: "Cannot filter aggregated group" };
+      }
+
+      if (label === BREAKDOWN_GROUP_NAMES.UNKNOWN) {
+        return { tooltip: "Cannot filter unknown values" };
+      }
+
+      const isSpanMetric = SPAN_METRIC_NAMES.has(metricName);
+      const logsType = isSpanMetric ? LOGS_TYPE.spans : LOGS_TYPE.traces;
+      const filtersKey = isSpanMetric ? "spans_filters" : "traces_filters";
+      const tooltipText = isSpanMetric
+        ? "View filtered spans"
+        : "View filtered traces";
+
+      const drilldownFilter = buildBreakdownDrilldownFilter(
+        effectiveBreakdown.field,
+        label,
+        effectiveBreakdown.metadataKey,
+      );
+      if (!drilldownFilter) return undefined;
+
+      const filter = createFilter(drilldownFilter);
+
+      const widgetFilters = isSpanMetric
+        ? (widget?.config?.spanFilters as Filter[] | undefined)?.filter(
+            isFilterValid,
+          ) ?? []
+        : (widget?.config?.traceFilters as Filter[] | undefined)?.filter(
+            isFilterValid,
+          ) ?? [];
+
+      return {
+        onClick: () => {
+          navigate({
+            to: "/$workspaceName/projects/$projectId/traces",
+            params: {
+              projectId,
+              workspaceName,
+            },
+            search: {
+              tab: PROJECT_TAB.logs,
+              logsType,
+              [filtersKey]: [...widgetFilters, filter],
+              time_range: globalConfig.dateRange,
+            },
+          });
+        },
+        tooltip: tooltipText,
+      };
+    },
+    [
+      projectId,
+      effectiveBreakdown,
+      metricName,
+      navigate,
+      workspaceName,
+      widget?.config?.spanFilters,
+      widget?.config?.traceFilters,
+      globalConfig.dateRange,
+    ],
+  );
+
   if (!widget) {
     return null;
   }
@@ -304,6 +388,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
           breakdown={effectiveBreakdown}
+          getLabelAction={effectiveBreakdown ? getLabelAction : undefined}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue

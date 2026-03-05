@@ -81,6 +81,7 @@ public class BreakdownQueryBuilder {
             case METADATA -> "ifNull(JSONExtractString(s.metadata, :metadata_key), 'Unknown')";
             case NAME -> "ifNull(s.name, 'Unknown')";
             case ERROR_INFO -> "if(length(s.error_info) > 0, 'Has Error', 'No Error')";
+            case ERROR_TYPE -> "if(length(s.error_info) > 0, ifNull(nullIf(simpleJSONExtractString(s.error_info, 'exception_type'), ''), 'Unknown Error'), 'No Error')";
             case MODEL -> "if(s.model = '', 'Unknown', s.model)";
             case PROVIDER -> "if(s.provider = '', 'Unknown', s.provider)";
             case TYPE -> "toString(s.type)";
@@ -97,6 +98,7 @@ public class BreakdownQueryBuilder {
             case METADATA -> "ifNull(JSONExtractString(t.metadata, :metadata_key), 'Unknown')";
             case NAME -> "ifNull(t.name, 'Unknown')";
             case ERROR_INFO -> "if(length(t.error_info) > 0, 'Has Error', 'No Error')";
+            case ERROR_TYPE -> "if(length(t.error_info) > 0, ifNull(nullIf(simpleJSONExtractString(t.error_info, 'exception_type'), ''), 'Unknown Error'), 'No Error')";
             default -> "''";
         };
     }
