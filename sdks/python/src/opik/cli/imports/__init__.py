@@ -46,10 +46,13 @@ def _import_by_type(
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
 
         # Initialize Opik client
+        # _use_batching=True speeds up bulk ingestion. It is safe here because
+        # the import flow only creates traces/spans (no update calls) and
+        # explicitly calls client.flush() before exiting.
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace)
+            client = opik.Opik(api_key=api_key, workspace=workspace, _use_batching=True)
         else:
-            client = opik.Opik(workspace=workspace)
+            client = opik.Opik(workspace=workspace, _use_batching=True)
 
         # Determine source directory based on import type
         base_path = Path(path)
