@@ -1352,6 +1352,10 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         return self._streamer.flush(timeout)
 
+    def __internal_api__failed_uploads__(self, timeout: Optional[float] = None) -> int:
+        """Returns the number of failed file uploads after flush. Blocking - waits for all uploads to complete."""
+        return self._streamer.__internal_api__failed_uploads__(timeout=timeout)
+
     def search_traces(
         self,
         project_name: Optional[str] = None,
