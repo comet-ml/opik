@@ -24,36 +24,25 @@ env:
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
   run-e2e:
-    name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
+    name: TypeScript SDK E2E Tests
     permissions:
       contents: read
       checks: write
       pull-requests: write
     runs-on: ubuntu-latest-m
-    timeout-minutes: 30   
-    strategy:
-      fail-fast: false
-      matrix:
-        node_version: [18, 20, 22]
-
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
-          
-      - name: Set up Node.js ${{matrix.node_version}}
-        uses: actions/setup-node@v4.2.0
-        with:
-          node-version: ${{matrix.node_version}}
-    
+
       - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
-          # Avoid Buildx Bake concurrent image export collisions in CI.
           COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --backend --port-mapping --guardrails --build
-      
+
       - name: Check Opik server availability
         shell: bash
         run: |
@@ -64,40 +53,88 @@ jobs:
           echo "Check backend health"
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
-      - name: Install TypeScript SDK dependencies
-        working-directory: sdks/typescript
-        run: npm ci
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: 18
 
-      - name: Build TypeScript SDK
+      - name: Install and build (Node 18)
         working-directory: sdks/typescript
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Run integration tests
+      - name: Run integration tests (Node 18)
         working-directory: sdks/typescript
         run: |
-          # once OPIK-3910 is fixed we can revert to npm run test:integration
-          npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
+          npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node18.xml
 
-      - name: Publish Test Report
+      - name: Publish Test Report (Node 18)
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
-          check_name: "TS SDK E2E Tests - Node ${{matrix.node_version}}"
-          files: ${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
+          check_name: "TS SDK E2E Tests - Node 18"
+          files: ${{ github.workspace }}/test_results_node18.xml
+
+      - name: Set up Node.js 20
+        if: always()
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: 20
+
+      - name: Install and build (Node 20)
+        if: always()
+        working-directory: sdks/typescript
+        run: npm ci && npm run build
+
+      - name: Run integration tests (Node 20)
+        working-directory: sdks/typescript
+        if: always()
+        run: |
+          npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node20.xml
+
+      - name: Publish Test Report (Node 20)
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          check_name: "TS SDK E2E Tests - Node 20"
+          files: ${{ github.workspace }}/test_results_node20.xml
+
+      - name: Set up Node.js 22
+        if: always()
+        uses: actions/setup-node@v4.2.0
+        with:
+          node-version: 22
+
+      - name: Install and build (Node 22)
+        if: always()
+        working-directory: sdks/typescript
+        run: npm ci && npm run build
+
+      - name: Run integration tests (Node 22)
+        working-directory: sdks/typescript
+        if: always()
+        run: |
+          npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node22.xml
+
+      - name: Publish Test Report (Node 22)
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          check_name: "TS SDK E2E Tests - Node 22"
+          files: ${{ github.workspace }}/test_results_node22.xml
 
       - name: Keep BE log in case of failure
         if: failure()
         run: |
           PROJECT_NAME=$(docker compose ls --format json 2>/dev/null | jq -r '.[].Name' | grep '^opik' | head -1)
           CONTAINER="${PROJECT_NAME:-opik}-backend-1"
-          docker logs "$CONTAINER" > ${{ github.workspace }}/opik-backend_node${{matrix.node_version}}.log 2>&1 || echo "Could not capture logs from $CONTAINER"
+          docker logs "$CONTAINER" > ${{ github.workspace }}/opik-backend.log 2>&1 || echo "Could not capture logs from $CONTAINER"
 
       - name: Attach BE log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: opik-backend-log-node${{matrix.node_version}}
-          path: ${{ github.workspace }}/opik-backend_node${{matrix.node_version}}.log
+          name: opik-backend-log
+          path: ${{ github.workspace }}/opik-backend.log
 
       - name: Stop opik server
         if: always()
