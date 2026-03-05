@@ -31,7 +31,7 @@ const BlueprintValueCell = (
           </Tag>
         );
       }
-      case "Prompt":
+      case "prompt":
         return (
           <div className="flex items-center gap-1.5 overflow-hidden">
             <FileText className="size-3.5 shrink-0 text-muted-slate" />

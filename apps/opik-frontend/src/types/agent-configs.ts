@@ -1,4 +1,4 @@
-export type BlueprintValueType = "string" | "int" | "float" | "boolean" | "Prompt";
+export type BlueprintValueType = "string" | "int" | "float" | "boolean" | "prompt";
 
 export interface BlueprintValue {
   key: string;
@@ -10,6 +10,7 @@ export interface BlueprintValue {
 export interface EnrichedBlueprintValue extends BlueprintValue {
   promptName?: string;
   promptId?: string;
+  promptVersionId?: string;
 }
 
 export enum BlueprintType {

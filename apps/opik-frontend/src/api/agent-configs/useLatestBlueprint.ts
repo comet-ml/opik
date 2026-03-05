@@ -22,8 +22,8 @@ const MOCK_BLUEPRINT: BlueprintDetails = {
     { key: "top_p", type: "number", value: "0.95" },
     { key: "stream", type: "boolean", value: "true" },
     { key: "json_mode", type: "boolean", value: "false" },
-    { key: "system_prompt", type: "Prompt", value: "system-prompt:v3" },
-    { key: "user_prompt", type: "Prompt", value: "user-template:v12" },
+    { key: "system_prompt", type: "prompt", value: "system-prompt:v3" },
+    { key: "user_prompt", type: "prompt", value: "user-template:v12" },
   ],
 };
 
@@ -51,7 +51,7 @@ export default function useLatestBlueprint(
 
   const promptCommits = useMemo(() => {
     return blueprint.values
-      .filter((v) => v.type === "Prompt")
+      .filter((v) => v.type === "prompt")
       .map((v) => v.value);
   }, [blueprint.values]);
 
@@ -76,7 +76,7 @@ export default function useLatestBlueprint(
     return {
       ...blueprint,
       values: blueprint.values.map<EnrichedBlueprintValue>((v) => {
-        if (v.type !== "Prompt") return v;
+        if (v.type !== "prompt") return v;
 
         const promptInfo = promptsMap[v.value];
         return {

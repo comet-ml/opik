@@ -1,14 +1,15 @@
 import React from "react";
 import { FileTerminal, Hash, ToggleLeft, Type } from "lucide-react";
+import { BlueprintValueType } from "@/types/agent-configs";
 
 const TYPE_CONFIG: Record<
-  string,
+  BlueprintValueType,
   { icon: React.ComponentType<{ className?: string }>; color: string }
 > = {
   int: { icon: Hash, color: "var(--color-blue)" },
   float: { icon: Hash, color: "var(--color-blue)" },
   boolean: { icon: ToggleLeft, color: "var(--color-green)" },
-  Prompt: { icon: FileTerminal, color: "var(--color-burgundy)" },
+  prompt: { icon: FileTerminal, color: "var(--color-burgundy)" },
   string: { icon: Type, color: "var(--color-violet)" },
 };
 

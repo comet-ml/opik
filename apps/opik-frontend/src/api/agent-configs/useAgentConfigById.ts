@@ -36,7 +36,7 @@ export default function useAgentConfigById({
   const promptCommits = useMemo(() => {
     if (!blueprint) return [];
     return blueprint.values
-      .filter((v) => v.type === "Prompt")
+      .filter((v) => v.type === "prompt")
       .map((v) => v.value);
   }, [blueprint]);
 
@@ -55,12 +55,13 @@ export default function useAgentConfigById({
     return {
       ...blueprint,
       values: blueprint.values.map<EnrichedBlueprintValue>((v) => {
-        if (v.type !== "Prompt") return v;
+        if (v.type !== "prompt") return v;
         const promptInfo = promptsMap[v.value];
         return {
           ...v,
           promptName: promptInfo?.prompt_name,
           promptId: promptInfo?.prompt_id,
+          promptVersionId: promptInfo?.prompt_version_id,
         };
       }),
     };

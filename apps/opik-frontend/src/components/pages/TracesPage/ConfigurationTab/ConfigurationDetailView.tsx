@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Clock,
-  FileTerminal,
   FilePen,
   Pencil,
   Rocket,
@@ -17,6 +16,7 @@ import { formatNumericData } from "@/lib/utils";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import Loader from "@/components/shared/Loader/Loader";
 import { Card } from "@/components/ui/card";
+import BlueprintValuePrompt from "./BlueprintValuePrompt";
 import ProdTag from "./ProdTag";
 import BlueprintTypeIcon from "./BlueprintTypeIcon";
 import {
@@ -57,20 +57,8 @@ const renderValue = (v: EnrichedBlueprintValue) => {
           {v.value === "true" ? "true" : "false"}
         </div>
       );
-    case "Prompt":
-      return (
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <FileTerminal className="size-3.5 shrink-0 text-muted-slate" />
-          <div className="flex flex-col overflow-hidden">
-            <span className="comet-body-s truncate">
-              {v.promptName ?? v.value}
-            </span>
-            <span className="comet-body-xs truncate text-muted-slate">
-              {v.value}
-            </span>
-          </div>
-        </div>
-      );
+    case "prompt":
+      return <BlueprintValuePrompt value={v} />;
     default:
       return (
         <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
@@ -108,7 +96,6 @@ const ConfigurationDetailView: React.FC<ConfigurationDetailViewProps> = ({
   return (
     <>
       <Card className="mx-6 my-4 p-6">
-        {/* Header */}
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="comet-title-m">v{version}</h2>

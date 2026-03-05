@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FileTerminal, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 import {
   BlueprintType,
@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import Loader from "@/components/shared/Loader/Loader";
 import BlueprintTypeIcon from "./BlueprintTypeIcon";
+import BlueprintValuePrompt, {
+  BlueprintValuePromptHandle,
+} from "./BlueprintValuePrompt";
 
 type ConfigurationEditViewProps = {
   item: ConfigHistoryItem;
@@ -41,13 +44,16 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const originalValues = useRef<Record<string, string>>({});
   const initialized = useRef(false);
+  const promptRefs = useRef<Record<string, BlueprintValuePromptHandle | null>>(
+    {},
+  );
 
   useEffect(() => {
     if (agentConfig && !initialized.current) {
       initialized.current = true;
       const initial: Record<string, string> = {};
       agentConfig.values
-        .filter((v) => v.type !== "Prompt")
+        .filter((v) => v.type !== "prompt")
         .forEach((v) => {
           initial[v.key] = v.value;
         });
@@ -75,12 +81,12 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
 
   const hasErrors = Object.values(errors).some(Boolean);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!agentConfig) return;
 
     const newErrors: Record<string, string> = {};
     agentConfig.values
-      .filter((v) => v.type !== "Prompt" && v.type !== "boolean")
+      .filter((v) => v.type !== "prompt" && v.type !== "boolean")
       .forEach((v) => {
         const err = validateField(v.type, draftValues[v.key] ?? "");
         if (err) newErrors[v.key] = err;
@@ -91,10 +97,16 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
       return;
     }
 
+    await Promise.all(
+      Object.values(promptRefs.current)
+        .filter(Boolean)
+        .map((handle) => handle!.saveVersion()),
+    );
+
     const values: BlueprintValue[] = agentConfig.values.map((v) => ({
       key: v.key,
       type: v.type,
-      value: v.type !== "Prompt" ? draftValues[v.key] ?? v.value : v.value,
+      value: v.type !== "prompt" ? draftValues[v.key] ?? v.value : v.value,
       ...(v.description ? { description: v.description } : {}),
     }));
 
@@ -160,7 +172,7 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
       <div className="flex flex-col divide-y">
         {(agentConfig?.values ?? []).map((v) => {
           const isChanged =
-            v.type !== "Prompt" &&
+            v.type !== "prompt" &&
             draftValues[v.key] !== undefined &&
             draftValues[v.key] !== originalValues.current[v.key];
           return (
@@ -179,13 +191,14 @@ const ConfigurationEditView: React.FC<ConfigurationEditViewProps> = ({
                   {v.description}
                 </span>
               )}
-              {v.type === "Prompt" ? (
-                <div className="flex items-center gap-1.5 overflow-hidden">
-                  <FileTerminal className="size-3.5 shrink-0 text-muted-slate" />
-                  <span className="comet-body-s truncate text-muted-slate">
-                    {v.value}
-                  </span>
-                </div>
+              {v.type === "prompt" ? (
+                <BlueprintValuePrompt
+                  value={v}
+                  isEditing
+                  ref={(el) => {
+                    promptRefs.current[v.key] = el;
+                  }}
+                />
               ) : v.type === "boolean" ? (
                 <Switch
                   checked={draftValues[v.key] === "true"}
