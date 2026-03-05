@@ -263,7 +263,7 @@ describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
           expect(typeof score.reason).toBe("string");
         }
       });
-    }, 90000);
+    }, 180000);
 
     it("should maintain metric independence in scoring", async () => {
       const dataset = await createEvaluationDataset(client);
@@ -294,6 +294,6 @@ describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
         expect(relevanceScore.value).toBeDefined();
         expect(hallucinationScore.value).toBeDefined();
       }
-    }, 90000);
+    }, 180000);
   });
 });
