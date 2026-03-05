@@ -275,7 +275,7 @@ experimentDenormalization:
 # Scheduled job intervals (overrides @Every annotation defaults)
 # Keys are the simple class names of Job subclasses; values are duration strings (e.g. "5s", "1m")
 jobs:
-  ExperimentDenormalizationJob: ${EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
+  experimentDenormalizationJob: ${EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
