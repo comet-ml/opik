@@ -456,11 +456,7 @@ interface AgentConfigDAO {
             if (RowUtils.hasColumn(rs, "delta_values")) {
                 String deltaValuesJson = rs.getString("delta_values");
                 if (StringUtils.isNotBlank(deltaValuesJson)) {
-                    try {
-                        values = JsonUtils.getMapper().readValue(deltaValuesJson, VALUES_TYPE_REF);
-                    } catch (JsonProcessingException e) {
-                        throw new SQLException("Failed to parse delta_values JSON", e);
-                    }
+                  values = JsonUtils.readValue(deltaValuesJson, VALUES_TYPE_REF);
                 }
             }
 
