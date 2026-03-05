@@ -410,11 +410,8 @@ def test_agent_config_decorator__prompt_tracks_latest_version__prompt_version_st
 
     instance2 = PromptConfig()
 
-    # TODO: Once the backend supports resolving a Prompt field to the latest version of
-    # the prompt by prompt_id (rather than the specific version_id stored in the
-    # blueprint), this assert should change to version_id_v2. For now the blueprint still
-    # holds version_id_v1 so the Prompt field resolves to that same version.
-    assert instance2.system_prompt.version_id == version_id_v1
+    # We've received a new version
+    assert instance2.system_prompt.version_id != version_id_v1
 
     # PromptVersionDetail field stays pinned to the specific commit it was registered with
     assert instance2.pinned_version.id == version_id_v1
