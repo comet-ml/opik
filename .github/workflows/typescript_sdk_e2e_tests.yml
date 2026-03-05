@@ -23,47 +23,8 @@ env:
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
-  build-server:
-    name: Build Opik Server
-    runs-on: ubuntu-latest-m
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4.2.2
-
-      - name: Build Opik images
-        env:
-          OPIK_USAGE_REPORT_ENABLED: false
-          COMPOSE_BAKE: false
-        run: |
-          cd ${{ github.workspace }}
-          source scripts/worktree-utils.sh
-          init_worktree_ports
-          docker compose -p "$COMPOSE_PROJECT_NAME" \
-            -f deployment/docker-compose/docker-compose.yaml \
-            -f deployment/docker-compose/docker-compose.override.yaml \
-            --profile backend --profile guardrails \
-            build
-
-      - name: Save built images
-        run: |
-          docker save \
-            ghcr.io/comet-ml/opik/opik-backend:latest \
-            ghcr.io/comet-ml/opik/opik-python-backend:latest \
-            ghcr.io/comet-ml/opik/opik-guardrails-backend:latest \
-            | gzip > /tmp/opik-images.tar.gz
-          echo "Image archive size: $(du -h /tmp/opik-images.tar.gz | cut -f1)"
-
-      - name: Upload images artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: opik-images
-          path: /tmp/opik-images.tar.gz
-          retention-days: 1
-
   run-e2e:
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
-    needs: build-server
     permissions:
       contents: read
       checks: write
@@ -79,23 +40,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.2
 
-      - name: Download pre-built images
-        uses: actions/download-artifact@v4
+      - name: Set up Node.js ${{matrix.node_version}}
+        uses: actions/setup-node@v4.2.0
         with:
-          name: opik-images
-          path: /tmp
+          node-version: ${{matrix.node_version}}
 
-      - name: Load images
-        run: |
-          docker load < /tmp/opik-images.tar.gz
-
-      - name: Start Opik server
+      - name: Run latest Opik server
         env:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
         run: |
           cd ${{ github.workspace }}
-          ./opik.sh --backend --port-mapping --guardrails
+          ./opik.sh --backend --port-mapping --guardrails --build
 
       - name: Check Opik server availability
         shell: bash
@@ -106,11 +62,6 @@ jobs:
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
           echo "Check backend health"
           ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
-
-      - name: Set up Node.js ${{matrix.node_version}}
-        uses: actions/setup-node@v4.2.0
-        with:
-          node-version: ${{matrix.node_version}}
 
       - name: Install TypeScript SDK dependencies
         working-directory: sdks/typescript
@@ -123,6 +74,7 @@ jobs:
       - name: Run integration tests
         working-directory: sdks/typescript
         run: |
+          # once OPIK-3910 is fixed we can revert to npm run test:integration
           npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit=${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
 
       - name: Publish Test Report
