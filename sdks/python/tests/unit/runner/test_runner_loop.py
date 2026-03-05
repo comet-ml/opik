@@ -5,6 +5,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.types.local_runner_heartbeat_response import (
+    LocalRunnerHeartbeatResponse,
+)
+from opik.rest_api.types.local_runner_job import LocalRunnerJob
 from opik.runner import runner_loop, job_executor, agents_registry
 
 
@@ -12,7 +16,9 @@ from opik.runner import runner_loop, job_executor, agents_registry
 def mock_api():
     api = MagicMock()
     api.runners.register_agents = MagicMock(return_value=None)
-    api.runners.heartbeat = MagicMock(return_value={"cancelled_job_ids": []})
+    api.runners.heartbeat = MagicMock(
+        return_value=LocalRunnerHeartbeatResponse(cancelled_job_ids=[])
+    )
     api.runners.next_job = MagicMock(return_value=None)
     api.runners.report_job_result = MagicMock()
     api.runners.append_job_logs = MagicMock()
@@ -68,7 +74,7 @@ class TestMainLoop:
     def test_run__job_available__dispatches_to_executor(
         self, mock_api, shutdown_event, loop
     ):
-        job = {"id": "j-1", "agent_name": "test", "inputs": {"q": "hi"}}
+        job = LocalRunnerJob(id="j-1", agent_name="test", inputs={"q": "hi"})
         call_count = 0
 
         def next_job_side_effect(runner_id):
@@ -87,7 +93,7 @@ class TestMainLoop:
 
             assert mock_execute.called
             executed_job = mock_execute.call_args[0][0]
-            assert executed_job["id"] == "j-1"
+            assert executed_job.id == "j-1"
 
     def test_run__poll_error__backs_off(self, mock_api, shutdown_event):
         loop = runner_loop.RunnerLoop(
@@ -120,7 +126,7 @@ class TestMainLoop:
 
 class TestSafeExecute:
     def test_safe_execute__crash__reports_failed(self, mock_api, shutdown_event, loop):
-        job = {"id": "j-crash", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-crash", agent_name="a", inputs={}, runner_id="r-1")
         executor = job_executor.JobExecutor(
             mock_api,
             loop._active_jobs,
@@ -158,7 +164,7 @@ class TestHeartbeatLoop:
             call_count += 1
             if call_count >= 2:
                 shutdown_event.set()
-            return {"cancelled_job_ids": []}
+            return LocalRunnerHeartbeatResponse(cancelled_job_ids=[])
 
         mock_api.runners.heartbeat.side_effect = heartbeat_side_effect
 
@@ -182,9 +188,9 @@ class TestHeartbeatLoop:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return {"cancelled_job_ids": ["j-1"]}
+                return LocalRunnerHeartbeatResponse(cancelled_job_ids=["j-1"])
             shutdown_event.set()
-            return {"cancelled_job_ids": []}
+            return LocalRunnerHeartbeatResponse(cancelled_job_ids=[])
 
         mock_api.runners.heartbeat.side_effect = heartbeat_side_effect
 

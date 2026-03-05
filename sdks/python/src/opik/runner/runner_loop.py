@@ -6,6 +6,7 @@ from typing import Dict
 
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
+from ..rest_api.types.local_runner_job import LocalRunnerJob
 from . import agents_registry, job_executor
 from .agents_registry import AgentInfo
 
@@ -98,25 +99,21 @@ class RunnerLoop:
     def _safe_execute(
         self,
         executor: job_executor.JobExecutor,
-        job: Dict,
-        agents: Dict,
+        job: LocalRunnerJob,
+        agents: Dict[str, AgentInfo],
     ) -> None:
         try:
             executor.execute(job, agents)
         except Exception:
-            LOGGER.error(
-                "Executor thread crashed for job %s", job.get("id"), exc_info=True
-            )
+            LOGGER.error("Executor thread crashed for job %s", job.id, exc_info=True)
             try:
                 self._api.runners.report_job_result(
-                    job_id=job.get("id", ""),
+                    job_id=job.id or "",
                     status="failed",
                     error="Internal runner error",
                 )
             except Exception:
-                LOGGER.debug(
-                    "Failed to report crash for job %s", job.get("id"), exc_info=True
-                )
+                LOGGER.debug("Failed to report crash for job %s", job.id, exc_info=True)
 
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
@@ -127,7 +124,7 @@ class RunnerLoop:
 
                 resp = self._api.runners.heartbeat(self._runner_id)
 
-                cancelled_job_ids = resp.get("cancelled_job_ids", [])
+                cancelled_job_ids = resp.cancelled_job_ids or []
                 if cancelled_job_ids:
                     with self._lock:
                         for jid in cancelled_job_ids:

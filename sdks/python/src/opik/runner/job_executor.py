@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from .. import id_helpers
 from ..rest_api.client import OpikApi
+from ..rest_api.types.local_runner_job import LocalRunnerJob
 from ..rest_api.types.local_runner_log_entry import LocalRunnerLogEntry
 from .agents_registry import AgentInfo
 
@@ -48,12 +49,12 @@ class JobExecutor:
 
     def execute(
         self,
-        job: Dict[str, Any],
+        job: LocalRunnerJob,
         agents: Dict[str, AgentInfo],
     ) -> None:
-        job_id = job["id"]
-        agent_name = job["agent_name"]
-        inputs = job.get("inputs") or {}
+        job_id = job.id or ""
+        agent_name = job.agent_name or ""
+        inputs = job.inputs or {}
 
         agent = self._resolve_agent(job_id, agent_name, agents)
         if agent is None:
@@ -149,12 +150,12 @@ class JobExecutor:
     def _wait_and_report(
         self,
         proc: subprocess.Popen[bytes],
-        job: Dict[str, Any],
+        job: LocalRunnerJob,
         agent: AgentInfo,
         trace_id: str,
         result_file: str,
     ) -> None:
-        job_id = job["id"]
+        job_id = job.id or ""
 
         stdout_thread = threading.Thread(
             target=_stream_logs,
@@ -169,7 +170,7 @@ class JobExecutor:
         stdout_thread.start()
         stderr_thread.start()
 
-        timeout = job.get("timeout")
+        timeout = job.timeout
         if timeout is None:
             timeout = agent.timeout
         try:

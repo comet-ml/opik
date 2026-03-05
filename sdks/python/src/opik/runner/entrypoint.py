@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..decorator.tracker import track
 from ..types import SpanType
+from .agents_registry import AgentInfo, Param
 
 LOGGER = logging.getLogger(__name__)
 
@@ -93,17 +94,17 @@ def get_registry() -> Dict[str, Dict[str, Any]]:
     return _REGISTRY
 
 
-def _extract_params(fn: Callable) -> List[Dict[str, str]]:
+def _extract_params(fn: Callable) -> List[Param]:
     """Extract parameter names and type annotations from a function."""
     sig = inspect.signature(fn)
-    params = []
+    params: List[Param] = []
     for param_name, param in sig.parameters.items():
         if param.annotation is inspect.Parameter.empty:
             type_name = "str"
         else:
             ann = param.annotation
             type_name = ann.__name__ if hasattr(ann, "__name__") else str(ann)
-        params.append({"name": param_name, "type": type_name})
+        params.append(Param(name=param_name, type=type_name))
     return params
 
 
@@ -111,20 +112,22 @@ def _self_register(
     agent_name: str,
     project: str,
     source_file: str,
-    params: List[Dict[str, str]],
+    params: List[Any],
     docstring: str,
 ) -> None:
     """Write this agent's info to ~/.opik/agents.json."""
-    from .config import register_agent
+    from .agents_registry import register_agent
 
     try:
         register_agent(
-            name=agent_name,
-            python=sys.executable,
-            file=source_file,
-            project=project,
-            params=params,
-            docstring=docstring,
+            AgentInfo(
+                name=agent_name,
+                executable=sys.executable,
+                source_file=source_file,
+                project=project,
+                params=params,
+                description=docstring,
+            )
         )
     except Exception:
         LOGGER.debug("Failed to self-register agent '%s'", agent_name, exc_info=True)

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from opik.rest_api.types.local_runner_job import LocalRunnerJob
 from opik.runner import job_executor
 from opik.runner.agents_registry import AgentInfo
 
@@ -77,12 +78,12 @@ class TestExecuteSuccess:
             )
         }
 
-        job = {
-            "id": "j-1",
-            "agent_name": "echo_agent",
-            "inputs": {"msg": "hello"},
-            "runner_id": "r-1",
-        }
+        job = LocalRunnerJob(
+            id="j-1",
+            agent_name="echo_agent",
+            inputs={"msg": "hello"},
+            runner_id="r-1",
+        )
         executor.execute(job, agents)
 
         mock_api.runners.report_job_result.assert_called_once()
@@ -106,7 +107,7 @@ class TestExecuteSuccess:
         agents = {
             "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-trace", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-trace", agent_name="a", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
 
@@ -130,7 +131,7 @@ class TestExecuteSuccess:
         agents = {
             "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-2", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-2", agent_name="a", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
         assert "j-2" not in executor._active_jobs
@@ -149,7 +150,7 @@ class TestExecuteFailure:
         agents = {
             "bad": AgentInfo(name="bad", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-3", "agent_name": "bad", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-3", agent_name="bad", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
 
@@ -158,7 +159,7 @@ class TestExecuteFailure:
         assert "exit" in call_kwargs["error"].lower()
 
     def test_execute__unknown_agent__reports_failed(self, mock_api, executor):
-        job = {"id": "j-4", "agent_name": "unknown", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-4", agent_name="unknown", inputs={}, runner_id="r-1")
         executor.execute(job, {})
 
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
@@ -173,12 +174,12 @@ class TestExecuteFailure:
                 source_file="/nonexistent/agent.py",
             )
         }
-        job = {
-            "id": "j-missing",
-            "agent_name": "missing",
-            "inputs": {},
-            "runner_id": "r-1",
-        }
+        job = LocalRunnerJob(
+            id="j-missing",
+            agent_name="missing",
+            inputs={},
+            runner_id="r-1",
+        )
 
         executor.execute(job, agents)
 
@@ -195,7 +196,7 @@ class TestExecuteFailure:
                 source_file="/x.py",
             )
         }
-        job = {"id": "j-5", "agent_name": "bad", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-5", agent_name="bad", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
 
@@ -222,12 +223,12 @@ class TestExecuteFailure:
                 timeout=1,
             )
         }
-        job = {
-            "id": "j-timeout-fallback",
-            "agent_name": "slow",
-            "inputs": {},
-            "runner_id": "r-1",
-        }
+        job = LocalRunnerJob(
+            id="j-timeout-fallback",
+            agent_name="slow",
+            inputs={},
+            runner_id="r-1",
+        )
 
         executor.execute(job, agents)
 
@@ -250,7 +251,7 @@ class TestExecuteFailure:
         agents = {
             "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-cancel", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-cancel", agent_name="a", inputs={}, runner_id="r-1")
         cancelled_jobs.add("j-cancel")
 
         executor.execute(job, agents)
@@ -276,13 +277,13 @@ class TestExecuteFailure:
                 source_file=script,
             )
         }
-        job = {
-            "id": "j-6",
-            "agent_name": "slow",
-            "inputs": {},
-            "runner_id": "r-1",
-            "timeout": 1,
-        }
+        job = LocalRunnerJob(
+            id="j-6",
+            agent_name="slow",
+            inputs={},
+            runner_id="r-1",
+            timeout=1,
+        )
 
         executor.execute(job, agents)
 
@@ -308,7 +309,7 @@ class TestLogStreaming:
         agents = {
             "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-7", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-7", agent_name="a", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
 
@@ -337,7 +338,7 @@ class TestLogStreaming:
         agents = {
             "a": AgentInfo(name="a", executable=sys.executable, source_file=script)
         }
-        job = {"id": "j-8", "agent_name": "a", "inputs": {}, "runner_id": "r-1"}
+        job = LocalRunnerJob(id="j-8", agent_name="a", inputs={}, runner_id="r-1")
 
         executor.execute(job, agents)
 
