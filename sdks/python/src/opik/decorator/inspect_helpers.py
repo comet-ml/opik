@@ -1,7 +1,10 @@
 import inspect
 import functools
+import logging
 
-from typing import Callable, Tuple, Any, Dict
+from typing import Callable, Tuple, Any, Dict, Optional
+
+LOGGER = logging.getLogger(__name__)
 
 
 def extract_inputs(
@@ -55,3 +58,26 @@ def get_function_name(func: Callable) -> str:
 
     # For regular functions and other callables
     return getattr(func, "__name__", "<unknown>")
+
+
+def get_function_source(func: Callable) -> Optional[str]:
+    """
+    Safely extract the source code of a function.
+
+    Returns None if the source code cannot be retrieved (e.g., in REPL,
+    Jupyter notebooks, compiled code, lambda functions, or dynamically
+    generated functions).
+    """
+    try:
+        if isinstance(func, functools.partial):
+            func = func.func
+
+        source = inspect.getsource(func)
+        return source
+    except (OSError, TypeError) as e:
+        LOGGER.debug(
+            "Could not extract source code for function %s: %s",
+            get_function_name(func),
+            str(e),
+        )
+        return None
