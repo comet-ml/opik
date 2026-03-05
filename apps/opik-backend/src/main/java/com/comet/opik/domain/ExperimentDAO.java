@@ -537,7 +537,7 @@ class ExperimentDAO {
                     experiment_id,
                     toNullable(sum(item_passed)) AS passed_count,
                     toNullable(count(*)) AS total_count,
-                    toNullable(if(count(*) = 0, toFloat64(1.0), toFloat64(sum(item_passed)) / toFloat64(count(*)))) AS pass_rate
+                    if(count(*) = 0, NULL, toNullable(toFloat64(sum(item_passed)) / toFloat64(count(*)))) AS pass_rate
                 FROM pass_rate_item_results
                 GROUP BY experiment_id
             )
@@ -1161,7 +1161,7 @@ class ExperimentDAO {
                     experiment_id,
                     toNullable(sum(item_passed)) AS passed_count,
                     toNullable(count(*)) AS total_count,
-                    toNullable(if(count(*) = 0, toFloat64(1.0), toFloat64(sum(item_passed)) / toFloat64(count(*)))) AS pass_rate
+                    if(count(*) = 0, NULL, toNullable(toFloat64(sum(item_passed)) / toFloat64(count(*)))) AS pass_rate
                 FROM pass_rate_item_results
                 GROUP BY experiment_id
             ), experiments_full AS (
