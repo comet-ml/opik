@@ -214,11 +214,11 @@ class JobExecutor:
             _cleanup_result_file(result_file)
 
 
-def _read_result(result_file: str, job_id: str) -> Optional[Any]:
+def _read_result(result_file: str, job_id: str) -> Optional[Dict[str, Any]]:
     try:
         with open(result_file, "r") as f:
             data = json.load(f)
-        return data.get("result")
+        return data  # LocalRunnerJob.result expect a dict, not a bare value.
     except FileNotFoundError:
         LOGGER.warning("Result file missing for job %s: %s", job_id, result_file)
         return None

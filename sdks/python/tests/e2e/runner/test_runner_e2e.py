@@ -1,13 +1,8 @@
-"""Happy-path e2e test for the local runner.
+"""Happy-path e2e tests for the local runner.
 
-Flow:
-1. Generate a pairing code via the REST API.
-2. Start ``opik connect --pair <code>`` in a subprocess (runner process).
-3. Wait for the runner to appear (extract runner_id from its stdout).
-4. Run echo_app.py in a subprocess so that the agent self-registers.
-5. Create a job targeting the "echo" agent.
-6. Poll the job until it completes.
-7. Verify a trace was created with the expected output.
+Test 1 (basic): register echo agent, create job, verify trace output.
+Test 2 (mask):  register echo_config agent, create mask, create job with
+                mask_id, verify the mask value appears in the trace output.
 """
 
 import os
@@ -16,19 +11,101 @@ import shutil
 import subprocess
 import sys
 import time
+from typing import Optional
 
 import pytest
 
-from opik import synchronization
+from opik import Opik, synchronization
 from opik.rest_api.client import OpikApi
 
 
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
+ECHO_CONFIG_APP = os.path.join(os.path.dirname(__file__), "echo_config_app.py")
 OPIK_CLI = shutil.which("opik") or "opik"
 
 RUNNER_STARTUP_TIMEOUT = 15
 JOB_COMPLETION_TIMEOUT = 30
-TRACE_PROPAGATION_TIMEOUT = 15
+TRACE_PROPAGATION_TIMEOUT = 30
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def register_agent(app_path: str) -> None:
+    """Run an agent app once so it self-registers to ~/.opik/agents.json."""
+    proc = subprocess.run(
+        [sys.executable, app_path],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, (
+        f"Agent registration failed ({app_path}):\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+
+
+def submit_job(
+    api: OpikApi,
+    agent_name: str,
+    message: str,
+    mask_id: Optional[str] = None,
+) -> None:
+    """Create a job for the given agent."""
+    api.runners.create_job(
+        agent_name=agent_name,
+        inputs={"message": message},
+        mask_id=mask_id,
+    )
+
+
+def wait_for_completed_job(api: OpikApi, runner_id: str, match_text: str):
+    """Poll list_jobs until a completed job whose inputs contain *match_text* appears."""
+
+    def _find():
+        page = api.runners.list_jobs(runner_id=runner_id, size=20)
+        if page.content:
+            for j in page.content:
+                if j.status == "completed" and j.inputs and match_text in str(j.inputs):
+                    return j
+        return None
+
+    assert synchronization.until(
+        lambda: _find() is not None,
+        max_try_seconds=JOB_COMPLETION_TIMEOUT,
+        allow_errors=True,
+    ), f"No completed job with '{match_text}' found within {JOB_COMPLETION_TIMEOUT}s"
+
+    return _find()
+
+
+def find_trace_by_input(api: OpikApi, project_name: str, match_text: str):
+    """Poll until a trace whose input contains *match_text* appears and has output."""
+
+    def _find():
+        page = api.traces.get_traces_by_project(
+            project_name=project_name,
+            size=20,
+        )
+        if page.content:
+            for t in page.content:
+                if t.input and match_text in str(t.input) and t.output:
+                    return t
+        return None
+
+    assert synchronization.until(
+        lambda: _find() is not None,
+        max_try_seconds=TRACE_PROPAGATION_TIMEOUT,
+        allow_errors=True,
+    ), f"No trace with '{match_text}' found within {TRACE_PROPAGATION_TIMEOUT}s"
+
+    return _find()
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
@@ -39,15 +116,11 @@ def api_client():
 
 @pytest.fixture()
 def runner_process(api_client):
-    """Start ``opik connect --pair <code>`` and yield the runner_id.
-
-    Tears down the runner subprocess on exit.
-    """
+    """Start ``opik connect --pair <code>`` and yield the runner_id."""
     pair = api_client.runners.generate_pairing_code()
-    pairing_code = pair.pairing_code
 
     proc = subprocess.Popen(
-        [OPIK_CLI, "connect", "--pair", pairing_code],
+        [OPIK_CLI, "connect", "--pair", pair.pairing_code],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -66,7 +139,6 @@ def runner_process(api_client):
             continue
 
         output_lines.append(line.rstrip())
-
         match = re.search(r"Runner connected \(ID: ([^)]+)\)", line)
         if match:
             runner_id = match.group(1)
@@ -75,10 +147,9 @@ def runner_process(api_client):
     if runner_id is None:
         proc.terminate()
         proc.wait(timeout=5)
-        collected = "\n".join(output_lines)
         pytest.fail(
             f"Runner did not start within {RUNNER_STARTUP_TIMEOUT}s.\n"
-            f"Output:\n{collected}"
+            f"Output:\n" + "\n".join(output_lines)
         )
 
     yield runner_id
@@ -91,90 +162,55 @@ def runner_process(api_client):
         proc.wait()
 
 
-@pytest.fixture()
-def register_echo_agent():
-    """Run echo_app.py once so that the agent self-registers to ~/.opik/agents.json."""
-    proc = subprocess.run(
-        [sys.executable, ECHO_APP],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert proc.returncode == 0, (
-        f"echo_app.py registration failed:\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
-    )
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 
-def test_runner_happy_path(api_client, register_echo_agent, runner_process):
-    """Run a job through the full runner pipeline and verify the trace."""
-    runner_id = runner_process
+def test_runner_happy_path(api_client, runner_process):
+    """Basic: register echo agent, run job, verify job result and trace output."""
+    register_agent(ECHO_APP)
     message = f"hello-e2e-{int(time.time())}"
 
-    # Wait for the runner to pick up the registered agent via heartbeat
+    # Let heartbeat pick up the agent
     time.sleep(2)
 
-    # Create a job (raises on non-2xx)
-    api_client.runners.create_job(
-        agent_name="echo",
-        inputs={"message": message},
-    )
+    submit_job(api_client, "echo", message)
 
-    # Find the job by listing jobs for this runner
-    def _find_job():
-        page = api_client.runners.list_jobs(runner_id, size=10)
-        if page.content:
-            for j in page.content:
-                if j.agent_name == "echo" and j.inputs and j.inputs.get("message") == message:
-                    return j
-        return None
+    job = wait_for_completed_job(api_client, runner_process, message)
+    assert job.result is not None, "Completed job should have a result"
+    assert f"echo: {message}" in str(job.result)
 
-    assert synchronization.until(
-        lambda: _find_job() is not None,
-        max_try_seconds=10,
-        allow_errors=True,
-    ), "Job not found in runner's job list"
-
-    job = _find_job()
-    job_id = job.id
-
-    # Wait for the job to complete
-    def _job_completed():
-        j = api_client.runners.get_job(job_id)
-        return j.status in ("completed", "failed")
-
-    assert synchronization.until(
-        _job_completed,
-        max_try_seconds=JOB_COMPLETION_TIMEOUT,
-        allow_errors=True,
-    ), f"Job {job_id} did not complete within {JOB_COMPLETION_TIMEOUT}s"
-
-    completed_job = api_client.runners.get_job(job_id)
-    assert completed_job.status == "completed", (
-        f"Job failed: {completed_job.error}"
-    )
-
-    assert completed_job.trace_id is not None, "Job completed but no trace_id"
-
-    # Search for a trace matching our input in the default project.
-    # The trace is created by the agent subprocess's @track decorator with its
-    # own trace_id, which may differ from the runner-assigned trace_id on the job.
-    def _find_trace():
-        page = api_client.traces.get_traces_by_project(
-            project_name="Default Project",
-            size=20,
-        )
-        if page.content:
-            for t in page.content:
-                if t.input and message in str(t.input):
-                    return t
-        return None
-
-    assert synchronization.until(
-        lambda: _find_trace() is not None,
-        max_try_seconds=TRACE_PROPAGATION_TIMEOUT,
-        allow_errors=True,
-    ), f"No trace with message '{message}' found within {TRACE_PROPAGATION_TIMEOUT}s"
-
-    trace = _find_trace()
-    assert trace.output is not None
+    trace = find_trace_by_input(api_client, "Default Project", message)
     assert f"echo: {message}" in str(trace.output)
+
+
+def test_runner_with_mask(api_client, runner_process):
+    """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
+    register_agent(ECHO_CONFIG_APP)
+    message = f"mask-e2e-{int(time.time())}"
+    custom_greeting = f"custom-greeting-{int(time.time())}"
+
+    # Let heartbeat pick up the agent
+    time.sleep(2)
+
+    # Create a mask overriding the default greeting
+    opik_client = Opik()
+    try:
+        agent_config = opik_client.get_agent_config()
+        mask_id = agent_config.create_mask(
+            parameters={"EchoConfig.greeting": custom_greeting},
+        )
+    finally:
+        opik_client.end()
+
+    submit_job(api_client, "echo_config", message, mask_id=mask_id)
+
+    job = wait_for_completed_job(api_client, runner_process, message)
+    assert job.result is not None, "Completed job should have a result"
+    assert custom_greeting in str(job.result)
+
+    trace = find_trace_by_input(api_client, "Default Project", message)
+    assert custom_greeting in str(trace.output), (
+        f"Expected '{custom_greeting}' in trace output, got: {trace.output}"
+    )

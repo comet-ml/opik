@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Any, Callable, Dict, List, Optional
 
-from ..decorator.tracker import track
+from ..decorator.tracker import track, flush_tracker
 from ..types import SpanType
 from .agents_registry import AgentInfo, Param
 from opik import agent_config_context
@@ -149,6 +149,8 @@ def dispatch_agent(func: Callable) -> None:
         output = {"result": result}
     except Exception as e:
         output = {"error": f"{type(e).__name__}: {e}"}
+
+    flush_tracker()
 
     result_file = os.environ.get("OPIK_RESULT_FILE")
     if result_file:
