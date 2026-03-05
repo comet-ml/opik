@@ -191,37 +191,49 @@ class JobExecutor:
             if was_cancelled:
                 pass
             elif proc.returncode == 0:
-                result = _read_result(result_file, job_id)
-                self._api.runners.report_job_result(
-                    job_id=job_id,
-                    status="completed",
-                    result=result,
-                    trace_id=trace_id,
-                )
+                result, error = _read_result(result_file, job_id)
+                if error:
+                    self._api.runners.report_job_result(
+                        job_id=job_id,
+                        status="failed",
+                        error=error,
+                        trace_id=trace_id,
+                    )
+                else:
+                    self._api.runners.report_job_result(
+                        job_id=job_id,
+                        status="completed",
+                        result=result,
+                        trace_id=trace_id,
+                    )
             else:
+                _, error = _read_result(result_file, job_id)
                 self._api.runners.report_job_result(
                     job_id=job_id,
                     status="failed",
-                    error=f"Process exited with code {proc.returncode}",
+                    error=error or f"Process exited with code {proc.returncode}",
                     trace_id=trace_id,
                 )
         finally:
             _cleanup_result_file(result_file)
 
 
-def _read_result(result_file: str, job_id: str) -> Optional[Any]:
+def _read_result(
+    result_file: str, job_id: str
+) -> tuple[Optional[Any], Optional[str]]:
+    """Read the result file and return (result, error)."""
     try:
         with open(result_file, "r") as f:
             data = json.load(f)
-        return data.get("result")
+        return data.get("result"), data.get("error")
     except FileNotFoundError:
         LOGGER.warning("Result file missing for job %s: %s", job_id, result_file)
-        return None
+        return None, None
     except json.JSONDecodeError:
         LOGGER.warning(
             "Result file for job %s contains invalid JSON: %s", job_id, result_file
         )
-        return None
+        return None, None
 
 
 def _cleanup_result_file(result_file: str) -> None:

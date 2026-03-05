@@ -139,6 +139,7 @@ def dispatch_agent(func: Callable) -> None:
     except (json.JSONDecodeError, EOFError):
         inputs = {}
 
+    exit_code = 0
     try:
         result = func(**inputs) if isinstance(inputs, dict) else func(inputs)
         if not isinstance(result, (dict, str, int, float, bool, list)):
@@ -146,6 +147,7 @@ def dispatch_agent(func: Callable) -> None:
         output = {"result": result}
     except Exception as e:
         output = {"error": f"{type(e).__name__}: {e}"}
+        exit_code = 1
 
     result_file = os.environ.get("OPIK_RESULT_FILE")
     if result_file:
@@ -154,4 +156,4 @@ def dispatch_agent(func: Callable) -> None:
     else:
         sys.stdout.write(json.dumps(output))
         sys.stdout.flush()
-    sys.exit(0)
+    sys.exit(exit_code)
