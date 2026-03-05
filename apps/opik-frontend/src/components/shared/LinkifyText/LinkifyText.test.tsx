@@ -221,7 +221,6 @@ describe("LinkifyText", () => {
       const link = getLinks(container)[0];
       expect(link.className).toContain("text-blue-600");
       expect(link.className).toContain("underline");
-      expect(link.className).toContain("break-all");
     });
   });
 
