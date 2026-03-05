@@ -110,19 +110,13 @@ def _import_by_type(
             # FileUploadManager.flush() returns True even when individual
             # uploads fail (only False on timeout), so check failed_uploads
             # separately to catch silent upload failures.
-            file_upload_manager = getattr(
-                getattr(client, "_streamer", None), "_file_upload_manager", None
-            )
-            if file_upload_manager is not None and hasattr(
-                file_upload_manager, "failed_uploads"
-            ):
-                failed = file_upload_manager.failed_uploads(timeout=None)
-                if failed > 0:
-                    console.print(
-                        f"[yellow]Warning: {failed} file upload(s) failed during import. "
-                        "Re-run the import to retry.[/yellow]"
-                    )
-                    sys.exit(1)
+            failed = client.__internal_api__failed_uploads__(timeout=None)
+            if failed > 0:
+                console.print(
+                    f"[yellow]Warning: {failed} file upload(s) failed during import. "
+                    "Re-run the import to retry.[/yellow]"
+                )
+                sys.exit(1)
 
         # Display summary
         print_import_summary(stats)
