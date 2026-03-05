@@ -23,18 +23,22 @@ import java.util.UUID;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentConfigValue(
         @JsonView( {
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
-        @JsonView({AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+                AgentConfig.View.Public.class,
+                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({AgentConfig.View.Public.class,
+                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
+        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
+                AgentConfig.View.Write.class}) @NotBlank String value,
+        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
+                AgentConfig.View.Write.class}) @NotNull ValueType type,
+        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
+                AgentConfig.View.Write.class}) String description,
         @JsonView({AgentConfig.View.Public.class,
-                AgentConfig.View.Write.class}) @NotBlank @Size(max = 512, message = "value cannot exceed 512 characters") String value,
-        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.Write.class}) @NotNull ValueType type,
-        @JsonView({AgentConfig.View.Public.class, AgentConfig.View.Write.class}) String description,
-        @JsonView({
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
-        @JsonView({
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId){
+                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validFromBlueprintId,
+        @JsonView({AgentConfig.View.Public.class,
+                AgentConfig.View.History.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID validToBlueprintId){
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

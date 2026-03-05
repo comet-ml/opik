@@ -492,6 +492,7 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -519,6 +520,8 @@ class RawTracesClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -544,6 +547,7 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1191,6 +1195,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1205,6 +1210,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1225,6 +1232,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1302,6 +1310,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1316,6 +1325,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1336,6 +1347,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1489,6 +1501,7 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1514,6 +1527,8 @@ class RawTracesClient:
 
         sorting : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -1538,6 +1553,7 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -2571,6 +2587,7 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2598,6 +2615,8 @@ class AsyncRawTracesClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -2623,6 +2642,7 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3270,6 +3290,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3284,6 +3305,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -3304,6 +3327,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3381,6 +3405,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3395,6 +3420,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -3415,6 +3442,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3568,6 +3596,7 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3593,6 +3622,8 @@ class AsyncRawTracesClient:
 
         sorting : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -3617,6 +3648,7 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },

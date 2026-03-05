@@ -26,6 +26,26 @@ export type EvaluationResult = {
 
   /** Optional URL to view detailed results in the Opik platform */
   resultUrl?: string;
+
+  /** Errors encountered during evaluation (task failures, API errors, etc.) */
+  errors: EvaluationError[];
+};
+
+/**
+ * Represents an error that occurred during evaluation of a single dataset item run.
+ */
+export type EvaluationError = {
+  /** ID of the dataset item that failed */
+  datasetItemId: string;
+
+  /** Run index (0-based) within the item's execution */
+  runIndex: number;
+
+  /** Human-readable error message */
+  message: string;
+
+  /** Original error object, if available */
+  error?: Error;
 };
 
 /**
@@ -43,6 +63,9 @@ export type EvaluationScoreResult = {
 
   /** Whether the scoring failed */
   scoringFailed?: boolean;
+
+  /** Optional category name for grouping scores (e.g., "suite_assertion") */
+  categoryName?: string;
 };
 
 /**
@@ -71,4 +94,10 @@ export type EvaluationTestResult = {
 
   /** Results from all metrics for this test case */
   scoreResults: EvaluationScoreResult[];
+
+  /** Run index (0, 1, 2...) for multi-run evaluation suites */
+  trialId?: number;
+
+  /** Resolved per-item execution policy (set by engine in suite mode). */
+  resolvedExecutionPolicy?: { runsPerItem: number; passThreshold: number };
 };

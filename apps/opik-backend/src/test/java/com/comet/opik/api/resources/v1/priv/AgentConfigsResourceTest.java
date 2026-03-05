@@ -14,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AgentConfigsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import com.comet.opik.domain.AgentConfigEnv;
@@ -25,6 +26,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -98,12 +100,14 @@ class AgentConfigsResourceTest {
 
     private AgentConfigsResourceClient agentConfigsResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private PromptResourceClient promptResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         String baseUrl = TestUtils.getBaseUrl(client);
         this.agentConfigsResourceClient = new AgentConfigsResourceClient(client);
         this.projectResourceClient = new ProjectResourceClient(client, baseUrl, factory);
+        this.promptResourceClient = new PromptResourceClient(client, baseUrl, factory);
 
         ClientSupportUtils.config(client);
 
@@ -873,8 +877,11 @@ class AgentConfigsResourceTest {
         private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
                 "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
 
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
         @Test
-        @DisplayName("Success: get paginated history with tagged blueprints, excludes masks")
+        @DisplayName("Success: get paginated history with tagged blueprints and delta values, excludes masks")
         void getHistory() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
@@ -950,6 +957,20 @@ class AgentConfigsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(BLUEPRINT_IGNORED_FIELDS)
                     .isEqualTo(expectedBlueprints);
+
+            assertThat(historyPage.content().getFirst().values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build()));
+
+            assertThat(historyPage.content().get(1).values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()));
         }
 
         @Test
@@ -957,6 +978,268 @@ class AgentConfigsResourceTest {
         void getHistory__whenConfigNotFound__thenReturn404() {
             agentConfigsResourceClient.getHistory(UUID.randomUUID(), 1, 10, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Nested
+    @DisplayName("Automatic Blueprint Updates on Prompt Version:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AutomaticBlueprintUpdates {
+
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
+        @Test
+        @DisplayName("Success: when new prompt version created, blueprint with that prompt is auto-updated")
+        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion1 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit1 = promptVersion1.commit();
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Initial config with prompt")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("system_prompt").value(commit1).type(ValueType.PROMPT)
+                                    .build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit2 = promptVersion2.commit();
+
+            Awaitility.await().untilAsserted(() -> {
+                var latestBlueprint = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+
+                assertThat(latestBlueprint).isNotNull();
+                assertThat(latestBlueprint.id()).isNotEqualTo(blueprint1Id);
+                assertThat(latestBlueprint.values()).hasSize(2);
+
+                var expectedValues = List.of(
+                        AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                        AgentConfigValue.builder().key("system_prompt").value(commit2).type(ValueType.PROMPT).build());
+
+                assertThat(latestBlueprint.values())
+                        .usingRecursiveComparison()
+                        .ignoringFields(VALUE_IGNORED_FIELDS)
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedValues);
+            });
+        }
+
+        @Test
+        @DisplayName("Success: blueprint with multiple prompts updates only the changed prompt")
+        void createPromptVersion__whenBlueprintHasMultiplePrompts__thenUpdateOnlyChangedOne() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt1Name = "test-prompt-1-" + UUID.randomUUID();
+            var prompt1 = com.comet.opik.api.Prompt.builder()
+                    .name(prompt1Name)
+                    .build();
+            promptResourceClient.createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+            var prompt1Version1 = promptResourceClient.createPromptVersion(prompt1, API_KEY, TEST_WORKSPACE);
+            var prompt1Commit1 = prompt1Version1.commit();
+
+            var prompt2Name = "test-prompt-2-" + UUID.randomUUID();
+            var prompt2 = com.comet.opik.api.Prompt.builder()
+                    .name(prompt2Name)
+                    .build();
+            promptResourceClient.createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+            var prompt2Version1 = promptResourceClient.createPromptVersion(prompt2, API_KEY, TEST_WORKSPACE);
+            var prompt2Commit1 = prompt2Version1.commit();
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Config with two prompts")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("system_prompt").value(prompt1Commit1)
+                                    .type(ValueType.PROMPT).build(),
+                            AgentConfigValue.builder().key("user_prompt").value(prompt2Commit1).type(ValueType.PROMPT)
+                                    .build()))
+                    .build();
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var prompt1Version2 = promptResourceClient.createPromptVersion(prompt1, API_KEY, TEST_WORKSPACE);
+            var prompt1Commit2 = prompt1Version2.commit();
+
+            Awaitility.await().untilAsserted(() -> {
+                var latestBlueprint = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+
+                assertThat(latestBlueprint).isNotNull();
+                assertThat(latestBlueprint.values()).hasSize(2);
+
+                var expectedValues = List.of(
+                        AgentConfigValue.builder().key("system_prompt").value(prompt1Commit2).type(ValueType.PROMPT)
+                                .build(),
+                        AgentConfigValue.builder().key("user_prompt").value(prompt2Commit1).type(ValueType.PROMPT)
+                                .build());
+
+                assertThat(latestBlueprint.values())
+                        .usingRecursiveComparison()
+                        .ignoringFields(VALUE_IGNORED_FIELDS)
+                        .ignoringCollectionOrder()
+                        .isEqualTo(expectedValues);
+            });
+        }
+
+        @Test
+        @DisplayName("Success: no update when blueprint has no prompt values")
+        void createPromptVersion__whenBlueprintHasNoPrompts__thenNoUpdate() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Config without prompts")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+            promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+
+            Awaitility.await().untilAsserted(() -> {
+                var latestBlueprint = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+
+                assertThat(latestBlueprint).isNotNull();
+                assertThat(latestBlueprint.id()).isEqualTo(blueprint1Id);
+            });
+        }
+
+        @Test
+        @DisplayName("Success: mask blueprints are not auto-updated")
+        void createPromptVersion__whenMaskReferencesPrompt__thenNoUpdate() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion1 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit1 = promptVersion1.commit();
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Regular blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var mask = AgentBlueprint.builder()
+                    .type(BlueprintType.MASK)
+                    .description("Mask with prompt")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("system_prompt").value(commit1).type(ValueType.PROMPT)
+                                    .build()))
+                    .build();
+
+            var maskId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(mask).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+
+            Awaitility.await().untilAsserted(() -> {
+                var maskDelta = agentConfigsResourceClient.getDelta(maskId, API_KEY, TEST_WORKSPACE,
+                        HttpStatus.SC_OK);
+
+                assertThat(maskDelta).isNotNull();
+                assertThat(maskDelta.id()).isEqualTo(maskId);
+                assertThat(maskDelta.values()).hasSize(1);
+                assertThat(maskDelta.values().get(0).value()).isEqualTo(commit1);
+            });
+        }
+
+        @Test
+        @DisplayName("Success: cross-project isolation - only same project blueprints updated")
+        void createPromptVersion__whenMultipleProjects__thenOnlySameProjectUpdated() {
+            var project1Name = UUID.randomUUID().toString();
+            var project1Id = projectResourceClient.createProject(project1Name, API_KEY, TEST_WORKSPACE);
+
+            var project2Name = UUID.randomUUID().toString();
+            var project2Id = projectResourceClient.createProject(project2Name, API_KEY, TEST_WORKSPACE);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion1 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit1 = promptVersion1.commit();
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Project 1 config")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("system_prompt").value(commit1).type(ValueType.PROMPT)
+                                    .build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(project1Id).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Project 2 config")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(project2Id).blueprint(blueprint2).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit2 = promptVersion2.commit();
+
+            Awaitility.await().untilAsserted(() -> {
+                var project1Latest = agentConfigsResourceClient.getLatestBlueprint(project1Id, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+                assertThat(project1Latest).isNotNull();
+                assertThat(project1Latest.id()).isNotEqualTo(blueprint1Id);
+                assertThat(project1Latest.values().get(0).value()).isEqualTo(commit2);
+
+                var project2Latest = agentConfigsResourceClient.getLatestBlueprint(project2Id, null, API_KEY,
+                        TEST_WORKSPACE, HttpStatus.SC_OK);
+                assertThat(project2Latest).isNotNull();
+                assertThat(project2Latest.id()).isEqualTo(blueprint2Id);
+            });
         }
     }
 }
