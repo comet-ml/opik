@@ -473,8 +473,9 @@ class TraceServiceImpl implements TraceService {
                                             .workspaceId(workspaceId)
                                             .userName(userName)
                                             .build());
-                                    log.info("Published TracesDeleted event for trace ids count '{}' on workspace '{}'",
-                                            batch.size(), workspaceId);
+                                    log.info(
+                                            "Published TracesDeleted event for trace ids count '{}' for project_id '{}' on workspace '{}'",
+                                            batch.size(), projectId, workspaceId);
                                 }))
                         .then());
     }
