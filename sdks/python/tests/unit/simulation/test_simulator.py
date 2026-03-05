@@ -8,7 +8,7 @@ from opik.simulation.simulated_user import SimulatedUser
 class TestRunSimulation:
     """Test cases for run_simulation function."""
 
-    def test_run_simulation_basic(self):
+    def test_run_simulation_basic(self, fake_backend):
         """Test basic simulation functionality."""
 
         # Mock app that returns simple responses
@@ -35,7 +35,7 @@ class TestRunSimulation:
         assert history[1]["role"] == "assistant"
         assert "Response to: Hello" in history[1]["content"]
 
-    def test_run_simulation_with_initial_message(self):
+    def test_run_simulation_with_initial_message(self, fake_backend):
         """Test simulation with provided initial message."""
 
         def mock_app(message, *, thread_id, **kwargs):
@@ -56,7 +56,7 @@ class TestRunSimulation:
         assert history[0]["content"] == "Custom initial message"
         assert history[2]["content"] == "Follow up message"
 
-    def test_run_simulation_with_thread_id(self):
+    def test_run_simulation_with_thread_id(self, fake_backend):
         """Test simulation with provided thread_id."""
 
         def mock_app(message, *, thread_id, **kwargs):
@@ -74,7 +74,7 @@ class TestRunSimulation:
 
         assert result["thread_id"] == custom_thread_id
 
-    def test_run_simulation_with_app_kwargs(self):
+    def test_run_simulation_with_app_kwargs(self, fake_backend):
         """Test simulation with additional app kwargs."""
 
         def mock_app(message, *, thread_id, custom_param=None, **kwargs):
@@ -92,7 +92,7 @@ class TestRunSimulation:
         history = result["conversation_history"]
         assert "Custom: test_value" in history[1]["content"]
 
-    def test_run_simulation_app_error_handling(self):
+    def test_run_simulation_app_error_handling(self, fake_backend):
         """Test simulation handles app errors gracefully."""
 
         def failing_app(message, *, thread_id, **kwargs):
@@ -107,7 +107,7 @@ class TestRunSimulation:
         history = result["conversation_history"]
         assert "Error processing message: App error" in history[1]["content"]
 
-    def test_run_simulation_invalid_app_response(self):
+    def test_run_simulation_invalid_app_response(self, fake_backend):
         """Test simulation handles invalid app responses."""
 
         def invalid_app(message, *, thread_id, **kwargs):
@@ -123,7 +123,7 @@ class TestRunSimulation:
         assert history[1]["role"] == "assistant"
         assert history[1]["content"] == "Not a dict"
 
-    def test_run_simulation_app_returns_none(self):
+    def test_run_simulation_app_returns_none(self, fake_backend):
         """Test simulation handles None app responses."""
 
         def none_app(message, *, thread_id, **kwargs):
@@ -140,7 +140,7 @@ class TestRunSimulation:
         assert history[1]["content"] == "No response"
 
     @patch("opik.simulation.simulator.id_helpers.generate_id")
-    def test_run_simulation_generates_thread_id(self, mock_generate_id):
+    def test_run_simulation_generates_thread_id(self, mock_generate_id, fake_backend):
         """Test that thread_id is generated when not provided."""
         mock_generate_id.return_value = "generated-thread-456"
 
@@ -156,7 +156,7 @@ class TestRunSimulation:
         assert result["thread_id"] == "generated-thread-456"
         mock_generate_id.assert_called_once()
 
-    def test_run_simulation_with_project_name(self):
+    def test_run_simulation_with_project_name(self, fake_backend):
         """Test simulation includes project_name in result."""
 
         def mock_app(message, *, thread_id, **kwargs):
@@ -173,7 +173,7 @@ class TestRunSimulation:
 
         assert result["project_name"] == "test_project"
 
-    def test_run_simulation_max_turns_zero(self):
+    def test_run_simulation_max_turns_zero(self, fake_backend):
         """Test simulation with zero max_turns."""
 
         def mock_app(message, *, thread_id, **kwargs):

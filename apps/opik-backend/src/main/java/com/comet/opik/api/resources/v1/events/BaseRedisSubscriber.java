@@ -47,6 +47,7 @@ import java.util.stream.Stream;
 public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private static final String BUSYGROUP = "BUSYGROUP";
+    private static final String NOGROUP = "NOGROUP";
 
     /**
      * Non-retryable: programming and validation exceptions that won't succeed on retry.
@@ -302,10 +303,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Propagates errors except BUSYGROUP and makes start fail in that case.
      */
     private void enforceConsumerGroup() {
+        createConsumerGroup()
+                .block(config.getLongPollingDuration().toJavaDuration());
+    }
+
+    private Mono<Void> createConsumerGroup() {
         var streamCreateGroupArgs = StreamCreateGroupArgs
                 .name(config.getConsumerGroupName())
                 .makeStream();
-        stream.createGroup(streamCreateGroupArgs)
+        return stream.createGroup(streamCreateGroupArgs)
                 .subscribeOn(consumerScheduler)
                 .onErrorResume(throwable -> {
                     if (Objects.toString(throwable.getMessage(), "").contains(BUSYGROUP)) {
@@ -316,8 +322,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     log.error("Failed to create consumer group '{}' for stream '{}'",
                             config.getConsumerGroupName(), config.getStreamName(), throwable);
                     return Mono.error(throwable);
-                })
-                .block(config.getLongPollingDuration().toJavaDuration());
+                });
     }
 
     private Disposable setupStreamListener() {
@@ -377,6 +382,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     claimErrors.add(1);
                     log.error("Error claiming pending messages", throwable);
+                    if (isNoGroupError(throwable)) {
+                        return recoverFromNoGroup();
+                    }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> claimTime.record(System.currentTimeMillis() - startMillis));
@@ -397,9 +405,28 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     readErrors.add(1);
                     log.error("Error reading from Redis stream", throwable);
+                    if (isNoGroupError(throwable)) {
+                        return recoverFromNoGroup();
+                    }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> readTime.record(System.currentTimeMillis() - startMillis));
+    }
+
+    private boolean isNoGroupError(Throwable throwable) {
+        return Objects.toString(throwable.getMessage(), "").contains(NOGROUP);
+    }
+
+    private Mono<Map<StreamMessageId, Map<String, M>>> recoverFromNoGroup() {
+        log.warn("Recreating not found consumer group '{}' for stream '{}'",
+                config.getConsumerGroupName(), config.getStreamName());
+        return createConsumerGroup()
+                .onErrorResume(throwable -> {
+                    log.error("Failed to recreate consumer group '{}' for stream '{}'",
+                            config.getConsumerGroupName(), config.getStreamName(), throwable);
+                    return Mono.empty();
+                })
+                .thenReturn(Map.of());
     }
 
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
