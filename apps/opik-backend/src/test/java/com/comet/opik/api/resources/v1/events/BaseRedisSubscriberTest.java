@@ -244,6 +244,36 @@ class BaseRedisSubscriberTest {
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(otherPayloadMessages.size());
         }
+
+        @Test
+        void shouldRecoverFromNoGroupOnReadAndContinueProcessing() {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(config, redissonClient));
+            subscriber.start();
+
+            // Process initial messages to confirm subscriber works
+            publishMessagesToStream(messages);
+            waitForMessagesProcessed(subscriber, messages.size());
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+            var countAfterFirstBatch = subscriber.getSuccessMessageCount().get();
+
+            // Delete the stream (which destroys the consumer group)
+            stream.delete().block();
+
+            waitForStreamRecovery();
+
+            // Publish new messages after group deletion
+            var newMessages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            publishMessagesToStream(newMessages);
+
+            // Subscriber should recover and process new messages
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get())
+                            .isEqualTo(countAfterFirstBatch + newMessages.size()));
+            waitForMessagesAckedAndRemoved();
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
     }
 
     @Nested
@@ -414,5 +444,10 @@ class BaseRedisSubscriberTest {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 // Verify messages were removed from stream
                 .untilAsserted(() -> assertThat(stream.size().block()).isEqualTo(pendingMessages));
+    }
+
+    private void waitForStreamRecovery() {
+        await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertThat(stream.isExists().block()).isTrue());
     }
 }
