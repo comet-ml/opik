@@ -6,6 +6,8 @@ from typing import Optional
 import click
 
 from . import configure
+from . import connect
+from . import disconnect
 from . import exports
 from . import harbor
 from . import healthcheck
@@ -47,3 +49,5 @@ cli.add_command(exports.export_group)
 cli.add_command(imports.import_group)
 cli.add_command(usage_report.usage_report)
 cli.add_command(harbor.harbor)
+cli.add_command(connect.connect)
+cli.add_command(disconnect.disconnect)
