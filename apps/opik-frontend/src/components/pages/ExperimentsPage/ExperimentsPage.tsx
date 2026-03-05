@@ -28,6 +28,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { getExperimentChangeDescription } from "@/lib/experiments";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   transformExperimentScores,
@@ -592,9 +593,7 @@ const ExperimentsPage: React.FC = () => {
           scores[s.name] = s.value;
         });
 
-        const changeDescription =
-          experiment.prompt_versions?.[0]?.change_description ??
-          experiment.prompt_version?.change_description;
+        const changeDescription = getExperimentChangeDescription(experiment);
 
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,

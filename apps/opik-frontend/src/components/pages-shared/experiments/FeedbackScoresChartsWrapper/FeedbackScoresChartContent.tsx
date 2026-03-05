@@ -7,6 +7,7 @@ import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import ExperimentChartTooltipHeader from "@/components/pages-shared/experiments/ExperimentChartTooltipHeader";
 import {
   ChartContainer,
   ChartTooltip,
@@ -80,21 +81,12 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       const { entityName, createdDate, changeDescription } = payload[0].payload;
-
       return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 truncate">
-            {entityName}
-          </div>
-          <div className="comet-body-xs mb-1 text-light-slate">
-            {createdDate}
-          </div>
-          {changeDescription && (
-            <div className="comet-body-xs mb-1 truncate text-light-slate">
-              {changeDescription}
-            </div>
-          )}
-        </>
+        <ExperimentChartTooltipHeader
+          entityName={entityName}
+          createdDate={createdDate}
+          changeDescription={changeDescription}
+        />
       );
     },
     [],

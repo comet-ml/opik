@@ -20,8 +20,10 @@ import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useAppStore from "@/store/AppStore";
 import useChartConfig from "@/hooks/useChartConfig";
 import { formatDate } from "@/lib/date";
+import { getExperimentChangeDescription } from "@/lib/experiments";
 import { CHART_TYPE } from "@/constants/chart";
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import ExperimentChartTooltipHeader from "@/components/pages-shared/experiments/ExperimentChartTooltipHeader";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ExperimentsGroupNodeWithAggregations,
@@ -199,9 +201,7 @@ function transformUngroupedExperimentsToChartData(
       entityName: experiment.name,
       createdDate: formatDate(experiment.created_at),
       scores,
-      changeDescription:
-        experiment.prompt_versions?.[0]?.change_description ??
-        experiment.prompt_version?.change_description,
+      changeDescription: getExperimentChangeDescription(experiment),
     };
   });
 
@@ -451,23 +451,13 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       const { entityName, createdDate, changeDescription } = payload[0].payload;
-
       return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 line-clamp-3 max-w-64 break-words">
-            {entityName}
-          </div>
-          {createdDate && (
-            <div className="comet-body-xs mb-1 text-light-slate">
-              {createdDate}
-            </div>
-          )}
-          {changeDescription && (
-            <div className="comet-body-xs mb-1 truncate text-light-slate">
-              {changeDescription}
-            </div>
-          )}
-        </>
+        <ExperimentChartTooltipHeader
+          entityName={entityName}
+          createdDate={createdDate}
+          changeDescription={changeDescription}
+          entityNameClassName="line-clamp-3 max-w-64 break-words"
+        />
       );
     },
     [],

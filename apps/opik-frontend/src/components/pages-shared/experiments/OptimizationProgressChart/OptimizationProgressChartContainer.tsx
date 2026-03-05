@@ -3,6 +3,7 @@ import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 
 import { formatDate } from "@/lib/date";
+import { getExperimentChangeDescription } from "@/lib/experiments";
 import { Experiment } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
@@ -58,9 +59,7 @@ const OptimizationProgressChartContainer: React.FC<
           objectiveName,
         );
 
-        const changeDescription =
-          experiment.prompt_versions?.[0]?.change_description ??
-          experiment.prompt_version?.change_description;
+        const changeDescription = getExperimentChangeDescription(experiment);
 
         retVal.data.push({
           entityId: experiment.id,

@@ -1,4 +1,14 @@
+import { Experiment } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+
+export const getExperimentChangeDescription = (
+  experiment: Pick<Experiment, "prompt_versions" | "prompt_version">,
+): string | undefined => {
+  return (
+    experiment.prompt_versions?.[0]?.change_description ??
+    experiment.prompt_version?.change_description
+  );
+};
 
 export const calculateLineHeight = (
   height: ROW_HEIGHT,

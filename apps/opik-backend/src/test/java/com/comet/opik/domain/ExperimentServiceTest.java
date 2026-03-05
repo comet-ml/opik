@@ -2,10 +2,12 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -15,15 +17,24 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
+import static com.comet.opik.api.Experiment.PromptVersionLink;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -344,6 +355,78 @@ class ExperimentServiceTest {
 
             verify(experimentDAO).getById(experimentId);
             verify(experimentDAO).update(experimentId, experimentUpdate);
+        }
+    }
+
+    @Nested
+    @DisplayName("Enrich Prompt Version Link:")
+    class EnrichPromptVersionLinkTests {
+
+        private static final String TEST_WORKSPACE = "test-workspace";
+        private static final String COMMIT = "abc123";
+        private static final String PROMPT_NAME = "my-prompt";
+        private static final String CHANGE_DESCRIPTION = "Initial version";
+
+        static Stream<Arguments> promptVersionInfoCases() {
+            return Stream.of(
+                    Arguments.of(
+                            "null PromptVersionInfo — all enriched fields are null",
+                            null, null, null, false),
+                    Arguments.of(
+                            "PromptVersionInfo with all fields set",
+                            COMMIT, PROMPT_NAME, CHANGE_DESCRIPTION, true),
+                    Arguments.of(
+                            "PromptVersionInfo without changeDescription",
+                            COMMIT, PROMPT_NAME, null, true));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("promptVersionInfoCases")
+        @DisplayName("when enriching prompt version link, then PromptVersionLink fields are populated correctly")
+        void enrichPromptVersionLink_whenVariousInfoStates_thenFieldsMappedCorrectly(
+                String description,
+                String infoCommit,
+                String infoPromptName,
+                String infoChangeDescription,
+                boolean hasInfo) {
+            // given
+            var versionId = UUID.randomUUID();
+            var promptId = UUID.randomUUID();
+            var initialLink = new PromptVersionLink(versionId, null, promptId, null, null);
+
+            var experiment = podamFactory.manufacturePojo(Experiment.class)
+                    .toBuilder()
+                    .promptVersion(initialLink)
+                    .promptVersions(null)
+                    .datasetVersionId(null)
+                    .projectId(null)
+                    .build();
+
+            var request = ExperimentStreamRequest.builder().name(experiment.name()).build();
+
+            Map<UUID, PromptVersionInfo> infoMap = hasInfo
+                    ? Map.of(versionId, new PromptVersionInfo(
+                            versionId, infoCommit, infoPromptName, infoChangeDescription))
+                    : Map.of();
+
+            when(experimentDAO.get(request)).thenReturn(Flux.just(experiment));
+            when(promptService.getVersionsInfoByVersionsIds(Set.of(versionId)))
+                    .thenReturn(Mono.just(infoMap));
+            when(datasetService.findByIds(any(), any())).thenReturn(List.of());
+
+            // when & then
+            StepVerifier.create(
+                            experimentService.get(request)
+                                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE)))
+                    .assertNext(result -> {
+                        assertThat(result.promptVersion()).isNotNull();
+                        assertThat(result.promptVersion().id()).isEqualTo(versionId);
+                        assertThat(result.promptVersion().promptId()).isEqualTo(promptId);
+                        assertThat(result.promptVersion().commit()).isEqualTo(infoCommit);
+                        assertThat(result.promptVersion().promptName()).isEqualTo(infoPromptName);
+                        assertThat(result.promptVersion().changeDescription()).isEqualTo(infoChangeDescription);
+                    })
+                    .verifyComplete();
         }
     }
 }
