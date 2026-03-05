@@ -191,36 +191,57 @@ class JobExecutor:
             if was_cancelled:
                 pass
             elif proc.returncode == 0:
-                result = _read_result(result_file, job_id)
-                self._api.runners.report_job_result(
-                    job_id=job_id,
-                    status="completed",
-                    result=result,
-                    trace_id=trace_id,
-                )
+                result, error = _read_result(result_file, job_id)
+                if error:
+                    self._api.runners.report_job_result(
+                        job_id=job_id,
+                        status="failed",
+                        error=error,
+                        trace_id=trace_id,
+                    )
+                else:
+                    self._api.runners.report_job_result(
+                        job_id=job_id,
+                        status="completed",
+                        result=result,
+                        trace_id=trace_id,
+                    )
             else:
+                exit_error = f"Process exited with code {proc.returncode}"
+                agent_error = _read_agent_error(result_file)
                 self._api.runners.report_job_result(
                     job_id=job_id,
                     status="failed",
-                    error=f"Process exited with code {proc.returncode}",
+                    error=agent_error or exit_error,
                     trace_id=trace_id,
                 )
         finally:
             _cleanup_result_file(result_file)
 
 
-def _read_result(result_file: str, job_id: str) -> Optional[Any]:
+def _read_result(result_file: str, job_id: str) -> tuple[Optional[Any], Optional[str]]:
+    """Read the result file and return (result, error)."""
     try:
         with open(result_file, "r") as f:
             data = json.load(f)
-        return data.get("result")
+        return data.get("result"), data.get("error")
     except FileNotFoundError:
-        LOGGER.warning("Result file missing for job %s: %s", job_id, result_file)
-        return None
-    except json.JSONDecodeError:
-        LOGGER.warning(
-            "Result file for job %s contains invalid JSON: %s", job_id, result_file
-        )
+        msg = f"Result file missing for job {job_id}: {result_file}"
+        LOGGER.warning(msg)
+        return None, msg
+    except json.JSONDecodeError as e:
+        msg = f"Result file for job {job_id} contains invalid JSON: {e}"
+        LOGGER.warning(msg)
+        return None, msg
+
+
+def _read_agent_error(result_file: str) -> Optional[str]:
+    """Try to read an agent-written error from the result file. Returns None if unreadable."""
+    try:
+        with open(result_file, "r") as f:
+            data = json.load(f)
+        return data.get("error")
+    except (FileNotFoundError, json.JSONDecodeError, ValueError):
         return None
 
 

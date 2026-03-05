@@ -380,13 +380,21 @@ class TestReadResult:
         rf = str(tmp_path / "result.json")
         with open(rf, "w") as f:
             json.dump({"result": "hello"}, f)
-        assert job_executor._read_result(rf, "j-test") == "hello"
+        result, error = job_executor._read_result(rf, "j-test")
+        assert result == "hello"
+        assert error is None
 
-    def test_read_result__missing_file__returns_none(self, tmp_path):
-        assert job_executor._read_result(str(tmp_path / "nope.json"), "j-test") is None
+    def test_read_result__missing_file__returns_error(self, tmp_path):
+        result, error = job_executor._read_result(str(tmp_path / "nope.json"), "j-test")
+        assert result is None
+        assert error is not None
+        assert "missing" in error.lower()
 
-    def test_read_result__corrupted_json__returns_none(self, tmp_path):
+    def test_read_result__corrupted_json__returns_error(self, tmp_path):
         rf = str(tmp_path / "bad.json")
         with open(rf, "w") as f:
             f.write("{bad")
-        assert job_executor._read_result(rf, "j-test") is None
+        result, error = job_executor._read_result(rf, "j-test")
+        assert result is None
+        assert error is not None
+        assert "invalid JSON" in error
