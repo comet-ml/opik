@@ -56,7 +56,6 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
-import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
 import static com.comet.opik.infrastructure.DatabaseUtils.generateUuidPool;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -346,7 +345,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
             if (featureFlags.isDatasetVersioningEnabled()) {
                 log.info("Patching item '{}' with versioning", id);
-                return patchItemWithVersionById(id, item, workspaceId, userName);
+                return patchItemWithVersion(id, item, workspaceId, userName);
             }
 
             // Legacy mode: get from draft table and update
@@ -368,33 +367,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
         }).then();
     }
 
-    /**
-     * Patches a single item by its row ID and creates a new version.
-     * The frontend sends 'id' (row ID) but patching works on dataset_item_id (stable IDs).
-     * This method first maps the row ID to dataset_item_id, then performs the patch.
-     */
-    private Mono<Long> patchItemWithVersionById(UUID rowId, DatasetItem patchData,
-            String workspaceId, String userName) {
-        // Map row ID to dataset_item_id
-        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for patching
-        return versionDao.mapRowIdsToDatasetItemIds(Set.of(rowId))
-                .collectList()
-                .flatMap(mappings -> {
-                    if (mappings.isEmpty()) {
-                        // No mapping found - item doesn't exist or was deleted
-                        log.warn("Item with row ID '{}' not found", rowId);
-                        return Mono.error(failWithNotFound("Dataset item not found"));
-                    }
-
-                    // Use the mapped dataset_item_id
-                    UUID datasetItemId = mappings.get(0).datasetItemId();
-                    return patchItemWithVersion(datasetItemId, patchData, workspaceId, userName);
-                });
-    }
-
-    /**
-     * Patches a single item by its stable dataset_item_id and creates a new version.
-     */
     private Mono<Long> patchItemWithVersion(UUID datasetItemId, DatasetItem patchData,
             String workspaceId, String userName) {
         // Resolve which dataset contains this item
@@ -543,42 +515,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return batchUpdateByFiltersWithVersioning(datasetId, batchUpdate, workspaceId, userName);
         }
 
-        // For batch update by IDs without explicit dataset ID, map row IDs to dataset_item_ids
-        // The frontend sends 'id' (row ID) but we need 'dataset_item_id' (stable ID) for updates
         if (CollectionUtils.isNotEmpty(batchUpdate.ids())) {
-            return versionDao.mapRowIdsToDatasetItemIds(batchUpdate.ids())
-                    .collectList()
-                    .flatMap(mappings -> {
-                        if (mappings.isEmpty()) {
-                            // No mappings found - items don't exist or were deleted
-                            log.warn("No mappings found for provided row IDs, items not found");
-                            return Mono.error(failWithNotFound("Dataset items not found"));
-                        }
-
-                        // Verify all mappings belong to the same dataset
-                        validateMappingsBelongToSameDataset(mappings);
-
-                        // Extract dataset_item_ids and dataset_id from mappings (NO additional query!)
-                        Set<UUID> datasetItemIds = mappings.stream()
-                                .map(DatasetItemIdMapping::datasetItemId)
-                                .collect(Collectors.toSet());
-                        UUID mappedDatasetId = mappings.get(0).datasetId();
-
-                        log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
-                                batchUpdate.ids().size(), datasetItemIds.size(), mappedDatasetId);
-
-                        // Create a new batchUpdate with mapped dataset_item_ids
-                        DatasetItemBatchUpdate mappedBatchUpdate = DatasetItemBatchUpdate.builder()
-                                .ids(datasetItemIds)
-                                .filters(batchUpdate.filters())
-                                .datasetId(batchUpdate.datasetId())
-                                .update(batchUpdate.update())
-                                .mergeTags(batchUpdate.mergeTags())
-                                .build();
-
-                        return batchUpdateByIdsWithVersioning(mappedDatasetId, mappedBatchUpdate, workspaceId,
-                                userName);
-                    });
+            return resolveDatasetIdFromItemIds(batchUpdate.ids())
+                    .switchIfEmpty(Mono.error(failWithNotFound("Dataset items not found")))
+                    .flatMap(resolvedDatasetId -> batchUpdateByIdsWithVersioning(resolvedDatasetId, batchUpdate,
+                            workspaceId, userName));
         }
 
         // This should not happen due to validation, but handle it gracefully
@@ -790,17 +731,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * Validates that all item mappings belong to the same dataset.
      * Throws BadRequestException if items span multiple datasets.
      */
-    private void validateMappingsBelongToSameDataset(List<DatasetItemIdMapping> mappings) {
-        Set<UUID> distinctDatasetIds = mappings.stream()
-                .map(DatasetItemIdMapping::datasetId)
-                .collect(Collectors.toSet());
-
-        if (distinctDatasetIds.size() > 1) {
-            log.error("Batch update with IDs spans multiple datasets: '{}'", distinctDatasetIds);
-            throw new BadRequestException("Cannot batch update items across multiple datasets");
-        }
-    }
-
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             @NonNull List<DatasetItemFilter> filters, Visibility visibility) {
@@ -1131,44 +1061,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
         log.info("Deleting '{}' items by IDs with versioning, batchGroupId='{}', createVersion='{}'",
                 ids.size(), batchGroupId, createVersion);
 
-        // Try to map the provided IDs as row IDs (from frontend) to dataset_item_ids
-        return versionDao.mapRowIdsToDatasetItemIds(ids)
-                .collectList()
-                .flatMap(mappings -> {
-                    if (mappings.isEmpty()) {
-                        // IDs are already dataset_item_ids (from SDK) - resolve dataset from any existing item
-                        log.info("No row ID mappings found, treating as dataset_item_ids and resolving dataset");
-
-                        // Try to resolve dataset ID from any of the provided IDs (not just the first)
-                        // This handles cases where some IDs may not exist (already deleted)
-                        return versionDao.resolveDatasetIdFromItemIds(ids)
-                                .flatMap(datasetId -> {
-                                    log.info("Resolved dataset '{}' for deletion request with '{}' item IDs",
-                                            datasetId, ids.size());
-                                    return deleteByDatasetItemIdsInDataset(ids, datasetId, workspaceId, userName,
-                                            batchGroupId, createVersion);
-                                })
-                                .switchIfEmpty(Mono.defer(() -> {
-                                    // None of the items found - DELETE is idempotent, so this is not an error
-                                    log.info(
-                                            "None of the '{}' items found in versioned table, treating as already deleted",
-                                            ids.size());
-                                    return Mono.empty();
-                                }));
-                    }
-
-                    // Successfully mapped row IDs to dataset_item_ids
-                    Set<UUID> datasetItemIds = mappings.stream()
-                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
-                            .collect(Collectors.toSet());
-                    UUID datasetId = mappings.get(0).datasetId();
-
-                    log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset '{}'",
-                            ids.size(), datasetItemIds.size(), datasetId);
-
-                    return deleteByDatasetItemIdsInDataset(datasetItemIds, datasetId, workspaceId, userName,
+        return resolveDatasetIdFromItemIds(ids)
+                .flatMap(datasetId -> {
+                    log.info("Resolved dataset '{}' for deletion request with '{}' item IDs", datasetId, ids.size());
+                    return deleteByDatasetItemIdsInDataset(ids, datasetId, workspaceId, userName,
                             batchGroupId, createVersion);
-                });
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("None of the '{}' items found in versioned table, treating as already deleted",
+                            ids.size());
+                    return Mono.empty();
+                }));
     }
 
     /**
@@ -1507,80 +1410,77 @@ class DatasetItemServiceImpl implements DatasetItemService {
             List<DatasetItem> addedItems = prepareAddedItems(changes, datasetId);
             Set<UUID> deletedRowIds = changes.deletedIds() != null ? changes.deletedIds() : Set.of();
 
-            // Resolve edited item row IDs to stable dataset_item_ids (no fetch needed)
+            // Collect edited item IDs (already stable dataset_item_ids)
             List<DatasetItemEdit> editedItemEdits = changes.editedItems() != null ? changes.editedItems() : List.of();
             Set<UUID> editedRowIds = editedItemEdits.stream()
                     .map(DatasetItemEdit::id)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
 
-            Mono<Map<UUID, UUID>> editMappingsMono = resolveEditMappings(editedRowIds);
-            Mono<Set<UUID>> deletedItemIdsMono = mapRowIdsToDatasetItemIds(deletedRowIds);
+            // IDs are stable dataset_item_ids; identity mapping
+            Map<UUID, UUID> rowIdToDatasetItemId = editedRowIds.stream()
+                    .collect(Collectors.toMap(id -> id, id -> id));
 
-            return Mono.zip(editMappingsMono, deletedItemIdsMono)
-                    .flatMap(tuple -> {
-                        Map<UUID, UUID> rowIdToDatasetItemId = tuple.getT1();
-                        Set<UUID> deletedIds = tuple.getT2();
+            return Mono.defer(() -> {
+                Set<UUID> editedDatasetItemIds = new HashSet<>(editedRowIds);
 
-                        Set<UUID> editedDatasetItemIds = new HashSet<>(rowIdToDatasetItemId.values());
+                // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
+                // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
+                // we need to generate UUIDs in reverse order of desired appearance:
+                // 1. Unchanged items first (smallest UUIDs) - will appear LAST
+                // 2. Edited items second (middle UUIDs) - will appear in MIDDLE
+                // 3. Added items last (largest UUIDs) - will appear FIRST
 
-                        // Generate UUIDs for all items in the correct order for ClickHouse's ORDER BY id DESC
-                        // Since UUIDv7 is time-ordered (later = larger) and we sort DESC (largest first),
-                        // we need to generate UUIDs in reverse order of desired appearance:
-                        // 1. Unchanged items first (smallest UUIDs) - will appear LAST
-                        // 2. Edited items second (middle UUIDs) - will appear in MIDDLE
-                        // 3. Added items last (largest UUIDs) - will appear FIRST
+                // However, we reverse the unchanged UUID pool to maintain original order
+                List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
+                List<UUID> editedUuids = generateUuidPool(idGenerator, editedItemEdits.size());
+                List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
-                        // However, we reverse the unchanged UUID pool to maintain original order
-                        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(baseVersionItemCount);
-                        List<UUID> editedUuids = generateUuidPool(idGenerator, editedItemEdits.size());
-                        List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
+                List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
 
-                        List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
+                // Validate tag limits on all items being inserted or edited
+                Stream.concat(
+                        addedItemsWithIds.stream().map(DatasetItem::tags),
+                        editedItemEdits.stream().map(DatasetItemEdit::tags))
+                        .filter(tags -> tags != null && tags.size() > TagOperations.MAX_TAGS_PER_ITEM)
+                        .findFirst()
+                        .ifPresent(tags -> {
+                            throw new ClientErrorException(
+                                    Response.status(422)
+                                            .entity(new ErrorMessage(List.of(
+                                                    TagOperations.TAG_LIMIT_ERROR)))
+                                            .build());
+                        });
 
-                        // Validate tag limits on all items being inserted or edited
-                        Stream.concat(
-                                addedItemsWithIds.stream().map(DatasetItem::tags),
-                                editedItemEdits.stream().map(DatasetItemEdit::tags))
-                                .filter(tags -> tags != null && tags.size() > TagOperations.MAX_TAGS_PER_ITEM)
-                                .findFirst()
-                                .ifPresent(tags -> {
-                                    throw new ClientErrorException(
-                                            Response.status(422)
-                                                    .entity(new ErrorMessage(List.of(
-                                                            TagOperations.TAG_LIMIT_ERROR)))
-                                                    .build());
-                                });
+                // Edit items via INSERT...SELECT (merge happens in SQL, not Java)
+                Mono<Long> editedCountMono = versionDao.editItemsViaSelectInsert(
+                        datasetId, baseVersionId, newVersionId,
+                        editedItemEdits, rowIdToDatasetItemId, editedUuids);
 
-                        // Edit items via INSERT...SELECT (merge happens in SQL, not Java)
-                        Mono<Long> editedCountMono = versionDao.editItemsViaSelectInsert(
-                                datasetId, baseVersionId, newVersionId,
-                                editedItemEdits, rowIdToDatasetItemId, editedUuids);
+                // Apply delta for added items + copy unchanged (exclude edited + deleted)
+                return editedCountMono
+                        .flatMap(editedCount -> versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                                addedItemsWithIds, List.of(), deletedRowIds, unchangedUuids,
+                                editedDatasetItemIds)
+                                .map(otherCount -> editedCount + otherCount))
+                        .flatMap(itemsTotal -> {
+                            log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
-                        // Apply delta for added items + copy unchanged (exclude edited + deleted)
-                        return editedCountMono
-                                .flatMap(editedCount -> versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                        addedItemsWithIds, List.of(), deletedIds, unchangedUuids,
-                                        editedDatasetItemIds)
-                                        .map(otherCount -> editedCount + otherCount))
-                                .flatMap(itemsTotal -> {
-                                    log.info("Applied delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
-
-                                    return createVersionFromDelta(
-                                            datasetId,
-                                            newVersionId,
-                                            itemsTotal.intValue(),
-                                            baseVersionId,
-                                            changes.tags(),
-                                            changes.changeDescription(),
-                                            changes.evaluators(),
-                                            changes.executionPolicy(),
-                                            Boolean.TRUE.equals(changes.clearExecutionPolicy()),
-                                            null, // No batch group ID
-                                            workspaceId,
-                                            userName);
-                                });
-                    });
+                            return createVersionFromDelta(
+                                    datasetId,
+                                    newVersionId,
+                                    itemsTotal.intValue(),
+                                    baseVersionId,
+                                    changes.tags(),
+                                    changes.changeDescription(),
+                                    changes.evaluators(),
+                                    changes.executionPolicy(),
+                                    Boolean.TRUE.equals(changes.clearExecutionPolicy()),
+                                    null, // No batch group ID
+                                    workspaceId,
+                                    userName);
+                        });
+            });
         });
     }
 
@@ -1605,57 +1505,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             .build();
                 })
                 .toList();
-    }
-
-    private Mono<Map<UUID, UUID>> resolveEditMappings(Set<UUID> editedRowIds) {
-        if (editedRowIds.isEmpty()) {
-            return Mono.just(Map.of());
-        }
-
-        return versionDao.mapRowIdsToDatasetItemIds(editedRowIds)
-                .collectList()
-                .flatMap(mappings -> {
-                    Map<UUID, UUID> map = mappings.stream()
-                            .collect(Collectors.toMap(
-                                    DatasetItemVersionDAO.DatasetItemIdMapping::rowId,
-                                    DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId));
-
-                    Set<UUID> missing = editedRowIds.stream()
-                            .filter(id -> !map.containsKey(id))
-                            .collect(Collectors.toSet());
-
-                    if (!missing.isEmpty()) {
-                        return Mono.error(failWithNotFound("Items not found for IDs: " + missing));
-                    }
-                    return Mono.just(map);
-                });
-    }
-
-    /**
-     * Maps row IDs (from API response's 'id' field) to stable dataset_item_ids.
-     * The frontend sends row IDs but the versioned deletion logic needs dataset_item_ids.
-     */
-    private Mono<Set<UUID>> mapRowIdsToDatasetItemIds(Set<UUID> rowIds) {
-        if (rowIds == null || rowIds.isEmpty()) {
-            return Mono.just(Set.of());
-        }
-
-        return versionDao.mapRowIdsToDatasetItemIds(rowIds)
-                .collectList()
-                .map(mappings -> {
-                    if (mappings.isEmpty()) {
-                        // IDs might already be dataset_item_ids (from SDK or older clients)
-                        log.debug("No row ID mappings found, assuming IDs are already dataset_item_ids");
-                        return rowIds;
-                    }
-
-                    Set<UUID> datasetItemIds = mappings.stream()
-                            .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
-                            .collect(Collectors.toSet());
-
-                    log.debug("Mapped '{}' row IDs to '{}' dataset_item_ids", rowIds.size(), datasetItemIds.size());
-                    return datasetItemIds;
-                });
     }
 
     @Override
@@ -2240,14 +2089,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * @param ids the item IDs to delete (row IDs from client, may be null)
      * @return Mono emitting the resolved datasetId
      */
+    private Mono<UUID> resolveDatasetIdFromItemIds(Set<UUID> itemIds) {
+        return versionDao.resolveDatasetIdsFromItemIds(itemIds)
+                .flatMap(datasetIds -> {
+                    if (datasetIds.isEmpty()) {
+                        return Mono.empty();
+                    }
+                    if (datasetIds.size() > 1) {
+                        log.error("Item IDs span multiple datasets: '{}'", datasetIds);
+                        return Mono.error(new BadRequestException(
+                                "Cannot operate on items across multiple datasets"));
+                    }
+                    return Mono.just(datasetIds.getFirst());
+                });
+    }
+
     private Mono<UUID> getDatasetIdOrResolveItemDatasetId(UUID datasetId, Set<UUID> ids) {
         if (datasetId != null) {
             return Mono.just(datasetId);
         } else if (CollectionUtils.isNotEmpty(ids)) {
-            // Map row IDs to get dataset_id directly from the mapping
-            return versionDao.mapRowIdsToDatasetItemIds(ids)
-                    .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetId)
-                    .next(); // Get the first mapping's dataset_id (all should be from same dataset)
+            return resolveDatasetIdFromItemIds(ids);
         } else {
             return Mono.error(new BadRequestException("Must provide either datasetId or itemIds"));
         }
@@ -2277,54 +2138,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     createVersion);
         }
 
-        // First, map row IDs to dataset_item_ids
-        return versionDao.mapRowIdsToDatasetItemIds(ids)
-                .collectList()
-                .flatMap(mappings -> {
-                    // Determine the stable dataset_item_ids to use
-                    Set<UUID> datasetItemIds;
-                    UUID resolvedDatasetId = datasetId;
+        if (datasetId != null) {
+            return proceedWithGroupedDeletion(batchGroupId, ids, datasetId, filters, workspaceId, userName,
+                    createVersion);
+        }
 
-                    if (mappings.isEmpty()) {
-                        // No mappings found - IDs are already stable dataset_item_ids (SDK or direct usage)
-                        log.info("No row ID mappings found for batch_group_id '{}', treating as dataset_item_ids",
-                                batchGroupId);
-                        datasetItemIds = ids;
-
-                        // If datasetId is null, resolve it from any existing item (not just first)
-                        if (resolvedDatasetId == null && !ids.isEmpty()) {
-                            return versionDao.resolveDatasetIdFromItemIds(ids)
-                                    .flatMap(resolvedId -> {
-                                        log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId,
-                                                batchGroupId);
-                                        return proceedWithGroupedDeletion(batchGroupId, datasetItemIds, resolvedId,
-                                                filters, workspaceId, userName, createVersion);
-                                    })
-                                    .switchIfEmpty(Mono.defer(() -> {
-                                        log.info(
-                                                "None of the '{}' items found for batch_group_id '{}', treating as already deleted",
-                                                ids.size(), batchGroupId);
-                                        return Mono.empty();
-                                    }));
-                        }
-                    } else {
-                        // Successfully mapped row IDs to dataset_item_ids
-                        datasetItemIds = mappings.stream()
-                                .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
-                                .collect(Collectors.toSet());
-
-                        // If datasetId is null, use the dataset from the first mapping
-                        if (resolvedDatasetId == null) {
-                            resolvedDatasetId = mappings.get(0).datasetId();
-                        }
-
-                        log.info("Mapped '{}' row IDs to '{}' dataset_item_ids for batch_group_id '{}', dataset '{}'",
-                                ids.size(), datasetItemIds.size(), batchGroupId, resolvedDatasetId);
-                    }
-
-                    return proceedWithGroupedDeletion(batchGroupId, datasetItemIds, resolvedDatasetId,
-                            filters, workspaceId, userName, createVersion);
-                });
+        return resolveDatasetIdFromItemIds(ids)
+                .flatMap(resolvedId -> {
+                    log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId, batchGroupId);
+                    return proceedWithGroupedDeletion(batchGroupId, ids, resolvedId, filters, workspaceId, userName,
+                            createVersion);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("None of the '{}' items found for batch_group_id '{}', treating as already deleted",
+                            ids.size(), batchGroupId);
+                    return Mono.empty();
+                }));
     }
 
     /**

@@ -223,9 +223,9 @@ public interface DatasetItemVersionDAO {
      * This is more efficient than calling resolveDatasetIdFromItemId multiple times.
      *
      * @param datasetItemIds the set of stable item IDs (dataset_item_ids)
-     * @return Mono emitting the first resolved dataset ID, or empty if none of the IDs exist
+     * @return Mono emitting the list of distinct dataset IDs found, or empty list if none exist
      */
-    Mono<UUID> resolveDatasetIdFromItemIds(Set<UUID> datasetItemIds);
+    Mono<List<UUID>> resolveDatasetIdsFromItemIds(Set<UUID> datasetItemIds);
 
     /**
      * Gets an item by its dataset_item_id from a specific version.
@@ -249,15 +249,6 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItem> getItemsByDatasetItemIds(UUID datasetId, UUID versionId, Set<UUID> datasetItemIds);
 
     /**
-     * Maps row IDs (id field) to their corresponding stable item IDs (dataset_item_id).
-     * This is used when the frontend sends row IDs but we need stable IDs for operations.
-     *
-     * @param rowIds the row IDs (id field values)
-     * @return Flux emitting mappings of row ID to dataset_item_id
-     */
-    Flux<DatasetItemIdMapping> mapRowIdsToDatasetItemIds(Set<UUID> rowIds);
-
-    /**
      * Gets an item by its ID (id field).
      * This is used when the frontend sends the ID from the API response.
      *
@@ -267,19 +258,14 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItem> getItemById(UUID id);
 
     /**
-     * Gets workspace IDs for dataset item row IDs (id field from dataset_item_versions).
+     * Gets workspace IDs for stable dataset item IDs (dataset_item_id field from dataset_item_versions).
      * Used for validating that dataset items belong to the correct workspace.
      *
-     * @param datasetItemRowIds the row IDs (id field values from dataset_item_versions)
+     * @param datasetItemRowIds the stable dataset_item_id values
+     * @param workspaceId the workspace ID to scope the lookup
      * @return Mono emitting a list of workspace and resource ID pairs
      */
-    Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemRowIds);
-
-    /**
-     * Mapping from row ID to dataset_item_id.
-     */
-    record DatasetItemIdMapping(UUID rowId, UUID datasetItemId, UUID datasetId) {
-    }
+    Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemRowIds, String workspaceId);
 
     /**
      * Soft deletes all items from a specific dataset version.
@@ -345,14 +331,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY dataset_item_id DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             SELECT
-                id,
-                dataset_item_id,
+                dataset_item_id AS id,
                 dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
                 description,
@@ -371,10 +356,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            <if(lastRetrievedId)>AND id \\< :lastRetrievedId<endif>
+            <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY dataset_item_id DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
             <if(lastRetrievedId)>
             LIMIT :limit
             <else>
@@ -383,7 +368,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
-            SELECT count(DISTINCT id) as count
+            SELECT count(DISTINCT dataset_item_id) as count
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -526,8 +511,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <endif>
             , dataset_items_resolved AS (
                 SELECT
-                    div_dedup.id AS id,
-                    div_dedup.dataset_item_id AS dataset_item_id,
+                    div_dedup.dataset_item_id AS id,
                     div_dedup.data AS data,
                     div_dedup.source AS source,
                     div_dedup.trace_id AS trace_id,
@@ -546,6 +530,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS div_dedup
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY dataset_item_id
             )
             , experiment_items_final AS (
             	SELECT *
@@ -625,7 +611,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
             WITH dataset_items_scope AS (
                 SELECT DISTINCT
-                    div.id AS row_id,
                     div.dataset_item_id AS stable_id,
                     div.dataset_version_id
                 FROM experiments e
@@ -644,7 +629,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     dataset_item_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                AND dataset_item_id IN (SELECT row_id FROM dataset_items_scope)
+                AND dataset_item_id IN (SELECT stable_id FROM dataset_items_scope)
                 <if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -743,8 +728,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ),
             dataset_items_resolved AS (
                 SELECT
-                    div_dedup.id AS id,
-                    div_dedup.dataset_item_id AS dataset_item_id,
+                    div_dedup.dataset_item_id AS id,
                     div_dedup.data AS data,
                     div_dedup.description AS description,
                     div_dedup.source AS source,
@@ -766,6 +750,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS div_dedup
+                ORDER BY item_last_updated_at DESC
+                LIMIT 1 BY dataset_item_id
             ),
             feedback_scores_combined_raw AS (
                 SELECT
@@ -1353,7 +1339,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM dataset_item_versions
             WHERE dataset_item_id = :datasetItemId
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            ORDER BY last_updated_at DESC
             LIMIT 1
             """;
 
@@ -1364,7 +1350,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_item_id IN :datasetItemIds
             AND workspace_id = :workspace_id
             GROUP BY dataset_id
-            LIMIT 1
             """;
 
     private static final String SELECT_COLUMNS_BY_VERSION = """
@@ -1392,22 +1377,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             """;
 
-    private static final String SELECT_ITEM_ID_MAPPING_BY_ROW_IDS = """
-            SELECT
-                id,
-                dataset_item_id,
-                dataset_id
-            FROM dataset_item_versions
-            WHERE id IN :rowIds
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            """;
-
     private static final String SELECT_ITEM_BY_ID = """
             SELECT
-                id,
-                dataset_item_id,
+                dataset_item_id AS id,
                 dataset_id,
                 data,
                 description,
@@ -1423,25 +1395,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 item_last_updated_by as last_updated_by
             FROM dataset_item_versions
             WHERE workspace_id = :workspace_id
-            AND id = :id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            AND dataset_item_id = :id
+            ORDER BY last_updated_at DESC
             LIMIT 1
             """;
 
     private static final String SELECT_DATASET_WORKSPACE_ITEMS_BY_ROW_IDS = """
             SELECT DISTINCT
-                id,
+                dataset_item_id AS id,
                 workspace_id
             FROM dataset_item_versions
-            WHERE id IN :datasetItemRowIds
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            WHERE dataset_item_id IN :datasetItemRowIds
+            ORDER BY last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
             """;
 
     private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
             SELECT
-                id,
-                dataset_item_id,
+                dataset_item_id AS id,
                 dataset_id,
                 data,
                 description,
@@ -1460,7 +1431,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND dataset_item_id IN :datasetItemIds
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            ORDER BY dataset_item_id DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
             """;
 
@@ -1585,16 +1556,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     ei.trace_id
                 FROM experiment_items_scope ei
                 INNER JOIN (
-                    SELECT
-                        div.id,
-                        div.dataset_item_id
-                    FROM dataset_item_versions div
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id IN (SELECT resolved_version_id FROM experiments_resolved)
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
-                ) dibv ON dibv.id = ei.dataset_item_id
+                    SELECT div_dedup.dataset_item_id
+                    FROM (
+                        SELECT *
+                        FROM dataset_item_versions div
+                        WHERE div.workspace_id = :workspace_id
+                        AND div.dataset_id = :datasetId
+                        AND div.dataset_version_id IN (SELECT resolved_version_id FROM experiments_resolved)
+                        ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
+                        LIMIT 1 BY div.id
+                    ) div_dedup
+                    ORDER BY div_dedup.last_updated_at DESC
+                    LIMIT 1 BY div_dedup.dataset_item_id
+                ) dibv ON dibv.dataset_item_id = ei.dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT
@@ -1637,7 +1611,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     SELECT id
                     FROM (
                         SELECT
-                            div_dedup.id AS id,
+                            div_dedup.dataset_item_id AS id,
                             div_dedup.data AS data,
                             div_dedup.source AS source,
                             div_dedup.trace_id AS trace_id,
@@ -1657,6 +1631,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                             LIMIT 1 BY id
                         ) AS div_dedup
+                        ORDER BY last_updated_at DESC
+                        LIMIT 1 BY dataset_item_id
                     ) AS versioned
                     WHERE <dataset_item_filters>
                 )
@@ -1795,7 +1771,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String COUNT_ITEMS_IN_VERSION = """
-            SELECT count(DISTINCT id) as count
+            SELECT count(DISTINCT dataset_item_id) as count
             FROM dataset_item_versions
             WHERE workspace_id = :workspaceId
               AND dataset_id = :datasetId
@@ -1811,7 +1787,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String COUNT_ITEMS_IN_VERSIONS_BATCH = """
             SELECT
                 dataset_version_id,
-                count(DISTINCT id) as count
+                count(DISTINCT dataset_item_id) as count
             FROM dataset_item_versions
             WHERE (workspace_id, dataset_id, dataset_version_id) IN (<version_tuples>)
             GROUP BY dataset_version_id
@@ -2908,13 +2884,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<UUID> resolveDatasetIdFromItemIds(@NonNull Set<UUID> datasetItemIds) {
+    public Mono<List<UUID>> resolveDatasetIdsFromItemIds(@NonNull Set<UUID> datasetItemIds) {
         if (datasetItemIds.isEmpty()) {
-            log.debug("Empty dataset_item_ids set provided, returning empty");
-            return Mono.empty();
+            log.debug("Empty dataset_item_ids set provided, returning empty list");
+            return Mono.just(List.of());
         }
 
-        log.debug("Resolving dataset ID from '{}' item IDs", datasetItemIds.size());
+        log.debug("Resolving dataset IDs from '{}' item IDs", datasetItemIds.size());
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(RESOLVE_DATASET_ID_FROM_ITEM_IDS)
@@ -2930,14 +2906,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 return Flux.from(statement.execute())
                         .flatMap(result -> result
                                 .map((row, rowMetadata) -> UUID.fromString(row.get("dataset_id", String.class))))
-                        .next()
-                        .doOnSuccess(datasetId -> {
-                            if (datasetId != null) {
-                                log.debug("Resolved dataset '{}' from '{}' item IDs", datasetId, datasetItemIds.size());
-                            } else {
-                                log.debug("No dataset found for '{}' item IDs", datasetItemIds.size());
-                            }
-                        })
+                        .collectList()
+                        .doOnSuccess(datasetIds -> log.debug("Resolved '{}' dataset(s) from '{}' item IDs",
+                                datasetIds.size(), datasetItemIds.size()))
                         .doFinally(signalType -> endSegment(segment));
             });
         });
@@ -2992,9 +2963,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         Map.Entry::getKey,
                         entry -> com.comet.opik.utils.JsonUtils.getJsonNodeFromStringWithFallback(entry.getValue())));
 
+        UUID id = UUID.fromString(row.get("id", String.class));
         return DatasetItem.builder()
-                .id(UUID.fromString(row.get("id", String.class)))
-                .datasetItemId(UUID.fromString(row.get("dataset_item_id", String.class)))
+                .id(id)
+                .datasetItemId(id)
                 .datasetId(UUID.fromString(row.get("dataset_id", String.class)))
                 .data(data.isEmpty() ? null : data)
                 .description(DatasetItemResultMapper.getDescription(row, rowMetadata))
@@ -3046,30 +3018,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Flux<DatasetItemIdMapping> mapRowIdsToDatasetItemIds(@NonNull Set<UUID> rowIds) {
-        if (rowIds.isEmpty()) {
-            return Flux.empty();
-        }
-
-        log.debug("Mapping '{}' row IDs to dataset_item_ids", rowIds.size());
-
-        return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(SELECT_ITEM_ID_MAPPING_BY_ROW_IDS)
-                    .bind("rowIds", rowIds.toArray(UUID[]::new));
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "map_row_ids_to_dataset_item_ids");
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, rowMetadata) -> new DatasetItemIdMapping(
-                            UUID.fromString(row.get("id", String.class)),
-                            UUID.fromString(row.get("dataset_item_id", String.class)),
-                            UUID.fromString(row.get("dataset_id", String.class)))));
-        });
-    }
-
-    @Override
-    @WithSpan
     public Mono<DatasetItem> getItemById(@NonNull UUID id) {
         log.debug("Getting item by ID '{}'", id);
 
@@ -3100,7 +3048,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     @WithSpan
-    public Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(@NonNull Set<UUID> datasetItemRowIds) {
+    public Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(@NonNull Set<UUID> datasetItemRowIds,
+            @NonNull String workspaceId) {
         if (datasetItemRowIds.isEmpty()) {
             return Mono.just(List.of());
         }

@@ -434,7 +434,10 @@ public class DatasetsResource {
 
     @PUT
     @Path("/items")
-    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = "Create/update dataset items based on dataset item id", responses = {
+    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
+            Create/update dataset items based on dataset item id.
+            Each item's 'id' field is the stable identifier and upsert key.
+            Provide it to update an existing item, or omit it to create a new one.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited

@@ -209,12 +209,10 @@ public class ExperimentItemService {
             return Mono.just(true);
         }
 
-        // When versioning is enabled, dataset item IDs are row IDs from dataset_item_versions
+        // When versioning is enabled, dataset item IDs are stable dataset_item_id values from dataset_item_versions
         // When versioning is disabled, dataset item IDs are from dataset_items (legacy table)
-        // We need to check both tables to support backward compatibility
         if (featureFlags.isDatasetVersioningEnabled()) {
-            // Check versioned table
-            return datasetItemVersionDAO.getDatasetItemWorkspace(datasetItemIds)
+            return datasetItemVersionDAO.getDatasetItemWorkspace(datasetItemIds, workspaceId)
                     .map(items -> items.stream()
                             .allMatch(item -> workspaceId.equals(item.workspaceId())));
         }
