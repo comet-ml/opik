@@ -25,39 +25,24 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const { fieldType = "input" } = (custom ?? {}) as CustomMeta;
   const value = context.getValue() as string | object | undefined | null;
 
-  const rawValue = useMemo(() => {
-    let text = "";
-    if (isObject(value)) {
-      text = JSON.stringify(value, null, 2);
-    } else {
-      text = value ?? "-";
-    }
-
-    return text;
-  }, [value]);
-
-  const hasExceededLimit = useMemo(
-    () => truncationEnabled && rawValue.length > maxDataLength,
-    [rawValue, maxDataLength, truncationEnabled],
-  );
-
   const displayMessage = useMemo(() => {
-    if (!value || hasExceededLimit) {
-      return hasExceededLimit
-        ? rawValue.slice(0, maxDataLength) + " [truncated]"
-        : "-";
+    if (!value) return "-";
+
+    const pretty = prettifyMessage(value, { type: fieldType });
+
+    let message: string;
+    if (isObject(pretty.message)) {
+      message = JSON.stringify(value, null, 2);
+    } else {
+      message = pretty.message || "";
     }
 
-    const pretty = prettifyMessage(value, {
-      type: fieldType,
-    });
-
-    const message = isObject(pretty.message)
-      ? JSON.stringify(value, null, 2)
-      : pretty.message || "";
+    if (truncationEnabled && message.length > maxDataLength) {
+      return message.slice(0, maxDataLength) + " [truncated]";
+    }
 
     return message;
-  }, [value, hasExceededLimit, fieldType, rawValue, maxDataLength]);
+  }, [value, fieldType, truncationEnabled, maxDataLength]);
 
   const rowHeight =
     context.column.columnDef.meta?.overrideRowHeight ??
