@@ -68,6 +68,10 @@ class OpikTracer:
         self._opik_client = opik_client.get_client_cached()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
+        # Fallback span stack for cases where ContextVar is not accessible across async
+        # context boundaries (e.g. SSE streaming + OTel context managers in ADK context caching).
+        # Acts as a LIFO stack mirroring context_storage, used when top_span_data() returns None.
+        self._pending_llm_spans: List[span.SpanData] = []
 
         patchers.patch_adk(
             self._opik_client, distributed_headers=self._distributed_headers
@@ -242,6 +246,7 @@ class OpikTracer:
             )
 
             context_storage.add_span_data(result.span_data)
+            self._pending_llm_spans.append(result.span_data)
 
             # Track request start time for time-to-first-token calculation
             request_start_time = time.time()
@@ -278,10 +283,19 @@ class OpikTracer:
 
             current_span = context_storage.top_span_data()
             if current_span is None:
-                LOGGER.warning(
-                    "No current span found in context for model output update"
-                )
-                return
+                # ContextVar may be inaccessible across async context boundaries
+                # (e.g. SSE streaming combined with OTel context managers in ADK context
+                # caching). Fall back to the instance-level pending spans list.
+                if self._pending_llm_spans:
+                    current_span = self._pending_llm_spans[-1]
+                    LOGGER.debug(
+                        "Falling back to instance-level span tracking for model output update"
+                    )
+                else:
+                    LOGGER.warning(
+                        "No current span found in context for model output update"
+                    )
+                    return
 
             # Store span_id early for cleanup on all exit paths
             span_id = current_span.id
@@ -355,6 +369,11 @@ class OpikTracer:
             )
 
             context_storage.pop_span_data(ensure_id=current_span.id)
+            if (
+                self._pending_llm_spans
+                and self._pending_llm_spans[-1].id == current_span.id
+            ):
+                self._pending_llm_spans.pop()
             current_span.init_end_time()
             # We close this span manually because otherwise ADK will close it too late,
             # and it will also add tool spans inside of it, which we want to avoid.
@@ -443,8 +462,9 @@ class OpikTracer:
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("_opik_client", None)
-        # Don't serialize TTFT tracking as it's runtime state
+        # Don't serialize runtime state
         state.pop("_ttft_tracking", None)
+        state.pop("_pending_llm_spans", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
