@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from .. import id_helpers
 from ..rest_api.client import OpikApi
-from ..rest_api.types.log_entry import LogEntry
+from ..rest_api.types.local_runner_log_entry import LocalRunnerLogEntry
 from .agents_registry import AgentInfo
 
 LOGGER = logging.getLogger(__name__)
@@ -263,7 +263,9 @@ def _flush_logs(
     try:
         api.runners.append_job_logs(
             job_id,
-            request=[LogEntry(stream=e["stream"], text=e["text"]) for e in logs],
+            request=[
+                LocalRunnerLogEntry(stream=e["stream"], text=e["text"]) for e in logs
+            ],
         )
     except Exception:
         LOGGER.debug("Failed to flush logs for job %s", job_id, exc_info=True)
