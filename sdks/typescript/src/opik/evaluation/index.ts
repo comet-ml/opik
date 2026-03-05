@@ -8,3 +8,5 @@ export * from "./evaluatePrompt";
 export * from "./metrics";
 export * from "./models";
 export * from "./types";
+export * from "./suite";
+export * from "./suite_evaluators";

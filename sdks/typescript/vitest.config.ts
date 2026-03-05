@@ -11,6 +11,7 @@ const config = {
     setupFiles: ["./tests/setup.ts"],
     env: {
       OPIK_API_KEY: process.env.OPIK_API_KEY || "test-api-key",
+      OPIK_CONFIG_PATH: "/dev/null",
       // Pass through OPIK_URL_OVERRIDE for local testing (only if set)
       ...(process.env.OPIK_URL_OVERRIDE && {
         OPIK_URL_OVERRIDE: process.env.OPIK_URL_OVERRIDE,

@@ -18,6 +18,7 @@ export interface ExperimentData {
   name?: string;
   datasetName: string;
   prompts?: Prompt[];
+  tags?: string[];
 }
 
 /**
@@ -28,19 +29,21 @@ export class Experiment {
   private _name?: string;
   public readonly datasetName: string;
   public readonly prompts?: Prompt[];
+  public readonly tags?: string[];
 
   /**
    * Creates a new Experiment instance.
    * This should not be created directly, use static factory methods instead.
    */
   constructor(
-    { id, name, datasetName, prompts }: ExperimentData,
+    { id, name, datasetName, prompts, tags }: ExperimentData,
     private opik: OpikClient
   ) {
     this.id = id || generateId();
     this._name = name;
     this.datasetName = datasetName;
     this.prompts = prompts;
+    this.tags = tags;
   }
 
   /**
