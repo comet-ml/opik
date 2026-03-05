@@ -134,8 +134,8 @@ def backend_value_to_python_value(
 
 def extract_dataclass_fields(
     cls: type,
-) -> typing.List[typing.Tuple[str, typing.Any, typing.Any, typing.Optional[str]]]:
-    """Returns (field_name, field_type, default_or_MISSING, description) for supported fields."""
+) -> typing.List[typing.Tuple[str, typing.Any, typing.Optional[str]]]:
+    """Returns (field_name, field_type, description) for supported fields."""
     if not dataclasses.is_dataclass(cls):
         raise TypeError(f"{cls} is not a dataclass")
 
@@ -155,11 +155,5 @@ def extract_dataclass_fields(
             py_type = inner
         if not is_supported_type(py_type):
             continue
-        if f.default is not dataclasses.MISSING:
-            default = f.default
-        elif f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-            default = f.default_factory()
-        else:
-            default = dataclasses.MISSING
-        result.append((f.name, py_type, default, description))
+        result.append((f.name, py_type, description))
     return result

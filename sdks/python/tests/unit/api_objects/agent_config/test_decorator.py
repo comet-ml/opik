@@ -1014,6 +1014,31 @@ class TestConfigDecoratorContextMask:
         mock_backend.agent_configs.get_blueprint_by_env.assert_not_called()
 
 
+class TestConfigDecoratorDefaultFactory:
+    def test_default_factory_prompt__instantiated_exactly_once(self, mock_backend):
+        factory_call_count = 0
+
+        def counting_factory():
+            nonlocal factory_call_count
+            factory_call_count += 1
+            p = mock.Mock(spec=Prompt)
+            p.commit = "abc123"
+            return p
+
+        @agent_config_decorator
+        @dataclasses.dataclass
+        class MyConfig:
+            system_prompt: Prompt = dataclasses.field(default_factory=counting_factory)
+
+        assert factory_call_count == 0, "factory must not be called at decoration time"
+        config = MyConfig()
+        assert factory_call_count == 1, (
+            "factory must be called exactly once on instantiation"
+        )
+        config.system_prompt
+        assert factory_call_count == 1, "factory must not be called on attribute access"
+
+
 class TestConfigDecoratorAnnotatedDescriptions:
     def test_annotated_field__description_sent_to_backend(self, mock_backend):
         @agent_config_decorator
