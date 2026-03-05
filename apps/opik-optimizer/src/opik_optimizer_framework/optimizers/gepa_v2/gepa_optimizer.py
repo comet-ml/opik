@@ -20,13 +20,30 @@ from opik_optimizer_framework.types import (
 )
 
 from .gepa_adapter import (
+    SYSTEM_PROMPT_KEY,
     DatasetItem,
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
-    build_seed_candidate,
 )
 
 logger = logging.getLogger(__name__)
+
+
+PROMPT_KEYS = frozenset({SYSTEM_PROMPT_KEY})
+
+
+def _build_seed_candidate(baseline_config: dict) -> dict[str, str]:
+    return {
+        k: str(v) for k, v in baseline_config.items()
+        if k in PROMPT_KEYS and isinstance(v, str)
+    }
+
+
+def _make_config_builder(baseline_config: dict):
+    def build(candidate: dict[str, str]) -> dict:
+        return {**baseline_config, **candidate}
+    return build
+
 
 GENERALIZATION_REFLECTION_TEMPLATE = """\
 I provided an assistant with the following instructions to perform a task for me:
@@ -120,7 +137,7 @@ class GepaV2Optimizer:
         )
         max_candidates = params.get("max_candidates", 5)
 
-        seed_candidate = build_seed_candidate(context.prompt_messages)
+        seed_candidate = _build_seed_candidate(context.baseline_config)
 
         # Combine train + val into a single dataset (no split).
         seen_ids: set[str] = set()
@@ -136,9 +153,9 @@ class GepaV2Optimizer:
             "max_metric_calls", max_candidates * effective_n_samples * 5
         )
 
+        config_builder = _make_config_builder(context.baseline_config)
         adapter = FrameworkGEPAAdapter(
-            base_messages=context.prompt_messages,
-            baseline_config=context.baseline_config,
+            config_builder=config_builder,
             evaluation_adapter=evaluation_adapter,
             reflection_lm=context.model,
             reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,

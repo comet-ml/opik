@@ -55,8 +55,7 @@ class EvaluationAdapter:
 
     @staticmethod
     def _make_cache_key(config: CandidateConfig, dataset_item_ids: list[str]) -> str:
-        prompt_messages = config.get("prompt_messages", [])
-        raw = json.dumps(prompt_messages, sort_keys=True) + "\0" + ",".join(sorted(dataset_item_ids))
+        raw = json.dumps(config, sort_keys=True, default=str) + "\0" + ",".join(sorted(dataset_item_ids))
         return hashlib.sha256(raw.encode()).hexdigest()
 
     def _resolve_step_index(self, parent_candidate_ids: list[str] | None) -> int:

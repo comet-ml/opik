@@ -183,7 +183,6 @@ def main():
         optimizer_type=optimizer_type,
         optimizer_parameters=optimizer_parameters,
         baseline_config={
-            "prompt_messages": PROMPT_MESSAGES,
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 256},
         },

@@ -8,12 +8,15 @@ pytest.importorskip("gepa")
 from opik_optimizer_framework.optimizers.gepa_v2.gepa_adapter import (
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
+    SYSTEM_PROMPT_KEY,
     _candidate_key,
     _extract_per_item_feedback,
-    build_seed_candidate,
-    rebuild_prompt_messages,
 )
-from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import GepaV2Optimizer
+from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import (
+    GepaV2Optimizer,
+    _build_seed_candidate,
+    _make_config_builder,
+)
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationState,
@@ -25,16 +28,12 @@ from opik_optimizer_framework.types import (
 
 
 def _make_context(**overrides):
-    prompt_messages = [
-        {"role": "system", "content": "You are helpful."},
-        {"role": "user", "content": "Answer: {question}"},
-    ]
     defaults = dict(
         optimization_id="opt-gepa-test",
         dataset_name="test-dataset",
-        prompt_messages=prompt_messages,
+        prompt_messages=[],
         model="openai/gpt-4o-mini",
-        model_parameters={"temperature": 0.5},
+        model_parameters={},
         metric_type="equals",
         metric_parameters={},
         optimizer_type="GepaV2Optimizer",
@@ -44,7 +43,8 @@ def _make_context(**overrides):
             "seed": 42,
         },
         baseline_config={
-            "prompt_messages": prompt_messages,
+            "system_prompt": "You are helpful.",
+            "user_message": "Answer: {question}",
             "model": "openai/gpt-4o-mini",
             "model_parameters": {"temperature": 0.5},
         },
@@ -93,9 +93,9 @@ def _make_inst(item_id, question="Q"):
 
 def _build_adapter(mock_eval_adapter):
     """Create a FrameworkGEPAAdapter with a mocked EvaluationAdapter."""
+    baseline_config = {"system_prompt": "Hi", "user_message": "Say {question}", "model": "test-model"}
     return FrameworkGEPAAdapter(
-        base_messages=[{"role": "user", "content": "Hi"}],
-        baseline_config={"prompt_messages": [{"role": "user", "content": "Hi"}], "model": "test-model"},
+        config_builder=_make_config_builder(baseline_config),
         evaluation_adapter=mock_eval_adapter,
     )
 
@@ -104,73 +104,45 @@ def _build_adapter(mock_eval_adapter):
 
 
 class TestBuildSeedCandidate:
-    def test_builds_from_messages(self):
-        messages = [
-            {"role": "system", "content": "Be helpful."},
-            {"role": "user", "content": "Hello {name}"},
-        ]
-        seed = build_seed_candidate(messages)
-        assert seed == {"system_0": "Be helpful.", "user_1": "Hello {name}"}
+    def test_extracts_prompt_key(self):
+        config = {"system_prompt": "Be helpful.", "model": "gpt-4o"}
+        seed = _build_seed_candidate(config)
+        assert seed == {SYSTEM_PROMPT_KEY: "Be helpful."}
 
-    def test_uses_name_field_when_provided(self):
-        messages = [
-            {"role": "system", "content": "Be helpful.", "name": "instructions"},
-            {"role": "user", "content": "Hello {name}"},
-        ]
-        seed = build_seed_candidate(messages)
-        assert seed == {"instructions": "Be helpful.", "user_1": "Hello {name}"}
+    def test_ignores_non_prompt_keys(self):
+        config = {"system_prompt": "Be helpful.", "model": "gpt-4o", "temperature": "0.5"}
+        seed = _build_seed_candidate(config)
+        assert seed == {SYSTEM_PROMPT_KEY: "Be helpful."}
+        assert len(seed) == 1
 
-    def test_excludes_template_only_messages(self):
-        messages = [
-            {"role": "system", "content": "Be helpful."},
-            {"role": "user", "content": "{question}"},
-        ]
-        seed = build_seed_candidate(messages)
-        assert seed == {"system_0": "Be helpful."}
-        assert "user_1" not in seed
+    def test_empty_config(self):
+        assert _build_seed_candidate({}) == {}
 
-    def test_keeps_messages_with_text_around_template(self):
-        messages = [
-            {"role": "system", "content": "Be helpful."},
-            {"role": "user", "content": "Question: {question}\nContext: {context}"},
-        ]
-        seed = build_seed_candidate(messages)
-        assert "user_1" in seed
-
-    def test_empty_messages(self):
-        assert build_seed_candidate([]) == {}
+    def test_no_prompt_key(self):
+        config = {"model": "gpt-4o", "model_parameters": {}}
+        assert _build_seed_candidate(config) == {}
 
 
-class TestRebuildPromptMessages:
-    def test_uses_candidate_values(self):
-        base = [
-            {"role": "system", "content": "original"},
-            {"role": "user", "content": "original user"},
-        ]
-        candidate = {"system_0": "improved", "user_1": "improved user"}
-        result = rebuild_prompt_messages(base, candidate)
-        assert result[0]["content"] == "improved"
-        assert result[1]["content"] == "improved user"
+class TestMakeConfigBuilder:
+    def test_merges_candidate_into_baseline(self):
+        baseline = {"system_prompt": "original", "model": "gpt-4o"}
+        builder = _make_config_builder(baseline)
+        result = builder({SYSTEM_PROMPT_KEY: "improved"})
+        assert result["system_prompt"] == "improved"
+        assert result["model"] == "gpt-4o"
 
-    def test_falls_back_to_original(self):
-        base = [
-            {"role": "system", "content": "original"},
-            {"role": "user", "content": "original user"},
-        ]
-        candidate = {"system_0": "improved"}
-        result = rebuild_prompt_messages(base, candidate)
-        assert result[0]["content"] == "improved"
-        assert result[1]["content"] == "original user"
+    def test_candidate_overrides_baseline(self):
+        baseline = {"system_prompt": "original", "user_message": "{q}"}
+        builder = _make_config_builder(baseline)
+        result = builder({SYSTEM_PROMPT_KEY: "new"})
+        assert result["system_prompt"] == "new"
+        assert result["user_message"] == "{q}"
 
-    def test_uses_name_field_when_provided(self):
-        base = [
-            {"role": "system", "content": "original", "name": "instructions"},
-            {"role": "user", "content": "original user"},
-        ]
-        candidate = {"instructions": "improved", "user_1": "improved user"}
-        result = rebuild_prompt_messages(base, candidate)
-        assert result[0]["content"] == "improved"
-        assert result[1]["content"] == "improved user"
+    def test_empty_candidate(self):
+        baseline = {"system_prompt": "original", "model": "gpt-4o"}
+        builder = _make_config_builder(baseline)
+        result = builder({})
+        assert result == baseline
 
 
 class TestExtractPerItemFeedback:
@@ -248,7 +220,6 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, raw_result)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._base_messages = [{"role": "user", "content": "Say {question}"}]
 
         insts = [
             {"id": "id-1", "question": "Q1"},
@@ -257,7 +228,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         result = adapter.evaluate(
             batch=insts,
-            candidate={"user_0": "Say {question}"},
+            candidate={SYSTEM_PROMPT_KEY: "Say {question}"},
         )
 
         mock_eval_adapter.evaluate_with_details.assert_called_once()
@@ -278,7 +249,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         adapter = _build_adapter(mock_eval_adapter)
 
-        result = adapter.evaluate(batch=[_make_inst("id-1")], candidate={"user_0": "Hi"})
+        result = adapter.evaluate(batch=[_make_inst("id-1")], candidate={SYSTEM_PROMPT_KEY: "Hi"})
         assert result.scores == [0.6]
 
     @patch("gepa.core.adapter.EvaluationBatch")
@@ -290,7 +261,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        candidate = {"user_0": "Hello"}
+        candidate = {SYSTEM_PROMPT_KEY: "Hello"}
         adapter.evaluate(
             batch=[_make_inst("x")],
             candidate=candidate,
@@ -312,7 +283,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -333,7 +304,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -354,7 +325,7 @@ class TestFrameworkGEPAAdapterEvaluate:
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -371,12 +342,12 @@ class TestFrameworkGEPAAdapterEvaluate:
         adapter = _build_adapter(mock_eval_adapter)
         adapter._current_step = 3
         # Pre-register the candidate so it's "known"
-        adapter._known_candidates[_candidate_key({"user_0": "Hi"})] = "c-prev"
+        adapter._known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "Hi"})] = "c-prev"
         adapter._candidate_parents["c-prev"] = []
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -401,8 +372,8 @@ class TestAdapterParentTracking:
         ]
 
         adapter = _build_adapter(mock_eval_adapter)
-        parent_candidate = {"user_0": "parent prompt"}
-        child_candidate = {"user_0": "child prompt"}
+        parent_candidate = {SYSTEM_PROMPT_KEY: "parent prompt"}
+        child_candidate = {SYSTEM_PROMPT_KEY: "child prompt"}
 
         # Pre-populate: parent was evaluated in a previous step
         adapter._known_candidates[_candidate_key(parent_candidate)] = "parent-1"
@@ -438,7 +409,7 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        candidate = {"user_0": "test"}
+        candidate = {SYSTEM_PROMPT_KEY: "test"}
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -466,7 +437,7 @@ class TestAdapterParentTracking:
 
         adapter.evaluate(
             batch=[_make_inst("z")],
-            candidate={"user_0": "merged prompt"},
+            candidate={SYSTEM_PROMPT_KEY: "merged prompt"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -500,7 +471,7 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        candidate = {"user_0": "same prompt"}
+        candidate = {SYSTEM_PROMPT_KEY: "same prompt"}
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -528,9 +499,9 @@ class TestAdapterParentTracking:
         adapter = _build_adapter(mock_eval_adapter)
         adapter._gepa_idx_to_candidate_id[0] = "parent-1"
         adapter._candidate_parents["parent-1"] = []
-        adapter._known_candidates[_candidate_key({"user_0": "parent prompt"})] = "parent-1"
+        adapter._known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "parent prompt"})] = "parent-1"
 
-        child_candidate = {"user_0": "child prompt"}
+        child_candidate = {SYSTEM_PROMPT_KEY: "child prompt"}
 
         adapter._on_new_step(0)
         adapter._on_candidate_selected(0)
@@ -563,7 +534,7 @@ class TestAdapterParentTracking:
         adapter._on_new_step(3)
 
         batch = [_make_inst("id-1"), _make_inst("id-2")]
-        adapter.evaluate(batch=batch, candidate={"user_0": "test"}, capture_traces=True)
+        adapter.evaluate(batch=batch, candidate={SYSTEM_PROMPT_KEY: "test"}, capture_traces=True)
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
         assert call_kwargs["batch_index"] == 3
@@ -591,7 +562,7 @@ class TestAdapterParentTracking:
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "new prompt"},
+            candidate={SYSTEM_PROMPT_KEY: "new prompt"},
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
@@ -615,7 +586,7 @@ class TestAdapterParentTracking:
         # evaluate() arg says capture_traces=False — on_evaluation_start should win
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "test"},
+            candidate={SYSTEM_PROMPT_KEY: "test"},
             capture_traces=False,
         )
 
@@ -636,7 +607,7 @@ class TestAdapterParentTracking:
 
         adapter.evaluate(
             batch=[_make_inst("x")],
-            candidate={"user_0": "test"},
+            candidate={SYSTEM_PROMPT_KEY: "test"},
         )
 
         assert adapter._pending_eval_parent_ids is None
@@ -657,7 +628,7 @@ class TestAdapterParentTracking:
         adapter._gepa_idx_to_candidate_id[0] = "parent-1"
         adapter._selected_parent_id = "parent-1"
 
-        child_candidate = {"user_0": "new child"}
+        child_candidate = {SYSTEM_PROMPT_KEY: "new child"}
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -693,7 +664,7 @@ class TestGEPAProgressCallback:
         callback.on_candidate_selected({
             "iteration": 1,
             "candidate_idx": 2,
-            "candidate": {"user_0": "test"},
+            "candidate": {SYSTEM_PROMPT_KEY: "test"},
             "score": 0.8,
         })
 
@@ -706,7 +677,7 @@ class TestGEPAProgressCallback:
         callback.on_valset_evaluated({
             "iteration": 1,
             "candidate_idx": 2,
-            "candidate": {"user_0": "test"},
+            "candidate": {SYSTEM_PROMPT_KEY: "test"},
             "scores_by_val_id": {},
             "average_score": 0.8,
             "num_examples_evaluated": 5,
@@ -716,7 +687,7 @@ class TestGEPAProgressCallback:
             "outputs_by_val_id": None,
         })
 
-        adapter._on_valset_evaluated.assert_called_once_with(2, {"user_0": "test"})
+        adapter._on_valset_evaluated.assert_called_once_with(2, {SYSTEM_PROMPT_KEY: "test"})
 
     def test_on_evaluation_start_forwards_to_adapter(self):
         adapter = MagicMock()
@@ -781,14 +752,14 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        assert "user_0" in result
-        assert len(result["user_0"]) == 1
-        feedback = result["user_0"][0]["Feedback"]
+        assert SYSTEM_PROMPT_KEY in result
+        assert len(result[SYSTEM_PROMPT_KEY]) == 1
+        feedback = result[SYSTEM_PROMPT_KEY][0]["Feedback"]
         assert "FAILED assertions" in feedback
         assert "- Assertion: security concern" in feedback
         assert "  Reason: The response does not address the security concern" in feedback
@@ -821,12 +792,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        feedback = result["user_0"][0]["Feedback"]
+        feedback = result[SYSTEM_PROMPT_KEY][0]["Feedback"]
         assert "PASSED assertions" in feedback
         assert "FAILED" not in feedback
 
@@ -846,12 +817,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        inputs = result["user_0"][0]["Inputs"]
+        inputs = result[SYSTEM_PROMPT_KEY][0]["Inputs"]
         assert inputs["question"] == "What is X?"
         assert inputs["context"] == "X is a thing"
         assert inputs["extra"] == "42"
@@ -873,13 +844,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"system_0": "Be helpful", "user_1": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Be helpful"},
             eval_batch=eval_batch,
             components_to_update=[],
         )
 
-        assert "system_0" in result
-        assert "user_1" in result
+        assert SYSTEM_PROMPT_KEY in result
 
     def test_multiple_runs_consolidated_into_single_record(self):
         adapter = _build_adapter(MagicMock())
@@ -908,12 +878,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        records = result["user_0"]
+        records = result[SYSTEM_PROMPT_KEY]
         assert len(records) == 1
         record = records[0]
         assert record["Inputs"]["question"] == "Q1"
@@ -961,12 +931,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        record = result["user_0"][0]
+        record = result[SYSTEM_PROMPT_KEY][0]
         assert "0/2 runs passed" in record["Summary"]
         assert "Consistent failures: tone" in record["Summary"]
         assert "clarity" not in record["Summary"]
@@ -997,12 +967,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        records = result["user_0"]
+        records = result[SYSTEM_PROMPT_KEY]
         assert len(records) == 2
         assert records[0]["Inputs"]["question"] == "hard"
         assert records[1]["Inputs"]["question"] == "easy"
@@ -1025,12 +995,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        record = result["user_0"][0]
+        record = result[SYSTEM_PROMPT_KEY][0]
         assert "Generated Outputs" in record
         assert "Feedback" in record
         assert "Runs" not in record
@@ -1070,12 +1040,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        runs_text = result["user_0"][0]["Runs"]
+        runs_text = result[SYSTEM_PROMPT_KEY][0]["Runs"]
         assert "- Assertion: Response addresses concern" in runs_text
         assert "  Reason: The response is too generic" in runs_text
         assert "- Response is relevant" in runs_text
@@ -1098,12 +1068,12 @@ class TestMakeReflectiveDataset:
         )
 
         result = adapter.make_reflective_dataset(
-            candidate={"user_0": "Hi"},
+            candidate={SYSTEM_PROMPT_KEY: "Hi"},
             eval_batch=eval_batch,
-            components_to_update=["user_0"],
+            components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        feedback = result["user_0"][0]["Feedback"]
+        feedback = result[SYSTEM_PROMPT_KEY][0]["Feedback"]
         assert "- Assertion: tone check" in feedback
         assert "Reason" not in feedback
 
@@ -1135,8 +1105,7 @@ class TestGepaV2Optimizer:
         mock_optimize.assert_called_once()
         call_kwargs = mock_optimize.call_args.kwargs
         assert call_kwargs["seed_candidate"] == {
-            "system_0": "You are helpful.",
-            "user_1": "Answer: {question}",
+            SYSTEM_PROMPT_KEY: "You are helpful.",
         }
         assert call_kwargs["reflection_lm"] == "openai/gpt-4o-mini"
         assert call_kwargs["seed"] == 42

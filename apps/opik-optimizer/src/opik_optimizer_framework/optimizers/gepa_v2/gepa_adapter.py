@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
 
@@ -25,50 +24,12 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from gepa.core.adapter import EvaluationBatch
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
-    from opik_optimizer_framework.types import CandidateConfig, TrialResult
+    from opik_optimizer_framework.types import TrialResult
 
 
 DatasetItem = dict[str, Any]
 
-
-_TEMPLATE_ONLY_RE = re.compile(r"^\s*\{\w+\}\s*$")
-
-
-def _message_key(msg: dict[str, str], idx: int) -> str:
-    return msg.get("name") or f"{msg['role']}_{idx}"
-
-
-def _is_template_only(content: str) -> bool:
-    """True if content is a single template variable like ``{question}``."""
-    return bool(_TEMPLATE_ONLY_RE.match(content))
-
-
-def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
-    """Build the initial GEPA seed candidate from the framework's prompt_messages list.
-
-    Uses ``msg["name"]`` as key when provided, falls back to ``{role}_{index}``.
-    Messages that are pure template variables (e.g. ``{question}``) are excluded —
-    they are pass-through inputs and should not be optimized.
-    """
-    seed: dict[str, str] = {}
-    for idx, msg in enumerate(prompt_messages):
-        content = msg.get("content", "")
-        if _is_template_only(content):
-            continue
-        seed[_message_key(msg, idx)] = content
-    return seed
-
-
-def rebuild_prompt_messages(
-    base_messages: list[dict[str, str]],
-    candidate: dict[str, str],
-) -> list[dict[str, str]]:
-    """Rebuild prompt messages from GEPA candidate, falling back to originals."""
-    messages: list[dict[str, str]] = []
-    for idx, msg in enumerate(base_messages):
-        content = candidate.get(_message_key(msg, idx), msg.get("content", ""))
-        messages.append({"role": msg["role"], "content": content})
-    return messages
+SYSTEM_PROMPT_KEY = "system_prompt"
 
 
 def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
@@ -174,14 +135,12 @@ class FrameworkGEPAAdapter:
 
     def __init__(
         self,
-        base_messages: list[dict[str, str]],
-        baseline_config: CandidateConfig,
+        config_builder: Any,
         evaluation_adapter: EvaluationAdapter,
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
     ) -> None:
-        self._base_messages = base_messages
-        self._baseline_config = baseline_config
+        self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
         self._reflection_lm = reflection_lm
         self._reflection_prompt_template = reflection_prompt_template
@@ -419,14 +378,13 @@ class FrameworkGEPAAdapter:
         eval_purpose = self._determine_eval_purpose(key, effective_capture_traces)
         parent_candidate_ids = self._resolve_parent_ids(key)
 
-        prompt_messages = rebuild_prompt_messages(self._base_messages, candidate)
         dataset_item_ids = [
             str(inst.get("id"))
             for inst in batch
             if inst.get("id") is not None
         ]
 
-        config = {**self._baseline_config, "prompt_messages": prompt_messages}
+        config = self._config_builder(candidate)
 
         batch_index = self._current_step if self._current_step >= 0 else None
 

@@ -162,9 +162,9 @@ def main():
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
-        prompt_messages=PROMPT_MESSAGES,
+        prompt_messages=[],
         model=MODEL,
-        model_parameters={"temperature": 0.7, "max_tokens": 512},
+        model_parameters={},
         metric_type=OBJECTIVE_NAME,
         metric_parameters={},
         optimizer_type=optimizer_type,
@@ -174,7 +174,8 @@ def main():
             "seed": 42,
         },
         baseline_config={
-            "prompt_messages": PROMPT_MESSAGES,
+            "system_prompt": "You are a customer support agent. Answer questions briefly.",
+            "user_message": "{question}",
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },

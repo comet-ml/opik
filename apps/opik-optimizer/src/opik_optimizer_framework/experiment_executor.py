@@ -76,7 +76,6 @@ def run_experiment_with_details(
     dataset = client.get_dataset(dataset_name)
 
     config_for_metadata = dict(candidate.config)
-    config_for_metadata["prompt"] = config_for_metadata.get("prompt_messages", [])
 
     experiment_config = {
         "metric": metric_type,
@@ -119,7 +118,7 @@ def run_experiment_with_details(
         metric_scores={metric_type: score},
         experiment_id=getattr(result, "experiment_id", None),
         experiment_name=getattr(result, "experiment_name", None),
-        prompt_messages=candidate.config["prompt_messages"],
+        prompt_messages=candidate.config.get("prompt_messages", []),
         parent_candidate_ids=candidate.parent_candidate_ids,
     )
     return trial, result
