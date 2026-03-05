@@ -52,6 +52,9 @@ export interface EvaluateOptions<T = Record<string, unknown>> {
    * Allows renaming keys from dataset or task output to match what metrics expect
    */
   scoringKeyMapping?: ScoringKeyMappingType;
+
+  /** Optional list of tags to associate with the experiment */
+  tags?: string[];
 }
 
 export async function evaluate<T = Record<string, unknown>>(
@@ -79,6 +82,7 @@ export async function evaluate<T = Record<string, unknown>>(
     experimentConfig: options.experimentConfig,
     prompts: options.prompts,
     datasetVersionId: versionInfo?.id,
+    tags: options.tags,
   });
 
   try {

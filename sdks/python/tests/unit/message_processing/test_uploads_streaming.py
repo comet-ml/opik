@@ -30,6 +30,7 @@ def streamer_with_file_upload_manager(
             rest_client=mock.Mock(),
             file_upload_manager=file_upload_manager,
             fallback_replay_manager=mock.Mock(),
+            unauthorized_message_types_registry=mock.Mock(),
         )
         streamer_ = streamer_constructors.construct_streamer(
             message_processor=online,
