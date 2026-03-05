@@ -65,6 +65,7 @@ from ..message_processing import (
     messages,
     streamer_constructors,
     message_queue,
+    permissions,
 )
 from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
@@ -208,12 +209,14 @@ class Opik:
 
         fallback_replay = self._create_replay_manager()
 
-        self.__internal_api__message_processor__ = (
-            message_processors_chain.create_message_processors_chain(
-                rest_client=self._rest_client,
-                file_upload_manager=file_uploader,
-                fallback_replay_manager=fallback_replay,
-            )
+        self.__internal_api__message_processor__ = message_processors_chain.create_message_processors_chain(
+            rest_client=self._rest_client,
+            file_upload_manager=file_uploader,
+            fallback_replay_manager=fallback_replay,
+            unauthorized_message_types_registry=permissions.UnauthorizedMessageTypeRegistry(
+                retry_interval_seconds=self._config.unauthorized_message_type_retry_interval,
+                max_retry_count=self._config.unauthorized_message_type_max_retry_count,
+            ),
         )
         self._streamer = streamer_constructors.construct_online_streamer(
             file_uploader=file_uploader,
