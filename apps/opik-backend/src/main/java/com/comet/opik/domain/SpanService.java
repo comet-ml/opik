@@ -487,13 +487,24 @@ public class SpanService {
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return spanDAO.getSpanIdsForTraces(traceIds, projectId)
-                    .flatMap(
-                            spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
-                                    .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
-                                    .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
-                                    .then(Mono.defer(() -> spanDAO.deleteByIds(spanIds, projectId)))
-                                    .thenReturn(spanIds))
-                    .doOnSuccess(spanIds -> eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName)))
+                    .flatMap(spanIds -> {
+                        if (spanIds.isEmpty()) {
+                            return Mono.empty();
+                        }
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                                .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
+                                .then(spanDAO.deleteByIds(spanIds, projectId)
+                                        .doOnSuccess(__ -> log.info(
+                                                "Deleted '{}' spans for workspace '{}', project '{}'",
+                                                spanIds.size(), workspaceId, projectId)))
+                                .thenReturn(spanIds);
+                    })
+                    .doOnSuccess(spanIds -> {
+                        if (spanIds != null) {
+                            eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName));
+                        }
+                    })
                     .then();
         });
     }

@@ -339,7 +339,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, UUID projectId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -351,7 +351,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteBySpanIds(@NonNull Set<UUID> spanIds, @NonNull UUID projectId) {
+    public Mono<Void> deleteBySpanIds(@NonNull Set<UUID> spanIds, UUID projectId) {
         if (spanIds.isEmpty()) {
             return Mono.empty();
         }

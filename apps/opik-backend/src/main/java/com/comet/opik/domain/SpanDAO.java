@@ -1136,7 +1136,7 @@ class SpanDAO {
 
     private static final String DELETE_BY_IDS = """
             DELETE FROM spans
-            WHERE trace_id IN :trace_ids
+            WHERE id IN :ids
             AND workspace_id = :workspace_id
             <if(project_id)>AND project_id = :project_id<endif>
             SETTINGS log_comment = '<log_comment>'
@@ -1979,7 +1979,6 @@ class SpanDAO {
     public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
-        log.info("Deleting spans by spanIds, count '{}'", spanIds.size());
         var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
 
         return Mono.from(connectionFactory.create())
@@ -1991,7 +1990,7 @@ class SpanDAO {
                             .ifPresent(id -> template.add("project_id", id));
 
                     var statement = connection.createStatement(template.render())
-                            .bind("span_ids", spanIds.toArray(UUID[]::new))
+                            .bind("ids", spanIds.toArray(UUID[]::new))
                             .bind("workspace_id", workspaceId);
 
                     if (projectId != null) {

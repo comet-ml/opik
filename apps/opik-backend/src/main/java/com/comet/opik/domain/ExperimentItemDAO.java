@@ -579,60 +579,31 @@ class ExperimentItemDAO {
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
             @NonNull Set<ExperimentStatus> statuses) {
-        if (traceIds.isEmpty() || statuses.isEmpty()) {
-            return Flux.empty();
-        }
-
-        log.info("Getting experiment refs by trace ids, count '{}', statuses '{}'", traceIds.size(), statuses);
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(GET_EXPERIMENT_REFS_BY_TRACE_IDS)
-                            .bind("trace_ids", traceIds.stream().map(UUID::toString).toArray(String[]::new))
-                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
-                        row.get("experiment_id", UUID.class),
-                        row.get("trace_id", UUID.class))));
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "trace_ids", traceIds, statuses);
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
-        if (itemIds.isEmpty() || statuses.isEmpty()) {
-            return Flux.empty();
-        }
-
-        log.info("Getting experiment refs by item ids, count '{}', statuses '{}'", itemIds.size(), statuses);
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(GET_EXPERIMENT_REFS_BY_ITEM_IDS)
-                            .bind("item_ids", itemIds.stream().map(UUID::toString).toArray(String[]::new))
-                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
-                        row.get("experiment_id", UUID.class),
-                        row.get("trace_id", UUID.class))));
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "item_ids", itemIds, statuses);
     }
 
     @WithSpan
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
             @NonNull Set<ExperimentStatus> statuses) {
-        if (spanIds.isEmpty() || statuses.isEmpty()) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "span_ids", spanIds, statuses);
+    }
+
+    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String idParamName,
+            @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses) {
+        if (ids.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
 
-        log.info("Getting experiment refs by span ids, count '{}', statuses '{}'", spanIds.size(), statuses);
-
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    Statement statement = connection.createStatement(GET_EXPERIMENT_REFS_BY_SPAN_IDS)
-                            .bind("span_ids", spanIds.stream().map(UUID::toString).toArray(String[]::new))
+                    Statement statement = connection.createStatement(sql)
+                            .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
                             .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
@@ -648,8 +619,6 @@ class ExperimentItemDAO {
         if (experimentIds.isEmpty() || statuses.isEmpty()) {
             return Flux.empty();
         }
-
-        log.info("Filtering experiment ids by status, count '{}', statuses '{}'", experimentIds.size(), statuses);
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
