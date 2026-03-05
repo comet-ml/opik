@@ -55,6 +55,38 @@ const client = new Opik({
 });
 ```
 
+## CLI Query Mode (`opik`)
+
+The package now includes an agent-friendly terminal query mode with JSON output:
+
+```bash
+# List resources
+npx opik query projects --json
+npx opik query datasets --json
+npx opik query prompts --json
+
+# Fetch a single resource
+npx opik query dataset --name my-dataset --json
+npx opik query prompt --name my-prompt --json
+
+# Search runtime data
+npx opik query traces --project-name \"Default Project\" --filter 'tags contains \"prod\"' --limit 50 --json
+npx opik query spans --project-name \"Default Project\" --filter 'model = \"gpt-4\"' --limit 50 --json
+```
+
+Shell completion:
+
+```bash
+# Bash
+eval \"$(npx opik query completion --shell bash)\"
+
+# Zsh
+eval \"$(npx opik query completion --shell zsh)\"
+
+# Fish
+npx opik query completion --shell fish | source
+```
+
 ## Usage
 
 ```typescript
