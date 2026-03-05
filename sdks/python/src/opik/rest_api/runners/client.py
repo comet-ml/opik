@@ -165,6 +165,7 @@ class RunnersClient:
         inputs: typing.Optional[JsonNode] = OMIT,
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
+        mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -180,6 +181,8 @@ class RunnersClient:
 
         runner_id : typing.Optional[str]
 
+        mask_id : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -194,7 +197,12 @@ class RunnersClient:
         client.runners.create_job(agent_name='agent_name', )
         """
         _response = self._raw_client.create_job(
-            agent_name=agent_name, inputs=inputs, project=project, runner_id=runner_id, request_options=request_options
+            agent_name=agent_name,
+            inputs=inputs,
+            project=project,
+            runner_id=runner_id,
+            mask_id=mask_id,
+            request_options=request_options,
         )
         return _response.data
 
@@ -634,6 +642,7 @@ class AsyncRunnersClient:
         inputs: typing.Optional[JsonNode] = OMIT,
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
+        mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -648,6 +657,8 @@ class AsyncRunnersClient:
         project : typing.Optional[str]
 
         runner_id : typing.Optional[str]
+
+        mask_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -666,7 +677,12 @@ class AsyncRunnersClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_job(
-            agent_name=agent_name, inputs=inputs, project=project, runner_id=runner_id, request_options=request_options
+            agent_name=agent_name,
+            inputs=inputs,
+            project=project,
+            runner_id=runner_id,
+            mask_id=mask_id,
+            request_options=request_options,
         )
         return _response.data
 

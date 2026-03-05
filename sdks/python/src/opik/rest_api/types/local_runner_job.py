@@ -19,6 +19,7 @@ class LocalRunnerJob(UniversalBaseModel):
     error: typing.Optional[str] = None
     project: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
+    mask_id: typing.Optional[str] = None
     timeout: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     started_at: typing.Optional[dt.datetime] = None
