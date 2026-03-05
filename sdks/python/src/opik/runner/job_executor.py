@@ -67,7 +67,9 @@ class JobExecutor:
         )
         os.close(fd)
 
-        proc = self._spawn_process(agent, job_id, inputs, trace_id, result_file)
+        proc = self._spawn_process(
+            agent, job_id, inputs, trace_id, result_file, job.mask_id
+        )
         if proc is None:
             return
 
@@ -121,6 +123,7 @@ class JobExecutor:
         inputs: Dict[str, Any],
         trace_id: str,
         result_file: str,
+        mask_id: Optional[str],
     ) -> Optional[subprocess.Popen[bytes]]:
         env = {
             **os.environ,
@@ -128,6 +131,8 @@ class JobExecutor:
             "OPIK_RESULT_FILE": result_file,
             "OPIK_TRACE_ID": trace_id,
         }
+        if mask_id:
+            env["OPIK_MASK_ID"] = mask_id
 
         try:
             return subprocess.Popen(
