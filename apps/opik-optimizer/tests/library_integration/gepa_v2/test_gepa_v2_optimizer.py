@@ -42,6 +42,7 @@ def _make_context(**overrides):
             "reflection_minibatch_size": 2,
             "seed": 42,
         },
+        optimizable_keys=["system_prompt"],
         baseline_config={
             "system_prompt": "You are helpful.",
             "user_message": "Answer: {question}",
@@ -106,21 +107,21 @@ def _build_adapter(mock_eval_adapter):
 class TestBuildSeedCandidate:
     def test_extracts_prompt_key(self):
         config = {"system_prompt": "Be helpful.", "model": "gpt-4o"}
-        seed = _build_seed_candidate(config)
+        seed = _build_seed_candidate(config, ["system_prompt"])
         assert seed == {SYSTEM_PROMPT_KEY: "Be helpful."}
 
     def test_ignores_non_prompt_keys(self):
         config = {"system_prompt": "Be helpful.", "model": "gpt-4o", "temperature": "0.5"}
-        seed = _build_seed_candidate(config)
+        seed = _build_seed_candidate(config, ["system_prompt"])
         assert seed == {SYSTEM_PROMPT_KEY: "Be helpful."}
         assert len(seed) == 1
 
     def test_empty_config(self):
-        assert _build_seed_candidate({}) == {}
+        assert _build_seed_candidate({}, ["system_prompt"]) == {}
 
     def test_no_prompt_key(self):
         config = {"model": "gpt-4o", "model_parameters": {}}
-        assert _build_seed_candidate(config) == {}
+        assert _build_seed_candidate(config, ["system_prompt"]) == {}
 
 
 class TestMakeConfigBuilder:

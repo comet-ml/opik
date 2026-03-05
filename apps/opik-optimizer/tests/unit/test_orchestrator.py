@@ -86,6 +86,7 @@ class TestOrchestrator:
             metric_parameters={},
             optimizer_type="nonexistent",
             optimizer_parameters={},
+            optimizable_keys=["prompt_messages"],
             baseline_config={"prompt_messages": [{"role": "user", "content": "hi"}], "model": "gpt-4"},
         )
         with pytest.raises(ValueError, match="Unknown optimizer type"):
@@ -107,6 +108,7 @@ class TestOrchestrator:
             metric_parameters={},
             optimizer_type="SimpleOptimizer",
             optimizer_parameters={},
+            optimizable_keys=["prompt_messages"],
             baseline_config={"prompt_messages": [{"role": "user", "content": "Hi {name}"}], "model": "openai/gpt-4o-mini"},
         )
 

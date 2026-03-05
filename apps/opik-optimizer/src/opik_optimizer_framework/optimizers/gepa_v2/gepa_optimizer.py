@@ -20,7 +20,6 @@ from opik_optimizer_framework.types import (
 )
 
 from .gepa_adapter import (
-    SYSTEM_PROMPT_KEY,
     DatasetItem,
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
@@ -29,13 +28,10 @@ from .gepa_adapter import (
 logger = logging.getLogger(__name__)
 
 
-PROMPT_KEYS = frozenset({SYSTEM_PROMPT_KEY})
-
-
-def _build_seed_candidate(baseline_config: dict) -> dict[str, str]:
+def _build_seed_candidate(baseline_config: dict, optimizable_keys: list[str]) -> dict[str, str]:
     return {
         k: str(v) for k, v in baseline_config.items()
-        if k in PROMPT_KEYS and isinstance(v, str)
+        if k in optimizable_keys and isinstance(v, str)
     }
 
 
@@ -137,7 +133,7 @@ class GepaV2Optimizer:
         )
         max_candidates = params.get("max_candidates", 5)
 
-        seed_candidate = _build_seed_candidate(context.baseline_config)
+        seed_candidate = _build_seed_candidate(context.baseline_config, context.optimizable_keys)
 
         # Combine train + val into a single dataset (no split).
         seen_ids: set[str] = set()

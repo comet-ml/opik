@@ -270,6 +270,7 @@ def main():
         metric_parameters={},
         optimizer_type=optimizer_type,
         optimizer_parameters=optimizer_parameters,
+        optimizable_keys=["system_prompt", "user_message"],
         baseline_config={
             "system_prompt": PROMPT_MESSAGES[0]["content"],
             "user_message": PROMPT_MESSAGES[1]["content"],

@@ -46,6 +46,7 @@ class OptimizationContext:
     metric_parameters: dict[str, Any]
     optimizer_type: str
     optimizer_parameters: dict[str, Any]
+    optimizable_keys: list[str]
     baseline_config: CandidateConfig = field(default_factory=dict)
 
 

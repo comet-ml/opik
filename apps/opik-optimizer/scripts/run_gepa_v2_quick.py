@@ -173,6 +173,7 @@ def main():
             "reflection_minibatch_size": 3,
             "seed": 42,
         },
+        optimizable_keys=["system_prompt", "user_message"],
         baseline_config={
             "system_prompt": "You are a customer support agent. Answer questions briefly.",
             "user_message": "{question}",

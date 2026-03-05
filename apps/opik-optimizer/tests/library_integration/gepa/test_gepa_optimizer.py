@@ -45,6 +45,7 @@ def _make_context(**overrides):
             "reflection_minibatch_size": 2,
             "seed": 42,
         },
+        optimizable_keys=["prompt_messages"],
         baseline_config={
             "prompt_messages": prompt_messages,
             "model": "openai/gpt-4o-mini",

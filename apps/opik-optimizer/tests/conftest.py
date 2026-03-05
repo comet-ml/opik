@@ -35,6 +35,7 @@ def sample_optimization_context(sample_candidate_config, sample_prompt_messages)
         metric_parameters={},
         optimizer_type="SimpleOptimizer",
         optimizer_parameters={},
+        optimizable_keys=["prompt_messages"],
         baseline_config=sample_candidate_config,
     )
 
