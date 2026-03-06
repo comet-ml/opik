@@ -27,6 +27,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import PassRateCell from "@/components/shared/DataTableCells/PassRateCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
@@ -70,8 +71,6 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
 const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
@@ -86,6 +85,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "trace_count",
   "duration.p50",
   "total_estimated_cost_avg",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
 ];
@@ -102,6 +102,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
+  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   COLUMN_COMMENTS_ID,
@@ -116,9 +117,6 @@ interface ExperimentsTabProps {
 
 const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const isDatasetVersioningEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
-  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -211,7 +209,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Dataset",
+        label: "Evaluation suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -220,19 +218,15 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           resource: RESOURCE_TYPE.dataset,
         },
       },
-      ...(isDatasetVersioningEnabled
-        ? [
-            {
-              id: "dataset_version",
-              label: "Dataset version",
-              type: COLUMN_TYPE.string,
-              iconType: "version" as const,
-              accessorFn: (row: GroupedExperiment) =>
-                row.dataset_version_summary?.version_name || "",
-              cell: DatasetVersionCell as never,
-            },
-          ]
-        : []),
+      {
+        id: "dataset_version",
+        label: "Evaluation suite version",
+        type: COLUMN_TYPE.string,
+        iconType: "version" as const,
+        accessorFn: (row: GroupedExperiment) =>
+          row.dataset_version_summary?.version_name || "",
+        cell: DatasetVersionCell as never,
+      },
       {
         id: "created_at",
         label: "Created",
@@ -309,6 +303,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         },
       },
       {
+        id: "pass_rate",
+        label: "Pass rate",
+        type: COLUMN_TYPE.number,
+        accessorFn: (row) => row.pass_rate,
+        cell: PassRateCell as never,
+        aggregatedCell: PassRateCell.Aggregation as never,
+        customMeta: {
+          aggregationKey: "pass_rate",
+        },
+      },
+      {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
@@ -346,7 +351,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         cell: CodeCell as never,
       },
     ];
-  }, [isDatasetVersioningEnabled]);
+  }, []);
 
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
