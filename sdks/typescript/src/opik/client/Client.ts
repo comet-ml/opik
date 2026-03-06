@@ -52,6 +52,7 @@ import {
   TracesAnnotationQueue,
   ThreadsAnnotationQueue,
 } from "@/annotation-queue";
+import { AgentConfig } from "@/agent-config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -1639,6 +1640,28 @@ export class OpikClient {
    * });
    * ```
    */
+  /**
+   * Returns an AgentConfig instance scoped to the given project.
+   * Use it to create blueprints, masks, and manage environment labels.
+   *
+   * @param options.projectName - Project name (defaults to client's configured project)
+   * @returns AgentConfig domain object
+   *
+   * @example
+   * ```typescript
+   * const agentConfig = client.getAgentConfig();
+   * const blueprint = await agentConfig.createBlueprint({
+   *   values: { temperature: "0.8", model: "gpt-4" },
+   *   description: "Initial config",
+   * });
+   * console.log(blueprint.values); // { temperature: "0.8", model: "gpt-4" }
+   * ```
+   */
+  public getAgentConfig = (options?: { projectName?: string }): AgentConfig => {
+    const projectName = options?.projectName ?? this.config.projectName;
+    return new AgentConfig(projectName, this);
+  };
+
   public updatePromptVersionTags = async (
     versionIds: string[],
     options?: {

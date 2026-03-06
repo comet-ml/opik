@@ -375,9 +375,7 @@ def test_agent_config_decorator__prompt_tracks_latest_version__prompt_version_st
     project_name: str,
 ):
     """Prompt and PromptVersionDetail fields both resolve to the version stored in the
-    blueprint.  Creating a new prompt version does not automatically update a Prompt
-    field because the backend currently stores a specific version_id rather than a
-    prompt_id pointer — see the TODO assert below."""
+    blueprint."""
     prompt_name = f"e2e-prompt-{uuid.uuid4().hex[:8]}"
 
     # Create v1 of the prompt
