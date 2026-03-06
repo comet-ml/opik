@@ -2,13 +2,16 @@
 
 ## Architecture
 
-Three files, three responsibilities:
+Six files, six responsibilities:
 
 | File | Class | Role |
 |------|-------|------|
 | `gepa_optimizer.py` | `GepaV2Optimizer` | Entry point. Builds the seed candidate, sampler, adapter, and calls `gepa.optimize()`. |
-| `gepa_adapter.py` | `FrameworkGEPAAdapter` | Bridges GEPA's evaluate/reflect interface to the framework's `EvaluationAdapter`. Tracks candidates, parents, per-item scores. |
-| `gepa_adapter.py` | `GEPAProgressCallback` | Receives GEPA lifecycle events and forwards them to the adapter for state management. |
+| `gepa_adapter.py` | `FrameworkGEPAAdapter` | Thin facade. Orchestrates evaluation, delegates to collaborators. |
+| `gepa_adapter.py` | `GEPAProgressCallback` | Receives GEPA lifecycle events and forwards them to the adapter. |
+| `candidate_tracker.py` | `CandidateTracker` | Candidate identity, parent lineage, GEPA-to-framework ID mapping, callback state. |
+| `reflective_dataset_builder.py` | `ReflectiveDatasetBuilder` | Builds structured feedback datasets for the reflection LLM. |
+| `reflection_proposer.py` | `ReflectionProposer` | Calls the reflection LLM, logs prompts and proposals. |
 | `failure_aware_sampler.py` | `FailureAwareBatchSampler` | Controls which dataset items appear in each minibatch, balancing failed and passed items. |
 
 ## How GEPA Works (High Level)

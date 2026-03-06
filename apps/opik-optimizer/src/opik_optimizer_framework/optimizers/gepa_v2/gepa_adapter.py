@@ -14,10 +14,13 @@ detecting the initialization phase.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
+
+from .candidate_tracker import CandidateTracker, _candidate_key
+from .reflective_dataset_builder import ReflectiveDatasetBuilder
+from .reflection_proposer import ReflectionProposer
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +79,6 @@ def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     return feedback
 
 
-def _candidate_key(candidate: dict[str, str]) -> str:
-    """Deterministic string key for a GEPA candidate dict."""
-    return json.dumps(candidate, sort_keys=True)
-
-
 class GEPAProgressCallback:
     """Bridges GEPA's lifecycle events to the adapter's state management.
 
@@ -121,87 +119,56 @@ class GEPAProgressCallback:
 
 
 class FrameworkGEPAAdapter:
-    """Adapter that bridges GEPA's evaluate/reflect interface to the framework.
+    """Thin facade that bridges GEPA's evaluate/reflect interface to the framework.
 
-    Uses two complementary mechanisms for tracking evaluation context:
-
-    1. **Callbacks** (via ``GEPAProgressCallback``): ``on_evaluation_start``
-       fires RIGHT BEFORE each ``evaluate()`` call during the main loop,
-       providing authoritative parent_ids, capture_traces, and candidate_idx.
-
-    2. **Initialization fallback**: The seed eval (during ``initialize_gepa_state``)
-       happens before callbacks are active. The adapter detects this via
-       ``_current_step < 0`` and labels it ``eval_purpose="initialization"``.
+    Delegates to three collaborators:
+    - CandidateTracker: candidate identity, parent lineage, GEPA index mapping
+    - ReflectiveDatasetBuilder: feedback dataset construction for reflection
+    - ReflectionProposer: reflection LLM interaction and logging
     """
 
     def __init__(
         self,
         config_builder: Any,
         evaluation_adapter: EvaluationAdapter,
+        candidate_tracker: CandidateTracker | None = None,
+        dataset_builder: ReflectiveDatasetBuilder | None = None,
+        reflection_proposer: ReflectionProposer | None = None,
+        batch_sampler: FailureAwareBatchSampler | None = None,
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
-        batch_sampler: FailureAwareBatchSampler | None = None,
     ) -> None:
         self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
-        self._reflection_lm = reflection_lm
-        self._reflection_prompt_template = reflection_prompt_template
         self._batch_sampler = batch_sampler
-        self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
-        self._reflection_log: list[dict[str, Any]] = []
 
-        # Candidate tracking
-        self._known_candidates: dict[str, str] = {}
-        self._candidate_parents: dict[str, list[str]] = {}
-        self._baseline_candidate_id: str | None = None
-        self._seed_candidate_key: str | None = None
+        self._tracker = candidate_tracker or CandidateTracker()
+        self._dataset_builder = dataset_builder or ReflectiveDatasetBuilder(batch_sampler)
+        if reflection_proposer is not None:
+            self._proposer: ReflectionProposer | None = reflection_proposer
+        elif reflection_lm is not None:
+            self._proposer = ReflectionProposer(reflection_lm, reflection_prompt_template)
+        else:
+            self._proposer = None
+
+        self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
         self._full_dataset_size: int | None = None
         self.best_full_eval_trial_score: float = 0.0
 
-        # GEPA index → framework candidate_id mapping
-        self._gepa_idx_to_candidate_id: dict[int, str] = {}
-
-        # Step/iteration tracking (set by callbacks)
-        self._current_step: int = -1
-        self._selected_parent_id: str | None = None
-
-        # Pending eval metadata (set by on_evaluation_start, consumed by evaluate)
-        self._pending_eval_parent_ids: list[int] | None = None
-        self._pending_eval_capture_traces: bool | None = None
-        self._pending_eval_candidate_idx: int | None = None
-        self._pending_merge_parent_ids: list[int] | None = None
+    # -- Delegation to CandidateTracker ----------------------------------------
 
     def register_baseline(
         self,
         seed_candidate: dict[str, str],
         baseline_candidate_id: str,
     ) -> None:
-        """Register the baseline so GEPA's initialization reuses the same candidate_id.
-
-        Pre-seeds ``_known_candidates`` so the initialization eval (before
-        iterations) reuses the baseline's candidate_id at step 0.
-        """
-        key = _candidate_key(seed_candidate)
-        self._known_candidates[key] = baseline_candidate_id
-        self._candidate_parents[baseline_candidate_id] = []
-        self._baseline_candidate_id = baseline_candidate_id
-        self._seed_candidate_key = key
-        self._gepa_idx_to_candidate_id[0] = baseline_candidate_id
-
-    # -- Callback handlers (called by GEPAProgressCallback) -------------------
+        self._tracker.register_baseline(seed_candidate, baseline_candidate_id)
 
     def _on_new_step(self, iteration: int) -> None:
-        self._current_step = iteration
-        self._selected_parent_id = None
-        self._pending_merge_parent_ids = None
-        self._pending_eval_parent_ids = None
-        self._pending_eval_capture_traces = None
-        self._pending_eval_candidate_idx = None
+        self._tracker.on_new_step(iteration)
 
     def _on_candidate_selected(self, candidate_idx: int) -> None:
-        self._selected_parent_id = self._gepa_idx_to_candidate_id.get(
-            candidate_idx
-        )
+        self._tracker.on_candidate_selected(candidate_idx)
 
     def _on_evaluation_start(
         self,
@@ -209,108 +176,99 @@ class FrameworkGEPAAdapter:
         parent_ids: Sequence[int],
         capture_traces: bool,
     ) -> None:
-        self._pending_eval_candidate_idx = candidate_idx
-        self._pending_eval_parent_ids = list(parent_ids)
-        self._pending_eval_capture_traces = capture_traces
+        self._tracker.on_evaluation_start(candidate_idx, parent_ids, capture_traces)
 
     def _on_valset_evaluated(
         self, candidate_idx: int, candidate: dict[str, str],
     ) -> None:
-        key = _candidate_key(candidate)
-        fw_id = self._known_candidates.get(key)
-        if fw_id is not None:
-            self._gepa_idx_to_candidate_id[candidate_idx] = fw_id
+        self._tracker.on_valset_evaluated(candidate_idx, candidate)
 
     def _on_merge_accepted(self, parent_ids: Sequence[int]) -> None:
-        self._pending_merge_parent_ids = list(parent_ids)
+        self._tracker.on_merge_accepted(parent_ids)
 
-    # -- Parent resolution ----------------------------------------------------
+    # -- Compatibility properties for tests ------------------------------------
 
-    def _resolve_parent_ids(
-        self, key: str,
-    ) -> list[str]:
-        """Resolve parent candidate IDs using callback metadata and tracking maps.
+    @property
+    def _known_candidates(self) -> dict[str, str]:
+        return self._tracker._known_candidates
 
-        Priority:
-        1. Merge parents (from on_merge_accepted)
-        2. Pre-eval parents (from on_evaluation_start, resolved via gepa_idx map)
-        3. Persistent parents (from _candidate_parents for known candidates)
-        4. Selected parent (from on_candidate_selected)
-        5. Baseline fallback
-        """
-        if self._pending_merge_parent_ids is not None:
-            resolved = [
-                self._gepa_idx_to_candidate_id[idx]
-                for idx in self._pending_merge_parent_ids
-                if idx in self._gepa_idx_to_candidate_id
-            ]
-            self._pending_merge_parent_ids = None
-            if resolved:
-                return resolved
+    @property
+    def _candidate_parents(self) -> dict[str, list[str]]:
+        return self._tracker._candidate_parents
 
-        if self._pending_eval_parent_ids is not None:
-            resolved = [
-                self._gepa_idx_to_candidate_id[idx]
-                for idx in self._pending_eval_parent_ids
-                if idx in self._gepa_idx_to_candidate_id
-            ]
-            if resolved:
-                return resolved
+    @property
+    def _baseline_candidate_id(self) -> str | None:
+        return self._tracker._baseline_candidate_id
 
-        known_id = self._known_candidates.get(key)
-        if known_id is not None and known_id in self._candidate_parents:
-            return self._candidate_parents[known_id]
+    @property
+    def _seed_candidate_key(self) -> str | None:
+        return self._tracker._seed_candidate_key
 
-        if self._selected_parent_id is not None:
-            return [self._selected_parent_id]
+    @property
+    def _gepa_idx_to_candidate_id(self) -> dict[int, str]:
+        return self._tracker._gepa_idx_to_candidate_id
 
-        if self._baseline_candidate_id is not None:
-            return [self._baseline_candidate_id]
+    @_gepa_idx_to_candidate_id.setter
+    def _gepa_idx_to_candidate_id(self, value: dict[int, str]) -> None:
+        self._tracker._gepa_idx_to_candidate_id = value
 
-        return []
+    @property
+    def _current_step(self) -> int:
+        return self._tracker._current_step
 
-    def _determine_eval_purpose(
-        self, key: str, capture_traces: bool,
-    ) -> str:
-        """Determine eval_purpose from callback metadata or fallback detection."""
-        if self._current_step < 0:
-            return "initialization"
+    @_current_step.setter
+    def _current_step(self, value: int) -> None:
+        self._tracker._current_step = value
 
-        if capture_traces:
-            return "exploration:minibatch"
+    @property
+    def _selected_parent_id(self) -> str | None:
+        return self._tracker._selected_parent_id
 
-        is_known = key in self._known_candidates
-        if not is_known:
-            return "exploration:mutation"
+    @_selected_parent_id.setter
+    def _selected_parent_id(self, value: str | None) -> None:
+        self._tracker._selected_parent_id = value
 
-        return "validation"
+    @property
+    def _pending_eval_parent_ids(self) -> list[int] | None:
+        return self._tracker._pending_eval_parent_ids
 
-    # -- Core evaluate/reflect ------------------------------------------------
+    @_pending_eval_parent_ids.setter
+    def _pending_eval_parent_ids(self, value: list[int] | None) -> None:
+        self._tracker._pending_eval_parent_ids = value
 
-    def _record_trial(
-        self,
-        key: str,
-        trial: TrialResult,
-        parent_candidate_ids: list[str],
-        capture_traces: bool,
-    ) -> None:
-        """Update candidate tracking maps after a successful evaluation."""
-        is_new = trial.candidate_id not in self._candidate_parents
-        self._known_candidates[key] = trial.candidate_id
-        if is_new:
-            self._candidate_parents[trial.candidate_id] = parent_candidate_ids
+    @property
+    def _pending_eval_capture_traces(self) -> bool | None:
+        return self._tracker._pending_eval_capture_traces
 
-        if capture_traces:
-            self._selected_parent_id = trial.candidate_id
+    @_pending_eval_capture_traces.setter
+    def _pending_eval_capture_traces(self, value: bool | None) -> None:
+        self._tracker._pending_eval_capture_traces = value
 
-        logger.debug(
-            "[adapter.evaluate] result: score=%.4f candidate_id=%s "
-            "is_new=%s parents=%s",
-            trial.score,
-            trial.candidate_id[:8],
-            is_new,
-            self._candidate_parents.get(trial.candidate_id, []),
-        )
+    @property
+    def _pending_eval_candidate_idx(self) -> int | None:
+        return self._tracker._pending_eval_candidate_idx
+
+    @_pending_eval_candidate_idx.setter
+    def _pending_eval_candidate_idx(self, value: int | None) -> None:
+        self._tracker._pending_eval_candidate_idx = value
+
+    @property
+    def _pending_merge_parent_ids(self) -> list[int] | None:
+        return self._tracker._pending_merge_parent_ids
+
+    @_pending_merge_parent_ids.setter
+    def _pending_merge_parent_ids(self, value: list[int] | None) -> None:
+        self._tracker._pending_merge_parent_ids = value
+
+    @property
+    def _reflection_log(self) -> list[dict[str, Any]]:
+        return self._proposer.reflection_log if self._proposer else []
+
+    @property
+    def _reflection_prompt_template(self) -> str | None:
+        return self._proposer.reflection_prompt_template if self._proposer else None
+
+    # -- Core evaluate ---------------------------------------------------------
 
     def _build_evaluation_batch(
         self,
@@ -363,23 +321,18 @@ class FrameworkGEPAAdapter:
         candidate: dict[str, str],
         capture_traces: bool = False,
     ) -> EvaluationBatch:
-        """Evaluate a GEPA candidate against a batch of data instances.
-
-        Delegates to the framework's EvaluationAdapter to get real scores
-        from the evaluation suite (LLM judge assertions, etc.).
-        """
+        """Evaluate a GEPA candidate against a batch of data instances."""
         key = _candidate_key(candidate)
 
-        # Use callback-provided capture_traces if available
         effective_capture_traces = (
-            self._pending_eval_capture_traces
-            if self._pending_eval_capture_traces is not None
+            self._tracker.consume_pending_capture_traces()
+            if self._tracker._pending_eval_capture_traces is not None
             else capture_traces
         )
 
-        existing_candidate_id = self._known_candidates.get(key)
-        eval_purpose = self._determine_eval_purpose(key, effective_capture_traces)
-        parent_candidate_ids = self._resolve_parent_ids(key)
+        existing_candidate_id = self._tracker.get_existing_candidate_id(key)
+        eval_purpose = self._tracker.determine_eval_purpose(key, effective_capture_traces)
+        parent_candidate_ids = self._tracker.resolve_parent_ids(key)
 
         dataset_item_ids = [
             str(inst.get("id"))
@@ -389,7 +342,7 @@ class FrameworkGEPAAdapter:
 
         config = self._config_builder(candidate)
 
-        batch_index = self._current_step if self._current_step >= 0 else None
+        batch_index = self._tracker._current_step if self._tracker._current_step >= 0 else None
 
         if self._full_dataset_size is None:
             self._full_dataset_size = len(batch)
@@ -421,13 +374,10 @@ class FrameworkGEPAAdapter:
             experiment_type=experiment_type,
         )
 
-        # Clear pending eval metadata (consumed)
-        self._pending_eval_parent_ids = None
-        self._pending_eval_capture_traces = None
-        self._pending_eval_candidate_idx = None
+        self._tracker.clear_pending_eval()
 
         if trial is not None:
-            self._record_trial(key, trial, parent_candidate_ids, effective_capture_traces)
+            self._tracker.record_trial(key, trial, parent_candidate_ids, effective_capture_traces)
             if is_full_eval and trial.score > self.best_full_eval_trial_score:
                 self.best_full_eval_trial_score = trial.score
 
@@ -442,143 +392,17 @@ class FrameworkGEPAAdapter:
             batch, per_item, trial, effective_capture_traces,
         )
 
+    # -- Delegation to ReflectiveDatasetBuilder --------------------------------
+
     def make_reflective_dataset(
         self,
         candidate: dict[str, str],
         eval_batch: EvaluationBatch,
         components_to_update: list[str],
     ) -> dict[str, list[dict[str, Any]]]:
-        """Build the feedback dataset for GEPA's reflection LLM.
+        return self._dataset_builder.build(candidate, eval_batch, components_to_update)
 
-        When runs_per_item > 1, all runs are consolidated into a single
-        record per input — this avoids repeating the same input N times
-        and lets the reflection LLM compare runs side-by-side.
-        Records are sorted by difficulty (most failures first).
-        """
-        if not components_to_update:
-            components_to_update = [
-                key
-                for key in candidate.keys()
-                if not key.startswith("_") and key not in ("source", "id")
-            ]
-
-        trajectories = eval_batch.trajectories or []
-
-        def _build_inputs(dataset_item: dict[str, Any]) -> dict[str, str]:
-            return {
-                k: str(v) for k, v in dataset_item.items()
-                if k != "id"
-            }
-
-        def _build_run_feedback(assertions: list[dict[str, Any]]) -> str:
-            failed = [a for a in assertions if a["value"] < 1.0]
-            passed = [a for a in assertions if a["value"] >= 1.0]
-            lines = []
-            if failed:
-                lines.append("FAILED assertions (fix these):")
-                for a in failed:
-                    reason = a.get("reason", "")
-                    lines.append(f"- Assertion: {a['name']}")
-                    if reason:
-                        lines.append(f"  Reason: {reason}")
-            if passed:
-                lines.append("PASSED assertions (preserve these):")
-                for a in passed:
-                    lines.append(f"- {a['name']}")
-            return "\n".join(lines)
-
-        records = []
-        for traj in trajectories:
-            dataset_item = traj.get("input", {})
-            runs = traj.get("runs", [])
-            total_runs = len(runs)
-            inputs = _build_inputs(dataset_item)
-
-            if total_runs <= 1:
-                run = runs[0] if runs else {}
-                assertions = run.get("assertions", [])
-                max_failed = sum(1 for a in assertions if a["value"] < 1.0)
-                records.append({
-                    "Inputs": inputs,
-                    "Generated Outputs": run.get("output", ""),
-                    "Feedback": _build_run_feedback(assertions),
-                    "_max_failed": max_failed,
-                })
-            else:
-                run_sections = []
-                max_failed = 0
-                per_run_failed_names: list[set[str]] = []
-                num_passed_runs = 0
-
-                for run_idx, run in enumerate(runs):
-                    assertions = run.get("assertions", [])
-                    num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-                    max_failed = max(max_failed, num_failed)
-                    failed_names = {a["name"] for a in assertions if a["value"] < 1.0}
-                    per_run_failed_names.append(failed_names)
-                    if num_failed == 0:
-                        num_passed_runs += 1
-
-                    section = f"[Run {run_idx + 1}/{total_runs}]\n"
-                    section += f"Output: {run.get('output', '')}\n"
-                    section += _build_run_feedback(assertions)
-                    run_sections.append(section)
-
-                consistent = set.intersection(*per_run_failed_names) if per_run_failed_names else set()
-                summary_parts = [f"{num_passed_runs}/{total_runs} runs passed."]
-                if consistent:
-                    summary_parts.append(
-                        f"Consistent failures: {', '.join(sorted(consistent))}"
-                    )
-
-                records.append({
-                    "Inputs": inputs,
-                    "Runs": "\n\n".join(run_sections),
-                    "Summary": " ".join(summary_parts),
-                    "_max_failed": max_failed,
-                })
-
-        if self._batch_sampler is not None:
-            for record, traj in zip(records, trajectories):
-                item_id = str(traj.get("input", {}).get("id", ""))
-                streak = self._batch_sampler.get_failure_streak(item_id)
-                if streak >= 1:
-                    stuck = self._batch_sampler.get_failed_assertions(item_id)
-                    if stuck:
-                        record["Failure History"] = (
-                            f"This item has failed {streak} consecutive iteration(s). "
-                            f"Still-failing assertions: {', '.join(stuck)}. "
-                            f"The current rules for these assertions are not working."
-                        )
-
-        records.sort(key=lambda r: r["_max_failed"], reverse=True)
-        for r in records:
-            del r["_max_failed"]
-
-        return {component: list(records) for component in components_to_update}
-
-    def _get_reflection_lm_callable(self) -> Any:
-        """Return a callable LanguageModel from the stored reflection_lm.
-
-        Handles both string model names (wrapped via litellm) and callables.
-        """
-        if callable(self._reflection_lm):
-            return self._reflection_lm
-        if isinstance(self._reflection_lm, str):
-            import litellm
-            model_name = self._reflection_lm
-
-            def _lm(prompt: str | list[dict[str, str]]) -> str:
-                if isinstance(prompt, str):
-                    completion = litellm.completion(
-                        model=model_name,
-                        messages=[{"role": "user", "content": prompt}],
-                    )
-                else:
-                    completion = litellm.completion(model=model_name, messages=prompt)
-                return completion.choices[0].message.content
-            return _lm
-        raise ValueError(f"reflection_lm must be a string or callable, got {type(self._reflection_lm)}")
+    # -- Delegation to ReflectionProposer --------------------------------------
 
     def propose_new_texts(
         self,
@@ -586,62 +410,14 @@ class FrameworkGEPAAdapter:
         reflective_dataset: Mapping[str, Sequence[Mapping[str, Any]]],
         components_to_update: list[str],
     ) -> dict[str, str]:
-        """Propose improved texts using the reflection LLM.
-
-        Adds the parameter name to <curr_param> so the reflection LLM knows
-        which component it's optimizing. Logs all reflection calls for debugging.
-        """
-        from gepa.strategies.instruction_proposal import InstructionProposalSignature
-
-        if self._reflection_lm is None:
+        if self._proposer is None:
             raise ValueError(
                 "reflection_lm is required for propose_new_texts. "
                 "Pass it via FrameworkGEPAAdapter constructor."
             )
+        return self._proposer.propose(candidate, reflective_dataset, components_to_update)
 
-        lm = self._get_reflection_lm_callable()
-        new_texts: dict[str, str] = {}
-        for name in components_to_update:
-            if name not in reflective_dataset or not reflective_dataset.get(name):
-                logger.info("Component '%s' not in reflective dataset, skipping.", name)
-                continue
-
-            current_instruction = f"Parameter: {name}\n{candidate[name]}"
-            dataset_with_feedback = reflective_dataset[name]
-
-            input_dict = {
-                "current_instruction_doc": current_instruction,
-                "dataset_with_feedback": dataset_with_feedback,
-                "prompt_template": self._reflection_prompt_template,
-            }
-
-            rendered_prompt = InstructionProposalSignature.prompt_renderer(input_dict)
-
-            log_entry: dict[str, Any] = {
-                "component": name,
-                "current_instruction": current_instruction,
-                "dataset_with_feedback": [dict(d) for d in dataset_with_feedback],
-                "rendered_prompt": rendered_prompt if isinstance(rendered_prompt, str) else str(rendered_prompt),
-            }
-
-            result = InstructionProposalSignature.run(
-                lm=lm,
-                input_dict=input_dict,
-            )
-            new_text = result["new_instruction"]
-            prefix = f"Parameter: {name}\n"
-            if new_text.startswith(prefix):
-                new_text = new_text[len(prefix):]
-            new_texts[name] = new_text
-
-            log_entry["proposed_text"] = new_text
-            self._reflection_log.append(log_entry)
-            logger.info(
-                "Reflection for '%s': proposed %d chars (was %d)",
-                name, len(new_text), len(candidate[name]),
-            )
-
-        return new_texts
+    # -- Problematic items summary ---------------------------------------------
 
     def get_problematic_items_summary(self) -> list[dict[str, Any]]:
         """Return items that failed consistently, sorted by failure streak."""
