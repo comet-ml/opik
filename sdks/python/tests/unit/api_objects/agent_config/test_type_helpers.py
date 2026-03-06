@@ -431,24 +431,24 @@ class TestExtractDataclassFields:
         with pytest.raises(TypeError):
             type_helpers.extract_dataclass_fields(NotADataclass)
 
-    def test_fields_with_defaults__defaults_extracted(self):
+    def test_fields_with_defaults__names_and_types_extracted(self):
         @dataclasses.dataclass
         class WithDefaults:
             temp: float = 0.8
             name: str = "default"
 
         fields = type_helpers.extract_dataclass_fields(WithDefaults)
-        defaults = {f[0]: f[2] for f in fields}
-        assert defaults["temp"] == 0.8
-        assert defaults["name"] == "default"
+        by_name = {f[0]: f[1] for f in fields}
+        assert by_name["temp"] is float
+        assert by_name["name"] is str
 
-    def test_field_without_default__returns_missing_sentinel(self):
+    def test_field_without_default__included_in_results(self):
         @dataclasses.dataclass
         class NoDefault:
             temp: float
 
         fields = type_helpers.extract_dataclass_fields(NoDefault)
-        assert fields[0][2] is dataclasses.MISSING
+        assert fields[0][0] == "temp"
 
     def test_prompt_field__included_in_extracted_fields(self):
         @dataclasses.dataclass
@@ -478,10 +478,9 @@ class TestExtractDataclassFieldsAnnotated:
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
         assert len(fields) == 1
-        name, py_type, default, desc = fields[0]
+        name, py_type, desc = fields[0]
         assert name == "model"
         assert py_type is str
-        assert default == "gpt-4o"
         assert desc == "The LLM model name"
 
     def test_annotated_float__description_extracted(self):
@@ -490,7 +489,7 @@ class TestExtractDataclassFieldsAnnotated:
             temperature: Annotated[float, "Sampling temperature"] = 0.7
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
-        name, py_type, default, desc = fields[0]
+        name, py_type, desc = fields[0]
         assert py_type is float
         assert desc == "Sampling temperature"
 
@@ -500,7 +499,7 @@ class TestExtractDataclassFieldsAnnotated:
             tokens: Annotated[int, 42, "Max tokens to generate"] = 512
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, _, desc = fields[0]
+        _, _, desc = fields[0]
         assert desc == "Max tokens to generate"
 
     def test_annotated_no_str_metadata__description_is_none(self):
@@ -509,7 +508,7 @@ class TestExtractDataclassFieldsAnnotated:
             tokens: Annotated[int, 42] = 512
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, _, desc = fields[0]
+        _, _, desc = fields[0]
         assert desc is None
 
     def test_plain_type__description_is_none(self):
@@ -518,7 +517,7 @@ class TestExtractDataclassFieldsAnnotated:
             tokens: int = 512
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
-        _, _, _, desc = fields[0]
+        _, _, desc = fields[0]
         assert desc is None
 
     def test_mixed_annotated_and_plain__descriptions_per_field(self):
@@ -528,7 +527,7 @@ class TestExtractDataclassFieldsAnnotated:
             temperature: float = 0.7
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
-        by_name = {f[0]: f[3] for f in fields}
+        by_name = {f[0]: f[2] for f in fields}
         assert by_name["model"] == "Model name"
         assert by_name["temperature"] is None
 
@@ -614,7 +613,7 @@ class TestExtractDataclassFieldsOptional:
 
         fields = type_helpers.extract_dataclass_fields(Cfg)
         assert len(fields) == 1
-        _, py_type, _, _ = fields[0]
+        _, py_type, _ = fields[0]
         assert py_type is str
 
     def test_optional_and_plain_field__both_included(self):
