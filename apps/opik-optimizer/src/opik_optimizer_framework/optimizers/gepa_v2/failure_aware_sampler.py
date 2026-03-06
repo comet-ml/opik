@@ -9,12 +9,14 @@ if TYPE_CHECKING:
 
 
 class FailureAwareBatchSampler:
-    """Batch sampler that prioritizes failed and unseen items in minibatches.
+    """Batch sampler that balances failed and passed items in minibatches.
 
-    After the first full evaluation, items that scored below `failure_threshold`
-    are guaranteed `min_failed_per_batch` slots.  Items never seen in any
-    minibatch get `min_unseen_per_batch` slots.  Remaining slots are filled
-    randomly.  Before any failure data exists, sampling is uniform random.
+    After the first full evaluation, the minibatch is split roughly 50/50
+    between failed items (worst-first) and passed items (randomly sampled).
+    Including passed items prevents the reflection LLM from over-correcting
+    on failures and regressing behaviors that already work.
+
+    Before any failure data exists, sampling is uniform random.
 
     Also tracks per-item failure streaks and which assertions keep failing,
     so the reflection prompt can include failure history for stuck items.
@@ -24,18 +26,15 @@ class FailureAwareBatchSampler:
         self,
         minibatch_size: int,
         min_failed_per_batch: int = 1,
-        min_unseen_per_batch: int = 0,
         failure_threshold: float = 1.0,
         rng: random.Random | None = None,
     ) -> None:
         self.minibatch_size = minibatch_size
         self.min_failed_per_batch = min_failed_per_batch
-        self.min_unseen_per_batch = min_unseen_per_batch
         self.failure_threshold = failure_threshold
         self.rng = rng if rng is not None else random.Random(0)
 
         self._item_scores: dict[str, float] = {}
-        self._seen_item_ids: set[str] = set()
         self._has_full_eval_data: bool = False
 
         self._idx_to_item_id: dict[int, str] = {}
@@ -59,9 +58,6 @@ class FailureAwareBatchSampler:
             self._item_scores[item_id] = data.get("score", 0.0)
         if per_item_feedback:
             self._has_full_eval_data = True
-
-    def mark_seen(self, item_ids: list[str]) -> None:
-        self._seen_item_ids.update(item_ids)
 
     def update_assertion_failures(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
         for item_id, data in per_item_feedback.items():
@@ -105,8 +101,7 @@ class FailureAwareBatchSampler:
             return self.rng.sample(all_ids, n)
 
         failed_ids: list[int] = []
-        unseen_ids: list[int] = []
-        other_ids: list[int] = []
+        passed_ids: list[int] = []
 
         for idx in all_ids:
             item_id = self._idx_to_item_id.get(idx, "")
@@ -114,28 +109,30 @@ class FailureAwareBatchSampler:
 
             if score is not None and score < self.failure_threshold:
                 failed_ids.append(idx)
-            elif item_id not in self._seen_item_ids:
-                unseen_ids.append(idx)
             else:
-                other_ids.append(idx)
+                passed_ids.append(idx)
 
-        # Sort failed items by score ascending (worst first)
         failed_ids.sort(key=self._score_for_idx)
 
         selected: list[int] = []
         remaining = n
 
-        n_failed = min(self.min_failed_per_batch, len(failed_ids), remaining)
+        # Split slots ~50/50 between failed and passed items.
+        # This ensures the reflection LLM sees both what's broken AND what's
+        # working, preventing over-correction that regresses passing items.
+        n_failed_target = max(self.min_failed_per_batch, remaining // 2)
+        n_failed = min(n_failed_target, len(failed_ids), remaining)
         if n_failed > 0:
             selected.extend(failed_ids[:n_failed])
             remaining -= n_failed
 
-        available_unseen = [u for u in unseen_ids if u not in selected]
-        n_unseen = min(self.min_unseen_per_batch, len(available_unseen), remaining)
-        if n_unseen > 0:
-            selected.extend(self.rng.sample(available_unseen, n_unseen))
-            remaining -= n_unseen
+        # Fill with passed items to anchor working behaviors
+        if remaining > 0 and passed_ids:
+            n_passed = min(remaining, len(passed_ids))
+            selected.extend(self.rng.sample(passed_ids, n_passed))
+            remaining -= n_passed
 
+        # If still remaining (edge case: not enough passed items), fill randomly
         if remaining > 0:
             selected_set = set(selected)
             pool = [idx for idx in all_ids if idx not in selected_set]

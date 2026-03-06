@@ -170,7 +170,7 @@ def main():
         optimizer_type=optimizer_type,
         optimizer_parameters={
             "max_candidates": 10,
-            "reflection_minibatch_size": 3,
+            "reflection_minibatch_size": 4,
             "seed": 42,
         },
         optimizable_keys=["system_prompt", "user_message"],

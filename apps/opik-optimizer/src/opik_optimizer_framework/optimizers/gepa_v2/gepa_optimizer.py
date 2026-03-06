@@ -114,7 +114,7 @@ class GepaV2Optimizer:
 
         params = context.optimizer_parameters
         seed = params.get("seed", 42)
-        reflection_minibatch_size = params.get("reflection_minibatch_size", 3)
+        reflection_minibatch_size = max(4, params.get("reflection_minibatch_size", 4))
         candidate_selection_strategy = params.get(
             "candidate_selection_strategy", "pareto"
         )
@@ -138,10 +138,7 @@ class GepaV2Optimizer:
 
         sampler = FailureAwareBatchSampler(
             minibatch_size=reflection_minibatch_size,
-            min_failed_per_batch=params.get(
-                "min_failed_per_batch", max(1, reflection_minibatch_size - 1),
-            ),
-            min_unseen_per_batch=params.get("min_unseen_per_batch", 0),
+            min_failed_per_batch=params.get("min_failed_per_batch", 1),
             failure_threshold=params.get("failure_threshold", 1.0),
             rng=random.Random(seed),
         )
@@ -191,3 +188,18 @@ class GepaV2Optimizer:
             result.best_score if hasattr(result, "best_score") else -1,
             len(state.trials),
         )
+
+        problematic = adapter.get_problematic_items_summary()
+        if problematic:
+            logger.info("Problematic items (%d):", len(problematic))
+            for item in problematic:
+                logger.info(
+                    "  item=%s streak=%d assertions=%s",
+                    item["item_id"][:12],
+                    item["failure_streak"],
+                    item["failing_assertions"],
+                )
+            adapter._reflection_log.append({
+                "type": "problematic_items_summary",
+                "items": problematic,
+            })

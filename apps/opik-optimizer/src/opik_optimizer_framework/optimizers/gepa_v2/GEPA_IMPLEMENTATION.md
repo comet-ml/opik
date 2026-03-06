@@ -9,7 +9,7 @@ Three files, three responsibilities:
 | `gepa_optimizer.py` | `GepaV2Optimizer` | Entry point. Builds the seed candidate, sampler, adapter, and calls `gepa.optimize()`. |
 | `gepa_adapter.py` | `FrameworkGEPAAdapter` | Bridges GEPA's evaluate/reflect interface to the framework's `EvaluationAdapter`. Tracks candidates, parents, per-item scores. |
 | `gepa_adapter.py` | `GEPAProgressCallback` | Receives GEPA lifecycle events and forwards them to the adapter for state management. |
-| `failure_aware_sampler.py` | `FailureAwareBatchSampler` | Controls which dataset items appear in each minibatch, prioritizing failed items. |
+| `failure_aware_sampler.py` | `FailureAwareBatchSampler` | Controls which dataset items appear in each minibatch, balancing failed and passed items. |
 
 ## How GEPA Works (High Level)
 
@@ -59,11 +59,14 @@ def build(candidate: dict[str, str]) -> dict:
 
 GEPA candidates are flat `dict[str, str]` (e.g., `{"system_prompt": "...", "user_message": "..."}`). The framework's `EvaluationAdapter` receives the full merged config and handles conversion to whatever format the evaluation needs.
 
-## Failure-Aware Batch Sampling
+## Balanced Batch Sampling
 
-GEPA's default `EpochShuffledBatchSampler` selects minibatch items uniformly. With small minibatches (size 2-3) from ~15 items, there's a significant chance the minibatch contains zero failed items — wasting an iteration because the reflection LLM sees only passes and proposes marginal changes.
+GEPA's default `EpochShuffledBatchSampler` selects minibatch items uniformly. With small minibatches (size 4-7) from ~20 items, uniform sampling often produces batches dominated by either failures or passes, leading to two problems:
 
-`FailureAwareBatchSampler` replaces the default with slot-based guarantees:
+1. **All-failure batches** → the reflection LLM over-corrects, adding rules that fix failures but break passing behaviors (catastrophic regressions with 0.0 scores).
+2. **All-pass batches** → wasted iteration, the reflection LLM sees only passes and proposes marginal changes.
+
+`FailureAwareBatchSampler` replaces the default with **balanced 50/50 sampling**:
 
 ### Algorithm
 
@@ -71,13 +74,32 @@ GEPA's default `EpochShuffledBatchSampler` selects minibatch items uniformly. Wi
 2. **After a full eval** — the adapter calls `sampler.update_scores(per_item_feedback)`, providing per-item scores.
 3. **On each minibatch selection**, items are categorized:
    - **Failed**: score < `failure_threshold` in the last full eval
-   - **Unseen**: never appeared in any minibatch (tracked via `mark_seen()`)
-   - **Other**: everything else
-4. **Slot filling** (priority order):
-   - Fill `min_failed_per_batch` slots from failed items (random among them)
-   - Fill `min_unseen_per_batch` slots from unseen items
-   - Fill remaining slots randomly from all unselected items
+   - **Passed**: everything else
+4. **Slot filling**:
+   - Target `remaining // 2` failed slots (at least `min_failed_per_batch`)
+   - Fill failed slots with worst-scoring items first
+   - Fill remaining slots with randomly sampled passed items
+   - If not enough passed items, fill randomly from all remaining
 5. If a category is exhausted, its slots spill into the next category.
+
+### Why 50/50
+
+The passed items act as **behavioral anchors**. The reflection LLM sees both what's broken AND what's working, so it can:
+- Preserve rules that drive passing assertions
+- Make targeted fixes for failures without over-correcting
+- Avoid the pattern of "fix A, break B" that causes catastrophic regressions
+
+### Minimum batch size
+
+The minimum `reflection_minibatch_size` is clamped to **4** to ensure the 50/50 split is meaningful (at least 2 failed + 2 passed). Default is 4.
+
+### Failure streak tracking
+
+The sampler also tracks per-item **failure streaks** — how many consecutive full evaluations an item has failed, and which specific assertions keep failing. This data is used by the reflection prompt to annotate stuck items with "Failure History" context, encouraging the reflection LLM to try structurally different approaches rather than repeating the same fix.
+
+### Problematic items summary
+
+At the end of optimization, `get_problematic_items_summary()` returns items with `failure_streak >= 2`, sorted by streak length. This is logged to the reflection log for debugging and future UI display.
 
 ### ID mapping
 
@@ -86,7 +108,7 @@ GEPA's `DataLoader` uses integer indices (0..N-1). The adapter's per-item feedba
 ### Wiring
 
 - Created in `gepa_optimizer.py`, passed to both `gepa.optimize(batch_sampler=sampler)` and `FrameworkGEPAAdapter(batch_sampler=sampler)`.
-- The adapter calls `sampler.update_scores(per_item)` after each full eval and `sampler.mark_seen(dataset_item_ids)` after each minibatch eval.
+- The adapter calls `sampler.update_scores(per_item)` and `sampler.update_assertion_failures(per_item)` after each full eval.
 
 ## Callback Flow
 
@@ -163,75 +185,13 @@ The prompt receives two placeholders from GEPA's `InstructionProposalSignature`:
 
 ### The 4 steps
 
-**STEP 1 — DIAGNOSE**: Read FAILED assertions. Identify patterns across failures — what categories of behavior keep failing.
+**STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current instruction already produces these. Preserve the rules that drive successes.
 
-**STEP 2 — KEEP WHAT WORKS**: Look at PASSED assertions. Copy rules from the current instruction that drive successes verbatim, unless they conflict with a fix.
+**STEP 2 — CHECK FAILURE HISTORY**: If any example has a "Failure History" section, the current rules for that assertion already failed before. Do NOT add another generic rule of the same kind. Instead embed concrete example phrases or lookup instructions directly, or try a structurally different approach.
 
-**STEP 3 — WRITE RULES THAT MATCH THE ASSERTION**: Match rule specificity to what the assertion checks for:
-- Specific behavior assertion → specific rule to guarantee it
-- General quality assertion → broader rule with clear boundary
-- Key constraint: every rule must describe an observable action, not abstract advice
+**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify a specific rule. Every rule must describe an observable action (what to say, include, or avoid) — abstract advice like "be empathetic" does not reliably work. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
 
-**STEP 4 — GENERALIZE ACROSS INPUTS**: Rules must work for any input, not just the examples shown. Turn patterns into general triggers. Include domain facts the assistant wouldn't know on its own (company policies, product details, etc.).
-
-### Full template
-
-```
-I provided an assistant with the following instructions to perform a task for me:
-\```
-<curr_param>
-\```
-
-The following are examples of different task inputs provided to the assistant
-along with the assistant's response for each of them, and feedback showing
-which assertions PASSED and which FAILED.
-Examples are sorted by priority — the ones with the most failures come first:
-\```
-<side_info>
-\```
-
-Your task is to write an improved instruction for the assistant.
-
-STEP 1 — DIAGNOSE: Read the FAILED assertions. Each one names a specific
-behavior the assistant's response was missing. Identify the *patterns* across
-failures — what categories of behavior keep failing?
-
-STEP 2 — KEEP WHAT WORKS: Look at the PASSED assertions. The current
-instruction already produces these behaviors. Copy the specific rules from
-the current instruction that drive these successes into your new version
-verbatim, unless they directly conflict with a fix.
-
-STEP 3 — WRITE RULES THAT MATCH THE ASSERTION: Read each failing assertion
-carefully. The assertion itself tells you how specific your rule needs to be:
-
-- If the assertion checks for a SPECIFIC behavior (e.g., "includes a
-code example", "mentions the deadline"), write a rule specific enough to
-guarantee that behavior.
-Example: "When the user's question includes a code snippet, always
-include a corrected version in your response."
-
-- If the assertion checks for a GENERAL quality (e.g., "clear and concise",
-"factually accurate"), write a broader rule with a clear boundary.
-Example: "Never state uncertain information as fact — say 'this may
-vary' instead of asserting a specific value."
-
-The assistant is a language model that executes literal instructions. Abstract
-advice like "be empathetic" does NOT reliably produce the right behavior.
-Every rule must describe an observable action (what to say, what to include,
-what to avoid).
-
-STEP 4 — GENERALIZE ACROSS INPUTS: Your rules must work for any input in
-this domain, not just the examples shown. Do NOT reference specific test
-inputs (e.g., "if the input is about topic X, say Y"). Instead, try to turn
-the pattern into a general trigger but always mind the balance between
-SPECIFIC and GENERAL (e.g., "when the user references a specific entity,
-always confirm it back in your response").
-
-If the feedback reveals domain facts the assistant wouldn't know on its own
-(e.g., company policies, product details), include those facts as rules.
-
-Provide the new instructions within \``` blocks.
-```
+**STEP 4 — STRUCTURE**: Group related rules under short topic headers. Merge overlapping rules. Remove redundant ones. Keep the instruction concise — prefer tightening existing rules over appending new ones.
 
 ## Reflective Dataset Construction
 
@@ -270,6 +230,13 @@ For each item in the minibatch trajectories:
 - `Inputs`: same as above
 - `Runs`: each run as `[Run 1/N]` with output and feedback
 - `Summary`: e.g., "2/3 runs passed. Consistent failures: mentions_deadline"
+
+### Failure history annotation
+
+For items with `failure_streak >= 1`, a `Failure History` field is appended:
+> "This item has failed N consecutive iteration(s). Still-failing assertions: ... The current rules for these assertions are not working."
+
+This warns the reflection LLM to try a structurally different approach.
 
 ### Sorting
 
@@ -325,13 +292,12 @@ All passed via `context.optimizer_parameters`:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `seed` | `42` | Random seed for GEPA and the batch sampler |
-| `reflection_minibatch_size` | `3` | Items per minibatch for reflection |
+| `reflection_minibatch_size` | `4` (min 4) | Items per minibatch for reflection |
 | `candidate_selection_strategy` | `"pareto"` | How GEPA selects candidates (`"pareto"` or `"epsilon_greedy"`) |
 | `max_candidates` | `5` | Maximum candidates to explore |
 | `max_metric_calls` | `max_candidates * len(dataset) * 5` | Budget for total evaluations |
 | `score_threshold` | `1.0` | Stop when best full-eval score reaches this |
-| `min_failed_per_batch` | `reflection_minibatch_size - 1` | Guaranteed failed items per minibatch |
-| `min_unseen_per_batch` | `0` | Guaranteed unseen items per minibatch |
+| `min_failed_per_batch` | `1` | Minimum guaranteed failed items per minibatch |
 | `failure_threshold` | `1.0` | Items scoring below this are "failed" |
 
 ## Example Experiment Table
@@ -339,10 +305,10 @@ All passed via `context.optimizer_parameters`:
 ```
 step  batch  candidate  parents    num  type        eval_purpose
    0      -  AAA        []           5  (full)      initialization
-   1      1  AAA        []           3  mini-batch  exploration:minibatch
-   1      1  BBB        [AAA]        3  mini-batch  exploration:mutation
+   1      1  AAA        []           4  mini-batch  exploration:minibatch
+   1      1  BBB        [AAA]        4  mini-batch  exploration:mutation
    1      1  BBB        [AAA]        5  (full)      validation
-   2      2  BBB        [AAA]        3  mini-batch  exploration:minibatch
-   2      2  CCC        [BBB]        3  mini-batch  exploration:mutation
+   2      2  BBB        [AAA]        4  mini-batch  exploration:minibatch
+   2      2  CCC        [BBB]        4  mini-batch  exploration:mutation
    2      2  CCC        [BBB]        5  (full)      validation
 ```

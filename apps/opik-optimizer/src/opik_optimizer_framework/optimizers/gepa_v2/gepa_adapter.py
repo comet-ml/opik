@@ -434,12 +434,9 @@ class FrameworkGEPAAdapter:
         per_item = _extract_per_item_feedback(raw_result)
         self._last_per_item_feedback = per_item
 
-        if self._batch_sampler is not None:
-            if is_full_eval:
-                self._batch_sampler.update_scores(per_item)
-                self._batch_sampler.update_assertion_failures(per_item)
-            else:
-                self._batch_sampler.mark_seen(dataset_item_ids)
+        if self._batch_sampler is not None and is_full_eval:
+            self._batch_sampler.update_scores(per_item)
+            self._batch_sampler.update_assertion_failures(per_item)
 
         return self._build_evaluation_batch(
             batch, per_item, trial, effective_capture_traces,
@@ -645,3 +642,22 @@ class FrameworkGEPAAdapter:
             )
 
         return new_texts
+
+    def get_problematic_items_summary(self) -> list[dict[str, Any]]:
+        """Return items that failed consistently, sorted by failure streak."""
+        if self._batch_sampler is None:
+            return []
+
+        stuck = self._batch_sampler.get_stuck_items(min_streak=2)
+        if not stuck:
+            return []
+
+        summary = []
+        for item_id, streak in sorted(stuck.items(), key=lambda x: -x[1]):
+            assertions = self._batch_sampler.get_failed_assertions(item_id)
+            summary.append({
+                "item_id": item_id,
+                "failure_streak": streak,
+                "failing_assertions": assertions,
+            })
+        return summary

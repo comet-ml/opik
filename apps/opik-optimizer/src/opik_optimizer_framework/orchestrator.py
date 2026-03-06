@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as _json
 import logging
 from typing import Any
 
@@ -15,6 +16,22 @@ from opik_optimizer_framework.types import (
 
 logger = logging.getLogger(__name__)
 
+
+def _save_reflection_log(optimizer: Any) -> None:
+    adapter = getattr(optimizer, "adapter", None)
+    if adapter is None:
+        return
+    log = getattr(adapter, "_reflection_log", [])
+    if not log:
+        return
+    import time
+    path = f"reflection_log_{int(time.time())}.json"
+    try:
+        with open(path, "w") as f:
+            _json.dump(log, f, indent=2, default=str)
+        logger.info("Reflection log saved to %s (%d entries)", path, len(log))
+    except Exception:
+        logger.warning("Failed to save reflection log", exc_info=True)
 
 
 def run_optimization(
@@ -99,3 +116,5 @@ def run_optimization(
         state.status = "error"
         logger.exception("Optimization %s failed", context.optimization_id)
         raise
+    finally:
+        _save_reflection_log(optimizer)
