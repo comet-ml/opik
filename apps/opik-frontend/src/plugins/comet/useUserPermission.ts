@@ -127,6 +127,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUpdateUserRole = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.USER_ROLE_UPDATE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -139,6 +144,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeletePrompts,
     canDeleteDatasets,
     canDeleteOptimizationRuns,
+    canUpdateUserRole,
     isPending: isEnabled && isPending,
   };
 };
