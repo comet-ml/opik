@@ -1,11 +1,14 @@
 import functools
 import logging
-from typing import List, Optional, TYPE_CHECKING
+import os
+import time
+from typing import Callable, List, Optional, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
+from opik import synchronization
 from . import experiment_item, experiments_client
 from .. import constants, helpers
 from ...api_objects.prompt import base_prompt
@@ -14,6 +17,12 @@ if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
+
+# Default poll interval (seconds) for wait_for_evaluation_trigger. Overridable via
+# OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS (default: 5.0).
+DEFAULT_POLL_INTERVAL_SECONDS = float(
+    os.getenv("OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS", "5.0")
+)
 
 
 class Experiment:
@@ -157,3 +166,85 @@ class Experiment:
                 id=self.id,
                 experiment_scores=experiment_scores,
             )
+
+    def wait_for_evaluation_trigger(
+        self,
+        callback: Optional[Callable[[], None]] = None,
+        timeout: Optional[float] = None,
+        poll_interval: Optional[float] = None,
+    ) -> None:
+        """
+        Wait for an evaluation to be triggered from the UI.
+
+        This method polls the experiment status until it detects that an evaluation
+        has been triggered (status becomes "running") or until timeout is reached.
+        Once triggered, it executes the optional callback function and then waits
+        for the evaluation to complete (status becomes "completed" or "cancelled").
+
+        Args:
+            callback: Optional function to execute when evaluation is triggered.
+            timeout: Maximum time in seconds to wait. If None, waits indefinitely.
+            poll_interval: Time in seconds between status checks. Defaults to
+                :const:`DEFAULT_POLL_INTERVAL_SECONDS` (configurable via
+                ``OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS``, default 5.0 s).
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutError: If timeout is reached before evaluation completes.
+        """
+        if poll_interval is None:
+            poll_interval = DEFAULT_POLL_INTERVAL_SECONDS
+        LOGGER.info(
+            "Waiting for evaluation trigger on experiment '%s' (ID: %s)",
+            self.name,
+            self.id,
+        )
+
+        start_time = time.time()
+
+        def check_status_running() -> bool:
+            if timeout is not None and (time.time() - start_time) > timeout:
+                raise TimeoutError(
+                    f"Timeout waiting for evaluation trigger on experiment {self.id}"
+                )
+            exp_data = self.get_experiment_data()
+            return exp_data.status == "running"
+
+        synchronization.until(
+            function=check_status_running,
+            sleep=poll_interval,
+            max_try_seconds=timeout or float("inf"),
+        )
+
+        LOGGER.info(
+            "Evaluation triggered on experiment '%s' (ID: %s)", self.name, self.id
+        )
+
+        if callback is not None:
+            LOGGER.info("Executing callback function")
+            callback()
+
+        def check_status_complete() -> bool:
+            if timeout is not None and (time.time() - start_time) > timeout:
+                raise TimeoutError(
+                    f"Timeout waiting for evaluation completion on experiment {self.id}"
+                )
+            exp_data = self.get_experiment_data()
+            return exp_data.status in ("completed", "cancelled")
+
+        LOGGER.info("Waiting for evaluation to complete on experiment '%s'", self.name)
+
+        synchronization.until(
+            function=check_status_complete,
+            sleep=poll_interval,
+            max_try_seconds=timeout or float("inf"),
+        )
+
+        final_status = self.get_experiment_data().status
+        LOGGER.info(
+            "Evaluation completed on experiment '%s' with status: %s",
+            self.name,
+            final_status,
+        )

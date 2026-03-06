@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, Sparkles } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -15,13 +15,16 @@ import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { UpdateExperimentDialog } from "@/components/shared/UpdateExperimentDialog/UpdateExperimentDialog";
 import useExperimentUpdateMutation from "@/api/datasets/useExperimentUpdate";
+import RunExperimentEvaluationDialog from "@/components/pages/ExperimentsPage/RunExperimentEvaluationDialog";
+
+type ActiveDialog = "none" | "delete" | "edit" | "evaluate";
 
 const ExperimentRowActionsCell: React.FunctionComponent<
   CellContext<GroupedExperiment, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const experiment = context.row.original;
-  const [open, setOpen] = useState<boolean | number>(false);
+  const [activeDialog, setActiveDialog] = useState<ActiveDialog>("none");
 
   const experimentBatchDeleteMutation = useExperimentBatchDeleteMutation();
   const experimentUpdateMutation = useExperimentUpdateMutation();
@@ -53,18 +56,25 @@ const ExperimentRowActionsCell: React.FunctionComponent<
       className="justify-end p-0"
       stopClickPropagation
     >
+      <RunExperimentEvaluationDialog
+        key={`evaluate-${resetKeyRef.current}`}
+        open={activeDialog === "evaluate"}
+        setOpen={(open) => setActiveDialog(open ? "evaluate" : "none")}
+        projectId={experiment.project_id || ""}
+        experimentIds={[experiment.id]}
+      />
       <UpdateExperimentDialog
         key={`edit-${resetKeyRef.current}`}
-        open={open === 2}
-        setOpen={setOpen}
+        open={activeDialog === "edit"}
+        setOpen={(open) => setActiveDialog(open ? "edit" : "none")}
         onConfirm={updateExperimentHandler}
         latestName={experiment.name}
         latestConfiguration={experiment.metadata}
       />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
-        open={open === 1}
-        setOpen={setOpen}
+        open={activeDialog === "delete"}
+        setOpen={(open) => setActiveDialog(open ? "delete" : "none")}
         onConfirm={deleteExperimentsHandler}
         title="Delete experiment"
         description="Deleting an experiment will remove all samples in the experiment. Related traces won't be affected. This action can't be undone. Are you sure you want to continue?"
@@ -81,7 +91,16 @@ const ExperimentRowActionsCell: React.FunctionComponent<
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem
             onClick={() => {
-              setOpen(2);
+              setActiveDialog("evaluate");
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Sparkles className="mr-2 size-4" />
+            Evaluate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              setActiveDialog("edit");
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
           >
@@ -91,7 +110,7 @@ const ExperimentRowActionsCell: React.FunctionComponent<
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
-              setOpen(1);
+              setActiveDialog("delete");
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             variant="destructive"

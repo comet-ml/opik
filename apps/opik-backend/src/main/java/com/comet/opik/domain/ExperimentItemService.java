@@ -253,4 +253,52 @@ public class ExperimentItemService {
         log.info("Deleting experiment items, count '{}'", ids.size());
         return experimentItemDAO.delete(ids).then();
     }
+
+    private static final int TRACE_IDS_PAGE_SIZE = 10_000;
+
+    /**
+     * Returns trace IDs for the given experiment, scoped to the given workspace.
+     * Pages through all experiment items so every trace is included (no 10k cap).
+     * Callers must pass the current workspace ID to enforce tenant isolation.
+     *
+     * @param experimentId the experiment ID
+     * @param workspaceId  the workspace ID (from request context); must be non-null
+     * @return Flux of trace IDs belonging to the experiment in the workspace
+     */
+    public Flux<UUID> getTraceIdsByExperimentId(@NonNull UUID experimentId, @NonNull String workspaceId) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            throw new IllegalArgumentException("workspaceId is required for getTraceIdsByExperimentId");
+        }
+        log.info("Getting trace IDs for experiment '{}' in workspace '{}'", experimentId, workspaceId);
+        return getTraceIdsByExperimentIdPage(experimentId, workspaceId, null)
+                .map(ExperimentItem::traceId);
+    }
+
+    /**
+     * Fetches one page of experiment items and concat with the next page if full.
+     * Ensures all traces are streamed without holding more than one page in memory.
+     */
+    private Flux<ExperimentItem> getTraceIdsByExperimentIdPage(
+            @NonNull UUID experimentId, @NonNull String workspaceId, UUID lastRetrievedId) {
+        var criteria = ExperimentItemSearchCriteria.builder()
+                .limit(TRACE_IDS_PAGE_SIZE)
+                .truncate(false)
+                .lastRetrievedId(lastRetrievedId)
+                .build();
+        return experimentItemDAO.getItems(Set.of(experimentId), criteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .collectList()
+                .flatMapMany(page -> {
+                    if (page.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    Flux<ExperimentItem> pageFlux = Flux.fromIterable(page);
+                    if (page.size() == TRACE_IDS_PAGE_SIZE) {
+                        UUID nextLastId = page.get(page.size() - 1).id();
+                        return pageFlux.concatWith(
+                                getTraceIdsByExperimentIdPage(experimentId, workspaceId, nextLastId));
+                    }
+                    return pageFlux;
+                });
+    }
 }
