@@ -127,6 +127,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canConfigureWorkspaceSettings = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.WORKSPACE_SETTINGS_CONFIGURE,
+      ),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -139,6 +147,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeletePrompts,
     canDeleteDatasets,
     canDeleteOptimizationRuns,
+    canConfigureWorkspaceSettings,
     isPending: isEnabled && isPending,
   };
 };

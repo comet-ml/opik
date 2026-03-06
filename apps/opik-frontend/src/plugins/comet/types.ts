@@ -70,6 +70,7 @@ export enum ManagementPermissionsNames {
   PROMPT_DELETE = "prompt_delete",
   DATASET_DELETE = "dataset_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
+  WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
 }
 
 export interface UserPermission {
