@@ -26,6 +26,7 @@ OPIK_CLI = shutil.which("opik") or "opik"
 RUNNER_STARTUP_TIMEOUT = 15
 JOB_COMPLETION_TIMEOUT = 30
 TRACE_PROPAGATION_TIMEOUT = 30
+AGENT_REGISTRATION_TIMEOUT = 10
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +106,32 @@ def find_trace_by_input(
     ), f"No trace with '{match_text}' found within {TRACE_PROPAGATION_TIMEOUT}s"
 
     return _find()
+
+
+def wait_for_agent_registration(api: rest_api_client.OpikApi, agent_name: str) -> None:
+    """Poll until the agent is registered with any runner in the workspace.
+
+    Raises a pytest.fail if the agent is not registered within the timeout.
+    """
+
+    def _is_agent_registered():
+        runners_page = api.runners.list_runners(size=50)
+        if runners_page.content:
+            for runner in runners_page.content:
+                if runner.agents:
+                    for agent in runner.agents:
+                        if agent.name == agent_name:
+                            return True
+        return False
+
+    if not synchronization.until(
+        _is_agent_registered,
+        max_try_seconds=AGENT_REGISTRATION_TIMEOUT,
+        allow_errors=True,
+    ):
+        pytest.fail(
+            f"Agent '{agent_name}' was not registered within {AGENT_REGISTRATION_TIMEOUT}s"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +223,7 @@ def test_runner_happy_path(api_client, runner_process):
     register_agent(ECHO_APP)
     message = f"hello-e2e-{int(time.time())}"
 
-    # Let heartbeat pick up the agent
-    time.sleep(2)
+    wait_for_agent_registration(api_client, "echo")
 
     submit_job(api_client, "echo", message)
 
@@ -215,8 +241,7 @@ def test_runner_with_mask(api_client, runner_process):
     message = f"mask-e2e-{int(time.time())}"
     custom_greeting = f"custom-greeting-{int(time.time())}"
 
-    # Let heartbeat pick up the agent
-    time.sleep(2)
+    wait_for_agent_registration(api_client, "echo_config")
 
     # Create a mask overriding the default greeting
     opik_client = Opik()
