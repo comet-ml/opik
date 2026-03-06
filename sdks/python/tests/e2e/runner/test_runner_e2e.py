@@ -15,8 +15,8 @@ from typing import Optional
 
 import pytest
 
-import opik
-from opik.rest_api.client import OpikApi
+from opik import Opik, synchronization
+import opik.rest_api.client as rest_api_client
 
 
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
@@ -47,7 +47,7 @@ def register_agent(app_path: str) -> None:
 
 
 def submit_job(
-    api: OpikApi,
+    api: rest_api_client.OpikApi,
     agent_name: str,
     message: str,
     mask_id: Optional[str] = None,
@@ -60,7 +60,9 @@ def submit_job(
     )
 
 
-def wait_for_completed_job(api: OpikApi, runner_id: str, match_text: str):
+def wait_for_completed_job(
+    api: rest_api_client.OpikApi, runner_id: str, match_text: str
+):
     """Poll list_jobs until a completed job whose inputs contain *match_text* appears."""
 
     def _find():
@@ -71,7 +73,7 @@ def wait_for_completed_job(api: OpikApi, runner_id: str, match_text: str):
                     return j
         return None
 
-    assert opik.synchronization.until(
+    assert synchronization.until(
         lambda: _find() is not None,
         max_try_seconds=JOB_COMPLETION_TIMEOUT,
         allow_errors=True,
@@ -80,7 +82,9 @@ def wait_for_completed_job(api: OpikApi, runner_id: str, match_text: str):
     return _find()
 
 
-def find_trace_by_input(api: OpikApi, project_name: str, match_text: str):
+def find_trace_by_input(
+    api: rest_api_client.OpikApi, project_name: str, match_text: str
+):
     """Poll until a trace whose input contains *match_text* appears and has output."""
 
     def _find():
@@ -94,7 +98,7 @@ def find_trace_by_input(api: OpikApi, project_name: str, match_text: str):
                     return t
         return None
 
-    assert opik.synchronization.until(
+    assert synchronization.until(
         lambda: _find() is not None,
         max_try_seconds=TRACE_PROPAGATION_TIMEOUT,
         allow_errors=True,
@@ -110,34 +114,40 @@ def find_trace_by_input(api: OpikApi, project_name: str, match_text: str):
 
 @pytest.fixture()
 def api_client():
-    client = OpikApi()
-    yield client
+    opik_client = Opik()
+    yield opik_client.rest_client
+    opik_client.end()
 
 
 @pytest.fixture()
-def runner_process(api_client):
+def subprocess_env():
+    """Environment variables for subprocesses to reach the same Opik backend."""
+    opik_client = Opik()
+    try:
+        cfg = opik_client.config
+    finally:
+        opik_client.end()
+
+    env = os.environ.copy()
+    env["OPIK_URL_OVERRIDE"] = cfg.url_override
+    if cfg.api_key:
+        env["OPIK_API_KEY"] = cfg.api_key
+    if cfg.workspace:
+        env["OPIK_WORKSPACE"] = cfg.workspace
+    return env
+
+
+@pytest.fixture()
+def runner_process(api_client, subprocess_env):
     """Start ``opik connect --pair <code>`` and yield the runner_id."""
     pair = api_client.runners.generate_pairing_code()
-
-    # Propagate OpikApi client parameters to subprocess via environment variables
-    env = os.environ.copy()
-
-    # Get the base URL and API key from the client wrapper
-    client_wrapper = api_client._client_wrapper
-    base_url = client_wrapper.get_base_url()
-    if base_url:
-        env["OPIK_URL_OVERRIDE"] = base_url
-    if client_wrapper._api_key:
-        env["OPIK_API_KEY"] = client_wrapper._api_key
-    if client_wrapper._workspace_name:
-        env["OPIK_WORKSPACE"] = client_wrapper._workspace_name
 
     proc = subprocess.Popen(
         [OPIK_CLI, "connect", "--pair", pair.pairing_code],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        env=env,
+        env=subprocess_env,
     )
 
     runner_id = None
@@ -209,7 +219,7 @@ def test_runner_with_mask(api_client, runner_process):
     time.sleep(2)
 
     # Create a mask overriding the default greeting
-    opik_client = opik.Opik()
+    opik_client = Opik()
     try:
         agent_config = opik_client.get_agent_config()
         mask_id = agent_config.create_mask(
