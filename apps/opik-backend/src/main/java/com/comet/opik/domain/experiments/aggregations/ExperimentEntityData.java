@@ -3,6 +3,7 @@ package com.comet.opik.domain.experiments.aggregations;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,16 +58,24 @@ public class ExperimentEntityData {
     /**
      * Experiment item linking a dataset item to a trace.
      *
-     * @param id            The experiment item ID
-     * @param experimentId  The experiment ID
-     * @param traceId       The trace ID
-     * @param datasetItemId The dataset item ID
+     * @param id              The experiment item ID
+     * @param experimentId    The experiment ID
+     * @param traceId         The trace ID
+     * @param datasetItemId   The dataset item ID
+     * @param createdAt       Creation timestamp
+     * @param lastUpdatedAt   Last update timestamp
+     * @param createdBy       Creator user
+     * @param lastUpdatedBy   Last updater user
      */
     @Builder
     public record ExperimentItemData(
             UUID id,
             UUID experimentId,
             UUID traceId,
-            UUID datasetItemId) {
+            UUID datasetItemId,
+            Instant createdAt,
+            Instant lastUpdatedAt,
+            String createdBy,
+            String lastUpdatedBy) {
     }
 }

@@ -52,6 +52,12 @@ public class DatasetExportConfig implements StreamConfiguration {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration = Duration.minutes(5);
 
+    @JsonProperty
+    @Min(1000) @Max(10_000_000) private int streamMaxLen = 10000;
+
+    @JsonProperty
+    @Min(0) @Max(10_000) private int streamTrimLimit = 100;
+
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.HOURS)
     @MaxDuration(value = 7, unit = TimeUnit.DAYS)

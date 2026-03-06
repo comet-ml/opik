@@ -45,6 +45,12 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private int maxRetries = 3;
 
     @Builder.Default
+    private int streamMaxLen = 10000;
+
+    @Builder.Default
+    private int streamTrimLimit = 100;
+
+    @Builder.Default
     private Codec codec = RedisStreamCodec.JAVA.getCodec();
 
     public static TestStreamConfiguration create() {

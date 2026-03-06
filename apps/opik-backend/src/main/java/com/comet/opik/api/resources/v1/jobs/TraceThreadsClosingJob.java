@@ -130,7 +130,12 @@ public class TraceThreadsClosingJob extends Job implements InterruptableJob {
                     return traceThreadService.addToPendingQueue(message.projectId())
                             .flatMap(pending -> {
                                 if (Boolean.TRUE.equals(pending)) {
-                                    return stream.add(StreamAddArgs.entry(TraceThreadConfig.PAYLOAD_FIELD, message));
+                                    var streamAddArgs = StreamAddArgs
+                                            .<Object, Object>entry(TraceThreadConfig.PAYLOAD_FIELD, message)
+                                            .trimNonStrict()
+                                            .maxLen(traceThreadConfig.getStreamMaxLen())
+                                            .limit(traceThreadConfig.getStreamTrimLimit());
+                                    return stream.add(streamAddArgs);
                                 } else {
                                     log.info("Project {} is already in the pending closure list, skipping enqueue",
                                             message.projectId());

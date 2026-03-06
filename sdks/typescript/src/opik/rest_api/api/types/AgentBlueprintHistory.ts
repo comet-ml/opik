@@ -11,4 +11,5 @@ export interface AgentBlueprintHistory {
     createdAt?: Date;
     lastUpdatedBy?: string;
     lastUpdatedAt?: Date;
+    values: OpikApi.AgentConfigValueHistory[];
 }

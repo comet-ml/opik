@@ -357,23 +357,35 @@ def _inject_trace_metadata(
         resolved_cache = (
             shared_cache if shared_cache is not None else get_cached_config(instance)
         )
-        prefixed_key = instance.__opik_fields__[attr].prefixed_key
+        config_field = instance.__opik_fields__[attr]
+        prefixed_key = config_field.prefixed_key
 
+        if value is _MISSING:
+            value = resolved_cache.values.get(prefixed_key, _MISSING)
+
+        # Skip injection entirely if we still have nothing to record.
         if value is not _MISSING:
-            values = {prefixed_key: value}
-        elif prefixed_key in resolved_cache.values:
-            values = {prefixed_key: resolved_cache.values[prefixed_key]}
+            field_info: typing.Dict[str, typing.Any] = {
+                "value": value,
+                "type": type_helpers.python_type_to_backend_type(config_field.py_type),
+                **(
+                    {"description": config_field.description}
+                    if config_field.description is not None
+                    else {}
+                ),
+            }
+            values = {prefixed_key: field_info}
         else:
             values = {}
 
-        config_metadata = {
-            "agent_configuration": {
-                "blueprint_id": resolved_cache.blueprint_id,
-                "values": values,
+        opik_context.update_current_trace(
+            metadata={
+                "agent_configuration": {
+                    "blueprint_id": resolved_cache.blueprint_id,
+                    "values": values,
+                }
             }
-        }
-
-        opik_context.update_current_trace(metadata=config_metadata)
+        )
     except exceptions.OpikException:
         # Happens when there's no trace in the context
         pass
