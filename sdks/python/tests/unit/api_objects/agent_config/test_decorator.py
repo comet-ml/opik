@@ -309,6 +309,9 @@ class TestConfigDecoratorMaskAndEnv:
 
 class TestConfigDecoratorTraceMetadata:
     def test_field_access_inside_trace__injects_metadata(self, mock_backend):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
+        )
         with mock.patch(
             "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
         ) as mock_update:
@@ -327,6 +330,36 @@ class TestConfigDecoratorTraceMetadata:
             config = call_kwargs["metadata"]["agent_configuration"]
             assert "blueprint_id" in config
             assert "values" in config
+            field_entry = config["values"]["MyConfig.temp"]
+            assert field_entry["value"] == 0.8
+            assert field_entry["type"] == "float"
+            assert "description" not in field_entry
+
+    def test_field_access_inside_trace__injects_description_when_annotated(
+        self, mock_backend
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.8)]
+        )
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+
+            @agent_config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                temp: Annotated[float, "sampling temperature"] = 0.8
+
+            instance = MyConfig()
+            _ = instance.temp
+
+            mock_update.assert_called()
+            field_entry = mock_update.call_args[1]["metadata"]["agent_configuration"][
+                "values"
+            ]["MyConfig.temp"]
+            assert field_entry["value"] == 0.8
+            assert field_entry["type"] == "float"
+            assert field_entry["description"] == "sampling temperature"
 
     def test_multiple_field_accesses__configuration_present_after_each(
         self, mock_backend
@@ -363,6 +396,11 @@ class TestConfigDecoratorTraceMetadata:
                 "MyConfig.max_tokens"
                 not in trace_data.metadata["agent_configuration"]["values"]
             )
+            temp_entry = trace_data.metadata["agent_configuration"]["values"][
+                "MyConfig.temp"
+            ]
+            assert temp_entry["value"] == 0.8
+            assert temp_entry["type"] == "float"
 
             _ = instance.max_tokens
             assert trace_data.metadata["provider"] == "openai"
@@ -373,6 +411,11 @@ class TestConfigDecoratorTraceMetadata:
                 "MyConfig.max_tokens"
                 in trace_data.metadata["agent_configuration"]["values"]
             )
+            max_tokens_entry = trace_data.metadata["agent_configuration"]["values"][
+                "MyConfig.max_tokens"
+            ]
+            assert max_tokens_entry["value"] == 2000
+            assert max_tokens_entry["type"] == "integer"
 
     def test_field_access_outside_trace__no_injection(self, mock_backend):
         from opik import exceptions as opik_exceptions
