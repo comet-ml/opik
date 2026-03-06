@@ -37,9 +37,13 @@ a specific rule. Every rule must describe an observable action (what to say, \
 include, or avoid) — vague guidance does not reliably work. Rules must \
 generalize to any input in this domain; do NOT reference specific test inputs.
 
-STEP 4 — STRUCTURE: Group related rules under short descriptive headers. \
-Merge overlapping rules. Remove redundant ones. Keep the parameter concise \
-— prefer tightening existing rules over appending new ones.
+STEP 4 — STRUCTURE: Use markdown formatting. Group related rules under \
+## headers. Merge overlapping rules. Remove redundant ones. Keep the \
+parameter concise — prefer tightening existing rules over appending new ones.
+
+IMPORTANT: Output ONLY the parameter text. Do NOT include any metadata \
+such as "Parameter:", "Description:", or "Other parameters" lines — those \
+are context for you, not part of the parameter.
 
 Provide the new parameter within ``` blocks."""
 
@@ -89,6 +93,49 @@ class ReflectionProposer:
                 return completion.choices[0].message.content
             return _lm
         raise ValueError(f"reflection_lm must be a string or callable, got {type(self._reflection_lm)}")
+
+    def _strip_header(self, text: str, name: str) -> str:
+        """Strip header metadata lines from the beginning of proposed text.
+
+        The LLM sometimes echoes the header (Parameter:, Description:, Other
+        parameters:) at the start of its output, sometimes reformulated. This
+        method strips those lines so they don't leak into the proposal.
+        """
+        lines = text.split("\n")
+        description = self._prompt_descriptions.get(name, "")
+
+        # Strip leading lines that look like header metadata
+        while lines:
+            stripped = lines[0].strip()
+            if not stripped:
+                lines.pop(0)
+                continue
+            if stripped.lower().startswith("parameter:"):
+                lines.pop(0)
+                continue
+            if stripped.lower().startswith("description:"):
+                lines.pop(0)
+                continue
+            if stripped.lower().startswith("other parameters"):
+                lines.pop(0)
+                continue
+            # Bullet items from the sibling list (e.g., "- user_message: ...")
+            if stripped.startswith("- ") and ":" in stripped:
+                candidate_key = stripped[2:].split(":")[0].strip()
+                if candidate_key in (self._prompt_descriptions or {}):
+                    lines.pop(0)
+                    continue
+            # Bare parameter name (e.g., "system_prompt" or "System Prompt")
+            if stripped.lower().replace("_", " ") == name.lower().replace("_", " "):
+                lines.pop(0)
+                continue
+            # Description text echoed without "Description:" prefix
+            if description and stripped == description:
+                lines.pop(0)
+                continue
+            break
+
+        return "\n".join(lines).strip()
 
     def _build_header(self, name: str, candidate: dict[str, str]) -> str:
         """Build the parameter header with optional description and sibling context."""
@@ -149,13 +196,7 @@ class ReflectionProposer:
                 input_dict=input_dict,
             )
             new_text = result["new_instruction"]
-
-            # Strip the header so it doesn't leak into the proposed text
-            if new_text.startswith(header + "\n"):
-                new_text = new_text[len(header) + 1:]
-            elif new_text.startswith(f"Parameter: {name}\n"):
-                new_text = new_text[len(f"Parameter: {name}\n"):]
-
+            new_text = self._strip_header(new_text, name)
             new_texts[name] = new_text
 
             log_entry["proposed_text"] = new_text

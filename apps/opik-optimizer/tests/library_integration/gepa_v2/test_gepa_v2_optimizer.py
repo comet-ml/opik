@@ -1388,6 +1388,123 @@ class TestGepaV2Optimizer:
         assert call_kwargs["cache_evaluation"] is False
 
 
+# -- ReflectionProposer tests -------------------------------------------------
+
+
+class TestReflectionProposer:
+    """Tests for header stripping and prompt descriptions in ReflectionProposer."""
+
+    def _make_proposer(self, prompt_descriptions=None):
+        from opik_optimizer_framework.optimizers.gepa_v2.reflection_proposer import (
+            ReflectionProposer,
+        )
+        return ReflectionProposer(
+            reflection_lm=lambda prompt: "dummy",
+            reflection_prompt_template=None,
+            prompt_descriptions=prompt_descriptions,
+        )
+
+    def test_strip_header_removes_parameter_line(self):
+        proposer = self._make_proposer()
+        text = "Parameter: system_prompt\nActual content here"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content here"
+
+    def test_strip_header_removes_description_line(self):
+        proposer = self._make_proposer({"system_prompt": "Main agent prompt"})
+        text = "Parameter: system_prompt\nDescription: Main agent prompt\nActual content"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content"
+
+    def test_strip_header_removes_bare_description(self):
+        proposer = self._make_proposer({"system_prompt": "Main agent prompt"})
+        text = "Main agent prompt\nActual content"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content"
+
+    def test_strip_header_removes_bare_param_name(self):
+        proposer = self._make_proposer()
+        text = "system_prompt\nActual content here"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content here"
+
+    def test_strip_header_removes_reformulated_param_name(self):
+        proposer = self._make_proposer()
+        text = "System Prompt\nActual content here"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content here"
+
+    def test_strip_header_removes_other_parameters_section(self):
+        proposer = self._make_proposer({
+            "system_prompt": "Main agent",
+            "user_message": "User template",
+        })
+        text = (
+            "Parameter: system_prompt\n"
+            "Description: Main agent\n"
+            "\n"
+            "Other parameters in this system:\n"
+            "- user_message: User template\n"
+            "\n"
+            "Actual content here"
+        )
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == "Actual content here"
+
+    def test_strip_header_preserves_content_without_header(self):
+        proposer = self._make_proposer()
+        text = "## Response Guidelines\n- Be helpful\n- Be concise"
+        result = proposer._strip_header(text, "system_prompt")
+        assert result == text
+
+    def test_strip_header_real_world_leak(self):
+        """Regression test: LLM echoed 'System' and 'Description:' at the start."""
+        proposer = self._make_proposer({
+            "system_prompt": "Main customer-facing support agent system prompt",
+        })
+        text = (
+            "System\n"
+            "Description: Main customer-facing support agent system prompt\n"
+            "\n"
+            "## Response Tone\n"
+            "- Be empathetic"
+        )
+        result = proposer._strip_header(text, "system_prompt")
+        assert not result.startswith("Description:")
+        assert "## Response Tone" in result
+
+    def test_build_header_includes_sibling_context(self):
+        proposer = self._make_proposer({
+            "system_prompt": "Main agent",
+            "user_message": "User template",
+        })
+        header = proposer._build_header("system_prompt", {
+            "system_prompt": "You are helpful.",
+            "user_message": "{question}",
+        })
+        assert "Parameter: system_prompt" in header
+        assert "Description: Main agent" in header
+        assert "user_message: User template" in header
+        assert "do NOT modify" in header
+
+    def test_build_header_no_descriptions(self):
+        proposer = self._make_proposer()
+        header = proposer._build_header("system_prompt", {
+            "system_prompt": "You are helpful.",
+            "user_message": "{question}",
+        })
+        assert "Parameter: system_prompt" in header
+        assert "Description:" not in header
+        assert "- user_message" in header
+
+    def test_template_requests_markdown_formatting(self):
+        from opik_optimizer_framework.optimizers.gepa_v2.reflection_proposer import (
+            GENERALIZATION_REFLECTION_TEMPLATE,
+        )
+        assert "## headers" in GENERALIZATION_REFLECTION_TEMPLATE
+        assert "Do NOT include any metadata" in GENERALIZATION_REFLECTION_TEMPLATE
+
+
 # -- registration test --------------------------------------------------------
 
 
