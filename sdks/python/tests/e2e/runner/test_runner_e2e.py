@@ -119,11 +119,25 @@ def runner_process(api_client):
     """Start ``opik connect --pair <code>`` and yield the runner_id."""
     pair = api_client.runners.generate_pairing_code()
 
+    # Propagate OpikApi client parameters to subprocess via environment variables
+    env = os.environ.copy()
+
+    # Get the base URL and API key from the client wrapper
+    client_wrapper = api_client._client_wrapper
+    base_url = client_wrapper.get_base_url()
+    if base_url:
+        env["OPIK_URL_OVERRIDE"] = base_url
+    if client_wrapper._api_key:
+        env["OPIK_API_KEY"] = client_wrapper._api_key
+    if client_wrapper._workspace_name:
+        env["OPIK_WORKSPACE"] = client_wrapper._workspace_name
+
     proc = subprocess.Popen(
         [OPIK_CLI, "connect", "--pair", pair.pairing_code],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        env=env,
     )
 
     runner_id = None
