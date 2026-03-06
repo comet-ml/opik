@@ -1,14 +1,17 @@
-"""GEPA (Genetic-Pareto) Optimizer for the new optimization framework.
+"""GEPA optimizer for the optimization framework.
 
-Delegates to the external ``gepa`` library for the optimization loop.
-The GEPA adapter calls the framework's EvaluationAdapter during the
-internal loop so every candidate gets real scores from the evaluation suite.
+Delegates to the external ``gepa`` library (v0.1.0+) for the optimization loop.
+The adapter bridges GEPA's evaluate/reflect calls to the framework's EvaluationAdapter.
+Lifecycle events are received via GEPAProgressCallback for accurate phase/parent tracking.
+
+Uses the same dataset for both training and validation (no split) and a custom
+reflection prompt that encourages generalizable instructions.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+import random
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.types import (
@@ -17,25 +20,46 @@ from opik_optimizer_framework.types import (
     TrialResult,
 )
 
+from .failure_aware_sampler import FailureAwareBatchSampler
 from .gepa_adapter import (
+    DatasetItem,
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
-    build_data_insts,
-    build_seed_candidate,
-    infer_dataset_keys,
 )
+from .reflection_proposer import GENERALIZATION_REFLECTION_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
 
+def _build_seed_candidate(baseline_config: dict, optimizable_keys: list[str]) -> dict[str, str]:
+    return {
+        k: str(v) for k, v in baseline_config.items()
+        if k in optimizable_keys and isinstance(v, str)
+    }
+
+
+def _make_config_builder(baseline_config: dict):
+    def build(candidate: dict[str, str]) -> dict:
+        return {**baseline_config, **candidate}
+    return build
+
+
 class GepaOptimizer:
-    """Optimizer that uses GEPA's genetic-Pareto algorithm."""
+    """Optimizer that uses GEPA's genetic-Pareto algorithm.
+
+    Uses GEPA v0.1.0's callback system for lifecycle event tracking.
+    Passes the same dataset for both training and validation and a reflection
+    prompt that encourages generalizable instructions.
+    """
+
+    def __init__(self) -> None:
+        self.adapter: FrameworkGEPAAdapter | None = None
 
     def run(
         self,
         context: OptimizationContext,
-        training_set: list[dict[str, Any]],
-        validation_set: list[dict[str, Any]],
+        training_set: list[DatasetItem],
+        validation_set: list[DatasetItem],
         evaluation_adapter: EvaluationAdapter,
         state: OptimizationState,
         baseline_trial: TrialResult | None = None,
@@ -50,49 +74,84 @@ class GepaOptimizer:
 
         params = context.optimizer_parameters
         seed = params.get("seed", 42)
-        reflection_minibatch_size = params.get("reflection_minibatch_size", 3)
+        reflection_minibatch_size = max(4, params.get("reflection_minibatch_size", 4))
         candidate_selection_strategy = params.get(
             "candidate_selection_strategy", "pareto"
         )
         max_candidates = params.get("max_candidates", 5)
 
-        seed_candidate = build_seed_candidate(context.prompt_messages)
+        seed_candidate = _build_seed_candidate(context.baseline_config, context.optimizable_keys)
 
-        input_key, output_key = infer_dataset_keys(training_set)
-
-        train_insts = build_data_insts(training_set, input_key, output_key)
-        val_insts = build_data_insts(validation_set, input_key, output_key)
-
-        effective_n_samples = max(len(train_insts), 1)
+        effective_n_samples = max(len(training_set), 1)
         max_metric_calls = params.get(
-            "max_metric_calls", max_candidates * effective_n_samples
+            "max_metric_calls", max_candidates * effective_n_samples * 5
         )
 
-        adapter = FrameworkGEPAAdapter(
-            base_messages=context.prompt_messages,
-            baseline_config=context.baseline_config,
-            evaluation_adapter=evaluation_adapter,
+        sampler = FailureAwareBatchSampler(
+            minibatch_size=reflection_minibatch_size,
+            min_failed_per_batch=params.get("min_failed_per_batch", 1),
+            failure_threshold=params.get("failure_threshold", 1.0),
+            rng=random.Random(seed),
         )
+
+        config_builder = _make_config_builder(context.baseline_config)
+        adapter = FrameworkGEPAAdapter(
+            config_builder=config_builder,
+            evaluation_adapter=evaluation_adapter,
+            reflection_lm=context.model,
+            reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
+            batch_sampler=sampler,
+            config_descriptions=context.config_descriptions,
+        )
+        self.adapter = adapter
 
         if baseline_trial is not None:
             adapter.register_baseline(seed_candidate, baseline_trial.candidate_id)
 
         callback = GEPAProgressCallback(adapter=adapter)
 
-        _gepa.optimize(
+        score_threshold = params.get("score_threshold", 1.0)
+
+        def _trial_score_stopper(_state):
+            return adapter.best_full_eval_trial_score >= score_threshold
+
+        stop_callbacks = [_trial_score_stopper]
+
+        result = _gepa.optimize(
             seed_candidate=seed_candidate,
-            trainset=train_insts,
-            valset=val_insts,
+            trainset=training_set,
+            valset=training_set,
             adapter=adapter,
             reflection_lm=context.model,
             candidate_selection_strategy=candidate_selection_strategy,
-            reflection_minibatch_size=reflection_minibatch_size,
+            batch_sampler=sampler,
             max_metric_calls=max_metric_calls,
+            stop_callbacks=stop_callbacks,
             callbacks=[callback],
+            skip_perfect_score=False,
+            perfect_score=1,
             seed=seed,
+            reflection_prompt_template=None,
+            cache_evaluation=False,
         )
 
         logger.info(
-            "GepaOptimizer finished: %d trials recorded",
+            "GepaOptimizer finished: best_score=%.4f, %d trials recorded",
+            result.best_score if hasattr(result, "best_score") else -1,
             len(state.trials),
         )
+
+        problematic = adapter.get_problematic_items_summary()
+        if problematic:
+            logger.info("Problematic items (%d):", len(problematic))
+            for item in problematic:
+                logger.info(
+                    "  item=%s streak=%d assertions=%s",
+                    item["item_id"][:12],
+                    item["failure_streak"],
+                    item["failing_assertions"],
+                )
+            adapter.reflection_log.append({
+                "type": "problematic_items_summary",
+                "items": problematic,
+            })

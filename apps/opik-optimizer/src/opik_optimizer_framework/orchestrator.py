@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json as _json
 import logging
 from typing import Any
 
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.factory import create_optimizer
-from opik_optimizer_framework.sampler import sample_split
+from opik_optimizer_framework.sampler import no_split, sample_split
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationResult,
@@ -15,6 +16,22 @@ from opik_optimizer_framework.types import (
 
 logger = logging.getLogger(__name__)
 
+
+def _save_reflection_log(optimizer: Any) -> None:
+    adapter = getattr(optimizer, "adapter", None)
+    if adapter is None:
+        return
+    log = getattr(adapter, "reflection_log", [])
+    if not log:
+        return
+    import time
+    path = f"reflection_log_{int(time.time())}.json"
+    try:
+        with open(path, "w") as f:
+            _json.dump(log, f, indent=2, default=str)
+        logger.info("Reflection log saved to %s (%d entries)", path, len(log))
+    except Exception:
+        logger.warning("Failed to save reflection log", exc_info=True)
 
 
 def run_optimization(
@@ -31,11 +48,15 @@ def run_optimization(
     }
     dataset_item_ids = list(items_by_id.keys())
 
-    split = sample_split(dataset_item_ids, seed=seed)
+    if context.split_strategy == "no_split":
+        split = no_split(dataset_item_ids, seed=seed)
+    else:
+        split = sample_split(dataset_item_ids, seed=seed)
     logger.info(
-        "Split: %d train, %d validation",
+        "Split: %d train, %d validation (strategy=%s)",
         len(split.train_item_ids),
         len(split.validation_item_ids),
+        context.split_strategy,
     )
 
     state = OptimizationState()
@@ -47,9 +68,10 @@ def run_optimization(
         dataset_name=context.dataset_name,
         optimization_id=context.optimization_id,
         metric_type=context.metric_type,
-        metric_parameters=context.metric_parameters,
         state=state,
         event_emitter=event_emitter,
+        optimizer_type=context.optimizer_type,
+        optimizable_keys=context.optimizable_keys,
     )
 
     optimizer = create_optimizer(context.optimizer_type)
@@ -93,3 +115,5 @@ def run_optimization(
         state.status = "error"
         logger.exception("Optimization %s failed", context.optimization_id)
         raise
+    finally:
+        _save_reflection_log(optimizer)

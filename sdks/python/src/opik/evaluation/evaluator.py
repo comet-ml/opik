@@ -385,6 +385,7 @@ def _run_suite_evaluation(
     task_threads: int = 16,
     evaluator_model: Optional[str] = None,
     optimization_id: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     _validate_dataset_is_evaluation_suite(dataset)
 
@@ -406,7 +407,7 @@ def _run_suite_evaluation(
         dataset_version_id=None,
     )
     if optimization_id is not None:
-        create_experiment_kwargs["type"] = "trial"
+        create_experiment_kwargs["type"] = experiment_type or "trial"
         create_experiment_kwargs["optimization_id"] = optimization_id
 
     experiment_ = client.create_experiment(**create_experiment_kwargs)
@@ -1215,6 +1216,7 @@ def evaluate_optimization_suite_trial(
     verbose: int = 1,
     task_threads: int = 16,
     evaluator_model: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Run an optimization trial on a dataset configured as an evaluation suite.
@@ -1257,6 +1259,9 @@ def evaluate_optimization_suite_trial(
         evaluator_model: Optional model name to use for LLMJudge evaluators.
             If not provided, uses the default model.
 
+        experiment_type: Optional experiment type. Defaults to "trial".
+            Use "mini-batch" for minibatch evaluations.
+
     Returns:
         EvaluationResult containing test results for the optimization trial.
     """
@@ -1276,6 +1281,7 @@ def evaluate_optimization_suite_trial(
         task_threads=task_threads,
         evaluator_model=evaluator_model,
         optimization_id=optimization_id,
+        experiment_type=experiment_type,
     )
 
 

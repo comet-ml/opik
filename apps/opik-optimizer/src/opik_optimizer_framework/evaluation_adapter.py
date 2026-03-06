@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from typing import Any
 
@@ -28,25 +30,33 @@ class EvaluationAdapter:
         dataset_name: str,
         optimization_id: str,
         metric_type: str,
-        metric_parameters: dict[str, Any],
         state: OptimizationState,
         event_emitter: EventEmitter,
+        optimizer_type: str | None = None,
+        optimizable_keys: list[str] | None = None,
     ) -> None:
         self._client = client
         self._dataset_name = dataset_name
         self._optimization_id = optimization_id
         self._metric_type = metric_type
-        self._metric_parameters = metric_parameters
         self._state = state
         self._event_emitter = event_emitter
+        self._optimizer_type = optimizer_type
+        self._optimizable_keys = optimizable_keys or []
         self._trial_count = 0
         self._candidate_step_index: dict[str, int] = {}
         self._last_emitted_step = -1
+        self._result_cache: dict[str, tuple[TrialResult, Any]] = {}
 
     @property
     def trial_count(self) -> int:
         """Number of trials evaluated so far (read-only)."""
         return self._trial_count
+
+    @staticmethod
+    def _make_cache_key(config: CandidateConfig, dataset_item_ids: list[str]) -> str:
+        raw = json.dumps(config, sort_keys=True, default=str) + "\0" + ",".join(sorted(dataset_item_ids))
+        return hashlib.sha256(raw.encode()).hexdigest()
 
     def _resolve_step_index(self, parent_candidate_ids: list[str] | None) -> int:
         """Derive step_index from parent lineage: max parent step + 1.
@@ -90,6 +100,7 @@ class EvaluationAdapter:
         num_items: int | None = None,
         capture_traces: bool | None = None,
         eval_purpose: str | None = None,
+        experiment_type: str | None = None,
     ) -> tuple[TrialResult | None, Any]:
         """Evaluate a candidate and return both the TrialResult and the raw EvaluationResult.
 
@@ -97,7 +108,7 @@ class EvaluationAdapter:
         that include ``reason`` fields from LLM judge assertions. Returns
         ``(None, None)`` if the candidate is rejected.
         """
-        valid, reason = validate_candidate(config, self._state)
+        valid, reason = validate_candidate(config, self._optimizable_keys)
         if not valid:
             logger.warning("Candidate rejected: %s", reason)
             return None, None
@@ -115,26 +126,38 @@ class EvaluationAdapter:
 
         self._trial_count += 1
 
-        candidate = materialize_candidate(
-            config,
-            step_index=step_index,
-            parent_candidate_ids=parent_candidate_ids,
-            candidate_id=candidate_id,
-        )
+        cache_key = self._make_cache_key(config, dataset_item_ids)
+        cached = self._result_cache.get(cache_key)
 
-        trial, raw_result = run_experiment_with_details(
-            client=self._client,
-            candidate=candidate,
-            dataset_name=self._dataset_name,
-            dataset_item_ids=dataset_item_ids,
-            optimization_id=self._optimization_id,
-            metric_type=self._metric_type,
-            metric_parameters=self._metric_parameters,
-            batch_index=batch_index,
-            num_items=num_items,
-            capture_traces=capture_traces,
-            eval_purpose=eval_purpose,
-        )
+        if cached is not None:
+            trial, raw_result = cached
+            logger.debug("Cache hit for candidate %s", trial.candidate_id[:8])
+        else:
+            candidate = materialize_candidate(
+                config,
+                step_index=step_index,
+                parent_candidate_ids=parent_candidate_ids,
+                candidate_id=candidate_id,
+            )
+
+            trial, raw_result = run_experiment_with_details(
+                client=self._client,
+                candidate=candidate,
+                dataset_name=self._dataset_name,
+                dataset_item_ids=dataset_item_ids,
+                optimization_id=self._optimization_id,
+                metric_type=self._metric_type,
+                batch_index=batch_index,
+                num_items=num_items,
+                capture_traces=capture_traces,
+                eval_purpose=eval_purpose,
+                experiment_type=experiment_type,
+                optimizer_type=self._optimizer_type,
+                optimizable_keys=self._optimizable_keys,
+            )
+
+            if trial is not None:
+                self._result_cache[cache_key] = (trial, raw_result)
 
         # Register candidate_id → step_index after trial so re-evals reuse the step.
         if trial is not None and trial.candidate_id not in self._candidate_step_index:

@@ -23,7 +23,7 @@ class TrialResult:
     metric_scores: dict[str, float]
     experiment_id: str | None
     experiment_name: str | None
-    prompt_messages: list[dict[str, str]]
+    config: CandidateConfig
     parent_candidate_ids: list[str] = field(default_factory=list)
 
 
@@ -39,14 +39,14 @@ class SplitResult:
 class OptimizationContext:
     optimization_id: str
     dataset_name: str
-    prompt_messages: list[dict[str, str]]
     model: str
-    model_parameters: dict[str, Any]
     metric_type: str
-    metric_parameters: dict[str, Any]
     optimizer_type: str
     optimizer_parameters: dict[str, Any]
+    optimizable_keys: list[str]
     baseline_config: CandidateConfig = field(default_factory=dict)
+    config_descriptions: dict[str, str] = field(default_factory=dict)
+    split_strategy: str = "80_20"
 
 
 

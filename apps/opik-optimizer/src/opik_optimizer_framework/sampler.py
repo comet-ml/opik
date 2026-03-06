@@ -13,6 +13,18 @@ def _derive_seed(seed: int, item_count: int) -> int:
     return int(digest[:8], 16)
 
 
+def no_split(item_ids: list[str], seed: int) -> SplitResult:
+    """Return all items in both train and validation (no split)."""
+    if not item_ids:
+        raise ValueError("Cannot split an empty list of item IDs")
+    return SplitResult(
+        train_item_ids=list(item_ids),
+        validation_item_ids=list(item_ids),
+        dataset_size=len(item_ids),
+        seed=seed,
+    )
+
+
 def sample_split(
     item_ids: list[str],
     seed: int,
