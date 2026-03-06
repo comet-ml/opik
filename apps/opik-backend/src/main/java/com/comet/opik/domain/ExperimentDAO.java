@@ -491,10 +491,10 @@ class ExperimentDAO {
                     JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
-                    SELECT id, dataset_item_id, execution_policy
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND experiment_id IN (SELECT id FROM experiments_eval_suite)
+                    SELECT ei2.id, ei2.dataset_item_id, ei2.execution_policy
+                    FROM experiment_items ei2
+                    INNER JOIN experiments_eval_suite ees ON ei2.experiment_id = ees.id
+                    WHERE ei2.workspace_id = :workspace_id
                 ) eif ON ei.id = eif.id
                 INNER JOIN experiments_eval_suite ef ON ei.experiment_id = ef.id
             ),
@@ -1106,10 +1106,10 @@ class ExperimentDAO {
                     JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
-                    SELECT id, dataset_item_id, execution_policy
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND experiment_id IN (SELECT id FROM experiments_eval_suite)
+                    SELECT ei2.id, ei2.dataset_item_id, ei2.execution_policy
+                    FROM experiment_items ei2
+                    INNER JOIN experiments_eval_suite ees ON ei2.experiment_id = ees.id
+                    WHERE ei2.workspace_id = :workspace_id
                 ) eif ON ei.id = eif.id
                 INNER JOIN experiments_eval_suite ef ON ei.experiment_id = ef.id
             ),
