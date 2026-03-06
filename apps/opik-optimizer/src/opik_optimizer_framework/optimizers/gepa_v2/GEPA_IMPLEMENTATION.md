@@ -178,23 +178,40 @@ The `EvaluationAdapter` caches evaluation results keyed by `SHA256(JSON(config) 
 
 ## Reflection Prompt
 
-The reflection prompt is a custom 4-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE`. It replaces GEPA's default to provide structured reasoning and prevent overfitting.
+The reflection prompt is a custom 4-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE` in `reflection_proposer.py`. It replaces GEPA's default to provide structured reasoning and prevent overfitting. The template is task-agnostic — it uses neutral language ("parameter", "system") and avoids domain-specific examples.
 
 ### Template structure
 
 The prompt receives two placeholders from GEPA's `InstructionProposalSignature`:
-- `<curr_param>` — the current instruction text (prefixed with "Parameter: {name}")
+- `<curr_param>` — the current parameter text, prefixed with a header built by `_build_header()` (see below)
 - `<side_info>` — the reflective dataset records (formatted by GEPA)
+
+### Parameter header (`_build_header()`)
+
+The header prepended to `<curr_param>` provides the reflection LLM with context about what it's optimizing:
+
+1. **Parameter name**: always included (e.g., `Parameter: system_prompt`)
+2. **Description** (optional): from `OptimizationContext.prompt_descriptions` — explains the parameter's role in the system (e.g., "Main customer-facing support agent system prompt")
+3. **Sibling parameters** (if any): lists other optimizable parameters by name and description, explicitly marked as "for context only — do NOT modify these"
+
+The header is stripped from the LLM's output so it doesn't leak into the proposed text.
+
+### Prompt descriptions
+
+`OptimizationContext.prompt_descriptions` is an optional `dict[str, str]` mapping optimizable key names to human-readable descriptions. This helps the reflection LLM understand:
+- What part of the agent system each parameter controls
+- Whether it's a user-facing prompt or an internal subagent prompt
+- How parameters relate to each other
 
 ### The 4 steps
 
-**STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current instruction already produces these. Preserve the rules that drive successes.
+**STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current parameter already produces these. Preserve the rules that drive successes.
 
 **STEP 2 — CHECK FAILURE HISTORY**: If any example has a "Failure History" section, the current rules for that assertion already failed before. Do NOT add another generic rule of the same kind. Instead embed concrete example phrases or lookup instructions directly, or try a structurally different approach.
 
-**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify a specific rule. Every rule must describe an observable action (what to say, include, or avoid) — abstract advice like "be empathetic" does not reliably work. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
+**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify a specific rule. Every rule must describe an observable action (what to say, include, or avoid) — vague guidance does not reliably work. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
 
-**STEP 4 — STRUCTURE**: Group related rules under short topic headers. Merge overlapping rules. Remove redundant ones. Keep the instruction concise — prefer tightening existing rules over appending new ones.
+**STEP 4 — STRUCTURE**: Group related rules under short descriptive headers. Merge overlapping rules. Remove redundant ones. Keep the parameter concise — prefer tightening existing rules over appending new ones.
 
 ## Reflective Dataset Construction
 
@@ -251,15 +268,16 @@ Returns `{component_name: list[records]}` — one copy of records per component 
 
 ## Custom Reflection via `propose_new_texts()`
 
-The adapter overrides GEPA's default reflection with `propose_new_texts()`:
+The adapter delegates to `ReflectionProposer.propose()`, which overrides GEPA's default reflection:
 
-1. For each component to update, prepend "Parameter: {name}" to the current instruction
-2. Call GEPA's `InstructionProposalSignature.prompt_renderer()` to render the full prompt
-3. Call `InstructionProposalSignature.run(lm, input_dict)` to get the new instruction
-4. Strip the "Parameter: {name}" prefix from the result
-5. Log the full reflection call (current instruction, feedback, rendered prompt, proposed text) in `_reflection_log`
+1. For each component to update, build a header via `_build_header(name, candidate)` containing the parameter name, optional description, and sibling parameter context
+2. Prepend the header to the current parameter text as `current_instruction`
+3. Call GEPA's `InstructionProposalSignature.prompt_renderer()` to render the full prompt (substituting `<curr_param>` and `<side_info>`)
+4. Call `InstructionProposalSignature.run(lm, input_dict)` to get the new parameter text
+5. Strip the header from the result so it doesn't leak into the proposed text
+6. Log the full reflection call (current instruction, feedback, rendered prompt, proposed text) in `_reflection_log`
 
-The reflection LLM is resolved via `_get_reflection_lm_callable()`: string model names are wrapped in a litellm completion call; callables are used directly.
+The reflection LLM is resolved via `_get_lm_callable()`: string model names are wrapped in a litellm completion call; callables are used directly.
 
 ## Experiment Metadata
 
