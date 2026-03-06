@@ -181,6 +181,7 @@ def main():
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },
+        split_strategy="no_split",
     )
 
     # Run optimization directly so we can capture the adapter's reflection log

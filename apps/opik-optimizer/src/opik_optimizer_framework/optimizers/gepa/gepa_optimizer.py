@@ -82,16 +82,7 @@ class GepaOptimizer:
 
         seed_candidate = _build_seed_candidate(context.baseline_config, context.optimizable_keys)
 
-        # Combine train + val into a single dataset (no split).
-        seen_ids: set[str] = set()
-        all_items: list[DatasetItem] = []
-        for item in training_set + validation_set:
-            item_id = str(item.get("id", ""))
-            if item_id not in seen_ids:
-                seen_ids.add(item_id)
-                all_items.append(item)
-
-        effective_n_samples = max(len(all_items), 1)
+        effective_n_samples = max(len(training_set), 1)
         max_metric_calls = params.get(
             "max_metric_calls", max_candidates * effective_n_samples * 5
         )
@@ -128,8 +119,8 @@ class GepaOptimizer:
 
         result = _gepa.optimize(
             seed_candidate=seed_candidate,
-            trainset=all_items,
-            valset=all_items,
+            trainset=training_set,
+            valset=training_set,
             adapter=adapter,
             reflection_lm=context.model,
             candidate_selection_strategy=candidate_selection_strategy,

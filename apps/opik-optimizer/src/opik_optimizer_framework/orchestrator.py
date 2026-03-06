@@ -7,7 +7,7 @@ from typing import Any
 from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 from opik_optimizer_framework.event_emitter import EventEmitter
 from opik_optimizer_framework.optimizers.factory import create_optimizer
-from opik_optimizer_framework.sampler import sample_split
+from opik_optimizer_framework.sampler import no_split, sample_split
 from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationResult,
@@ -48,11 +48,15 @@ def run_optimization(
     }
     dataset_item_ids = list(items_by_id.keys())
 
-    split = sample_split(dataset_item_ids, seed=seed)
+    if context.split_strategy == "no_split":
+        split = no_split(dataset_item_ids, seed=seed)
+    else:
+        split = sample_split(dataset_item_ids, seed=seed)
     logger.info(
-        "Split: %d train, %d validation",
+        "Split: %d train, %d validation (strategy=%s)",
         len(split.train_item_ids),
         len(split.validation_item_ids),
+        context.split_strategy,
     )
 
     state = OptimizationState()

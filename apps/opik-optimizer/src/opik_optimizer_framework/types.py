@@ -46,6 +46,7 @@ class OptimizationContext:
     optimizable_keys: list[str]
     baseline_config: CandidateConfig = field(default_factory=dict)
     config_descriptions: dict[str, str] = field(default_factory=dict)
+    split_strategy: str = "80_20"
 
 
 

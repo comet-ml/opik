@@ -398,6 +398,7 @@ def main():
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },
+        split_strategy="no_split",
     )
 
     logger.info("Starting optimization (optimizer_type=%s, model=%s)", optimizer_type, MODEL)

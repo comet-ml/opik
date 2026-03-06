@@ -1270,67 +1270,8 @@ class TestGepaOptimizer:
         assert call_kwargs["batch_sampler"].minibatch_size == 5
         assert call_kwargs["candidate_selection_strategy"] == "epsilon_greedy"
         assert call_kwargs["seed"] == 99
-        # 10 max_candidates * 2 combined items * 5 multiplier
-        assert call_kwargs["max_metric_calls"] == 100
-
-    def test_no_split_same_dataset_for_train_and_val(self):
-        context = _make_context()
-        state = OptimizationState()
-        adapter = MagicMock()
-
-        optimizer = GepaOptimizer()
-
-        train = [
-            {"id": "id-1", "question": "Q1", "answer": "A1"},
-            {"id": "id-2", "question": "Q2", "answer": "A2"},
-            {"id": "id-3", "question": "Q3", "answer": "A3"},
-        ]
-        val = [{"id": "id-4", "question": "Q4", "answer": "A4"}]
-
-        with patch("gepa.optimize") as mock_optimize:
-            mock_optimize.return_value = SimpleNamespace(best_score=0.9, candidates=[])
-            optimizer.run(
-                context=context,
-                training_set=train,
-                validation_set=val,
-                evaluation_adapter=adapter,
-                state=state,
-            )
-
-        call_kwargs = mock_optimize.call_args.kwargs
-        assert len(call_kwargs["trainset"]) == 4
-        assert call_kwargs["trainset"] is call_kwargs["valset"]
-        assert call_kwargs["trainset"][0]["question"] == "Q1"
-
-    def test_no_split_deduplicates_by_id(self):
-        context = _make_context()
-        state = OptimizationState()
-        adapter = MagicMock()
-
-        optimizer = GepaOptimizer()
-
-        # id-2 appears in both train and val
-        train = [
-            {"id": "id-1", "question": "Q1", "answer": "A1"},
-            {"id": "id-2", "question": "Q2", "answer": "A2"},
-        ]
-        val = [
-            {"id": "id-2", "question": "Q2", "answer": "A2"},
-            {"id": "id-3", "question": "Q3", "answer": "A3"},
-        ]
-
-        with patch("gepa.optimize") as mock_optimize:
-            mock_optimize.return_value = SimpleNamespace(best_score=0.9, candidates=[])
-            optimizer.run(
-                context=context,
-                training_set=train,
-                validation_set=val,
-                evaluation_adapter=adapter,
-                state=state,
-            )
-
-        call_kwargs = mock_optimize.call_args.kwargs
-        assert len(call_kwargs["trainset"]) == 3
+        # 10 max_candidates * 1 training item * 5 multiplier
+        assert call_kwargs["max_metric_calls"] == 50
 
     def test_reflection_template_passed_to_adapter(self):
         from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import (
