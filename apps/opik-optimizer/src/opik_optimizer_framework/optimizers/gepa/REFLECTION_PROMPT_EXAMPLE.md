@@ -10,7 +10,7 @@ The reflection prompt is assembled in `ReflectionProposer.propose()` and rendere
 
 ```
 Parameter: {name}
-Description: {description}                      ← only if prompt_descriptions[name] exists
+Description: {description}                      ← only if config_descriptions[name] exists
 
 Other parameters in this system (for context only — do NOT modify these):
 - {other_name}: {other_description}              ← for each sibling parameter

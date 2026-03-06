@@ -51,12 +51,10 @@ Add your optimizer to `_load_registry()` in `factory.py`:
 
 ```python
 def _load_registry() -> dict[str, type]:
-    from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
     from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
     from opik_optimizer_framework.optimizers.my_optimizer import MyOptimizer
 
     return {
-        "SimpleOptimizer": SimpleOptimizer,
         "GepaOptimizer": GepaOptimizer,
         "MyOptimizer": MyOptimizer,
     }

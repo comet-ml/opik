@@ -24,16 +24,13 @@ def sample_candidate_config(sample_prompt_messages):
 
 
 @pytest.fixture
-def sample_optimization_context(sample_candidate_config, sample_prompt_messages):
+def sample_optimization_context(sample_candidate_config):
     return OptimizationContext(
         optimization_id="opt-test-123",
         dataset_name="test-dataset",
-        prompt_messages=sample_prompt_messages,
         model="openai/gpt-4o-mini",
-        model_parameters={"temperature": 0.7},
         metric_type="equals",
-        metric_parameters={},
-        optimizer_type="SimpleOptimizer",
+        optimizer_type="GepaOptimizer",
         optimizer_parameters={},
         optimizable_keys=["prompt_messages"],
         baseline_config=sample_candidate_config,

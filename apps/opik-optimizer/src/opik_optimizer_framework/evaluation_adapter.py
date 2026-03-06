@@ -30,7 +30,6 @@ class EvaluationAdapter:
         dataset_name: str,
         optimization_id: str,
         metric_type: str,
-        metric_parameters: dict[str, Any],
         state: OptimizationState,
         event_emitter: EventEmitter,
         optimizer_type: str | None = None,
@@ -39,7 +38,6 @@ class EvaluationAdapter:
         self._dataset_name = dataset_name
         self._optimization_id = optimization_id
         self._metric_type = metric_type
-        self._metric_parameters = metric_parameters
         self._state = state
         self._event_emitter = event_emitter
         self._optimizer_type = optimizer_type
@@ -147,7 +145,6 @@ class EvaluationAdapter:
                 dataset_item_ids=dataset_item_ids,
                 optimization_id=self._optimization_id,
                 metric_type=self._metric_type,
-                metric_parameters=self._metric_parameters,
                 batch_index=batch_index,
                 num_items=num_items,
                 capture_traces=capture_traces,

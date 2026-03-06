@@ -1,456 +1,298 @@
-"""GEPA adapter bridging GEPA's evaluation interface to the framework's EvaluationAdapter."""
+"""GEPA adapter bridging GEPA's evaluation interface to the framework's EvaluationAdapter.
+
+The gepa library (v0.1.0) interacts with this adapter through:
+  - adapter.evaluate(batch, candidate, capture_traces)
+  - adapter.make_reflective_dataset(candidate, eval_batch, components)
+  - adapter.propose_new_texts (optional, set to None)
+
+Lifecycle events are received via the GEPAProgressCallback, which fires
+on_evaluation_start RIGHT BEFORE adapter.evaluate(). The adapter uses
+this metadata for accurate phase/parent tracking. For the seed eval
+(which happens before callbacks are active), the adapter falls back to
+detecting the initialization phase.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
 from typing import Any, TYPE_CHECKING
+
+from .candidate_tracker import CandidateTracker, _candidate_key
+from .reflective_dataset_builder import ReflectiveDatasetBuilder
+from .reflection_proposer import ReflectionProposer
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from gepa.core.adapter import EvaluationBatch
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
+    from opik_optimizer_framework.types import TrialResult
+    from .failure_aware_sampler import FailureAwareBatchSampler
 
 
-@dataclass
-class OpikDataInst:
-    """Data instance handed to GEPA.
+DatasetItem = dict[str, Any]
 
-    Preserves the original dataset item dict so prompt formatting
-    can use all available fields.
-    """
-
-    input_text: str
-    answer: str
-    additional_context: dict[str, str]
-    opik_item: dict[str, Any]
-
-
-def build_data_insts(
-    dataset_items: list[dict[str, Any]],
-    input_key: str,
-    output_key: str,
-) -> list[OpikDataInst]:
-    """Convert raw dataset item dicts into OpikDataInst objects for GEPA."""
-    insts: list[OpikDataInst] = []
-    for item in dataset_items:
-        additional_context: dict[str, str] = {}
-        if "context" in item and isinstance(item["context"], str):
-            additional_context["context"] = item["context"]
-        insts.append(
-            OpikDataInst(
-                input_text=str(item.get(input_key, "")),
-                answer=str(item.get(output_key, "")),
-                additional_context=additional_context,
-                opik_item=item,
-            )
-        )
-    return insts
-
-
-def infer_dataset_keys(items: list[dict[str, Any]]) -> tuple[str, str]:
-    """Infer input and output keys from a list of dataset items."""
-    if not items:
-        return "text", "label"
-    sample = items[0]
-    output_candidates = ["label", "answer", "output", "expected_output"]
-    output_key = next((k for k in output_candidates if k in sample), "label")
-    excluded = {output_key, "id", "metadata"}
-    input_key = next((k for k in sample.keys() if k not in excluded), "text")
-    return input_key, output_key
-
-
-def build_seed_candidate(prompt_messages: list[dict[str, str]]) -> dict[str, str]:
-    """Build the initial GEPA seed candidate from the framework's prompt_messages list.
-
-    Keys are formatted as ``{role}_{index}`` to match the rebuild logic.
-    """
-    seed: dict[str, str] = {}
-    for idx, msg in enumerate(prompt_messages):
-        key = f"{msg['role']}_{idx}"
-        seed[key] = msg.get("content", "")
-    return seed
-
-
-def rebuild_prompt_messages(
-    base_messages: list[dict[str, str]],
-    candidate: dict[str, str],
-) -> list[dict[str, str]]:
-    """Rebuild prompt messages from GEPA candidate, falling back to originals."""
-    messages: list[dict[str, str]] = []
-    for idx, msg in enumerate(base_messages):
-        key = f"{msg['role']}_{idx}"
-        content = candidate.get(key, msg.get("content", ""))
-        messages.append({"role": msg["role"], "content": content})
-    return messages
+SYSTEM_PROMPT_KEY = "system_prompt"
 
 
 def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     """Extract per-item feedback from the raw EvaluationResult.
 
+    When multiple runs exist for the same item (runs_per_item > 1), all runs
+    are preserved so the reflection LLM can see what varies across attempts.
+
     Returns a dict keyed by dataset_item_id with:
-      - output: the LLM output text
-      - score: aggregate score (1.0 if all assertions passed, 0.0 otherwise)
-      - reasons: list of reason strings from ScoreResult objects
+      - runs: list of dicts, each with output, score, assertions
+      - score: mean score across all runs (for GEPA's numeric optimization)
     """
     feedback: dict[str, dict[str, Any]] = {}
     if raw_result is None or not hasattr(raw_result, "test_results"):
         return feedback
 
     for test_result in raw_result.test_results:
-        item_id = test_result.test_case.dataset_item_id
+        item_id = str(test_result.test_case.dataset_item_id)
         task_output = getattr(test_result.test_case, "task_output", {}) or {}
         output_text = str(task_output.get("output", ""))
 
-        reasons = []
+        assertions = []
         scores = []
         for sr in test_result.score_results:
-            scores.append(float(getattr(sr, "value", 0.0)))
-            reason = getattr(sr, "reason", None)
-            if reason:
-                reasons.append(reason)
+            value = float(getattr(sr, "value", 0.0))
+            scores.append(value)
+            assertions.append({
+                "name": getattr(sr, "name", ""),
+                "value": value,
+                "reason": getattr(sr, "reason", None) or "",
+            })
 
-        item_score = min(scores) if scores else 0.0
+        run_score = sum(scores) / len(scores) if scores else 0.0
+        run = {"output": output_text, "score": run_score, "assertions": assertions}
 
-        feedback[str(item_id)] = {
-            "output": output_text,
-            "score": item_score,
-            "reasons": reasons,
-        }
+        if item_id not in feedback:
+            feedback[item_id] = {"runs": [run], "score": run_score}
+        else:
+            feedback[item_id]["runs"].append(run)
+            all_scores = [r["score"] for r in feedback[item_id]["runs"]]
+            feedback[item_id]["score"] = sum(all_scores) / len(all_scores)
 
     return feedback
 
 
-def _candidate_key(candidate: dict[str, str]) -> str:
-    """Deterministic string key for a GEPA candidate dict."""
-    return json.dumps(candidate, sort_keys=True)
-
-
 class GEPAProgressCallback:
-    """Bridges GEPA's lifecycle events to the FrameworkGEPAAdapter.
+    """Bridges GEPA's lifecycle events to the adapter's state management.
 
-    Implements the GEPACallback protocol (duck-typed — implement only needed methods).
     GEPA dispatches events via ``notify_callbacks(callbacks, method_name, event)``.
+    Key events:
 
-    Event flow per iteration:
-      on_iteration_start → on_candidate_selected → on_minibatch_sampled →
-      on_evaluation_start → adapter.evaluate() → on_evaluation_end →
-      (reflection) → on_evaluation_start → adapter.evaluate() → on_evaluation_end →
-      (if accepted) on_candidate_accepted + on_valset_evaluated
+    - ``on_iteration_start``: resets per-iteration state, records step number
+    - ``on_candidate_selected``: records which candidate was selected as parent
+    - ``on_evaluation_start``: fires RIGHT BEFORE ``adapter.evaluate()`` — stores
+      pending metadata (parent_ids, capture_traces, candidate_idx)
+    - ``on_valset_evaluated``: maps GEPA candidate index → framework candidate_id
+    - ``on_merge_accepted``: records merge parent IDs
     """
 
-    def __init__(
-        self,
-        adapter: FrameworkGEPAAdapter,
-    ) -> None:
+    def __init__(self, adapter: FrameworkGEPAAdapter) -> None:
         self._adapter = adapter
 
     def on_iteration_start(self, event: dict[str, Any]) -> None:
-        iteration = event["iteration"]
-        logger.info("[callback] on_iteration_start: iteration=%d", iteration)
-        self._adapter._on_new_step(iteration)
+        self._adapter._on_new_step(event["iteration"])
 
     def on_candidate_selected(self, event: dict[str, Any]) -> None:
-        candidate_idx = event["candidate_idx"]
-        logger.info(
-            "[callback] on_candidate_selected: iteration=%d candidate_idx=%d score=%.4f",
-            event.get("iteration", -1), candidate_idx, event.get("score", 0.0),
-        )
-        self._adapter._on_candidate_selected(candidate_idx)
+        self._adapter._on_candidate_selected(event["candidate_idx"])
 
     def on_evaluation_start(self, event: dict[str, Any]) -> None:
-        """Fires RIGHT BEFORE adapter.evaluate(). Sets metadata for the upcoming eval."""
-        candidate_idx = event.get("candidate_idx")
-        parent_ids = list(event.get("parent_ids", []))
-        capture_traces = event.get("capture_traces", False)
-        logger.info(
-            "[callback] on_evaluation_start: iteration=%d candidate_idx=%s "
-            "parent_ids=%s capture_traces=%s batch_size=%d is_seed=%s",
-            event.get("iteration", -1), candidate_idx, parent_ids,
-            capture_traces, event.get("batch_size", 0),
-            event.get("is_seed_candidate", False),
-        )
         self._adapter._on_evaluation_start(
-            candidate_idx=candidate_idx,
-            parent_ids=parent_ids,
-            capture_traces=capture_traces,
-        )
-
-    def on_evaluation_end(self, event: dict[str, Any]) -> None:
-        logger.info(
-            "[callback] on_evaluation_end: iteration=%d candidate_idx=%s "
-            "scores=%s has_trajectories=%s",
-            event.get("iteration", -1), event.get("candidate_idx"),
-            event.get("scores", []), event.get("has_trajectories", False),
-        )
-
-    def on_candidate_accepted(self, event: dict[str, Any]) -> None:
-        logger.info(
-            "[callback] on_candidate_accepted: iteration=%d new_idx=%d "
-            "score=%.4f parent_ids=%s",
-            event.get("iteration", -1), event.get("new_candidate_idx", -1),
-            event.get("new_score", 0.0), list(event.get("parent_ids", [])),
-        )
-
-    def on_candidate_rejected(self, event: dict[str, Any]) -> None:
-        logger.info(
-            "[callback] on_candidate_rejected: iteration=%d old=%.4f new=%.4f reason=%s",
-            event.get("iteration", -1), event.get("old_score", 0.0),
-            event.get("new_score", 0.0), event.get("reason", ""),
+            candidate_idx=event["candidate_idx"],
+            parent_ids=event["parent_ids"],
+            capture_traces=event["capture_traces"],
         )
 
     def on_valset_evaluated(self, event: dict[str, Any]) -> None:
-        candidate_idx = event["candidate_idx"]
-        logger.info(
-            "[callback] on_valset_evaluated: iteration=%d candidate_idx=%d "
-            "avg_score=%.4f num_items=%d is_best=%s parent_ids=%s",
-            event.get("iteration", -1), candidate_idx,
-            event.get("average_score", 0.0),
-            event.get("num_examples_evaluated", 0),
-            event.get("is_best_program", False),
-            list(event.get("parent_ids", [])),
+        self._adapter._on_valset_evaluated(
+            event["candidate_idx"], event["candidate"],
         )
-        self._adapter._on_valset_evaluated(candidate_idx, event["candidate"])
 
     def on_merge_accepted(self, event: dict[str, Any]) -> None:
-        parent_ids = list(event.get("parent_ids", []))
-        logger.info(
-            "[callback] on_merge_accepted: iteration=%d new_idx=%d parent_ids=%s",
-            event.get("iteration", -1), event.get("new_candidate_idx", -1),
-            parent_ids,
-        )
-        self._adapter._on_merge_accepted(parent_ids)
-
-    def on_optimization_end(self, event: dict[str, Any]) -> None:
-        total_iterations = event.get("total_iterations", 0)
-        total_metric_calls = event.get("total_metric_calls", 0)
-        logger.info(
-            "[callback] on_optimization_end: %d iterations, %d metric calls",
-            total_iterations,
-            total_metric_calls,
-        )
+        self._adapter._on_merge_accepted(event["parent_ids"])
 
 
 class FrameworkGEPAAdapter:
-    """Adapter that bridges GEPA's evaluate/reflect interface to the framework.
+    """Thin facade that bridges GEPA's evaluate/reflect interface to the framework.
 
-    Calls ``evaluation_adapter.evaluate_with_details()`` during GEPA's
-    internal optimization loop to get real scores from the evaluation suite.
-
-    Metadata flow:
-    - ``on_evaluation_start`` fires RIGHT BEFORE each ``evaluate()`` call with
-      ``candidate_idx``, ``parent_ids``, and ``capture_traces`` — we store these
-      as ``_pending_eval_*`` fields and consume them in ``evaluate()``.
-    - ``on_valset_evaluated`` fires AFTER valset eval — maps gepa_idx to framework_id.
-    - ``on_merge_accepted`` fires for merges — sets parent IDs for the next eval.
+    Delegates to three collaborators:
+    - CandidateTracker: candidate identity, parent lineage, GEPA index mapping
+    - ReflectiveDatasetBuilder: feedback dataset construction for reflection
+    - ReflectionProposer: reflection LLM interaction and logging
     """
-
-    # Let GEPA use its default InstructionProposalSignature for mutation.
-    propose_new_texts = None
 
     def __init__(
         self,
-        base_messages: list[dict[str, str]],
-        baseline_config: dict[str, Any],
+        config_builder: Any,
         evaluation_adapter: EvaluationAdapter,
+        candidate_tracker: CandidateTracker | None = None,
+        dataset_builder: ReflectiveDatasetBuilder | None = None,
+        reflection_proposer: ReflectionProposer | None = None,
+        batch_sampler: FailureAwareBatchSampler | None = None,
+        reflection_lm: Any = None,
+        reflection_prompt_template: str | None = None,
+        config_descriptions: dict[str, str] | None = None,
     ) -> None:
-        self._base_messages = base_messages
-        self._baseline_config = baseline_config
+        self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
+        self._batch_sampler = batch_sampler
+
+        self._tracker = candidate_tracker or CandidateTracker()
+        self._dataset_builder = dataset_builder or ReflectiveDatasetBuilder(batch_sampler)
+        if reflection_proposer is not None:
+            self._proposer: ReflectionProposer | None = reflection_proposer
+        elif reflection_lm is not None:
+            self._proposer = ReflectionProposer(
+                reflection_lm, reflection_prompt_template, config_descriptions,
+            )
+        else:
+            self._proposer = None
+
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
+        self._full_dataset_size: int | None = None
+        self.best_full_eval_trial_score: float = 0.0
 
-        # Maps GEPA candidate index → framework candidate_id
-        self._gepa_idx_to_candidate_id: dict[int, str] = {}
-        # Maps candidate_key → framework candidate_id (latest eval)
-        self._known_candidates: dict[str, str] = {}
-        # Persistent parent mapping: candidate_id → parent_candidate_ids
-        self._candidate_parents: dict[str, list[str]] = {}
-        self._current_step = -1
-        self._baseline_candidate_id: str | None = None
-
-        # Pre-eval metadata set by on_evaluation_start (consumed in evaluate())
-        self._pending_eval_parent_ids: list[int] | None = None
-        self._pending_eval_capture_traces: bool | None = None
-        self._pending_eval_candidate_idx: int | None = None
-
-        # Parent framework ID from on_candidate_selected (pre-eval)
-        self._selected_parent_id: str | None = None
-        # Parent IDs from on_merge_accepted (pre-eval for merged candidate)
-        self._pending_merge_parent_ids: list[str] | None = None
+    # -- Delegation to CandidateTracker ----------------------------------------
 
     def register_baseline(
-        self, seed_candidate: dict[str, str], baseline_candidate_id: str,
+        self,
+        seed_candidate: dict[str, str],
+        baseline_candidate_id: str,
     ) -> None:
-        """Register the baseline so GEPA's initialization reuses the same candidate_id.
+        self._tracker.register_baseline(seed_candidate, baseline_candidate_id)
 
-        Pre-seeds ``_known_candidates`` so the initialization eval (before
-        iterations) reuses AAA at step 0.  When the first iteration starts,
-        ``_on_new_step`` clears the pre-seeded entry so that exploration evals
-        get a new candidate_id (BBB) at step 1 with ``parents=[AAA]``.
-        """
-        key = _candidate_key(seed_candidate)
-        self._known_candidates[key] = baseline_candidate_id
-        self._candidate_parents[baseline_candidate_id] = []
-        self._baseline_candidate_id = baseline_candidate_id
-        self._seed_candidate_key = key
-
-    def _on_new_step(self, step: int) -> None:
-        """Called by GEPAProgressCallback on each iteration start."""
-        # Transition from initialization to iterations: stop reusing baseline's
-        # candidate_id so exploration evals get their own id at step 1.
-        if self._current_step < 0 and hasattr(self, "_seed_candidate_key"):
-            self._known_candidates.pop(self._seed_candidate_key, None)
-
-        self._current_step = step
-        self._selected_parent_id = None
-        self._pending_merge_parent_ids = None
-        self._pending_eval_parent_ids = None
-        self._pending_eval_capture_traces = None
-        self._pending_eval_candidate_idx = None
+    def _on_new_step(self, iteration: int) -> None:
+        self._tracker.on_new_step(iteration)
 
     def _on_candidate_selected(self, candidate_idx: int) -> None:
-        """Called BEFORE evaluation. Records which candidate was selected as parent."""
-        framework_id = self._gepa_idx_to_candidate_id.get(candidate_idx)
-        self._selected_parent_id = framework_id
-        logger.debug(
-            "Candidate selected: gepa_idx=%d → framework_id=%s",
-            candidate_idx,
-            framework_id,
-        )
+        self._tracker.on_candidate_selected(candidate_idx)
 
     def _on_evaluation_start(
         self,
         candidate_idx: int | None,
-        parent_ids: list[int],
+        parent_ids: Sequence[int],
         capture_traces: bool,
     ) -> None:
-        """Called RIGHT BEFORE adapter.evaluate(). Stores metadata for the upcoming eval."""
-        self._pending_eval_candidate_idx = candidate_idx
-        self._pending_eval_parent_ids = parent_ids
-        self._pending_eval_capture_traces = capture_traces
+        self._tracker.on_evaluation_start(candidate_idx, parent_ids, capture_traces)
 
     def _on_valset_evaluated(
-        self,
-        candidate_idx: int | None,
-        candidate: dict[str, str],
+        self, candidate_idx: int, candidate: dict[str, str],
     ) -> None:
-        """Called AFTER evaluation. Maps gepa_idx → framework candidate_id."""
-        if candidate_idx is None:
-            return
-        key = _candidate_key(candidate)
-        framework_id = self._known_candidates.get(key)
-        if framework_id is not None:
-            self._gepa_idx_to_candidate_id[candidate_idx] = framework_id
-            logger.debug(
-                "Valset evaluated: gepa_idx=%d → framework_id=%s",
-                candidate_idx,
-                framework_id,
-            )
+        self._tracker.on_valset_evaluated(candidate_idx, candidate)
 
-    def _on_merge_accepted(self, gepa_parent_indices: list[int]) -> None:
-        """Called when GEPA merges candidates. Stores parent IDs for the next eval."""
-        framework_parent_ids = []
-        for idx in gepa_parent_indices:
-            fid = self._gepa_idx_to_candidate_id.get(idx)
-            if fid is not None:
-                framework_parent_ids.append(fid)
-        if framework_parent_ids:
-            self._pending_merge_parent_ids = framework_parent_ids
+    def _on_merge_accepted(self, parent_ids: Sequence[int]) -> None:
+        self._tracker.on_merge_accepted(parent_ids)
 
-    def _resolve_parent_ids(
-        self, candidate: dict[str, str],
-    ) -> list[str] | None:
-        """Determine parent_candidate_ids for the given candidate.
+    # -- Compatibility properties for tests ------------------------------------
 
-        Priority:
-        1. Merge parent IDs (from on_merge_accepted callback)
-        2. Pre-eval parent IDs from on_evaluation_start (GEPA indices → framework IDs)
-        3. For known candidates (re-eval): look up persistent parents
-        4. For new candidates (mutation result): parent is the selected candidate
-        """
-        if self._pending_merge_parent_ids is not None:
-            ids = self._pending_merge_parent_ids
-            self._pending_merge_parent_ids = None
-            return ids
+    @property
+    def _known_candidates(self) -> dict[str, str]:
+        return self._tracker._known_candidates
 
-        # Use parent_ids from on_evaluation_start if available and non-empty
-        if self._pending_eval_parent_ids is not None:
-            framework_ids = []
-            for idx in self._pending_eval_parent_ids:
-                fid = self._gepa_idx_to_candidate_id.get(idx)
-                if fid is not None:
-                    framework_ids.append(fid)
-            if framework_ids:
-                return framework_ids
-            # Empty resolved list — fall through to persistent parents lookup
+    @property
+    def _candidate_parents(self) -> dict[str, list[str]]:
+        return self._tracker._candidate_parents
 
-        key = _candidate_key(candidate)
-        known_id = self._known_candidates.get(key)
-        if known_id is not None:
-            stored = self._candidate_parents.get(known_id)
-            if stored is not None:
-                return stored
+    @property
+    def _baseline_candidate_id(self) -> str | None:
+        return self._tracker._baseline_candidate_id
 
-        # New candidate — parent is the one selected at the start of this iteration
-        if self._selected_parent_id is not None:
-            return [self._selected_parent_id]
+    @property
+    def _seed_candidate_key(self) -> str | None:
+        return self._tracker._seed_candidate_key
 
-        # Last resort — baseline is the root of all lineage
-        if self._baseline_candidate_id is not None:
-            return [self._baseline_candidate_id]
-        return None
+    @property
+    def _gepa_idx_to_candidate_id(self) -> dict[int, str]:
+        return self._tracker._gepa_idx_to_candidate_id
 
-    def _determine_eval_purpose(self) -> str:
-        """Determine the evaluation purpose based on current adapter state."""
-        if self._current_step < 0:
-            return "initialization"
-        if self._pending_eval_capture_traces is not None:
-            if self._pending_eval_capture_traces:
-                return "exploration:minibatch"
-            return "exploration:mutation"
-        return "validation"
+    @_gepa_idx_to_candidate_id.setter
+    def _gepa_idx_to_candidate_id(self, value: dict[int, str]) -> None:
+        self._tracker._gepa_idx_to_candidate_id = value
 
-    def _record_trial_lineage(
-        self,
-        key: str,
-        trial: Any,
-        parent_candidate_ids: list[str] | None,
-    ) -> None:
-        """Update candidate tracking maps after a successful evaluation."""
-        is_new = trial.candidate_id not in self._candidate_parents
-        self._known_candidates[key] = trial.candidate_id
-        if is_new:
-            self._candidate_parents[trial.candidate_id] = (
-                parent_candidate_ids or []
-            )
-        logger.debug(
-            "[adapter.evaluate] result: trial_id=%s score=%.4f "
-            "candidate_id=%s is_new_candidate=%s stored_parents=%s",
-            trial.candidate_id[:8], trial.score,
-            trial.candidate_id[:8], is_new,
-            self._candidate_parents.get(trial.candidate_id, []),
-        )
+    @property
+    def _current_step(self) -> int:
+        return self._tracker._current_step
+
+    @_current_step.setter
+    def _current_step(self, value: int) -> None:
+        self._tracker._current_step = value
+
+    @property
+    def _selected_parent_id(self) -> str | None:
+        return self._tracker._selected_parent_id
+
+    @_selected_parent_id.setter
+    def _selected_parent_id(self, value: str | None) -> None:
+        self._tracker._selected_parent_id = value
+
+    @property
+    def _pending_eval_parent_ids(self) -> list[int] | None:
+        return self._tracker._pending_eval_parent_ids
+
+    @_pending_eval_parent_ids.setter
+    def _pending_eval_parent_ids(self, value: list[int] | None) -> None:
+        self._tracker._pending_eval_parent_ids = value
+
+    @property
+    def _pending_eval_capture_traces(self) -> bool | None:
+        return self._tracker._pending_eval_capture_traces
+
+    @_pending_eval_capture_traces.setter
+    def _pending_eval_capture_traces(self, value: bool | None) -> None:
+        self._tracker._pending_eval_capture_traces = value
+
+    @property
+    def _pending_eval_candidate_idx(self) -> int | None:
+        return self._tracker._pending_eval_candidate_idx
+
+    @_pending_eval_candidate_idx.setter
+    def _pending_eval_candidate_idx(self, value: int | None) -> None:
+        self._tracker._pending_eval_candidate_idx = value
+
+    @property
+    def _pending_merge_parent_ids(self) -> list[int] | None:
+        return self._tracker._pending_merge_parent_ids
+
+    @_pending_merge_parent_ids.setter
+    def _pending_merge_parent_ids(self, value: list[int] | None) -> None:
+        self._tracker._pending_merge_parent_ids = value
+
+    @property
+    def _reflection_log(self) -> list[dict[str, Any]]:
+        return self._proposer.reflection_log if self._proposer else []
+
+    @property
+    def _reflection_prompt_template(self) -> str | None:
+        return self._proposer.reflection_prompt_template if self._proposer else None
+
+    # -- Core evaluate ---------------------------------------------------------
 
     def _build_evaluation_batch(
         self,
-        batch: list[OpikDataInst],
+        batch: list[DatasetItem],
         per_item: dict[str, dict[str, Any]],
-        trial: Any | None,
+        trial: TrialResult | None,
         capture_traces: bool,
     ) -> EvaluationBatch:
         """Convert per-item feedback into GEPA's EvaluationBatch format."""
         from gepa.core.adapter import EvaluationBatch
+
         outputs: list[dict[str, Any]] = []
         scores: list[float] = []
         trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
 
         for inst in batch:
-            item_id = str(inst.opik_item.get("id", ""))
+            item_id = str(inst.get("id", ""))
             item_feedback = per_item.get(item_id, {})
-            output_text = item_feedback.get("output", "")
+            runs = item_feedback.get("runs", [])
             score = item_feedback.get("score", 0.0)
+            output_text = runs[0]["output"] if runs else ""
 
             outputs.append({"output": output_text})
             scores.append(score)
@@ -458,10 +300,9 @@ class FrameworkGEPAAdapter:
             if trajectories is not None:
                 trajectories.append(
                     {
-                        "input": inst.opik_item,
-                        "output": output_text,
+                        "input": inst,
+                        "runs": runs,
                         "score": score,
-                        "reasons": item_feedback.get("reasons", []),
                     }
                 )
 
@@ -479,45 +320,49 @@ class FrameworkGEPAAdapter:
 
     def evaluate(
         self,
-        batch: list[OpikDataInst],
+        batch: list[DatasetItem],
         candidate: dict[str, str],
         capture_traces: bool = False,
     ) -> EvaluationBatch:
-        """Evaluate a GEPA candidate against a batch of data instances.
-
-        Delegates to the framework's EvaluationAdapter to get real scores
-        from the evaluation suite (LLM judge assertions, etc.).
-        """
+        """Evaluate a GEPA candidate against a batch of data instances."""
         key = _candidate_key(candidate)
-        parent_candidate_ids = self._resolve_parent_ids(candidate)
-        existing_candidate_id = self._known_candidates.get(key)
 
         effective_capture_traces = (
-            self._pending_eval_capture_traces
-            if self._pending_eval_capture_traces is not None
+            self._tracker.consume_pending_capture_traces()
+            if self._tracker._pending_eval_capture_traces is not None
             else capture_traces
         )
 
-        prompt_messages = rebuild_prompt_messages(self._base_messages, candidate)
+        existing_candidate_id = self._tracker.get_existing_candidate_id(key)
+        eval_purpose = self._tracker.determine_eval_purpose(key, effective_capture_traces)
+        parent_candidate_ids = self._tracker.resolve_parent_ids(key)
+
         dataset_item_ids = [
-            str(inst.opik_item.get("id"))
+            str(inst.get("id"))
             for inst in batch
-            if inst.opik_item.get("id") is not None
+            if inst.get("id") is not None
         ]
 
-        config = {**self._baseline_config, "prompt_messages": prompt_messages}
+        config = self._config_builder(candidate)
 
-        batch_index = self._current_step if self._current_step >= 0 else None
-        eval_purpose = self._determine_eval_purpose()
+        batch_index = self._tracker._current_step if self._tracker._current_step >= 0 else None
 
-        trial_count = getattr(self._evaluation_adapter, "trial_count", "?")
+        if self._full_dataset_size is None:
+            self._full_dataset_size = len(batch)
+
+        is_full_eval = len(batch) >= self._full_dataset_size
+        experiment_type = None if is_full_eval else "mini-batch"
+
         logger.debug(
-            "[adapter.evaluate] step_index=%s batch_index=%s num_items=%d "
-            "capture_traces=%s candidate_id=%s parent_ids=%s "
-            "eval_purpose=%s",
-            trial_count, batch_index, len(batch),
-            effective_capture_traces, existing_candidate_id,
-            parent_candidate_ids, eval_purpose,
+            "[adapter.evaluate] eval_purpose=%s batch_index=%s num_items=%d "
+            "capture_traces=%s candidate_id=%s parent_ids=%s is_full=%s",
+            eval_purpose,
+            batch_index,
+            len(batch),
+            effective_capture_traces,
+            existing_candidate_id,
+            parent_candidate_ids,
+            is_full_eval,
         )
 
         trial, raw_result = self._evaluation_adapter.evaluate_with_details(
@@ -529,22 +374,28 @@ class FrameworkGEPAAdapter:
             num_items=len(batch),
             capture_traces=effective_capture_traces,
             eval_purpose=eval_purpose,
+            experiment_type=experiment_type,
         )
 
-        if trial is not None:
-            self._record_trial_lineage(key, trial, parent_candidate_ids)
+        self._tracker.clear_pending_eval()
 
-        # Clear pending eval metadata (consumed)
-        self._pending_eval_parent_ids = None
-        self._pending_eval_capture_traces = None
-        self._pending_eval_candidate_idx = None
+        if trial is not None:
+            self._tracker.record_trial(key, trial, parent_candidate_ids, effective_capture_traces)
+            if is_full_eval and trial.score > self.best_full_eval_trial_score:
+                self.best_full_eval_trial_score = trial.score
 
         per_item = _extract_per_item_feedback(raw_result)
         self._last_per_item_feedback = per_item
 
+        if self._batch_sampler is not None and is_full_eval:
+            self._batch_sampler.update_scores(per_item)
+            self._batch_sampler.update_assertion_failures(per_item)
+
         return self._build_evaluation_batch(
-            batch, per_item, trial, capture_traces,
+            batch, per_item, trial, effective_capture_traces,
         )
+
+    # -- Delegation to ReflectiveDatasetBuilder --------------------------------
 
     def make_reflective_dataset(
         self,
@@ -552,58 +403,40 @@ class FrameworkGEPAAdapter:
         eval_batch: EvaluationBatch,
         components_to_update: list[str],
     ) -> dict[str, list[dict[str, Any]]]:
-        """Build the feedback dataset for GEPA's reflection LLM.
+        return self._dataset_builder.build(candidate, eval_batch, components_to_update)
 
-        Uses ``reason`` fields from the evaluation suite's ScoreResult objects
-        (e.g., LLM judge assertion explanations) to provide rich feedback.
-        """
-        if not components_to_update:
-            components_to_update = [
-                key
-                for key in candidate.keys()
-                if not key.startswith("_") and key not in ("source", "id")
-            ]
+    # -- Delegation to ReflectionProposer --------------------------------------
 
-        trajectories = eval_batch.trajectories or []
+    def propose_new_texts(
+        self,
+        candidate: dict[str, str],
+        reflective_dataset: Mapping[str, Sequence[Mapping[str, Any]]],
+        components_to_update: list[str],
+    ) -> dict[str, str]:
+        if self._proposer is None:
+            raise ValueError(
+                "reflection_lm is required for propose_new_texts. "
+                "Pass it via FrameworkGEPAAdapter constructor."
+            )
+        return self._proposer.propose(candidate, reflective_dataset, components_to_update)
 
-        def _records() -> list[dict[str, Any]]:
-            result = []
-            for traj in trajectories:
-                dataset_item = traj.get("input", {})
-                output_text = traj.get("output", "")
-                score = traj.get("score", 0.0)
-                reasons = traj.get("reasons", [])
+    # -- Problematic items summary ---------------------------------------------
 
-                if reasons:
-                    feedback = (
-                        f"Score={score:.4f}. "
-                        f"Evaluator feedback: {'; '.join(reasons)}"
-                    )
-                else:
-                    expected = (
-                        dataset_item.get("answer")
-                        or dataset_item.get("label")
-                        or dataset_item.get("expected_output")
-                        or ""
-                    )
-                    feedback = (
-                        f"Score={score:.4f}. "
-                        f"Expected answer: {expected}"
-                    )
+    def get_problematic_items_summary(self) -> list[dict[str, Any]]:
+        """Return items that failed consistently, sorted by failure streak."""
+        if self._batch_sampler is None:
+            return []
 
-                result.append(
-                    {
-                        "Inputs": {
-                            "text": dataset_item.get("input")
-                            or dataset_item.get("question")
-                            or dataset_item.get("text")
-                            or "",
-                        },
-                        "Generated Outputs": output_text,
-                        "Feedback": feedback,
-                    }
-                )
-            return result
+        stuck = self._batch_sampler.get_stuck_items(min_streak=2)
+        if not stuck:
+            return []
 
-        records = _records()
-        return {component: list(records) for component in components_to_update}
+        summary = []
+        for item_id, streak in sorted(stuck.items(), key=lambda x: -x[1]):
+            assertions = self._batch_sampler.get_failed_assertions(item_id)
+            summary.append({
+                "item_id": item_id,
+                "failure_streak": streak,
+                "failing_assertions": assertions,
+            })
+        return summary

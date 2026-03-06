@@ -175,15 +175,13 @@ def main():
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
-        prompt_messages=PROMPT_MESSAGES,
         model=MODEL,
-        model_parameters={"temperature": 0.7, "max_tokens": 256},
         metric_type=OBJECTIVE_NAME,
-        metric_parameters={},
         optimizer_type=optimizer_type,
         optimizer_parameters=optimizer_parameters,
         optimizable_keys=["prompt_messages"],
         baseline_config={
+            "prompt_messages": PROMPT_MESSAGES,
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 256},
         },

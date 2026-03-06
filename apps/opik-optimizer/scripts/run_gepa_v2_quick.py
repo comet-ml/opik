@@ -138,7 +138,7 @@ def main():
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
     from opik_optimizer_framework.event_emitter import EventEmitter
     from opik_optimizer_framework.types import OptimizationState
-    from opik_optimizer_framework.optimizers.gepa_v2.gepa_optimizer import GepaV2Optimizer
+    from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
 
     if OPIK_URL:
         os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
@@ -149,7 +149,7 @@ def main():
     suite = _build_suite(client)
     dataset_items = list(suite.dataset.get_items())
 
-    optimizer_type = "GepaV2Optimizer"
+    optimizer_type = "GepaOptimizer"
     optimization = client.create_optimization(
         dataset_name=SUITE_NAME,
         objective_name=OBJECTIVE_NAME,
@@ -162,11 +162,8 @@ def main():
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
-        prompt_messages=[],
         model=MODEL,
-        model_parameters={},
         metric_type=OBJECTIVE_NAME,
-        metric_parameters={},
         optimizer_type=optimizer_type,
         optimizer_parameters={
             "max_candidates": 10,
@@ -174,7 +171,7 @@ def main():
             "seed": 42,
         },
         optimizable_keys=["system_prompt", "user_message"],
-        prompt_descriptions={
+        config_descriptions={
             "system_prompt": "Main customer-facing support agent system prompt",
             "user_message": "User message template with question placeholder",
         },
@@ -212,7 +209,7 @@ def main():
     initial_score = baseline_trial.score if baseline_trial else 0.0
     logger.info("Baseline score: %.4f", initial_score)
 
-    optimizer = GepaV2Optimizer()
+    optimizer = GepaOptimizer()
     logger.info("Starting optimization")
     try:
         all_items = list(items_by_id.values())

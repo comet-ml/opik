@@ -63,11 +63,11 @@ class ReflectionProposer:
         self,
         reflection_lm: Any,
         reflection_prompt_template: str | None = None,
-        prompt_descriptions: dict[str, str] | None = None,
+        config_descriptions: dict[str, str] | None = None,
     ) -> None:
         self._reflection_lm = reflection_lm
         self._reflection_prompt_template = reflection_prompt_template
-        self._prompt_descriptions = prompt_descriptions or {}
+        self._config_descriptions = config_descriptions or {}
         self._reflection_log: list[dict[str, Any]] = []
 
     @property
@@ -106,7 +106,7 @@ class ReflectionProposer:
         method strips those lines so they don't leak into the proposal.
         """
         lines = text.split("\n")
-        description = self._prompt_descriptions.get(name, "")
+        description = self._config_descriptions.get(name, "")
 
         # Strip leading lines that look like header metadata
         while lines:
@@ -126,7 +126,7 @@ class ReflectionProposer:
             # Bullet items from the sibling list (e.g., "- user_message: ...")
             if stripped.startswith("- ") and ":" in stripped:
                 candidate_key = stripped[2:].split(":")[0].strip()
-                if candidate_key in (self._prompt_descriptions or {}):
+                if candidate_key in (self._config_descriptions or {}):
                     lines.pop(0)
                     continue
             # Bare parameter name (e.g., "system_prompt" or "System Prompt")
@@ -144,7 +144,7 @@ class ReflectionProposer:
     def _build_header(self, name: str, candidate: dict[str, str]) -> str:
         """Build the parameter header with optional description and sibling context."""
         header = f"Parameter: {name}"
-        description = self._prompt_descriptions.get(name, "")
+        description = self._config_descriptions.get(name, "")
         if description:
             header += f"\nDescription: {description}"
 
@@ -152,7 +152,7 @@ class ReflectionProposer:
         if others:
             header += "\n\nOther parameters in this system (for context only — do NOT modify these):"
             for other in others:
-                other_desc = self._prompt_descriptions.get(other, "")
+                other_desc = self._config_descriptions.get(other, "")
                 if other_desc:
                     header += f"\n- {other}: {other_desc}"
                 else:

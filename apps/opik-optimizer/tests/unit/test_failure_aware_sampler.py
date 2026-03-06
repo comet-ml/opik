@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from opik_optimizer_framework.optimizers.gepa_v2.failure_aware_sampler import (
+from opik_optimizer_framework.optimizers.gepa.failure_aware_sampler import (
     FailureAwareBatchSampler,
 )
 

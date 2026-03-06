@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-End-to-end test for GepaV2Optimizer with 20 evaluation suite items.
+End-to-end test for GepaOptimizer with 20 evaluation suite items.
 
 20 items across 3 difficulty tiers (5 easy, 7 medium, 8 hard) with
 assertions designed so that:
@@ -363,7 +363,7 @@ def main():
     dataset_items = list(suite.dataset.get_items())
     logger.info("Suite has %d items", len(dataset_items))
 
-    optimizer_type = "GepaV2Optimizer"
+    optimizer_type = "GepaOptimizer"
     optimization = client.create_optimization(
         dataset_name=SUITE_NAME,
         objective_name=OBJECTIVE_NAME,
@@ -383,15 +383,12 @@ def main():
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
-        prompt_messages=[],
         model=MODEL,
-        model_parameters={},
         metric_type=OBJECTIVE_NAME,
-        metric_parameters={},
         optimizer_type=optimizer_type,
         optimizer_parameters=optimizer_parameters,
         optimizable_keys=["system_prompt", "user_message"],
-        prompt_descriptions={
+        config_descriptions={
             "system_prompt": "Main customer-facing support agent system prompt",
             "user_message": "User message template with question and context placeholders",
         },
