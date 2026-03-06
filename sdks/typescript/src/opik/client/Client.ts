@@ -52,6 +52,7 @@ import {
   TracesAnnotationQueue,
   ThreadsAnnotationQueue,
 } from "@/annotation-queue";
+import { AgentConfig } from "@/agent-config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -568,6 +569,7 @@ export class OpikClient {
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
    * @param datasetVersionId Optional ID of the dataset version to link the experiment to
+   * @param evaluationMethod @internal Used by evaluation suites — not part of the public API
    * @returns The created Experiment object
    */
   public createExperiment = async ({
@@ -578,6 +580,8 @@ export class OpikClient {
     type = ExperimentType.Regular,
     optimizationId,
     datasetVersionId,
+    evaluationMethod,
+    tags,
   }: {
     datasetName: string;
     name?: string;
@@ -586,6 +590,8 @@ export class OpikClient {
     type?: ExperimentType;
     optimizationId?: string;
     datasetVersionId?: string;
+    evaluationMethod?: OpikApi.ExperimentWriteEvaluationMethod;
+    tags?: string[];
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -600,7 +606,7 @@ export class OpikClient {
     );
 
     const id = generateId();
-    const experiment = new Experiment({ id, name, datasetName, prompts }, this);
+    const experiment = new Experiment({ id, name, datasetName, prompts, tags }, this);
 
     try {
       await this.api.experiments.createExperiment({
@@ -612,6 +618,8 @@ export class OpikClient {
         type,
         optimizationId,
         datasetVersionId,
+        tags,
+        evaluationMethod,
       });
 
       logger.debug("Experiment created with id:", id);
@@ -1632,6 +1640,28 @@ export class OpikClient {
    * });
    * ```
    */
+  /**
+   * Returns an AgentConfig instance scoped to the given project.
+   * Use it to create blueprints, masks, and manage environment labels.
+   *
+   * @param options.projectName - Project name (defaults to client's configured project)
+   * @returns AgentConfig domain object
+   *
+   * @example
+   * ```typescript
+   * const agentConfig = client.getAgentConfig();
+   * const blueprint = await agentConfig.createBlueprint({
+   *   values: { temperature: "0.8", model: "gpt-4" },
+   *   description: "Initial config",
+   * });
+   * console.log(blueprint.values); // { temperature: "0.8", model: "gpt-4" }
+   * ```
+   */
+  public getAgentConfig = (options?: { projectName?: string }): AgentConfig => {
+    const projectName = options?.projectName ?? this.config.projectName;
+    return new AgentConfig(projectName, this);
+  };
+
   public updatePromptVersionTags = async (
     versionIds: string[],
     options?: {

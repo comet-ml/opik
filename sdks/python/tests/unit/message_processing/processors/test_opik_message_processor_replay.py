@@ -111,6 +111,7 @@ def processor(
         rest_client=mock_rest_client,
         file_upload_manager=mock_file_uploader,
         fallback_replay_manager=mock_replay,
+        unauthorized_message_types_registry=mock.Mock(),
     )
 
 
@@ -174,6 +175,7 @@ class TestRegisterMessage:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=mock_replay,
             active=False,
+            unauthorized_message_types_registry=mock.Mock(),
         )
 
         msg = _create_trace_message()
@@ -203,6 +205,7 @@ class TestNoServerConnection:
             rest_client=mock_rest_client,
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
+            unauthorized_message_types_registry=mock.Mock(),
         )
 
     def test_process__no_connection__registers_message_as_failed(
@@ -810,6 +813,7 @@ class TestAttachmentUploadCallbacks:
             rest_client=mock_rest_client,
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
+            unauthorized_message_types_registry=mock.Mock(),
         )
 
         msg = _create_attachment_message(message_id=80)
@@ -876,6 +880,7 @@ class TestIgnoredMessageTypes:
             rest_client=mock_rest_client,
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
+            unauthorized_message_types_registry=mock.Mock(),
         )
 
         noop_handler = mock.MagicMock(

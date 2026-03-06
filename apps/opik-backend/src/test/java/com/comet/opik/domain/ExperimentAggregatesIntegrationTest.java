@@ -68,6 +68,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -939,23 +940,25 @@ class ExperimentAggregatesIntegrationTest {
         return experimentItems;
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("datasetItemCountFilterScenarios")
-    @DisplayName("countDatasetItemsWithExperimentItems matches countDatasetItemsWithExperimentItemsFromAggregates")
-    void testDatasetItemCountWithAggregates(String scenarioName,
-            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+    private record AggregatesTestContext(
+            String workspaceName,
+            String apiKey,
+            String workspaceId,
+            DatasetItemCountTestData testData) {
+    }
 
+    private AggregatesTestContext setupAggregatesTestData(
+            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
         var workspaceName = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
         var workspaceId = UUID.randomUUID().toString();
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        List<List<UUID>> experimentIdsList = new ArrayList<>();
-        List<List<UUID>> datasetIdsList = new ArrayList<>();
-        List<List<String>> feedbackScoresList = new ArrayList<>();
+        List<List<UUID>> experimentIdsList = Collections.synchronizedList(new ArrayList<>());
+        List<List<UUID>> datasetIdsList = Collections.synchronizedList(new ArrayList<>());
+        List<List<String>> feedbackScoresList = Collections.synchronizedList(new ArrayList<>());
 
-        // Given: Create test data with multiple experiments
         IntStream.range(0, 2)
                 .parallel()
                 .forEach(i -> {
@@ -964,7 +967,6 @@ class ExperimentAggregatesIntegrationTest {
                     var experiment1 = createExperiment(dataset, apiKey, workspaceName);
                     var experiment2 = createExperiment(dataset, apiKey, workspaceName);
 
-                    // Create experiment items with specific feedback scores and varied data
                     List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
 
                     createExperimentItemWithData(
@@ -987,7 +989,6 @@ class ExperimentAggregatesIntegrationTest {
                     feedbackScoresList.add(feedbackScores);
                 });
 
-        // Populate aggregates for both experiments
         experimentIdsList
                 .parallelStream()
                 .flatMap(List::stream)
@@ -997,13 +998,22 @@ class ExperimentAggregatesIntegrationTest {
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
                         .block());
 
-        // Build criteria using the provided function
         var testData = new DatasetItemCountTestData(
                 datasetIdsList.getFirst().getFirst(),
                 Set.copyOf(experimentIdsList.getFirst()),
                 feedbackScoresList.getFirst());
 
-        var criteria = criteriaBuilder.apply(testData);
+        return new AggregatesTestContext(workspaceName, apiKey, workspaceId, testData);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("datasetItemCountFilterScenarios")
+    @DisplayName("countDatasetItemsWithExperimentItems matches countDatasetItemsWithExperimentItemsFromAggregates")
+    void testDatasetItemCountWithAggregates(String scenarioName,
+            Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
+
+        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var criteria = criteriaBuilder.apply(ctx.testData());
 
         // When: Get count from original service method
         var datasetItemPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
@@ -1011,17 +1021,17 @@ class ExperimentAggregatesIntegrationTest {
                 List.copyOf(criteria.experimentIds()),
                 criteria.search(),
                 criteria.filters(),
-                apiKey,
-                workspaceName);
+                ctx.apiKey(),
+                ctx.workspaceName());
 
         var countFromOriginal = datasetItemPage.total();
 
         // When: Get count from aggregates (new version)
         var countFromAggregates = experimentAggregatesService
                 .countDatasetItemsWithExperimentItemsFromAggregates(criteria)
-                .contextWrite(ctx -> ctx
+                .contextWrite(reactorCtx -> reactorCtx
                         .put(RequestContext.USER_NAME, USER)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .put(RequestContext.WORKSPACE_ID, ctx.workspaceId()))
                 .block();
 
         // Then: Both should return the same count
@@ -1163,66 +1173,8 @@ class ExperimentAggregatesIntegrationTest {
             String scenarioName,
             Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
 
-        // Given: Create test data and populate aggregates
-        var workspaceName = UUID.randomUUID().toString();
-        var apiKey = UUID.randomUUID().toString();
-        var workspaceId = UUID.randomUUID().toString();
-
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        List<List<UUID>> experimentIdsList = new ArrayList<>();
-        List<List<UUID>> datasetIdsList = new ArrayList<>();
-        List<List<String>> feedbackScoresList = new ArrayList<>();
-
-        // Given: Create test data with multiple experiments
-        IntStream.range(0, 2)
-                .parallel()
-                .forEach(i -> {
-                    var project = createProject(apiKey, workspaceName);
-                    var dataset = createDataset(apiKey, workspaceName);
-                    var experiment1 = createExperiment(dataset, apiKey, workspaceName);
-                    var experiment2 = createExperiment(dataset, apiKey, workspaceName);
-
-                    // Create experiment items with specific feedback scores and varied data
-                    List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-
-                    createExperimentItemWithData(
-                            experiment1.id(),
-                            dataset.id(),
-                            project.name(),
-                            feedbackScores,
-                            apiKey,
-                            workspaceName);
-                    createExperimentItemWithData(
-                            experiment2.id(),
-                            dataset.id(),
-                            project.name(),
-                            feedbackScores,
-                            apiKey,
-                            workspaceName);
-
-                    experimentIdsList.add(List.of(experiment1.id(), experiment2.id()));
-                    datasetIdsList.add(List.of(dataset.id()));
-                    feedbackScoresList.add(feedbackScores);
-                });
-
-        // Populate aggregates for both experiments
-        experimentIdsList
-                .parallelStream()
-                .flatMap(List::stream)
-                .forEach(experimentId -> experimentAggregatesService.populateAggregations(experimentId)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.USER_NAME, USER)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .block());
-
-        // Build criteria using the provided function
-        var testData = new DatasetItemCountTestData(
-                datasetIdsList.getFirst().getFirst(),
-                Set.copyOf(experimentIdsList.getFirst()),
-                feedbackScoresList.getFirst());
-
-        var criteria = criteriaBuilder.apply(testData);
+        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var criteria = criteriaBuilder.apply(ctx.testData());
 
         // When: Get items from original service method
         var pageFromOriginal = datasetResourceClient.getDatasetItemsWithExperimentItems(
@@ -1230,15 +1182,15 @@ class ExperimentAggregatesIntegrationTest {
                 List.copyOf(criteria.experimentIds()),
                 criteria.search(),
                 criteria.filters(),
-                apiKey,
-                workspaceName);
+                ctx.apiKey(),
+                ctx.workspaceName());
 
         // When: Get items from aggregates
         var pageFromAggregates = experimentAggregatesService
                 .getDatasetItemsWithExperimentItemsFromAggregates(criteria, 1, 10)
-                .contextWrite(ctx -> ctx
+                .contextWrite(reactorCtx -> reactorCtx
                         .put(RequestContext.USER_NAME, USER)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .put(RequestContext.WORKSPACE_ID, ctx.workspaceId()))
                 .block();
 
         // Then: Verify page properties match
@@ -1286,66 +1238,8 @@ class ExperimentAggregatesIntegrationTest {
     void getExperimentItemsStatsFromAggregates(String scenarioName,
             Function<DatasetItemCountTestData, DatasetItemSearchCriteria> criteriaBuilder) {
 
-        // Given: Create test data and populate aggregates
-        var workspaceName = UUID.randomUUID().toString();
-        var apiKey = UUID.randomUUID().toString();
-        var workspaceId = UUID.randomUUID().toString();
-
-        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-        List<List<UUID>> experimentIdsList = new ArrayList<>();
-        List<List<UUID>> datasetIdsList = new ArrayList<>();
-        List<List<String>> feedbackScoresList = new ArrayList<>();
-
-        // Given: Create test data with multiple experiments
-        IntStream.range(0, 2)
-                .parallel()
-                .forEach(i -> {
-                    var project = createProject(apiKey, workspaceName);
-                    var dataset = createDataset(apiKey, workspaceName);
-                    var experiment1 = createExperiment(dataset, apiKey, workspaceName);
-                    var experiment2 = createExperiment(dataset, apiKey, workspaceName);
-
-                    // Create experiment items with specific feedback scores and varied data
-                    List<String> feedbackScores = PodamFactoryUtils.manufacturePojoList(factory, String.class);
-
-                    createExperimentItemWithData(
-                            experiment1.id(),
-                            dataset.id(),
-                            project.name(),
-                            feedbackScores,
-                            apiKey,
-                            workspaceName);
-                    createExperimentItemWithData(
-                            experiment2.id(),
-                            dataset.id(),
-                            project.name(),
-                            feedbackScores,
-                            apiKey,
-                            workspaceName);
-
-                    experimentIdsList.add(List.of(experiment1.id(), experiment2.id()));
-                    datasetIdsList.add(List.of(dataset.id()));
-                    feedbackScoresList.add(feedbackScores);
-                });
-
-        // Populate aggregates for both experiments
-        experimentIdsList
-                .parallelStream()
-                .flatMap(List::stream)
-                .forEach(experimentId -> experimentAggregatesService.populateAggregations(experimentId)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.USER_NAME, USER)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .block());
-
-        // Build criteria using the provided function
-        var testData = new DatasetItemCountTestData(
-                datasetIdsList.getFirst().getFirst(),
-                Set.copyOf(experimentIdsList.getFirst()),
-                feedbackScoresList.getFirst());
-
-        var criteria = criteriaBuilder.apply(testData);
+        var ctx = setupAggregatesTestData(criteriaBuilder);
+        var criteria = criteriaBuilder.apply(ctx.testData());
 
         @SuppressWarnings("unchecked")
         List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters = (List<com.comet.opik.api.filter.ExperimentsComparisonFilter>) criteria
@@ -1355,8 +1249,8 @@ class ExperimentAggregatesIntegrationTest {
         var statsFromOriginal = datasetResourceClient.getDatasetExperimentItemsStats(
                 criteria.datasetId(),
                 List.copyOf(criteria.experimentIds()),
-                apiKey,
-                workspaceName,
+                ctx.apiKey(),
+                ctx.workspaceName(),
                 filters);
 
         // When: Get stats from aggregates DAO
@@ -1365,9 +1259,9 @@ class ExperimentAggregatesIntegrationTest {
                         criteria.datasetId(),
                         criteria.experimentIds(),
                         filters)
-                .contextWrite(ctx -> ctx
+                .contextWrite(reactorCtx -> reactorCtx
                         .put(RequestContext.USER_NAME, USER)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .put(RequestContext.WORKSPACE_ID, ctx.workspaceId()))
                 .block();
 
         // Then: Verify stats match

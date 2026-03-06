@@ -126,7 +126,11 @@ public class ExperimentAggregatesService {
     }
 
     public Mono<Long> countTotal(@NonNull ExperimentSearchCriteria criteria) {
-        return experimentAggregatesDAO.countTotal(criteria);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            log.info("Counting total experiments from aggregates for workspace: '{}'", workspaceId);
+            return experimentAggregatesDAO.countTotal(criteria);
+        });
     }
 
     /**
@@ -238,9 +242,13 @@ public class ExperimentAggregatesService {
                     versionService.resolveVersionId(workspaceId, criteria.datasetId(), criteria.versionHashOrTag()));
         }
 
-        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(criteria.datasetId(), workspaceId);
+        return resolveLatestVersionId(criteria.datasetId(), workspaceId);
+    }
+
+    private Optional<UUID> resolveLatestVersionId(UUID datasetId, String workspaceId) {
+        Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
         if (latestVersion.isEmpty()) {
-            log.warn("No versions found for dataset: '{}', workspace: '{}'", criteria.datasetId(), workspaceId);
+            log.warn("No versions found for dataset: '{}', workspace: '{}'", datasetId, workspaceId);
         }
         return latestVersion.map(DatasetVersion::id);
     }
@@ -263,18 +271,11 @@ public class ExperimentAggregatesService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            final UUID versionId;
 
-            Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
-            if (latestVersion.isEmpty()) {
-                log.warn("No versions found for dataset: '{}', workspace: '{}'", datasetId, workspaceId);
-                return Mono.just(new ProjectStats(List.of()));
-            } else {
-                versionId = latestVersion.get().id();
-            }
-
-            return experimentAggregatesDAO.getExperimentItemsStatsFromAggregates(datasetId, versionId, experimentIds,
-                    filters);
+            return resolveLatestVersionId(datasetId, workspaceId)
+                    .map(versionId -> experimentAggregatesDAO.getExperimentItemsStatsFromAggregates(datasetId,
+                            versionId, experimentIds, filters))
+                    .orElse(Mono.just(new ProjectStats(List.of())));
         });
     }
 }

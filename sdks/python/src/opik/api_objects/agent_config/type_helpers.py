@@ -86,9 +86,9 @@ def python_value_to_backend_value(value: typing.Any, py_type: typing.Any) -> str
     if py_type is str:
         return value
     if is_prompt_type(py_type):
-        return value.__internal_api__version_id__
+        return value.commit
     if is_prompt_version_type(py_type):
-        return value.id
+        return value.commit
     origin = typing.get_origin(py_type)
     if origin in (list, dict):
         return json.dumps(value)
