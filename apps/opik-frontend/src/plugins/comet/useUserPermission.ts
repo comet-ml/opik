@@ -134,7 +134,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
       ),
     [checkNullablePermission],
   );
-  
+
   const canUpdateAIProviders = useMemo(
     () =>
       checkNullablePermission(ManagementPermissionsNames.AI_PROVIDER_UPDATE),
