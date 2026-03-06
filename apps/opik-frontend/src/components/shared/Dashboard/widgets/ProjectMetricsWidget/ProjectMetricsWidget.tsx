@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
@@ -12,8 +13,10 @@ import {
   BreakdownConfig,
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
-import { isFilterValid } from "@/lib/filters";
+import { isFilterValid, createFilter } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import useAppStore from "@/store/AppStore";
 import { CHART_TYPE } from "@/constants/chart";
 import {
   INTERVAL_DESCRIPTIONS,
@@ -27,11 +30,19 @@ import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
-import { BREAKDOWN_FIELD } from "./breakdown";
+import {
+  BREAKDOWN_FIELD,
+  BREAKDOWN_GROUP_NAMES,
+  buildBreakdownDrilldownFilter,
+  getMetricEntityType,
+} from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const globalConfig = useDashboardStore(
     useShallow((state) => {
       const config = selectMixedConfig(state);
@@ -240,9 +251,92 @@ const ProjectMetricsWidget: React.FunctionComponent<
     ],
   );
 
+  const getLabelAction = useCallback(
+    (label: string) => {
+      if (!projectId || !effectiveBreakdown || !metricName) return undefined;
+
+      if (
+        label === BREAKDOWN_GROUP_NAMES.OTHERS_DISPLAY ||
+        label === BREAKDOWN_GROUP_NAMES.UNKNOWN
+      ) {
+        return undefined;
+      }
+
+      const entityType = getMetricEntityType(metricName);
+
+      const entityConfig = {
+        span: {
+          logsType: LOGS_TYPE.spans,
+          filtersKey: "spans_filters",
+          tooltip: "View filtered spans",
+          widgetFilters: widget?.config?.spanFilters as Filter[] | undefined,
+        },
+        thread: {
+          logsType: LOGS_TYPE.threads,
+          filtersKey: "threads_filters",
+          tooltip: "View filtered threads",
+          widgetFilters: widget?.config?.threadFilters as Filter[] | undefined,
+        },
+        trace: {
+          logsType: LOGS_TYPE.traces,
+          filtersKey: "traces_filters",
+          tooltip: "View filtered traces",
+          widgetFilters: widget?.config?.traceFilters as Filter[] | undefined,
+        },
+      }[entityType];
+
+      const { logsType, filtersKey, tooltip: tooltipText } = entityConfig;
+      const widgetFilters =
+        entityConfig.widgetFilters?.filter(isFilterValid) ?? [];
+
+      const drilldownFilter = buildBreakdownDrilldownFilter(
+        effectiveBreakdown.field,
+        label,
+        effectiveBreakdown.metadataKey,
+      );
+      if (!drilldownFilter) return undefined;
+
+      const filter = createFilter(drilldownFilter);
+
+      return {
+        onClick: () => {
+          navigate({
+            to: "/$workspaceName/projects/$projectId/traces",
+            params: {
+              projectId,
+              workspaceName,
+            },
+            search: {
+              tab: PROJECT_TAB.logs,
+              logsType,
+              [filtersKey]: [...widgetFilters, filter],
+              time_range: globalConfig.dateRange,
+            },
+          });
+        },
+        tooltip: tooltipText,
+      };
+    },
+    [
+      projectId,
+      effectiveBreakdown,
+      metricName,
+      navigate,
+      workspaceName,
+      widget?.config?.spanFilters,
+      widget?.config?.traceFilters,
+      widget?.config?.threadFilters,
+      globalConfig.dateRange,
+    ],
+  );
+
   if (!widget) {
     return null;
   }
+
+  const isAggregateTotal = effectiveBreakdown && breakdown?.aggregateTotal;
+
+  const effectiveInterval = isAggregateTotal ? INTERVAL_TYPE.TOTAL : interval;
 
   const renderChartContent = () => {
     const chartType =
@@ -263,7 +357,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       );
     }
 
-    if (!metricType || !interval) {
+    if (!metricType || !effectiveInterval) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
@@ -278,8 +372,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const validThreadFilters = threadFilters?.filter(isFilterValid);
     const validSpanFilters = spanFilters?.filter(isFilterValid);
 
-    const intervalType = interval as INTERVAL_TYPE;
-    const description = interval
+    const intervalType = effectiveInterval as INTERVAL_TYPE;
+    const description = effectiveInterval
       ? INTERVAL_DESCRIPTIONS.TOTALS[intervalType] || ""
       : "";
 
@@ -295,6 +389,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           description={description}
           metricName={metricName!}
           interval={intervalType}
+          isAggregateTotal={!!isAggregateTotal}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           projectId={projectId!}
@@ -304,6 +399,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
           breakdown={effectiveBreakdown}
+          getLabelAction={effectiveBreakdown ? getLabelAction : undefined}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue

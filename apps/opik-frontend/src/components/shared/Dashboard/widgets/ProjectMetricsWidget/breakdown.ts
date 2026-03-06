@@ -1,3 +1,6 @@
+import { COLUMN_TYPE } from "@/types/shared";
+import { Filter, FilterOperator } from "@/types/filters";
+
 /**
  * Group by field options for dashboard widget metrics.
  * Each field represents a dimension by which metrics can be grouped.
@@ -16,6 +19,7 @@ export enum BREAKDOWN_FIELD {
   METADATA = "metadata",
   NAME = "name",
   ERROR_INFO = "error_info",
+  ERROR_TYPE = "error_type",
   MODEL = "model",
   PROVIDER = "provider",
   TYPE = "type",
@@ -29,10 +33,11 @@ export const BREAKDOWN_FIELD_LABELS: Record<BREAKDOWN_FIELD, string> = {
   [BREAKDOWN_FIELD.TAGS]: "Tags",
   [BREAKDOWN_FIELD.METADATA]: "Metadata",
   [BREAKDOWN_FIELD.NAME]: "Name",
-  [BREAKDOWN_FIELD.ERROR_INFO]: "Has Error",
+  [BREAKDOWN_FIELD.ERROR_INFO]: "Has error",
+  [BREAKDOWN_FIELD.ERROR_TYPE]: "Error type",
   [BREAKDOWN_FIELD.MODEL]: "Model",
   [BREAKDOWN_FIELD.PROVIDER]: "Provider",
-  [BREAKDOWN_FIELD.TYPE]: "Span Type",
+  [BREAKDOWN_FIELD.TYPE]: "Span type",
 };
 
 /**
@@ -92,6 +97,14 @@ const SPAN_METRICS = [
 
 const ALL_METRIC_TYPES = [...TRACE_METRICS, ...THREAD_METRICS, ...SPAN_METRICS];
 
+export type MetricEntityType = "span" | "thread" | "trace";
+
+export function getMetricEntityType(metricName: string): MetricEntityType {
+  if ((SPAN_METRICS as string[]).includes(metricName)) return "span";
+  if ((THREAD_METRICS as string[]).includes(metricName)) return "thread";
+  return "trace";
+}
+
 /**
  * Compatibility matrix: which group by fields are compatible with which metric types.
  * Based on the Jira ticket OPIK-3790 "Supported Breakdown Fields" table:
@@ -113,6 +126,7 @@ export const BREAKDOWN_FIELD_COMPATIBILITY: Record<BREAKDOWN_FIELD, string[]> =
     [BREAKDOWN_FIELD.METADATA]: [...TRACE_METRICS, ...SPAN_METRICS],
     [BREAKDOWN_FIELD.NAME]: [...TRACE_METRICS, ...SPAN_METRICS],
     [BREAKDOWN_FIELD.ERROR_INFO]: [...TRACE_METRICS, ...SPAN_METRICS],
+    [BREAKDOWN_FIELD.ERROR_TYPE]: [...TRACE_METRICS, ...SPAN_METRICS],
     [BREAKDOWN_FIELD.MODEL]: SPAN_METRICS,
     [BREAKDOWN_FIELD.PROVIDER]: SPAN_METRICS,
     [BREAKDOWN_FIELD.TYPE]: SPAN_METRICS,
@@ -132,10 +146,79 @@ export function getCompatibleBreakdownFields(
 /**
  * Group by field options for use in select components.
  */
-export const BREAKDOWN_FIELD_OPTIONS = Object.values(BREAKDOWN_FIELD).map(
-  (field) => ({
-    value: field,
-    label: BREAKDOWN_FIELD_LABELS[field],
-    requiresKey: field === BREAKDOWN_FIELD.METADATA,
-  }),
-);
+export function buildBreakdownDrilldownFilter(
+  field: BREAKDOWN_FIELD,
+  label: string,
+  metadataKey?: string,
+): Partial<Filter> | null {
+  const noError = label === "No Error";
+
+  switch (field) {
+    case BREAKDOWN_FIELD.ERROR_TYPE:
+      if (noError) {
+        return {
+          field: "error_info",
+          operator: "is_empty" as FilterOperator,
+          type: COLUMN_TYPE.errors,
+          value: "",
+        };
+      }
+      return {
+        field: "error_type",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.string,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.ERROR_INFO:
+      return {
+        field: "error_info",
+        operator: (label === "Has Error"
+          ? "is_not_empty"
+          : "is_empty") as FilterOperator,
+        type: COLUMN_TYPE.errors,
+        value: "",
+      };
+
+    case BREAKDOWN_FIELD.TAGS:
+      return {
+        field: "tags",
+        operator: "contains" as FilterOperator,
+        type: COLUMN_TYPE.list,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.NAME:
+      return {
+        field: "name",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.string,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.MODEL:
+    case BREAKDOWN_FIELD.PROVIDER:
+      return null;
+
+    case BREAKDOWN_FIELD.TYPE:
+      return {
+        field: "type",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.category,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.METADATA:
+      if (!metadataKey) return null;
+      return {
+        field: "metadata",
+        key: metadataKey,
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.dictionary,
+        value: label,
+      };
+
+    default:
+      return null;
+  }
+}

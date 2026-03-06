@@ -1282,6 +1282,7 @@ class ProjectMetricsWithBreakdownResourceTest {
                 LocalDate startOfWeek = today.with(DayOfWeek.MONDAY);
                 yield startOfWeek.atStartOfDay(ZoneId.of("UTC")).toInstant();
             }
+            case TOTAL -> throw new IllegalArgumentException("Unsupported interval: " + interval);
         };
     }
 
