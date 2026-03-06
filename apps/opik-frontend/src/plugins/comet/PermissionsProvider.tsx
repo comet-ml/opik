@@ -17,6 +17,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canDeleteDatasets,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
+    canUpdateAIProviders,
     isPending,
   } = useUserPermission();
 
@@ -33,6 +34,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canDeleteDatasets,
         canDeleteOptimizationRuns,
         canConfigureWorkspaceSettings,
+        canUpdateAIProviders,
       },
       isPending,
     }),
@@ -47,6 +49,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canDeleteDatasets,
       canDeleteOptimizationRuns,
       canConfigureWorkspaceSettings,
+      canUpdateAIProviders,
       isPending,
     ],
   );
