@@ -114,6 +114,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     };
 
     private static final String EMPTY_ARRAY_STR = "[]";
+    private static final UUID ZERO_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -843,7 +844,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '' <endif>
+            <if(project_deleted)> AND project_id = '00000000-0000-0000-0000-000000000000' <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -869,7 +870,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '' <endif>
+            <if(project_deleted)> AND project_id = '00000000-0000-0000-0000-000000000000' <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1012,6 +1013,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     FROM experiment_item_aggregates eia FINAL
                     INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
                     WHERE eia.workspace_id = :workspace_id
+                    AND ea.dataset_id = :dataset_id
                     <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
                 )
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
@@ -2114,7 +2116,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {
         return TraceAggregations.builder()
                 .experimentId(experimentId)
-                .projectId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                .projectId(ZERO_UUID)
                 .durationPercentiles(Map.of())
                 .traceCount(0L)
                 .build();
