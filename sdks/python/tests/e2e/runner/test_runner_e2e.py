@@ -15,7 +15,7 @@ from typing import Optional
 
 import pytest
 
-from opik import Opik, synchronization
+import opik
 from opik.rest_api.client import OpikApi
 
 
@@ -71,7 +71,7 @@ def wait_for_completed_job(api: OpikApi, runner_id: str, match_text: str):
                     return j
         return None
 
-    assert synchronization.until(
+    assert opik.synchronization.until(
         lambda: _find() is not None,
         max_try_seconds=JOB_COMPLETION_TIMEOUT,
         allow_errors=True,
@@ -94,7 +94,7 @@ def find_trace_by_input(api: OpikApi, project_name: str, match_text: str):
                     return t
         return None
 
-    assert synchronization.until(
+    assert opik.synchronization.until(
         lambda: _find() is not None,
         max_try_seconds=TRACE_PROPAGATION_TIMEOUT,
         allow_errors=True,
@@ -195,7 +195,7 @@ def test_runner_with_mask(api_client, runner_process):
     time.sleep(2)
 
     # Create a mask overriding the default greeting
-    opik_client = Opik()
+    opik_client = opik.Opik()
     try:
         agent_config = opik_client.get_agent_config()
         mask_id = agent_config.create_mask(
