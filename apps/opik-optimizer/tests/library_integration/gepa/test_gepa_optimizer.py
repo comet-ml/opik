@@ -1496,7 +1496,7 @@ class TestEvaluationAdapterCache:
         mock_run_exp.return_value = (trial, raw_result)
 
         adapter, state = self._make_adapter()
-        config = {"prompt_messages": [{"role": "user", "content": "Hello"}]}
+        config = {"system_prompt": "Hello", "model": "test"}
         item_ids = ["item-1", "item-2"]
 
         # First call: cache miss → runs experiment
@@ -1524,8 +1524,8 @@ class TestEvaluationAdapterCache:
         adapter, _ = self._make_adapter()
         item_ids = ["item-1"]
 
-        config_a = {"prompt_messages": [{"role": "user", "content": "Hello A"}]}
-        config_b = {"prompt_messages": [{"role": "user", "content": "Hello B"}]}
+        config_a = {"system_prompt": "Hello A", "model": "test"}
+        config_b = {"system_prompt": "Hello B", "model": "test"}
 
         adapter.evaluate_with_details(config=config_a, dataset_item_ids=item_ids)
         adapter.evaluate_with_details(config=config_b, dataset_item_ids=item_ids)
@@ -1543,7 +1543,7 @@ class TestEvaluationAdapterCache:
         mock_run_exp.side_effect = [(trial_a, None), (trial_b, None)]
 
         adapter, _ = self._make_adapter()
-        config = {"prompt_messages": [{"role": "user", "content": "Hello"}]}
+        config = {"system_prompt": "Hello", "model": "test"}
 
         adapter.evaluate_with_details(config=config, dataset_item_ids=["item-1"])
         adapter.evaluate_with_details(config=config, dataset_item_ids=["item-1", "item-2"])
@@ -1560,7 +1560,7 @@ class TestEvaluationAdapterCache:
         mock_run_exp.return_value = (trial, None)
 
         adapter, state = self._make_adapter()
-        config = {"prompt_messages": [{"role": "user", "content": "Hello"}]}
+        config = {"system_prompt": "Hello", "model": "test"}
         item_ids = ["item-1"]
 
         adapter.evaluate_with_details(config=config, dataset_item_ids=item_ids)
@@ -1573,7 +1573,7 @@ class TestEvaluationAdapterCache:
     def test_cache_key_order_independent(self):
         from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
 
-        config = {"prompt_messages": [{"role": "user", "content": "Hello"}]}
+        config = {"system_prompt": "Hello", "model": "test"}
         key1 = EvaluationAdapter._make_cache_key(config, ["b", "a", "c"])
         key2 = EvaluationAdapter._make_cache_key(config, ["a", "c", "b"])
         assert key1 == key2

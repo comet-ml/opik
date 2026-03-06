@@ -15,8 +15,8 @@ class TestOrchestrator:
             metric_type="equals",
             optimizer_type="nonexistent",
             optimizer_parameters={},
-            optimizable_keys=["prompt_messages"],
-            baseline_config={"prompt_messages": [{"role": "user", "content": "hi"}], "model": "gpt-4"},
+            optimizable_keys=["system_prompt"],
+            baseline_config={"system_prompt": "hi", "user_message": "test", "model": "gpt-4"},
         )
         with pytest.raises(ValueError, match="Unknown optimizer type"):
             run_optimization(

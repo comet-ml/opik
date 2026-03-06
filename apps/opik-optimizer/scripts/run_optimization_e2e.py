@@ -41,20 +41,12 @@ OBJECTIVE_NAME = "pass_rate"
 # The model litellm will call for the optimization task.
 MODEL = os.environ.get("OPIK_TEST_MODEL", "gpt-4o-mini")
 
-PROMPT_MESSAGES = [
-    {
-        "role": "system",
-        "content": (
-            "You are a helpful customer support agent for an e-commerce company. "
-            "Be professional, empathetic, and provide clear, actionable responses. "
-            "If you don't know something, be honest about it."
-        ),
-    },
-    {
-        "role": "user",
-        "content": "Customer question: {question}\nAdditional context: {context}",
-    },
-]
+SYSTEM_PROMPT = (
+    "You are a helpful customer support agent for an e-commerce company. "
+    "Be professional, empathetic, and provide clear, actionable responses. "
+    "If you don't know something, be honest about it."
+)
+USER_MESSAGE = "Customer question: {question}\nAdditional context: {context}"
 
 # ---------------------------------------------------------------------------
 
@@ -179,9 +171,10 @@ def main():
         metric_type=OBJECTIVE_NAME,
         optimizer_type=optimizer_type,
         optimizer_parameters=optimizer_parameters,
-        optimizable_keys=["prompt_messages"],
+        optimizable_keys=["system_prompt"],
         baseline_config={
-            "prompt_messages": PROMPT_MESSAGES,
+            "system_prompt": SYSTEM_PROMPT,
+            "user_message": USER_MESSAGE,
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 256},
         },
@@ -217,8 +210,10 @@ def main():
         print(f"    Experiment    : {result.best_trial.experiment_name}")
         print(f"    Prompt        :")
         config = result.best_trial.config
-        for msg in config.get("prompt_messages", []):
-            print(f"      [{msg['role']}] {msg['content'][:80]}...")
+        if config.get("system_prompt"):
+            print(f"      [system] {config['system_prompt'][:80]}...")
+        if config.get("user_message"):
+            print(f"      [user] {config['user_message'][:80]}...")
 
     print(f"\n  Optimization trajectory:")
     for trial in result.all_trials:

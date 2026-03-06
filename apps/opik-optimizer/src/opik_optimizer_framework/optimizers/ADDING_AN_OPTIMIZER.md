@@ -70,10 +70,10 @@ Contains the optimization configuration:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `prompt_messages` | `list[dict]` | The original prompt (list of `{"role": ..., "content": ...}`) |
 | `model` | `str` | LiteLLM model identifier (e.g., `"gpt-4o-mini"`) |
-| `model_parameters` | `dict` | Model call parameters (temperature, etc.) |
-| `baseline_config` | `dict[str, Any]` | Full config dict for baseline evaluation (prompt_messages, model, model_parameters, etc.) |
+| `baseline_config` | `dict[str, Any]` | Full config dict for baseline evaluation (system_prompt, user_message, model, model_parameters, etc.) |
+| `optimizable_keys` | `list[str]` | Config keys the optimizer is allowed to modify (e.g., `["system_prompt"]`) |
+| `config_descriptions` | `dict[str, str]` | Descriptions of each optimizable key for the reflection LLM |
 | `optimizer_parameters` | `dict` | Algorithm-specific parameters from the UI |
 | `optimization_id` | `str` | Unique ID for this optimization run |
 | `dataset_name` | `str` | Name of the evaluation suite dataset |
@@ -83,8 +83,8 @@ Contains the optimization configuration:
 The main interface for evaluating candidates. Call `evaluate()` to score a prompt variant:
 
 ```python
-# Build config by copying baseline and replacing prompt_messages
-config = {**context.baseline_config, "prompt_messages": new_messages}
+# Build config by copying baseline and replacing the system prompt
+config = {**context.baseline_config, "system_prompt": new_system_prompt}
 
 trial = evaluation_adapter.evaluate(
     config=config,
@@ -142,10 +142,10 @@ def run(self, context, training_set, validation_set,
         evaluation_adapter, state, baseline_trial=None):
     for step in range(num_steps):
         # 1. Generate candidate prompt (your algorithm's logic)
-        new_messages = generate_improved_prompt(context.prompt_messages)
+        new_system_prompt = generate_improved_prompt(context.baseline_config["system_prompt"])
 
-        # 2. Evaluate it — copy baseline config, replace prompt_messages
-        config = {**context.baseline_config, "prompt_messages": new_messages}
+        # 2. Evaluate it — copy baseline config, replace system_prompt
+        config = {**context.baseline_config, "system_prompt": new_system_prompt}
         trial = evaluation_adapter.evaluate(
             config=config,
             dataset_item_ids=[str(item["id"]) for item in training_set],

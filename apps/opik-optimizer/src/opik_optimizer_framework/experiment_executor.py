@@ -75,13 +75,11 @@ def run_experiment_with_details(
     config_for_metadata = dict(candidate.config)
 
     if "prompt" not in config_for_metadata:
-        prompt_msgs = config_for_metadata.get("prompt_messages")
-        if not prompt_msgs:
-            prompt_msgs = [
-                {"role": role, "content": str(config_for_metadata[key])}
-                for key, role in MESSAGE_KEYS
-                if config_for_metadata.get(key) is not None
-            ]
+        prompt_msgs = [
+            {"role": role, "content": str(config_for_metadata[key])}
+            for key, role in MESSAGE_KEYS
+            if config_for_metadata.get(key) is not None
+        ]
         if prompt_msgs:
             config_for_metadata["prompt"] = prompt_msgs
 

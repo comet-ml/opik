@@ -71,6 +71,7 @@ def run_optimization(
         state=state,
         event_emitter=event_emitter,
         optimizer_type=context.optimizer_type,
+        optimizable_keys=context.optimizable_keys,
     )
 
     optimizer = create_optimizer(context.optimizer_type)

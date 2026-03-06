@@ -33,6 +33,7 @@ class EvaluationAdapter:
         state: OptimizationState,
         event_emitter: EventEmitter,
         optimizer_type: str | None = None,
+        optimizable_keys: list[str] | None = None,
     ) -> None:
         self._client = client
         self._dataset_name = dataset_name
@@ -41,6 +42,7 @@ class EvaluationAdapter:
         self._state = state
         self._event_emitter = event_emitter
         self._optimizer_type = optimizer_type
+        self._optimizable_keys = optimizable_keys or []
         self._trial_count = 0
         self._candidate_step_index: dict[str, int] = {}
         self._last_emitted_step = -1
@@ -106,7 +108,7 @@ class EvaluationAdapter:
         that include ``reason`` fields from LLM judge assertions. Returns
         ``(None, None)`` if the candidate is rejected.
         """
-        valid, reason = validate_candidate(config, self._state)
+        valid, reason = validate_candidate(config, self._optimizable_keys)
         if not valid:
             logger.warning("Candidate rejected: %s", reason)
             return None, None
