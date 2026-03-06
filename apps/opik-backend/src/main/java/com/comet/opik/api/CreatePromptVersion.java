@@ -30,4 +30,9 @@ public record CreatePromptVersion(@JsonView( {
     public TemplateStructure templateStructure() {
         return templateStructure == null ? TemplateStructure.TEXT : templateStructure;
     }
+
+    @Override
+    public PromptVersionAction action() {
+        return action == null ? PromptVersionAction.UPDATE_BLUEPRINT : action;
+    }
 }

@@ -11,7 +11,7 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum PromptVersionAction {
     UPDATE_BLUEPRINT("update_blueprint"),
-    NONE("none");
+    NO_ACTION("no_action");
 
     @JsonValue
     private final String value;

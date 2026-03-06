@@ -1273,7 +1273,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
-                    PromptVersionAction.NONE);
+                    PromptVersionAction.NO_ACTION);
 
             Thread.sleep(2000);
 

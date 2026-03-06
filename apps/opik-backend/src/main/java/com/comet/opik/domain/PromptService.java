@@ -757,7 +757,6 @@ class PromptServiceImpl implements PromptService {
                 .payload(promptVersion)
                 .build());
 
-        action = Optional.ofNullable(action).orElse(PromptVersionAction.UPDATE_BLUEPRINT);
         if (action == PromptVersionAction.UPDATE_BLUEPRINT) {
             eventBus.post(PromptVersionCreatedEvent.builder()
                     .workspaceId(workspaceId)
