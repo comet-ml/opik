@@ -130,8 +130,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
             TimeInterval.DAILY, "toIntervalDay(1)",
-            TimeInterval.HOURLY, "toIntervalHour(1)",
-            TimeInterval.TOTAL, "toIntervalYear(100)");
+            TimeInterval.HOURLY, "toIntervalHour(1)");
 
     private static final String PROJECT_METRIC_QUERY_NAME_PREFIX = "ProjectMetrics_";
     private static final String ALERT_METRIC_QUERY_NAME_PREFIX = "AlertMetrics_";
@@ -1527,15 +1526,21 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private Mono<? extends Result> getMetric(
             UUID projectId, ProjectMetricRequest request, Connection connection, String query, String segmentName) {
         return makeMonoContextAware((userName, workspaceId) -> {
+            var isTotal = request.interval() == TimeInterval.TOTAL;
             var template = getSTWithLogComment(query, PROJECT_METRIC_QUERY_NAME_PREFIX + segmentName, workspaceId,
-                    projectId.toString())
-                    .add("step", intervalToSql(request.interval()))
-                    .add("bucket", wrapWeekly(request.interval(),
-                            "toStartOfInterval(%s, %s)".formatted(getTimeField(request.metricType()),
-                                    intervalToSql(request.interval()))))
-                    .add("fill_from", wrapWeekly(request.interval(),
-                            "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
-                                    .formatted(intervalToSql(request.interval()))));
+                    projectId.toString());
+
+            if (isTotal) {
+                template.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
+            } else {
+                template.add("step", intervalToSql(request.interval()))
+                        .add("bucket", wrapWeekly(request.interval(),
+                                "toStartOfInterval(%s, %s)".formatted(getTimeField(request.metricType()),
+                                        intervalToSql(request.interval()))))
+                        .add("fill_from", wrapWeekly(request.interval(),
+                                "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
+                                        .formatted(intervalToSql(request.interval()))));
+            }
 
             // Add breakdown group expression if breakdown is enabled
             if (request.hasBreakdown()) {
@@ -1550,7 +1555,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             template.add("uuid_from_time", true);
             if (request.uuidToTime() != null) {
                 template.add("uuid_to_time", true);
-                template.add("with_fill", true);
+                if (!isTotal) {
+                    template.add("with_fill", true);
+                }
             }
             // Note: when uuid_to_time is null, WITH FILL clause is omitted entirely
 
