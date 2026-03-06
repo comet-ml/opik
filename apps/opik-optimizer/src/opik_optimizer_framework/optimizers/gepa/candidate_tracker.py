@@ -87,8 +87,7 @@ class CandidateTracker:
     def on_merge_accepted(self, parent_ids: Sequence[int]) -> None:
         self._pending_merge_parent_ids = list(parent_ids)
 
-    def consume_pending_capture_traces(self) -> bool | None:
-        """Return and clear the pending capture_traces value."""
+    def get_pending_capture_traces(self) -> bool | None:
         value = self._pending_eval_capture_traces
         return value
 

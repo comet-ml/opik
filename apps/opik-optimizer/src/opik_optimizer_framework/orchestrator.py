@@ -21,7 +21,7 @@ def _save_reflection_log(optimizer: Any) -> None:
     adapter = getattr(optimizer, "adapter", None)
     if adapter is None:
         return
-    log = getattr(adapter, "_reflection_log", [])
+    log = getattr(adapter, "reflection_log", [])
     if not log:
         return
     import time

@@ -53,7 +53,7 @@ class FailureAwareBatchSampler:
             self._idx_to_item_id[idx] = item_id
             self._item_id_to_idx[item_id] = idx
 
-    def update_scores(self, per_item_feedback: dict[str, dict[str, float]]) -> None:
+    def update_scores(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
         for item_id, data in per_item_feedback.items():
             self._item_scores[item_id] = data.get("score", 0.0)
         if per_item_feedback:

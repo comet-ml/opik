@@ -33,8 +33,6 @@ if TYPE_CHECKING:
 
 DatasetItem = dict[str, Any]
 
-SYSTEM_PROMPT_KEY = "system_prompt"
-
 
 def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
     """Extract per-item feedback from the raw EvaluationResult.
@@ -154,6 +152,7 @@ class FrameworkGEPAAdapter:
         else:
             self._proposer = None
 
+        self._standalone_reflection_log: list[dict[str, Any]] = []
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
         self._full_dataset_size: int | None = None
         self.best_full_eval_trial_score: float = 0.0
@@ -189,86 +188,88 @@ class FrameworkGEPAAdapter:
     def _on_merge_accepted(self, parent_ids: Sequence[int]) -> None:
         self._tracker.on_merge_accepted(parent_ids)
 
-    # -- Compatibility properties for tests ------------------------------------
+    # -- Public properties (facade over CandidateTracker) ----------------------
 
     @property
-    def _known_candidates(self) -> dict[str, str]:
+    def known_candidates(self) -> dict[str, str]:
         return self._tracker._known_candidates
 
     @property
-    def _candidate_parents(self) -> dict[str, list[str]]:
+    def candidate_parents(self) -> dict[str, list[str]]:
         return self._tracker._candidate_parents
 
     @property
-    def _baseline_candidate_id(self) -> str | None:
+    def baseline_candidate_id(self) -> str | None:
         return self._tracker._baseline_candidate_id
 
     @property
-    def _seed_candidate_key(self) -> str | None:
+    def seed_candidate_key(self) -> str | None:
         return self._tracker._seed_candidate_key
 
     @property
-    def _gepa_idx_to_candidate_id(self) -> dict[int, str]:
+    def gepa_idx_to_candidate_id(self) -> dict[int, str]:
         return self._tracker._gepa_idx_to_candidate_id
 
-    @_gepa_idx_to_candidate_id.setter
-    def _gepa_idx_to_candidate_id(self, value: dict[int, str]) -> None:
+    @gepa_idx_to_candidate_id.setter
+    def gepa_idx_to_candidate_id(self, value: dict[int, str]) -> None:
         self._tracker._gepa_idx_to_candidate_id = value
 
     @property
-    def _current_step(self) -> int:
+    def current_step(self) -> int:
         return self._tracker._current_step
 
-    @_current_step.setter
-    def _current_step(self, value: int) -> None:
+    @current_step.setter
+    def current_step(self, value: int) -> None:
         self._tracker._current_step = value
 
     @property
-    def _selected_parent_id(self) -> str | None:
+    def selected_parent_id(self) -> str | None:
         return self._tracker._selected_parent_id
 
-    @_selected_parent_id.setter
-    def _selected_parent_id(self, value: str | None) -> None:
+    @selected_parent_id.setter
+    def selected_parent_id(self, value: str | None) -> None:
         self._tracker._selected_parent_id = value
 
     @property
-    def _pending_eval_parent_ids(self) -> list[int] | None:
+    def pending_eval_parent_ids(self) -> list[int] | None:
         return self._tracker._pending_eval_parent_ids
 
-    @_pending_eval_parent_ids.setter
-    def _pending_eval_parent_ids(self, value: list[int] | None) -> None:
+    @pending_eval_parent_ids.setter
+    def pending_eval_parent_ids(self, value: list[int] | None) -> None:
         self._tracker._pending_eval_parent_ids = value
 
     @property
-    def _pending_eval_capture_traces(self) -> bool | None:
+    def pending_eval_capture_traces(self) -> bool | None:
         return self._tracker._pending_eval_capture_traces
 
-    @_pending_eval_capture_traces.setter
-    def _pending_eval_capture_traces(self, value: bool | None) -> None:
+    @pending_eval_capture_traces.setter
+    def pending_eval_capture_traces(self, value: bool | None) -> None:
         self._tracker._pending_eval_capture_traces = value
 
     @property
-    def _pending_eval_candidate_idx(self) -> int | None:
+    def pending_eval_candidate_idx(self) -> int | None:
         return self._tracker._pending_eval_candidate_idx
 
-    @_pending_eval_candidate_idx.setter
-    def _pending_eval_candidate_idx(self, value: int | None) -> None:
+    @pending_eval_candidate_idx.setter
+    def pending_eval_candidate_idx(self, value: int | None) -> None:
         self._tracker._pending_eval_candidate_idx = value
 
     @property
-    def _pending_merge_parent_ids(self) -> list[int] | None:
+    def pending_merge_parent_ids(self) -> list[int] | None:
         return self._tracker._pending_merge_parent_ids
 
-    @_pending_merge_parent_ids.setter
-    def _pending_merge_parent_ids(self, value: list[int] | None) -> None:
+    @pending_merge_parent_ids.setter
+    def pending_merge_parent_ids(self, value: list[int] | None) -> None:
         self._tracker._pending_merge_parent_ids = value
 
     @property
-    def _reflection_log(self) -> list[dict[str, Any]]:
-        return self._proposer.reflection_log if self._proposer else []
+    def reflection_log(self) -> list[dict[str, Any]]:
+        if self._proposer:
+            return self._proposer.reflection_log
+        return self._standalone_reflection_log
 
     @property
-    def _reflection_prompt_template(self) -> str | None:
+    def reflection_prompt_template(self) -> str | None:
         return self._proposer.reflection_prompt_template if self._proposer else None
 
     # -- Core evaluate ---------------------------------------------------------
@@ -309,8 +310,7 @@ class FrameworkGEPAAdapter:
         if not per_item and trial is not None:
             trial_score = trial.score
             for i in range(len(batch)):
-                if i < len(scores):
-                    scores[i] = trial_score
+                scores[i] = trial_score
 
         return EvaluationBatch(
             outputs=outputs,
@@ -327,11 +327,8 @@ class FrameworkGEPAAdapter:
         """Evaluate a GEPA candidate against a batch of data instances."""
         key = _candidate_key(candidate)
 
-        effective_capture_traces = (
-            self._tracker.consume_pending_capture_traces()
-            if self._tracker._pending_eval_capture_traces is not None
-            else capture_traces
-        )
+        pending = self._tracker.get_pending_capture_traces()
+        effective_capture_traces = pending if pending is not None else capture_traces
 
         existing_candidate_id = self._tracker.get_existing_candidate_id(key)
         eval_purpose = self._tracker.determine_eval_purpose(key, effective_capture_traces)
@@ -345,7 +342,7 @@ class FrameworkGEPAAdapter:
 
         config = self._config_builder(candidate)
 
-        batch_index = self._tracker._current_step if self._tracker._current_step >= 0 else None
+        batch_index = self.current_step if self.current_step >= 0 else None
 
         if self._full_dataset_size is None:
             self._full_dataset_size = len(batch)

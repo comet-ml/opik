@@ -151,7 +151,7 @@ class GepaOptimizer:
                     item["failure_streak"],
                     item["failing_assertions"],
                 )
-            adapter._reflection_log.append({
+            adapter.reflection_log.append({
                 "type": "problematic_items_summary",
                 "items": problematic,
             })

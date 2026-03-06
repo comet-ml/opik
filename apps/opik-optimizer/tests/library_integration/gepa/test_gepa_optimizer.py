@@ -8,10 +8,11 @@ pytest.importorskip("gepa")
 from opik_optimizer_framework.optimizers.gepa.gepa_adapter import (
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
-    SYSTEM_PROMPT_KEY,
     _candidate_key,
     _extract_per_item_feedback,
 )
+
+SYSTEM_PROMPT_KEY = "system_prompt"
 from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import (
     GepaOptimizer,
     _build_seed_candidate,
@@ -269,7 +270,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         key = _candidate_key(candidate)
-        assert adapter._known_candidates[key] == "c-123"
+        assert adapter.known_candidates[key] == "c-123"
 
     @patch("gepa.core.adapter.EvaluationBatch")
     def test_eval_purpose_initialization_before_iterations(self, mock_eb_cls):
@@ -280,7 +281,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        assert adapter._current_step == -1
+        assert adapter.current_step == -1
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -299,9 +300,9 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 2
-        adapter._pending_eval_capture_traces = True
-        adapter._pending_eval_parent_ids = []
+        adapter.current_step = 2
+        adapter.pending_eval_capture_traces = True
+        adapter.pending_eval_parent_ids = []
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -320,9 +321,9 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 2
-        adapter._pending_eval_capture_traces = False
-        adapter._pending_eval_parent_ids = [0]
+        adapter.current_step = 2
+        adapter.pending_eval_capture_traces = False
+        adapter.pending_eval_parent_ids = [0]
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -341,10 +342,10 @@ class TestFrameworkGEPAAdapterEvaluate:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 3
+        adapter.current_step = 3
         # Pre-register the candidate so it's "known"
-        adapter._known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "Hi"})] = "c-prev"
-        adapter._candidate_parents["c-prev"] = []
+        adapter.known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "Hi"})] = "c-prev"
+        adapter.candidate_parents["c-prev"] = []
 
         adapter.evaluate(
             batch=[_make_inst("x")],
@@ -377,9 +378,9 @@ class TestAdapterParentTracking:
         child_candidate = {SYSTEM_PROMPT_KEY: "child prompt"}
 
         # Pre-populate: parent was evaluated in a previous step
-        adapter._known_candidates[_candidate_key(parent_candidate)] = "parent-1"
-        adapter._candidate_parents["parent-1"] = []
-        adapter._gepa_idx_to_candidate_id[0] = "parent-1"
+        adapter.known_candidates[_candidate_key(parent_candidate)] = "parent-1"
+        adapter.candidate_parents["parent-1"] = []
+        adapter.gepa_idx_to_candidate_id[0] = "parent-1"
 
         adapter._on_new_step(1)
         adapter._on_candidate_selected(0)
@@ -419,7 +420,7 @@ class TestAdapterParentTracking:
 
         adapter._on_valset_evaluated(0, candidate)
 
-        assert adapter._gepa_idx_to_candidate_id[0] == "fw-123"
+        assert adapter.gepa_idx_to_candidate_id[0] == "fw-123"
 
     @patch("gepa.core.adapter.EvaluationBatch")
     def test_merge_parent_ids_from_callback(self, mock_eb_cls):
@@ -431,8 +432,8 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 1
-        adapter._gepa_idx_to_candidate_id = {0: "seed-id", 1: "parent-a", 2: "parent-b"}
+        adapter.current_step = 1
+        adapter.gepa_idx_to_candidate_id = {0: "seed-id", 1: "parent-a", 2: "parent-b"}
 
         adapter._on_merge_accepted([1, 2])
 
@@ -447,20 +448,20 @@ class TestAdapterParentTracking:
     def test_new_step_resets_state(self):
         """_on_new_step resets all per-iteration tracking state."""
         adapter = _build_adapter(MagicMock())
-        adapter._selected_parent_id = "old-parent"
-        adapter._pending_merge_parent_ids = [1]
-        adapter._pending_eval_parent_ids = [0]
-        adapter._pending_eval_capture_traces = True
-        adapter._pending_eval_candidate_idx = 2
+        adapter.selected_parent_id = "old-parent"
+        adapter.pending_merge_parent_ids = [1]
+        adapter.pending_eval_parent_ids = [0]
+        adapter.pending_eval_capture_traces = True
+        adapter.pending_eval_candidate_idx = 2
 
         adapter._on_new_step(5)
 
-        assert adapter._current_step == 5
-        assert adapter._selected_parent_id is None
-        assert adapter._pending_merge_parent_ids is None
-        assert adapter._pending_eval_parent_ids is None
-        assert adapter._pending_eval_capture_traces is None
-        assert adapter._pending_eval_candidate_idx is None
+        assert adapter.current_step == 5
+        assert adapter.selected_parent_id is None
+        assert adapter.pending_merge_parent_ids is None
+        assert adapter.pending_eval_parent_ids is None
+        assert adapter.pending_eval_capture_traces is None
+        assert adapter.pending_eval_candidate_idx is None
 
     @patch("gepa.core.adapter.EvaluationBatch")
     def test_candidate_id_reused_for_known_candidate(self, mock_eb_cls):
@@ -498,9 +499,9 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (child_trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._gepa_idx_to_candidate_id[0] = "parent-1"
-        adapter._candidate_parents["parent-1"] = []
-        adapter._known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "parent prompt"})] = "parent-1"
+        adapter.gepa_idx_to_candidate_id[0] = "parent-1"
+        adapter.candidate_parents["parent-1"] = []
+        adapter.known_candidates[_candidate_key({SYSTEM_PROMPT_KEY: "parent prompt"})] = "parent-1"
 
         child_candidate = {SYSTEM_PROMPT_KEY: "child prompt"}
 
@@ -552,8 +553,8 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 1
-        adapter._gepa_idx_to_candidate_id = {0: "seed-id", 1: "parent-fw-id"}
+        adapter.current_step = 1
+        adapter.gepa_idx_to_candidate_id = {0: "seed-id", 1: "parent-fw-id"}
 
         adapter._on_evaluation_start(
             candidate_idx=None,
@@ -603,7 +604,7 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (_make_trial("c-1", 0.8), None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 1
+        adapter.current_step = 1
         adapter._on_evaluation_start(candidate_idx=0, parent_ids=[1], capture_traces=True)
 
         adapter.evaluate(
@@ -611,9 +612,9 @@ class TestAdapterParentTracking:
             candidate={SYSTEM_PROMPT_KEY: "test"},
         )
 
-        assert adapter._pending_eval_parent_ids is None
-        assert adapter._pending_eval_capture_traces is None
-        assert adapter._pending_eval_candidate_idx is None
+        assert adapter.pending_eval_parent_ids is None
+        assert adapter.pending_eval_capture_traces is None
+        assert adapter.pending_eval_candidate_idx is None
 
     @patch("gepa.core.adapter.EvaluationBatch")
     def test_candidate_parents_stored_once(self, mock_eb_cls):
@@ -625,9 +626,9 @@ class TestAdapterParentTracking:
         mock_eval_adapter.evaluate_with_details.return_value = (trial, None)
 
         adapter = _build_adapter(mock_eval_adapter)
-        adapter._current_step = 1
-        adapter._gepa_idx_to_candidate_id[0] = "parent-1"
-        adapter._selected_parent_id = "parent-1"
+        adapter.current_step = 1
+        adapter.gepa_idx_to_candidate_id[0] = "parent-1"
+        adapter.selected_parent_id = "parent-1"
 
         child_candidate = {SYSTEM_PROMPT_KEY: "new child"}
 
@@ -635,15 +636,15 @@ class TestAdapterParentTracking:
             batch=[_make_inst("x")],
             candidate=child_candidate,
         )
-        assert adapter._candidate_parents["child-1"] == ["parent-1"]
+        assert adapter.candidate_parents["child-1"] == ["parent-1"]
 
         # Re-eval: _candidate_parents should NOT be overwritten
-        adapter._selected_parent_id = "different-parent"
+        adapter.selected_parent_id = "different-parent"
         adapter.evaluate(
             batch=[_make_inst("y")],
             candidate=child_candidate,
         )
-        assert adapter._candidate_parents["child-1"] == ["parent-1"]
+        assert adapter.candidate_parents["child-1"] == ["parent-1"]
 
 
 # -- progress callback tests --------------------------------------------------
@@ -1222,7 +1223,7 @@ class TestGepaOptimizer:
             )
 
         gepa_adapter = mock_optimize.call_args.kwargs["adapter"]
-        assert gepa_adapter._baseline_candidate_id == "baseline-id"
+        assert gepa_adapter.baseline_candidate_id == "baseline-id"
 
     def test_gepa_not_installed_raises(self):
         import sys
@@ -1300,10 +1301,10 @@ class TestGepaOptimizer:
 
         # Template passed to the adapter instead
         gepa_adapter = optimizer.adapter
-        assert gepa_adapter._reflection_prompt_template == GENERALIZATION_REFLECTION_TEMPLATE
-        assert "<curr_param>" in gepa_adapter._reflection_prompt_template
-        assert "<side_info>" in gepa_adapter._reflection_prompt_template
-        assert "DIAGNOSE" in gepa_adapter._reflection_prompt_template
+        assert gepa_adapter.reflection_prompt_template == GENERALIZATION_REFLECTION_TEMPLATE
+        assert "<curr_param>" in gepa_adapter.reflection_prompt_template
+        assert "<side_info>" in gepa_adapter.reflection_prompt_template
+        assert "DIAGNOSE" in gepa_adapter.reflection_prompt_template
 
     def test_cache_evaluation_disabled(self):
         context = _make_context()
