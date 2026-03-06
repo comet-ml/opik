@@ -43,8 +43,9 @@ const LegendItem: React.FC<LegendItemProps> = ({
       <TooltipWrapper content={tooltipContent}>
         <div
           className={cn(
-            "comet-body-xs truncate text-foreground",
-            isClickable && "text-muted-slate border-b border-muted-slate hover:text-primary",
+            "comet-body-xs truncate text-light-slate",
+            isClickable &&
+              "border-b border-light-slate hover:text-primary hover:border-primary",
           )}
         >
           {displayLabel}
