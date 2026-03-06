@@ -386,8 +386,8 @@ class TraceDAOImpl implements TraceDAO {
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
-                SELECT DISTINCT id, trace_id, type
-                FROM spans
+                SELECT id, trace_id, type
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
@@ -642,12 +642,10 @@ class TraceDAOImpl implements TraceDAO {
                         id,
                         type,
                         provider
-                    FROM spans
+                    FROM spans FINAL
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN :ids
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
                 )
                 GROUP BY trace_id
             ), experiments_agg AS (
