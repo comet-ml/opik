@@ -96,6 +96,7 @@ public class FilterQueryBuilder {
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
+    private static final String ERROR_TYPE_DB = "simpleJSONExtractString(error_info, 'exception_type')";
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
@@ -303,6 +304,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
                     .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
                     .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
@@ -348,6 +350,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
                     .put(SpanField.TTFT, TTFT_ANALYTICS_DB)
                     .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(SpanField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .build());
@@ -511,7 +514,8 @@ public class FilterQueryBuilder {
                 TraceField.THREAD_ID,
                 TraceField.GUARDRAILS,
                 TraceField.VISIBILITY_MODE,
-                TraceField.ERROR_INFO));
+                TraceField.ERROR_INFO,
+                TraceField.ERROR_TYPE));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
                 TraceField.EXPERIMENT_ID));
@@ -547,6 +551,7 @@ public class FilterQueryBuilder {
                 SpanField.DURATION,
                 SpanField.TTFT,
                 SpanField.ERROR_INFO,
+                SpanField.ERROR_TYPE,
                 SpanField.TYPE,
                 SpanField.TRACE_ID));
 

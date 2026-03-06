@@ -16,7 +16,7 @@ const toggleVariants = cva(
         outline:
           "rounded-md border border-input bg-transparent hover:bg-accent hover:text-accent-foreground active:bg-[var(--toggle-outline-active)] data-[state=on]:bg-[var(--toggle-outline-active)]",
         ghost:
-          "bg-transparent font-normal hover:text-primary-hover active:text-primary-active disabled:text-muted-gray disabled:opacity-100 data-[state=on]:bg-upload-icon-bg/40 data-[state=on]:text-foreground",
+          "bg-transparent font-normal hover:text-primary-hover active:text-primary-active disabled:text-muted-gray disabled:opacity-100 data-[state=on]:bg-upload-icon-bg/40 data-[state=on]:text-foreground disabled:data-[state=on]:bg-upload-icon-bg/20 disabled:data-[state=on]:text-muted-gray",
       },
       size: {
         default: "h-8 px-4",
