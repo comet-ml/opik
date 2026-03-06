@@ -1,5 +1,6 @@
 import React, { useMemo, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import isNumber from "lodash/isNumber";
 import {
   Dot,
   XAxis,
@@ -306,22 +307,45 @@ const OptimizationProgressChartContent: React.FC<
           );
           const status = chartPoint?.status ?? "passed";
           const scoreLabel = isEvaluationSuite ? "Pass rate" : "Score";
-          const percentageDisplay =
-            c.score != null ? formatAsPercentage(c.score) : "-";
+          const percentageDisplay = isNumber(c.score)
+            ? formatAsPercentage(c.score)
+            : "-";
           const fractionDisplay =
-            isEvaluationSuite && c.score != null && c.totalDatasetItemCount > 0
+            isEvaluationSuite &&
+            isNumber(c.score) &&
+            c.totalDatasetItemCount > 0
               ? ` (${Math.round(c.score * c.totalDatasetItemCount)}/${
                   c.totalDatasetItemCount
                 })`
               : "";
 
+          const rows: { label: string; value: string }[] = [
+            { label: "Status", value: status },
+            {
+              label: scoreLabel,
+              value: `${percentageDisplay}${fractionDisplay}`,
+            },
+          ];
+          if (c.latencyP50 != null) {
+            rows.push({
+              label: "Latency",
+              value: formatAsDuration(c.latencyP50),
+            });
+          }
+          if (c.runtimeCost != null) {
+            rows.push({
+              label: "Runtime cost",
+              value: formatAsCurrency(c.runtimeCost),
+            });
+          }
+
           const rect = containerRef.current!.getBoundingClientRect();
           const fixedLeft = rect.left + hoveredTrial.cx;
-          const fixedTop = rect.top + hoveredTrial.cy - 12;
+          const fixedTop = rect.top + hoveredTrial.cy - 16;
 
           return createPortal(
             <div
-              className="pointer-events-none rounded-md border border-border px-3 py-2 shadow-md"
+              className="pointer-events-none min-w-32 max-w-72 rounded-md border border-border px-1 py-1.5 shadow-md"
               style={{
                 position: "fixed",
                 left: fixedLeft,
@@ -331,37 +355,29 @@ const OptimizationProgressChartContent: React.FC<
                 backgroundColor: "hsl(var(--background))",
               }}
             >
-              <div className="comet-body-xs-accented mb-1">
-                Trial #{c.trialNumber}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <div className="comet-body-xs text-muted-slate">
-                  Status:{" "}
-                  <span className="capitalize text-foreground">{status}</span>
-                </div>
-                <div className="comet-body-xs text-muted-slate">
-                  {scoreLabel}:{" "}
-                  <span className="text-foreground">
-                    {percentageDisplay}
-                    {fractionDisplay}
-                  </span>
-                </div>
-                {c.latencyP50 != null && (
-                  <div className="comet-body-xs text-muted-slate">
-                    Latency:{" "}
-                    <span className="text-foreground">
-                      {formatAsDuration(c.latencyP50)}
-                    </span>
+              <div className="grid items-start gap-1.5">
+                <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
+                  <div className="comet-body-xs-accented mb-0.5 truncate">
+                    Trial #{c.trialNumber}
                   </div>
-                )}
-                {c.runtimeCost != null && (
-                  <div className="comet-body-xs text-muted-slate">
-                    Runtime cost:{" "}
-                    <span className="text-foreground">
-                      {formatAsCurrency(c.runtimeCost)}
-                    </span>
-                  </div>
-                )}
+                </div>
+                <div className="grid gap-1.5">
+                  {rows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex h-6 w-full items-center px-2"
+                    >
+                      <div className="flex flex-1 items-center justify-between gap-2 leading-none">
+                        <span className="comet-body-xs truncate text-muted-slate">
+                          {row.label}
+                        </span>
+                        <span className="comet-body-xs capitalize">
+                          {row.value}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>,
             document.body,

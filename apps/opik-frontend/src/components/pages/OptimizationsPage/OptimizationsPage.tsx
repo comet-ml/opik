@@ -81,7 +81,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "pass_rate",
     label: "Pass rate",
-    type: COLUMN_TYPE.number,
+    type: COLUMN_TYPE.numberDictionary,
     size: 200,
     accessorFn: (row) => row.best_objective_score,
     cell: OptimizationPassRateCell as never,
@@ -98,7 +98,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "latency",
     label: "Latency",
-    type: COLUMN_TYPE.number,
+    type: COLUMN_TYPE.duration,
     size: 180,
     accessorFn: (row) => row.best_duration,
     cell: OptimizationLatencyCell as never,
@@ -106,15 +106,15 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "cost",
     label: "Cost",
-    type: COLUMN_TYPE.number,
+    type: COLUMN_TYPE.cost,
     size: 180,
     accessorFn: (row) => row.best_cost,
     cell: OptimizationCostCell as never,
   },
   {
     id: "opt_cost",
-    label: "Opt. Cost",
-    type: COLUMN_TYPE.number,
+    label: "Opt. cost",
+    type: COLUMN_TYPE.cost,
     size: 120,
     accessorFn: (row) => row.total_optimization_cost,
     cell: OptimizationTotalCostCell as never,

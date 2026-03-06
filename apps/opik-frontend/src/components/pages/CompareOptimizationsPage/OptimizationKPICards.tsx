@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Clock, DollarSign, Target, Zap } from "lucide-react";
+import { Clock, Coins, PenLine } from "lucide-react";
 
 import MetricComparisonCell from "@/components/pages-shared/experiments/MetricComparisonCell/MetricComparisonCell";
 import {
@@ -61,7 +61,7 @@ const OptimizationKPICards: React.FunctionComponent<
     <div className="grid grid-cols-4 gap-4">
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <Target className="size-4 text-muted-slate" />
+          <PenLine className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">
             {isEvaluationSuite ? "Pass rate" : "Accuracy"}
           </span>
@@ -75,7 +75,7 @@ const OptimizationKPICards: React.FunctionComponent<
 
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <Zap className="size-4 text-muted-slate" />
+          <Clock className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">Latency</span>
         </div>
         <MetricComparisonCell
@@ -88,8 +88,8 @@ const OptimizationKPICards: React.FunctionComponent<
 
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <DollarSign className="size-4 text-muted-slate" />
-          <span className="comet-body-s text-muted-slate">Runtime Cost</span>
+          <Coins className="size-4 text-muted-slate" />
+          <span className="comet-body-s text-muted-slate">Runtime cost</span>
         </div>
         <MetricComparisonCell
           baseline={kpiData.baselineCost}
@@ -101,12 +101,12 @@ const OptimizationKPICards: React.FunctionComponent<
 
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <Clock className="size-4 text-muted-slate" />
+          <Coins className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">
-            Optimization Cost
+            Optimization cost
           </span>
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex items-baseline gap-1.5">
           <span className="comet-body-s-accented">
             {kpiData.totalOptCost > 0
               ? formatAsCurrency(kpiData.totalOptCost)

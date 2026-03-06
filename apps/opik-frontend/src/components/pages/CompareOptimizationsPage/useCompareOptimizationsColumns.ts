@@ -62,7 +62,7 @@ export const useCompareOptimizationsColumns = ({
       {
         id: "objective_name",
         label: isEvaluationSuite ? "Pass rate" : "Accuracy",
-        type: COLUMN_TYPE.number,
+        type: COLUMN_TYPE.numberDictionary,
         size: 160,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell as never,
@@ -73,8 +73,8 @@ export const useCompareOptimizationsColumns = ({
       },
       {
         id: "runtime_cost",
-        label: "Runtime Cost",
-        type: COLUMN_TYPE.number,
+        label: "Runtime cost",
+        type: COLUMN_TYPE.cost,
         size: 160,
         accessorFn: (row) => row.runtimeCost,
         cell: TrialCandidateCostCell as never,
@@ -85,7 +85,7 @@ export const useCompareOptimizationsColumns = ({
       {
         id: "latency",
         label: "Latency",
-        type: COLUMN_TYPE.number,
+        type: COLUMN_TYPE.duration,
         size: 160,
         accessorFn: (row) => row.latencyP50,
         cell: TrialCandidateLatencyCell as never,

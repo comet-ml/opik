@@ -180,7 +180,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
           {canViewDatasets && (
             <>
               <PageBodyStickyContainer direction="horizontal" limitWidth>
-                <h2 className="comet-title-s mb-4">Evaluation Results</h2>
+                <h2 className="comet-title-s mb-4">Evaluation results</h2>
               </PageBodyStickyContainer>
               <TrialItemsTab
                 objectiveName={optimization?.objective_name}

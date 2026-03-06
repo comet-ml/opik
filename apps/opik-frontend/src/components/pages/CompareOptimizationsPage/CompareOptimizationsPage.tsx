@@ -108,7 +108,7 @@ const CompareOptimizationsPage: React.FC = () => {
         <div className="shrink-0 pb-4">
           <TrialConfigurationSection
             experiments={[bestExperiment]}
-            title="Best Configuration"
+            title="Best configuration"
             referenceExperiment={baselineExperiment}
             studioConfig={optimization?.studio_config}
           />

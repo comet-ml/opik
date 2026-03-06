@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Clock, DollarSign, Target, Zap } from "lucide-react";
+import { Clock, Coins, PenLine } from "lucide-react";
 
 import MetricComparisonCell from "@/components/pages-shared/experiments/MetricComparisonCell/MetricComparisonCell";
 import {
@@ -117,10 +117,10 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
   }, [allOptimizationExperiments, experiments, objectiveName]);
 
   return (
-    <div className="grid grid-cols-4 gap-4">
+    <div className="grid grid-cols-3 gap-4">
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <Target className="size-4 text-muted-slate" />
+          <PenLine className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">
             {isEvaluationSuite ? "Pass rate" : objectiveName ?? "Accuracy"}
           </span>
@@ -134,7 +134,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
 
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <Zap className="size-4 text-muted-slate" />
+          <Clock className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">Latency</span>
         </div>
         <MetricComparisonCell
@@ -147,8 +147,8 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
 
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <DollarSign className="size-4 text-muted-slate" />
-          <span className="comet-body-s text-muted-slate">Runtime Cost</span>
+          <Coins className="size-4 text-muted-slate" />
+          <span className="comet-body-s text-muted-slate">Runtime cost</span>
         </div>
         <MetricComparisonCell
           baseline={baselineMetrics?.cost}
@@ -156,31 +156,6 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
           formatter={formatAsCurrency}
           trend="inverted"
         />
-      </div>
-
-      <div className="rounded-lg border bg-muted/20 p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Clock className="size-4 text-muted-slate" />
-          <span className="comet-body-s text-muted-slate">Traces</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="comet-body-s-accented">
-            {currentMetrics.totalTraceCount > 0
-              ? currentMetrics.totalTraceCount
-              : "-"}
-          </span>
-          {currentMetrics.totalCost != null &&
-            currentMetrics.totalCost > 0 &&
-            currentMetrics.totalTraceCount > 0 && (
-              <span className="comet-body-xs text-muted-slate">
-                ~
-                {formatAsCurrency(
-                  currentMetrics.totalCost / currentMetrics.totalTraceCount,
-                )}
-                /trace
-              </span>
-            )}
-        </div>
       </div>
     </div>
   );
