@@ -325,6 +325,21 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
+    // For evaluation suite experiments, show a single "passed" column
+    if (isEvaluationSuite) {
+      return [
+        {
+          id: "score_passed",
+          label: "passed",
+          type: COLUMN_TYPE.string,
+          cell: TrialPassedCell as never,
+          customMeta: {
+            experimentsIds,
+          },
+        },
+      ] as ColumnData<ExperimentsCompare>[];
+    }
+
     // Extract all unique feedback score names from experiments
     const feedbackScoreNames = new Set<string>();
 
@@ -336,8 +351,10 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
     // Convert to array and sort: main objective first, then alphabetically
     const sortedScoreNames = Array.from(feedbackScoreNames).sort((a, b) => {
+      // Main objective always comes first
       if (a === objectiveName) return -1;
       if (b === objectiveName) return 1;
+      // Sort the rest alphabetically (case-insensitive)
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
 
@@ -349,9 +366,11 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           )
         : undefined;
 
+    // Get score value from the first experiment (same as CompareTrialsDetails)
     const firstExperiment = experiments?.[0];
 
-    const scoreColumns = sortedScoreNames.map((scoreName) => ({
+    // Create column for each feedback score
+    return sortedScoreNames.map((scoreName) => ({
       id: `score_${scoreName}`,
       label: scoreName,
       type: COLUMN_TYPE.numberDictionary,
@@ -366,24 +385,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         )?.value,
       },
     })) as ColumnData<ExperimentsCompare>[];
-
-    // For evaluation suites, prepend a "passed" summary column
-    if (isEvaluationSuite) {
-      return [
-        {
-          id: "score_passed",
-          label: "passed",
-          type: COLUMN_TYPE.string,
-          cell: TrialPassedCell as never,
-          customMeta: {
-            experimentsIds,
-          },
-        } as ColumnData<ExperimentsCompare>,
-        ...scoreColumns,
-      ];
-    }
-
-    return scoreColumns;
   }, [experiments, experimentsIds, objectiveName, isEvaluationSuite]);
 
   // Auto-select all score columns when they become available

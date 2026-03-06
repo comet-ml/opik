@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import Loader from "@/components/shared/Loader/Loader";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { OPTIMIZATION_VIEW_TYPE } from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
-import { EXPERIMENT_TYPE } from "@/types/datasets";
 import { useCompareOptimizationsData } from "./useCompareOptimizationsData";
 import { useCompareOptimizationsColumns } from "./useCompareOptimizationsColumns";
 import CompareOptimizationsHeader from "./CompareOptimizationsHeader";
@@ -57,11 +56,6 @@ const CompareOptimizationsPage: React.FC = () => {
     sortableBy,
   });
 
-  const chartExperiments = useMemo(
-    () => experiments.filter((e) => e.type !== EXPERIMENT_TYPE.MINI_BATCH),
-    [experiments],
-  );
-
   // set initial view based on optimization status when optimization changes
   useEffect(() => {
     if (optimization?.status) {
@@ -104,7 +98,7 @@ const CompareOptimizationsPage: React.FC = () => {
 
       <div className="shrink-0 pb-6">
         <OptimizationProgressChartContainer
-          experiments={chartExperiments}
+          experiments={experiments}
           bestEntityId={bestExperiment?.id}
           objectiveName={optimization?.objective_name}
           status={optimization?.status}
