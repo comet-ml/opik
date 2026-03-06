@@ -113,7 +113,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    public static final String EMPTY_ARRAY_STR = "[]";
+    private static final String EMPTY_ARRAY_STR = "[]";
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;

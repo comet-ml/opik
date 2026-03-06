@@ -3,6 +3,7 @@ package com.comet.opik.domain.experiments.aggregations;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -72,8 +73,8 @@ public class ExperimentEntityData {
             UUID experimentId,
             UUID traceId,
             UUID datasetItemId,
-            java.time.Instant createdAt,
-            java.time.Instant lastUpdatedAt,
+            Instant createdAt,
+            Instant lastUpdatedAt,
             String createdBy,
             String lastUpdatedBy) {
     }
