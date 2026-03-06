@@ -18,7 +18,7 @@ public enum GeminiModelName implements StructuredOutputSupported {
     GEMINI_3_1_PRO("gemini-3.1-pro-preview", true),
     GEMINI_3_FLASH("gemini-3-flash-preview", true),
     GEMINI_3_PRO("gemini-3-pro-preview", true),
-    GEMINI_2_0_FLASH("gemini-2.0-flash-exp", true),
+    GEMINI_2_0_FLASH("gemini-2.0-flash", true),
     GEMINI_2_0_FLASH_LITE("gemini-2.0-flash-lite", true),
     GEMINI_2_5_PRO("gemini-2.5-pro", true),
     GEMINI_2_5_FLASH("gemini-2.5-flash", true),
