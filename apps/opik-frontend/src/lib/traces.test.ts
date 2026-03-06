@@ -432,6 +432,25 @@ describe("prettifyMessage", () => {
     expect(result.message).toBeDefined();
   });
 
+  it("parses JSON string and extracts text field", () => {
+    const message = JSON.stringify({
+      prompt: "Hello\nWorld",
+      systemPrompt: "You are a helpful assistant.",
+    });
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({ message: "Hello\nWorld", prettified: true });
+  });
+
+  it("extracts text field from backend-truncated JSON string", () => {
+    const fullJson = JSON.stringify({
+      prompt: "Hello\nWorld",
+      systemPrompt: "A".repeat(11000),
+    });
+    const truncated = fullJson.slice(0, 10000);
+    const result = prettifyMessage(truncated, { type: "input" });
+    expect(result).toEqual({ message: "Hello\nWorld", prettified: true });
+  });
+
   it("handles OpenAI input with mixed roles and returns last user message", () => {
     const message = {
       messages: [
