@@ -77,7 +77,7 @@ const ProjectMetricsBreakdownSection: React.FC<
   });
 
   const compatibleBreakdownFields = useMemo(() => {
-    if (!metricType) return [];
+    if (!metricType) return [BREAKDOWN_FIELD.NONE];
     return getCompatibleBreakdownFields(metricType);
   }, [metricType]);
 
@@ -118,15 +118,17 @@ const ProjectMetricsBreakdownSection: React.FC<
     ],
   );
 
-  const disabledExplainer = isGroupByDisabledForDuration
-    ? EXPLAINERS_MAP[EXPLAINER_ID.duration_groupby_requires_single_metric]
-    : isGroupByDisabledForUsage
-      ? EXPLAINERS_MAP[EXPLAINER_ID.usage_groupby_requires_single_metric]
-      : isGroupByDisabledForFeedbackScore
-        ? EXPLAINERS_MAP[
-            EXPLAINER_ID.feedback_score_groupby_requires_single_metric
-          ]
-        : null;
+  const disabledExplainer = !metricType
+    ? EXPLAINERS_MAP[EXPLAINER_ID.groupby_requires_metric]
+    : isGroupByDisabledForDuration
+      ? EXPLAINERS_MAP[EXPLAINER_ID.duration_groupby_requires_single_metric]
+      : isGroupByDisabledForUsage
+        ? EXPLAINERS_MAP[EXPLAINER_ID.usage_groupby_requires_single_metric]
+        : isGroupByDisabledForFeedbackScore
+          ? EXPLAINERS_MAP[
+              EXPLAINER_ID.feedback_score_groupby_requires_single_metric
+            ]
+          : null;
 
   useEffect(() => {
     if (isGroupByDisabled && hasBreakdownField) {

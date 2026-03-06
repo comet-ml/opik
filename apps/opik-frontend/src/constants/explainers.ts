@@ -104,6 +104,7 @@ export enum EXPLAINER_ID {
   feedback_score_groupby_requires_single_metric = "feedback_score_groupby_requires_single_metric",
   duration_groupby_requires_single_metric = "duration_groupby_requires_single_metric",
   usage_groupby_requires_single_metric = "usage_groupby_requires_single_metric",
+  groupby_requires_metric = "groupby_requires_metric",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -688,5 +689,9 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.usage_groupby_requires_single_metric,
     description:
       "Group by is available only when exactly one usage metric is selected. Select a single metric from the Usage metrics dropdown to enable grouping.",
+  },
+  [EXPLAINER_ID.groupby_requires_metric]: {
+    id: EXPLAINER_ID.groupby_requires_metric,
+    description: "Select a metric type first to enable grouping.",
   },
 };
