@@ -995,8 +995,9 @@ class Opik:
         self,
         name: str,
         description: Optional[str] = None,
-        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Create a new evaluation suite for regression testing.
@@ -1008,25 +1009,26 @@ class Opik:
         Args:
             name: The name of the evaluation suite.
             description: Optional description of what this suite tests.
-            evaluators: Suite-level evaluators (e.g., LLMJudge instances)
-                applied to all test items.
+            assertions: Shorthand for suite-level assertions. Under the hood,
+                an ``LLMJudge`` is created automatically. Cannot be combined
+                with ``evaluators``.
             execution_policy: Dataset-level execution policy.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
+            evaluators: (Deprecated) Suite-level evaluators (e.g., LLMJudge
+                instances). Prefer ``assertions`` instead. Cannot be combined
+                with ``assertions``.
 
         Returns:
             EvaluationSuite: The created evaluation suite object.
 
         Example:
-            >>> from opik.evaluation.suite_evaluators import LLMJudge
-            >>>
             >>> suite = client.create_evaluation_suite(
             ...     name="Refund Policy Tests",
             ...     description="Regression tests for refund scenarios",
-            ...     evaluators=[
-            ...         LLMJudge(assertions=[
-            ...             {"name": "no_hallucination", "expected_behavior": "No hallucinated information"},
-            ...         ]),
-            ...     ]
+            ...     assertions=[
+            ...         "No hallucinated information",
+            ...         "Response is helpful",
+            ...     ],
             ... )
             >>>
             >>> suite.add_item(
@@ -1037,8 +1039,9 @@ class Opik:
         """
         from .dataset import validators, rest_operations
 
-        if evaluators:
-            validators.validate_evaluators(evaluators, "suite-level evaluators")
+        evaluators = validators.resolve_evaluators(
+            assertions, evaluators, "suite-level evaluators"
+        )
 
         rest_operations.create_evaluation_suite_dataset(
             rest_client=self._rest_client,
@@ -1097,8 +1100,9 @@ class Opik:
         self,
         name: str,
         description: Optional[str] = None,
-        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Get an existing evaluation suite by name or create a new one if it does not exist.
@@ -1106,8 +1110,12 @@ class Opik:
         Args:
             name: The name of the evaluation suite.
             description: Optional description (used only when creating).
-            evaluators: Suite-level evaluators (used only when creating).
+            assertions: Shorthand for suite-level assertions (used only when
+                creating). Cannot be combined with ``evaluators``.
             execution_policy: Execution policy (used only when creating).
+            evaluators: (Deprecated) Suite-level evaluators (used only when
+                creating). Prefer ``assertions`` instead. Cannot be combined
+                with ``assertions``.
 
         Returns:
             EvaluationSuite: The evaluation suite object.
@@ -1121,6 +1129,7 @@ class Opik:
                     description=description,
                     evaluators=evaluators,
                     execution_policy=execution_policy,
+                    assertions=assertions,
                 )
             raise
 

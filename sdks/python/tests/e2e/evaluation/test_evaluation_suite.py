@@ -1,17 +1,17 @@
 """E2E tests for EvaluationSuite API.
 
 These tests verify the core evaluation suite functionality:
-1. Item-level evaluators stored as dataset item fields
-2. Suite-level evaluators applied to all items
+1. Item-level assertions stored as dataset item fields
+2. Suite-level assertions applied to all items
 3. Execution policy handling (runs_per_item, pass_threshold)
-4. Pass/fail determination based on LLMJudge assertion results
+4. Pass/fail determination based on assertion results
 5. Persistence: create, get, update, delete operations
 
 Key concepts:
-- Evaluation suites only support LLMJudge evaluators
-- Suite-level evaluators and execution_policy are stored at dataset version level
-- Item-level evaluators and execution_policy are stored as dataset item fields
-- Items without evaluators pass by default (no assertions to fail)
+- Assertions are evaluated by an LLMJudge built internally by the SDK
+- Suite-level assertions and execution_policy are stored at dataset version level
+- Item-level assertions and execution_policy are stored as dataset item fields
+- Items without assertions pass by default (no assertions to fail)
 - Pass/fail is determined by: runs_passed >= pass_threshold
 """
 
@@ -20,29 +20,28 @@ from typing import Dict, Any
 import pytest
 
 import opik
-from opik.evaluation.suite_evaluators import LLMJudge
 from .. import verifiers
 from ...testlib import environment, ThreadSafeCounter
 
 
 # =============================================================================
-# MAIN FLOW: Item-level evaluators with LLMJudge
+# MAIN FLOW: Item-level assertions
 # =============================================================================
 
 
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
+def test_evaluation_suite__item_level_assertions__feedback_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Main flow: Items have their own LLMJudge evaluators.
+    Main flow: Items have their own assertions.
 
     Each item can have different assertions to verify.
 
     Expected behavior:
-    - Each item is evaluated using its own LLMJudge evaluators
+    - Each item is evaluated using its own assertions
     - Feedback scores are created with assertion text as the score name
     - Score values are boolean (True=1.0, False=0.0)
     """
@@ -53,16 +52,16 @@ def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
 
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test item-level evaluators",
+        description="Test item-level assertions",
     )
 
     suite.add_item(
         data={"input": {"question": "What is the capital of France?"}},
-        evaluators=[LLMJudge(name="geography_judge", assertions=[geography_assertion])],
+        assertions=[geography_assertion],
     )
     suite.add_item(
         data={"input": {"question": "What is 2 + 2?"}},
-        evaluators=[LLMJudge(name="math_judge", assertions=[math_assertion])],
+        assertions=[math_assertion],
     )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,7 +105,7 @@ def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Test that multiple assertions in a single LLMJudge create multiple
+    Test that multiple assertions on a single item create multiple
     feedback scores, each evaluated independently.
     """
     assertion_1 = "The response is factually correct"
@@ -119,9 +118,7 @@ def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
 
     suite.add_item(
         data={"input": {"question": "What is the capital of France?"}},
-        evaluators=[
-            LLMJudge(name="quality_judge", assertions=[assertion_1, assertion_2])
-        ],
+        assertions=[assertion_1, assertion_2],
     )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -148,18 +145,18 @@ def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_evaluation_suite__suite_level_evaluators__applied_to_all_items(
+def test_evaluation_suite__suite_level_assertions__applied_to_all_items(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Test that suite-level evaluators are applied to every item.
+    Test that suite-level assertions are applied to every item.
     """
     suite_assertion = "The response is helpful and informative"
 
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test suite-level evaluators",
-        evaluators=[LLMJudge(name="suite_judge", assertions=[suite_assertion])],
+        description="Test suite-level assertions",
+        assertions=[suite_assertion],
     )
 
     suite.add_item(data={"input": {"question": "What is the capital of France?"}})
@@ -191,11 +188,11 @@ def test_evaluation_suite__suite_level_evaluators__applied_to_all_items(
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_created(
+def test_evaluation_suite__combined_suite_and_item_level_assertions__all_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Test that suite-level and item-level evaluators are combined:
+    Test that suite-level and item-level assertions are combined:
     total feedback scores = suite-level assertions + item-level assertions.
     """
     suite_assertion = "The response is helpful and informative"
@@ -203,13 +200,13 @@ def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_
 
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test combined suite and item level evaluators",
-        evaluators=[LLMJudge(name="suite_judge", assertions=[suite_assertion])],
+        description="Test combined suite and item level assertions",
+        assertions=[suite_assertion],
     )
 
     suite.add_item(
         data={"input": {"question": "What is the capital of France?"}},
-        evaluators=[LLMJudge(name="item_judge", assertions=[item_assertion])],
+        assertions=[item_assertion],
     )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -233,15 +230,15 @@ def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_
 
 
 # =============================================================================
-# EDGE CASE: Items without evaluators + default execution policy
+# EDGE CASE: Items without assertions + default execution policy
 # =============================================================================
 
 
-def test_evaluation_suite__no_evaluators_default_policy__items_pass_with_single_run(
+def test_evaluation_suite__no_assertions_default_policy__items_pass_with_single_run(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Edge case: Items without evaluators pass by default, and the default
+    Edge case: Items without assertions pass by default, and the default
     execution policy runs each item exactly once with pass_threshold=1.
 
     Expected behavior:
@@ -251,7 +248,7 @@ def test_evaluation_suite__no_evaluators_default_policy__items_pass_with_single_
     """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test items without evaluators and default policy",
+        description="Test items without assertions and default policy",
     )
 
     suite.add_item(
@@ -448,7 +445,7 @@ def test_evaluation_suite__assertion_fails__item_fails(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
-    Test that items fail when LLMJudge assertions fail.
+    Test that items fail when assertions fail.
     """
     failing_assertion = "The response correctly states that 2 + 2 equals 5"
 
@@ -459,7 +456,7 @@ def test_evaluation_suite__assertion_fails__item_fails(
 
     suite.add_item(
         data={"input": {"question": "What is 2 + 2?"}},
-        evaluators=[LLMJudge(name="wrong_judge", assertions=[failing_assertion])],
+        assertions=[failing_assertion],
     )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -502,15 +499,10 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     With runs_per_item=3, pass_threshold=2: only the first run returns a
     correct answer, so at most 1 run passes (< threshold of 2).
     """
-    judge = LLMJudge(
-        name="math_judge",
-        assertions=["The response correctly states that 2 + 2 equals 4"],
-    )
-
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test pass threshold failure",
-        evaluators=[judge],
+        assertions=["The response correctly states that 2 + 2 equals 4"],
         execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
@@ -568,12 +560,7 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test multiple assertions with multiple runs",
-        evaluators=[
-            LLMJudge(
-                name="geography_judge",
-                assertions=[assertion_1, assertion_2, assertion_3],
-            )
-        ],
+        assertions=[assertion_1, assertion_2, assertion_3],
         execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
@@ -638,17 +625,17 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     suite_assertion = "The response correctly identifies Paris as the capital of France"
     item_assertion = "Response is correct"
 
-    # 1. Create suite with evaluators + execution_policy
+    # 1. Create suite with assertions + execution_policy
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Persistence test suite",
-        evaluators=[LLMJudge(name="geography_judge", assertions=[suite_assertion])],
+        assertions=[suite_assertion],
         execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
 
     suite.add_item(
         data={"input": {"question": "What is the capital of France?"}},
-        evaluators=[LLMJudge(name="item_judge", assertions=[item_assertion])],
+        assertions=[item_assertion],
         description="Geography: France capital",
     )
     suite.add_item(
@@ -668,6 +655,9 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     # Verify item-level evaluators survived the round-trip
     items_with_evaluators = [i for i in retrieved_items if len(i["evaluators"]) > 0]
     assert len(items_with_evaluators) == 1
+
+    from opik.evaluation.suite_evaluators import LLMJudge
+
     assert isinstance(items_with_evaluators[0]["evaluators"][0], LLMJudge)
 
     # 3. Run the retrieved suite — evaluators/execution_policy come from BE
@@ -690,7 +680,7 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
         suite_result=suite_result,
         items_total=2,
         experiment_items_count=4,  # 2 items * 2 runs
-        total_feedback_scores=6,  # France: 2 runs × 2 assertions + Germany: 2 runs × 1 assertion
+        total_feedback_scores=6,  # France: 2 runs * 2 assertions + Germany: 2 runs * 1 assertion
         expected_score_names={suite_assertion, item_assertion},
     )
 
@@ -743,15 +733,15 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
     """
     Test that get_evaluators() returns LLMJudge instances from suite-level config.
     """
+    from opik.evaluation.suite_evaluators import LLMJudge
+
     opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test get_evaluators",
-        evaluators=[
-            LLMJudge(name="judge_1", assertions=["Response is helpful"]),
-            LLMJudge(
-                name="judge_2",
-                assertions=["Response is accurate", "Response is concise"],
-            ),
+        assertions=[
+            "Response is helpful",
+            "Response is accurate",
+            "Response is concise",
         ],
     )
 
@@ -759,12 +749,8 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
     evaluators = retrieved_suite.get_evaluators()
-    assert len(evaluators) == 2
+    assert len(evaluators) == 1
     assert all(isinstance(e, LLMJudge) for e in evaluators)
-
-    evaluator_names = {e.name for e in evaluators}
-    assert "judge_1" in evaluator_names
-    assert "judge_2" in evaluator_names
 
 
 def test_evaluation_suite__get_execution_policy__returns_persisted_policy(
@@ -803,33 +789,29 @@ def test_evaluation_suite__get_execution_policy__default_when_not_set(
     assert policy["pass_threshold"] == 1
 
 
-def test_evaluation_suite__update__changes_evaluators_and_policy(
+def test_evaluation_suite__update__changes_assertions_and_policy(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
-    Test that update() changes suite-level evaluators and execution policy.
+    Test that update() changes suite-level assertions and execution policy.
     """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test update",
-        evaluators=[LLMJudge(name="initial_judge", assertions=["Response is helpful"])],
+        assertions=["Response is helpful"],
         execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
 
     # Verify initial state
     evaluators = suite.get_evaluators()
     assert len(evaluators) == 1
-    assert evaluators[0].name == "initial_judge"
 
     policy = suite.get_execution_policy()
     assert policy["runs_per_item"] == 1
 
-    # Update with new evaluators and policy
+    # Update with new assertions and policy
     suite.update(
-        evaluators=[
-            LLMJudge(name="updated_judge_1", assertions=["Response is accurate"]),
-            LLMJudge(name="updated_judge_2", assertions=["Response is concise"]),
-        ],
+        assertions=["Response is accurate", "Response is concise"],
         execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
@@ -837,10 +819,11 @@ def test_evaluation_suite__update__changes_evaluators_and_policy(
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
     updated_evaluators = retrieved_suite.get_evaluators()
-    assert len(updated_evaluators) == 2
-    evaluator_names = {e.name for e in updated_evaluators}
-    assert "updated_judge_1" in evaluator_names
-    assert "updated_judge_2" in evaluator_names
+    assert len(updated_evaluators) == 1
+    assert set(updated_evaluators[0].assertions) == {
+        "Response is accurate",
+        "Response is concise",
+    }
 
     updated_policy = retrieved_suite.get_execution_policy()
     assert updated_policy["runs_per_item"] == 3
