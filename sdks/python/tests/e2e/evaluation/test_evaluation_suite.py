@@ -738,7 +738,11 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
     opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test get_evaluators",
-        assertions=["Response is helpful", "Response is accurate", "Response is concise"],
+        assertions=[
+            "Response is helpful",
+            "Response is accurate",
+            "Response is concise",
+        ],
     )
 
     # Retrieve from BE to verify persistence
