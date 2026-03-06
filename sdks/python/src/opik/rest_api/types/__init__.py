@@ -10,6 +10,8 @@ from .agent_blueprint_public_type import AgentBlueprintPublicType
 from .agent_blueprint_write import AgentBlueprintWrite
 from .agent_blueprint_write_type import AgentBlueprintWriteType
 from .agent_config_env import AgentConfigEnv
+from .agent_config_value_history import AgentConfigValueHistory
+from .agent_config_value_history_type import AgentConfigValueHistoryType
 from .agent_config_value_public import AgentConfigValuePublic
 from .agent_config_value_public_type import AgentConfigValuePublicType
 from .agent_config_value_write import AgentConfigValueWrite
@@ -622,6 +624,8 @@ __all__ = [
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
     "AgentConfigEnv",
+    "AgentConfigValueHistory",
+    "AgentConfigValueHistoryType",
     "AgentConfigValuePublic",
     "AgentConfigValuePublicType",
     "AgentConfigValueWrite",

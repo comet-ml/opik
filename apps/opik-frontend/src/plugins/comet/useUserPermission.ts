@@ -140,6 +140,12 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUpdateAIProviders = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.AI_PROVIDER_UPDATE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -153,6 +159,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteDatasets,
     canDeleteOptimizationRuns,
     canUpdateUserRole,
+    canUpdateAIProviders,
     isPending: isEnabled && isPending,
   };
 };

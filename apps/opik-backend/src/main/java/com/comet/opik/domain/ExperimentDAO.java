@@ -16,7 +16,6 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -61,7 +60,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
@@ -1343,9 +1341,9 @@ class ExperimentDAO {
                     .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
-                    .duration(getDuration(row))
-                    .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
-                    .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .duration(ExperimentGroupMappers.getDuration(row))
+                    .totalEstimatedCost(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost"))
+                    .totalEstimatedCostAvg(ExperimentGroupMappers.getCostValue(row, "total_estimated_cost_avg"))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -1364,32 +1362,6 @@ class ExperimentDAO {
                             .orElse(null))
                     .build();
         });
-    }
-
-    private static BigDecimal getCostValue(Row row, String fieldName) {
-        return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
-                .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
-                .orElse(null);
-    }
-
-    private static PercentageValues getDuration(Row row) {
-        return Optional.ofNullable(row.get("duration", Map.class))
-                .map(map -> (Map<String, ? extends Number>) map)
-                .map(durations -> new PercentageValues(
-                        convertToBigDecimal(durations.get("p50")),
-                        convertToBigDecimal(durations.get("p90")),
-                        convertToBigDecimal(durations.get("p99"))))
-                .orElse(null);
-    }
-
-    private static BigDecimal convertToBigDecimal(Number value) {
-        if (value instanceof BigDecimal) {
-            return (BigDecimal) value;
-        } else if (value instanceof Double) {
-            return BigDecimal.valueOf((Double) value);
-        } else {
-            return BigDecimal.ZERO;
-        }
     }
 
     private static BigDecimal getP(List<BigDecimal> durations, int index) {
@@ -1838,36 +1810,14 @@ class ExperimentDAO {
     private ST newGroupTemplate(String query, ExperimentGroupCriteria criteria, String queryName, String workspaceId) {
         var template = getSTWithLogComment(query, queryName, workspaceId, "");
 
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> template.add("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> template.add("types", types));
-        Optional.ofNullable(criteria.filters())
-                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
-                .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> template.add("project_id", projectId));
-        Optional.ofNullable(criteria.projectDeleted())
-                .ifPresent(projectDeleted -> template.add("project_deleted", projectDeleted));
-
+        ExperimentGroupMappers.applyGroupCriteriaToTemplate(template, criteria, filterQueryBuilder);
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
 
         return template;
     }
 
     private void bindGroupCriteria(Statement statement, ExperimentGroupCriteria criteria) {
-        Optional.ofNullable(criteria.name())
-                .ifPresent(name -> statement.bind("name", name));
-        Optional.ofNullable(criteria.types())
-                .filter(CollectionUtils::isNotEmpty)
-                .ifPresent(types -> statement.bind("types", types));
-        Optional.ofNullable(criteria.filters())
-                .ifPresent(filters -> {
-                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
-                });
-        Optional.ofNullable(criteria.projectId())
-                .ifPresent(projectId -> statement.bind("project_id", projectId));
+        ExperimentGroupMappers.bindGroupCriteria(statement, criteria, filterQueryBuilder);
     }
 
     /**
@@ -1953,48 +1903,13 @@ class ExperimentDAO {
     }
 
     private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            return ExperimentGroupItem.builder()
-                    .groupValues(groupValues)
-                    .lastCreatedExperimentAt(row.get("last_created_experiment_at", Instant.class))
-                    .build();
-        });
+        return result.map((row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupItem(row, groupsCount));
     }
 
     private Publisher<ExperimentGroupAggregationItem> mapExperimentGroupAggregationItem(Result result,
             int groupsCount) {
-        return result.map((row, rowMetadata) -> {
-
-            var groupValues = IntStream.range(0, groupsCount)
-                    .mapToObj(i -> "group_" + i)
-                    .map(columnName -> row.get(columnName, String.class))
-                    .toList();
-
-            var experimentCount = row.get("experiment_count", Long.class);
-            var traceCount = row.get("trace_count", Long.class);
-            var totalEstimatedCost = getCostValue(row, "total_estimated_cost");
-            var totalEstimatedCostAvg = getCostValue(row, "total_estimated_cost_avg");
-            var duration = getDuration(row);
-            var feedbackScores = getFeedbackScores(row, "feedback_scores");
-            var experimentScores = getFeedbackScores(row, "experiment_scores");
-
-            return ExperimentGroupAggregationItem.builder()
-                    .groupValues(groupValues)
-                    .experimentCount(experimentCount)
-                    .traceCount(traceCount)
-                    .totalEstimatedCost(totalEstimatedCost)
-                    .totalEstimatedCostAvg(totalEstimatedCostAvg)
-                    .duration(duration)
-                    .feedbackScores(feedbackScores)
-                    .experimentScores(experimentScores)
-                    .build();
-        });
+        return result.map(
+                (row, rowMetadata) -> ExperimentGroupMappers.toExperimentGroupAggregationItem(row, groupsCount));
     }
 
     @WithSpan

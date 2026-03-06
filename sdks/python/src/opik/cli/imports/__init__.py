@@ -46,10 +46,13 @@ def _import_by_type(
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
 
         # Initialize Opik client
+        # _use_batching=True speeds up bulk ingestion. It is safe here because
+        # the import flow only creates traces/spans (no update calls) and
+        # explicitly calls client.flush() before exiting.
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace)
+            client = opik.Opik(api_key=api_key, workspace=workspace, _use_batching=True)
         else:
-            client = opik.Opik(workspace=workspace)
+            client = opik.Opik(workspace=workspace, _use_batching=True)
 
         # Determine source directory based on import type
         base_path = Path(path)
@@ -90,6 +93,30 @@ def _import_by_type(
             stats = import_prompts_from_directory(
                 client, source_dir, dry_run, name_pattern, debug
             )
+
+        # Flush the async ingestion queue before returning so that all
+        # enqueued traces/spans are persisted on the server.  Without this,
+        # the process can exit while the background worker is still sending
+        # data, silently dropping items (especially under rate-limiting).
+        if not dry_run:
+            flushed = client.flush()
+            if not flushed:
+                console.print(
+                    "[yellow]Warning: flush timed out — some traces/spans may not have been ingested. "
+                    "Re-run the import to retry.[/yellow]"
+                )
+                sys.exit(1)
+
+            # FileUploadManager.flush() returns True even when individual
+            # uploads fail (only False on timeout), so check failed_uploads
+            # separately to catch silent upload failures.
+            failed = client.__internal_api__failed_uploads__(timeout=None)
+            if failed > 0:
+                console.print(
+                    f"[yellow]Warning: {failed} file upload(s) failed during import. "
+                    "Re-run the import to retry.[/yellow]"
+                )
+                sys.exit(1)
 
         # Display summary
         print_import_summary(stats)
