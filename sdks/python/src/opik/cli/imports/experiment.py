@@ -1114,11 +1114,10 @@ def import_experiments_from_directory(
                     and not dry_run
                     and manifest.is_file_completed(experiment_file)
                 ):
-                    if debug:
-                        debug_print(
-                            f"Skipping {experiment_file.name} (already imported in a previous run)",
-                            debug,
-                        )
+                    debug_print(
+                        f"Skipping {experiment_file.name} (already imported in a previous run)",
+                        debug,
+                    )
                     skipped_count += 1
                     continue
 

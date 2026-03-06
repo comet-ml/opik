@@ -239,6 +239,12 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
         # Import a specific project
         opik import my-workspace project "my-project"
 
+        # Import a specific dataset
+        opik import my-workspace dataset "my-dataset"
+
+        # Import from a custom path
+        opik import my-workspace project "my-project" --path ./custom-exports/
+
         # Resume an interrupted import (automatic — just re-run the same command)
         opik import my-workspace project "my-project"
 

@@ -16,6 +16,7 @@ from .utils import (
     clean_feedback_scores,
     clean_usage_for_import,
     sort_spans_topologically,
+    debug_print,
 )
 
 console = Console()
@@ -93,10 +94,10 @@ def import_projects_from_directory(
                     try:
                         # Skip trace files already imported in a previous run
                         if manifest and manifest.is_file_completed(trace_file):
-                            if debug:
-                                console.print(
-                                    f"[blue]Skipping {trace_file.name} (already imported in a previous run)[/blue]"
-                                )
+                            debug_print(
+                                f"Skipping {trace_file.name} (already imported in a previous run)",
+                                debug,
+                            )
                             traces_imported += 1
                             continue
 
@@ -149,15 +150,19 @@ def import_projects_from_directory(
                             if manifest:
                                 manifest.add_trace_mapping(original_trace_id, trace.id)
 
-                        # Create spans, preserving parent-child relationships
+                        # Create spans with full data, preserving parent-child relationships.
+                        # Sort spans topologically to ensure parents are processed before children
+                        # so that multi-level hierarchies are handled correctly.
                         sorted_spans = sort_spans_topologically(spans_info)
 
                         for span_info in sorted_spans:
+                            # Clean feedback scores to remove read-only fields
                             span_feedback_scores = clean_feedback_scores(
                                 span_info.get("feedback_scores")
                             )
 
                             original_span_id = span_info.get("id")
+                            # Translate parent_span_id to the new ID if it was already created
                             original_parent_span_id = span_info.get("parent_span_id")
 
                             new_parent_span_id = None
@@ -169,6 +174,7 @@ def import_projects_from_directory(
                                     original_parent_span_id
                                 ]
 
+                            # Clean usage data to avoid double-prefixing of original_usage keys
                             usage_data = clean_usage_for_import(span_info.get("usage"))
 
                             span = client.span(
@@ -203,6 +209,7 @@ def import_projects_from_directory(
                                 project_name=project_name,
                             )
 
+                            # Map original span ID to new span ID for parent relationship mapping
                             if original_span_id and span.id:
                                 span_id_map[original_span_id] = span.id
 
