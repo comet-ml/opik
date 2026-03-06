@@ -477,9 +477,9 @@ class ExperimentDAO {
                 GROUP BY ei.experiment_id
             ),
             experiments_eval_suite AS (
-                SELECT id, dataset_id, dataset_version_id, execution_policy AS suite_execution_policy
-                FROM experiments_final
-                WHERE evaluation_method = 'evaluation_suite'
+                SELECT ef.id, ef.dataset_id, ef.dataset_version_id, ef.execution_policy AS suite_execution_policy
+                FROM experiments_final ef
+                WHERE ef.evaluation_method = 'evaluation_suite'
             ),
             pass_rate_eval_items AS (
                 SELECT
@@ -1092,9 +1092,9 @@ class ExperimentDAO {
                 GROUP BY experiment_id
             ),
             experiments_eval_suite AS (
-                SELECT id, dataset_id, dataset_version_id, execution_policy AS suite_execution_policy
-                FROM experiments_final
-                WHERE evaluation_method = 'evaluation_suite'
+                SELECT ef.id, ef.dataset_id, ef.dataset_version_id, ef.execution_policy AS suite_execution_policy
+                FROM experiments_final ef
+                WHERE ef.evaluation_method = 'evaluation_suite'
             ),
             pass_rate_eval_items AS (
                 SELECT
