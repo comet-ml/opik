@@ -96,4 +96,18 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
                 ? streamConfig.getMaxRetries()
                 : onlineScoringConfig.getMaxRetries();
     }
+
+    @Override
+    public int getStreamMaxLen() {
+        return streamConfig.getStreamMaxLen() != null
+                ? streamConfig.getStreamMaxLen()
+                : onlineScoringConfig.getStreamMaxLen();
+    }
+
+    @Override
+    public int getStreamTrimLimit() {
+        return streamConfig.getStreamTrimLimit() != null
+                ? streamConfig.getStreamTrimLimit()
+                : onlineScoringConfig.getStreamTrimLimit();
+    }
 }
