@@ -7805,6 +7805,7 @@ class ExperimentsResourceTest {
 
             assertThat(actualExperiment.feedbackScores()).isNullOrEmpty();
             assertThat(actualExperiment.comments()).isNullOrEmpty();
+            assertThat(actualExperiment.experimentScores()).isNull();
         }
 
         @Test
@@ -7839,6 +7840,7 @@ class ExperimentsResourceTest {
             assertThat(found.id()).isEqualTo(experiment.id());
             assertThat(found.feedbackScores()).isNullOrEmpty();
             assertThat(found.comments()).isNullOrEmpty();
+            assertThat(found.experimentScores()).isNull();
         }
 
         @Test
