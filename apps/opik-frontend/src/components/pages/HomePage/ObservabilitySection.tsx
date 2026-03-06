@@ -27,6 +27,7 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { get } from "lodash";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -78,6 +79,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const ObservabilitySection: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -193,9 +198,11 @@ const ObservabilitySection: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            <Button variant="link" onClick={handleNewProjectClick}>
-              Create new project
-            </Button>
+            {canCreateProjects && (
+              <Button variant="link" onClick={handleNewProjectClick}>
+                Create new project
+              </Button>
+            )}
           </DataTableNoData>
         }
       />
