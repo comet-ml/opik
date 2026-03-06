@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -73,11 +74,15 @@ public class ExperimentResourceClient {
                 .totalEstimatedCost(null)
                 .totalEstimatedCostAvg(null)
                 .type(ExperimentType.REGULAR)
+                .evaluationMethod(EvaluationMethod.DATASET)
                 .optimizationId(null)
                 .usage(null)
                 .projectId(null)
                 .datasetVersionId(null)
-                .datasetVersionSummary(null);
+                .datasetVersionSummary(null)
+                .passRate(null)
+                .passedCount(null)
+                .totalCount(null);
     }
 
     public List<Experiment> generateExperimentList() {

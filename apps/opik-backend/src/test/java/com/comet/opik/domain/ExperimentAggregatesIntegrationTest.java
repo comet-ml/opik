@@ -77,7 +77,8 @@ class ExperimentAggregatesIntegrationTest {
     // Fields to ignore when comparing Experiment objects - we only care about aggregated fields
     private static final String[] EXPERIMENT_AGGREGATED_FIELDS_TO_IGNORE = new String[]{
             "id", "datasetName", "projectName", "createdAt", "lastUpdatedAt",
-            "promptVersion", "datasetVersionSummary",
+            "promptVersion", "datasetVersionSummary", "executionPolicy",
+            "passRate", "passedCount", "totalCount",
     };
 
     private static final String API_KEY = UUID.randomUUID().toString();

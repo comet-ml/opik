@@ -11,6 +11,7 @@ import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
+import static com.comet.opik.api.sorting.SortableFields.PASS_RATE;
 import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST_AVG;
@@ -31,7 +32,8 @@ public class ExperimentSortingFactory extends SortingFactory {
             TOTAL_ESTIMATED_COST_AVG,
             FEEDBACK_SCORES,
             EXPERIMENT_METRICS,
-            DURATION_AGG);
+            DURATION_AGG,
+            PASS_RATE);
 
     @Override
     public List<String> getSortableFields() {

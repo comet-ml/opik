@@ -275,6 +275,8 @@ public interface DatasetItemVersionDAO {
      */
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemRowIds);
 
+    Mono<Map<UUID, ExecutionPolicy>> getExecutionPoliciesByRowIds(Set<UUID> datasetItemRowIds);
+
     /**
      * Mapping from row ID to dataset_item_id.
      */
@@ -1438,6 +1440,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LIMIT 1 BY id
             """;
 
+    private static final String SELECT_EXECUTION_POLICIES_BY_ROW_IDS = """
+            SELECT DISTINCT
+                id,
+                execution_policy
+            FROM dataset_item_versions
+            WHERE id IN :datasetItemRowIds
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
             SELECT
                 id,
@@ -2438,7 +2450,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     }
                     if (!Boolean.TRUE.equals(edit.clearExecutionPolicy()) && edit.executionPolicy() != null) {
                         statement.bind("execution_policy",
-                                serializeExecutionPolicy(edit.executionPolicy()));
+                                ExecutionPolicy.serialize(edit.executionPolicy()));
                     }
 
                     publishers.add(statement.execute());
@@ -2603,7 +2615,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (!Boolean.TRUE.equals(batchUpdate.update().clearExecutionPolicy())
                         && batchUpdate.update().executionPolicy() != null) {
                     statement.bind("execution_policy",
-                            serializeExecutionPolicy(batchUpdate.update().executionPolicy()));
+                            ExecutionPolicy.serialize(batchUpdate.update().executionPolicy()));
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");
@@ -2662,7 +2674,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .bind("span_id" + i, DatasetItemResultMapper.getOrDefault(item.spanId()))
                         .bind("tags" + i, item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
                         .bind("evaluators" + i, serializeEvaluators(item.evaluators()))
-                        .bind("execution_policy" + i, serializeExecutionPolicy(item.executionPolicy()))
+                        .bind("execution_policy" + i, ExecutionPolicy.serialize(item.executionPolicy()))
                         .bind("item_created_at" + i, formatTimestamp(item.createdAt()))
                         .bind("item_last_updated_at" + i, formatTimestamp(item.lastUpdatedAt()))
                         .bind("item_created_by" + i, item.createdBy() != null ? item.createdBy() : userName)
@@ -2867,13 +2879,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return EvaluatorItem.EMPTY_LIST_JSON;
         }
         return JsonUtils.writeValueAsString(evaluators);
-    }
-
-    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
-        if (executionPolicy == null) {
-            return "";
-        }
-        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override
@@ -3118,6 +3123,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             row.get("workspace_id", String.class),
                             UUID.fromString(row.get("id", String.class)))))
                     .collectList()
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, ExecutionPolicy>> getExecutionPoliciesByRowIds(@NonNull Set<UUID> datasetItemRowIds) {
+        if (datasetItemRowIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_EXECUTION_POLICIES_BY_ROW_IDS)
+                    .bind("datasetItemRowIds", datasetItemRowIds.toArray(UUID[]::new));
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_execution_policies_by_row_ids");
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        var id = UUID.fromString(row.get("id", String.class));
+                        var policyJson = row.get("execution_policy", String.class);
+                        ExecutionPolicy policy = null;
+                        if (StringUtils.isNotBlank(policyJson)) {
+                            policy = JsonUtils.readValue(policyJson, ExecutionPolicy.class);
+                        }
+                        return Map.entry(id, Optional.ofNullable(policy));
+                    }))
+                    .filter(entry -> entry.getValue().isPresent())
+                    .collectMap(Map.Entry::getKey, entry -> entry.getValue().get())
                     .doFinally(signalType -> endSegment(segment));
         });
     }

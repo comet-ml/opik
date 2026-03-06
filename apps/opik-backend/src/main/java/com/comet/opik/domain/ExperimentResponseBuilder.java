@@ -257,6 +257,29 @@ public class ExperimentResponseBuilder {
         List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums,
                 experimentScoreCounts);
 
+        // Aggregate pass rate from children
+        long totalPassedCount = 0;
+        long totalTotalCount = 0;
+        BigDecimal passRateWeightedSum = BigDecimal.ZERO;
+        long passRateContributors = 0;
+        for (GroupContentWithAggregations child : childGroups.values()) {
+            AggregationData childAgg = child.aggregations();
+            if (childAgg.passedCountSum() != null) {
+                totalPassedCount += childAgg.passedCountSum();
+            }
+            if (childAgg.totalCountSum() != null) {
+                totalTotalCount += childAgg.totalCountSum();
+            }
+            if (childAgg.passRateAvg() != null) {
+                passRateWeightedSum = passRateWeightedSum.add(
+                        childAgg.passRateAvg().multiply(BigDecimal.valueOf(childAgg.experimentCount())));
+                passRateContributors += childAgg.experimentCount();
+            }
+        }
+        BigDecimal passRateAvg = passRateContributors > 0
+                ? passRateWeightedSum.divide(BigDecimal.valueOf(passRateContributors), 9, RoundingMode.HALF_UP)
+                : null;
+
         // Build updated aggregation data
         return AggregationData.builder()
                 .experimentCount(totalExperimentCount)
@@ -266,6 +289,9 @@ public class ExperimentResponseBuilder {
                 .duration(avgDuration)
                 .feedbackScores(avgFeedbackScores)
                 .experimentScores(avgExperimentScores)
+                .passRateAvg(passRateAvg)
+                .passedCountSum(totalTotalCount > 0 ? totalPassedCount : null)
+                .totalCountSum(totalTotalCount > 0 ? totalTotalCount : null)
                 .build();
     }
 
@@ -322,6 +348,9 @@ public class ExperimentResponseBuilder {
                 .duration(item.duration())
                 .feedbackScores(item.feedbackScores())
                 .experimentScores(item.experimentScores())
+                .passRateAvg(item.passRateAvg())
+                .passedCountSum(item.passedCountSum())
+                .totalCountSum(item.totalCountSum())
                 .build();
     }
 
