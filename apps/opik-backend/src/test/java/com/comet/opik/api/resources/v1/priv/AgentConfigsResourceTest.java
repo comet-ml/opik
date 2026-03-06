@@ -1244,8 +1244,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: no blueprint update when prompt version created with action=NONE")
-        void createPromptVersion__whenActionIsNone__thenBlueprintNotUpdated() throws InterruptedException {
+        @DisplayName("Success: no blueprint update when prompt version created with action=NO_ACTION")
+        void createPromptVersion__whenActionIsNoAction__thenBlueprintNotUpdated() throws InterruptedException {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
