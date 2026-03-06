@@ -155,7 +155,7 @@ const ProjectMetricsBreakdownSection: React.FC<
           <div className="flex items-start gap-4">
             <div className="flex-1">
               <Label className="comet-body-s-accented mb-1 flex items-center gap-1">
-                Group by property
+                Field
                 {isGroupByDisabled && disabledExplainer && (
                   <ExplainerIcon {...disabledExplainer} />
                 )}
@@ -245,10 +245,10 @@ const ProjectMetricsBreakdownSection: React.FC<
             </div>
             <div className="min-w-fit">
               <Label className="comet-body-s-accented mb-1 flex items-center gap-1">
-                Aggregation{" "}
+                Aggregation mode{" "}
                 <ExplainerIcon
                   className="inline"
-                  description="Choose how data is aggregated: 'Over time' shows values in time buckets (hourly, daily, or weekly), while 'Total' shows one value per group for the entire selected date range."
+                  description={`Choose how data is aggregated: 'Total' shows one value per group for the entire selected date range, while 'Time-based' shows values in time buckets (hourly, daily, or weekly).`}
                 />
               </Label>
               <ToggleGroup
@@ -266,18 +266,18 @@ const ProjectMetricsBreakdownSection: React.FC<
                 className="w-fit justify-start"
               >
                 <ToggleGroupItem
-                  value="interval"
-                  aria-label="Over time"
-                  className="gap-1.5"
-                >
-                  <span>Over time</span>
-                </ToggleGroupItem>
-                <ToggleGroupItem
                   value="total"
                   aria-label="Total"
                   className="gap-1.5"
                 >
                   <span>Total</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="interval"
+                  aria-label="Time-based"
+                  className="gap-1.5"
+                >
+                  <span>Time-based</span>
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
