@@ -10,6 +10,7 @@ import { OnChangeFn, ROW_HEIGHT } from "@/types/shared";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { calculateLineHeight } from "@/lib/experiments";
 import { traceExist } from "@/lib/traces";
+import { aggregateTrialItems } from "@/lib/trials";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
 import { cn } from "@/lib/utils";
 
@@ -46,11 +47,14 @@ const VerticallySplitCellWrapper = <TData,>({
   const { experimentsIds } = (custom ?? {}) as CustomMeta;
   const rowHeight = tableMetadata?.rowHeight ?? ROW_HEIGHT.small;
 
-  const items = experimentsIds.map((experimentId) =>
-    (experimentCompare.experiment_items || []).find(
+  const items = experimentsIds.map((experimentId) => {
+    const matchingItems = (experimentCompare.experiment_items || []).filter(
       (item) => item.experiment_id === experimentId,
-    ),
-  );
+    );
+    if (matchingItems.length === 0) return undefined;
+    if (matchingItems.length === 1) return matchingItems[0];
+    return aggregateTrialItems(matchingItems);
+  });
 
   if (items.every((item) => !item || !traceExist(item))) {
     return null;

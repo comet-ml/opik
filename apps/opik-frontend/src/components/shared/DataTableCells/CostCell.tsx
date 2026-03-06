@@ -7,6 +7,8 @@ import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
+import { isAggregatedItem } from "@/lib/trials";
+import AvgBadge from "@/components/shared/AvgBadge/AvgBadge";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
@@ -43,10 +45,22 @@ const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
     const value = get(item, accessor);
     if (!isNumber(value)) return "-";
 
-    return (
+    const formatted = (
       <TooltipWrapper content={formatCost(value, { modifier: "full" })}>
         <span>{formatter(value)}</span>
       </TooltipWrapper>
+    );
+
+    if (!isAggregatedItem(item)) return formatted;
+
+    return (
+      <span className="flex items-center gap-1">
+        {formatted}
+        <AvgBadge
+          values={item.trialItems.map((i) => get(i, accessor))}
+          formatter={formatter}
+        />
+      </span>
     );
   };
 
