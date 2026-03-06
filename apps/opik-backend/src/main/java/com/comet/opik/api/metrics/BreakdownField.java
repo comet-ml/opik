@@ -24,6 +24,7 @@ public enum BreakdownField {
     METADATA("metadata", "Metadata", true),
     NAME("name", "Name", false),
     ERROR_INFO("error_info", "Has Error", false),
+    ERROR_TYPE("error_type", "Error Type", false),
     MODEL("model", "Model", false),
     PROVIDER("provider", "Provider", false),
     TYPE("type", "Span Type", false);
@@ -75,7 +76,7 @@ public enum BreakdownField {
             case TAGS -> TRACE_METRICS.contains(metricType)
                     || SPAN_METRICS.contains(metricType)
                     || THREAD_METRICS.contains(metricType);
-            case METADATA, NAME, ERROR_INFO -> TRACE_METRICS.contains(metricType)
+            case METADATA, NAME, ERROR_INFO, ERROR_TYPE -> TRACE_METRICS.contains(metricType)
                     || SPAN_METRICS.contains(metricType);
             case MODEL, PROVIDER, TYPE -> SPAN_METRICS.contains(metricType);
             default -> false;
@@ -89,7 +90,7 @@ public enum BreakdownField {
         return switch (this) {
             case NONE -> "all metrics";
             case TAGS -> "Trace, Span, and Thread metrics";
-            case METADATA, NAME, ERROR_INFO -> "Trace and Span metrics";
+            case METADATA, NAME, ERROR_INFO, ERROR_TYPE -> "Trace and Span metrics";
             case MODEL, PROVIDER, TYPE -> "Span metrics only";
         };
     }

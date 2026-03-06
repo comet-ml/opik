@@ -45,6 +45,7 @@ export interface BreakdownConfig {
   field: BREAKDOWN_FIELD;
   metadataKey?: string;
   subMetric?: string;
+  aggregateTotal?: boolean;
 }
 
 export interface ProjectMetricsWidget {
