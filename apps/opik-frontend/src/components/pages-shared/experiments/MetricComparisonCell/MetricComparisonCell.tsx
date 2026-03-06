@@ -66,7 +66,11 @@ const MetricComparisonCell: React.FunctionComponent<
           (() => {
             const { Icon, variant } = getTrendConfig(percentage, trend);
             return (
-              <Tag size="sm" variant={variant} className="px-1">
+              <Tag
+                size="sm"
+                variant={variant}
+                className="inline-flex items-center justify-center px-1"
+              >
                 <Icon className="size-3" />
               </Tag>
             );

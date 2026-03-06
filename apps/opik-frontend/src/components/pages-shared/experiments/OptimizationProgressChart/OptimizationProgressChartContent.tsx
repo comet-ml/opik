@@ -356,7 +356,7 @@ const OptimizationProgressChartContent: React.FC<
                 )}
                 {c.runtimeCost != null && (
                   <div className="comet-body-xs text-muted-slate">
-                    Avg. runtime cost:{" "}
+                    Runtime cost:{" "}
                     <span className="text-foreground">
                       {formatAsCurrency(c.runtimeCost)}
                     </span>
