@@ -38,9 +38,9 @@ def _build_seed_candidate(baseline_config: dict, optimizable_keys: list[str]) ->
     }
 
 
-def _make_config_builder(baseline_config: dict, optimizable_keys: list[str]):
+def _make_config_builder(baseline_config: dict):
     def build(candidate: dict[str, str]) -> dict:
-        return {**baseline_config, **candidate, "optimizable_keys": optimizable_keys}
+        return {**baseline_config, **candidate}
     return build
 
 
@@ -94,7 +94,7 @@ class GepaOptimizer:
             rng=random.Random(seed),
         )
 
-        config_builder = _make_config_builder(context.baseline_config, context.optimizable_keys)
+        config_builder = _make_config_builder(context.baseline_config)
         adapter = FrameworkGEPAAdapter(
             config_builder=config_builder,
             evaluation_adapter=evaluation_adapter,

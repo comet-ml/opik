@@ -153,6 +153,7 @@ class EvaluationAdapter:
                 eval_purpose=eval_purpose,
                 experiment_type=experiment_type,
                 optimizer_type=self._optimizer_type,
+                optimizable_keys=self._optimizable_keys,
             )
 
             if trial is not None:

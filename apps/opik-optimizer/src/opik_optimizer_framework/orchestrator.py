@@ -77,11 +77,8 @@ def run_optimization(
     optimizer = create_optimizer(context.optimizer_type)
 
     # Evaluate baseline (original prompt)
-    baseline_config = dict(context.baseline_config)
-    if context.optimizable_keys:
-        baseline_config["optimizable_keys"] = context.optimizable_keys
     baseline_trial = adapter.evaluate(
-        config=baseline_config,
+        config=context.baseline_config,
         dataset_item_ids=dataset_item_ids,
         eval_purpose="baseline",
     )

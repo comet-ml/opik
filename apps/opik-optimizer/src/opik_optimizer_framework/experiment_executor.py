@@ -25,6 +25,7 @@ def run_experiment(
     eval_purpose: str | None = None,
     experiment_type: str | None = None,
     optimizer_type: str | None = None,
+    optimizable_keys: list[str] | None = None,
     task_threads: int = 4,
 ) -> TrialResult:
     """Execute an experiment, returning only the TrialResult."""
@@ -41,6 +42,7 @@ def run_experiment(
         eval_purpose=eval_purpose,
         experiment_type=experiment_type,
         optimizer_type=optimizer_type,
+        optimizable_keys=optimizable_keys,
         task_threads=task_threads,
     )
     return trial
@@ -59,6 +61,7 @@ def run_experiment_with_details(
     eval_purpose: str | None = None,
     experiment_type: str | None = None,
     optimizer_type: str | None = None,
+    optimizable_keys: list[str] | None = None,
     task_threads: int = 4,
 ) -> tuple[TrialResult, Any]:
     """Execute an experiment and return both the TrialResult and the raw EvaluationResult.
@@ -102,7 +105,7 @@ def run_experiment_with_details(
     if eval_purpose is not None:
         experiment_config["eval_purpose"] = eval_purpose
 
-    for key in candidate.config.get("optimizable_keys", []):
+    for key in (optimizable_keys or []):
         value = candidate.config.get(key)
         if value is not None:
             experiment_config[key] = value
