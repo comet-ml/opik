@@ -10,12 +10,18 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class OnlineScoringConfig {
 
     public static final String PAYLOAD_FIELD = "message";
@@ -45,10 +51,19 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) @Max(10) private int maxRetries;
 
+    @JsonProperty
+    @Min(1000) @Max(10_000_000) private int streamMaxLen;
+
+    @JsonProperty
+    @Min(0) @Max(10_000) private int streamTrimLimit;
+
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
     @Data
+    @Builder(toBuilder = true)
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class StreamConfiguration {
         @JsonProperty
         @NotBlank private String scorer;
@@ -80,5 +95,11 @@ public class OnlineScoringConfig {
 
         @JsonProperty
         @Min(1) @Max(10) private Integer maxRetries;
+
+        @JsonProperty
+        @Min(1000) @Max(10_000_000) private Integer streamMaxLen;
+
+        @JsonProperty
+        @Min(0) @Max(10_000) private Integer streamTrimLimit;
     }
 }

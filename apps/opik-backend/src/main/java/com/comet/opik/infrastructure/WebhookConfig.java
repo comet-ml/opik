@@ -11,12 +11,18 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.redisson.client.codec.Codec;
 
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class WebhookConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
@@ -77,6 +83,12 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration;
+
+    @JsonProperty
+    @Min(1000) @Max(10_000_000) private int streamMaxLen = 10000;
+
+    @JsonProperty
+    @Min(0) @Max(10_000) private int streamTrimLimit = 100;
 
     // lazy codec creation to ensure it picks up the configured JsonUtils mapper
     @Override
