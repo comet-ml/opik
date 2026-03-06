@@ -8,6 +8,7 @@ import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
 import { TransformedData } from "@/types/projects";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 
 const renderTooltipValue = ({ value }: { value: ValueType }) => value;
@@ -20,6 +21,7 @@ interface MetricLineChartProps {
   chartId: string;
   data: TransformedData[];
   isPending: boolean;
+  labelActions?: Record<string, LegendLabelAction>;
 }
 
 const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({
@@ -30,6 +32,7 @@ const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({
   chartId,
   isPending,
   data,
+  labelActions,
 }) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -74,6 +77,7 @@ const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({
       showLegend
       showArea
       connectNulls
+      labelActions={labelActions}
     />
   );
 };
