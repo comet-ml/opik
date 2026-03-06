@@ -17,6 +17,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Label } from "@/components/ui/label";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
@@ -118,6 +120,7 @@ const ProjectMetricsBreakdownSection: React.FC<
     onBreakdownChange({
       field: BREAKDOWN_FIELD.NONE,
       metadataKey: undefined,
+      aggregateTotal: undefined,
     });
   }, [
     breakdownFieldController,
@@ -200,6 +203,7 @@ const ProjectMetricsBreakdownSection: React.FC<
                                     value === BREAKDOWN_FIELD.METADATA
                                       ? breakdown.metadataKey
                                       : undefined,
+                                  aggregateTotal: true,
                                 });
                               }}
                               options={breakdownFieldOptions}
@@ -273,6 +277,43 @@ const ProjectMetricsBreakdownSection: React.FC<
                 Add group
               </Button>
             )}
+          </div>
+          <div>
+            <Label className="comet-body-s mb-1.5 flex items-center gap-1">
+              Aggregation{" "}
+              <ExplainerIcon
+                className="inline"
+                description="Choose how data is aggregated: 'Over time' shows values in time buckets (hourly, daily, or weekly), while 'Whole period' shows one total per group for the entire selected date range."
+              />
+            </Label>
+            <ToggleGroup
+              type="single"
+              variant="ghost"
+              value={breakdown.aggregateTotal ? "total" : "interval"}
+              onValueChange={(value) => {
+                if (value) {
+                  onBreakdownChange({
+                    aggregateTotal: value === "total",
+                  });
+                }
+              }}
+              className="w-fit justify-start"
+            >
+              <ToggleGroupItem
+                value="interval"
+                aria-label="Over time"
+                className="gap-1.5"
+              >
+                <span>Over time</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="total"
+                aria-label="Whole period"
+                className="gap-1.5"
+              >
+                <span>Whole period</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </AccordionContent>
       </AccordionItem>

@@ -22,6 +22,7 @@ interface MetricLineChartProps {
   data: TransformedData[];
   isPending: boolean;
   labelActions?: Record<string, LegendLabelAction>;
+  isAggregateTotal?: boolean;
 }
 
 const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({

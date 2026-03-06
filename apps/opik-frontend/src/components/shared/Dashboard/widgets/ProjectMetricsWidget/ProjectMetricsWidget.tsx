@@ -334,6 +334,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
     return null;
   }
 
+  const isAggregateTotal =
+    effectiveBreakdown && breakdown?.aggregateTotal;
+
+  const effectiveInterval = isAggregateTotal ? INTERVAL_TYPE.TOTAL : interval;
+
   const renderChartContent = () => {
     const chartType =
       (widget.config?.chartType as CHART_TYPE.line | CHART_TYPE.bar) ||
@@ -353,7 +358,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       );
     }
 
-    if (!metricType || !interval) {
+    if (!metricType || !effectiveInterval) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
@@ -368,8 +373,8 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const validThreadFilters = threadFilters?.filter(isFilterValid);
     const validSpanFilters = spanFilters?.filter(isFilterValid);
 
-    const intervalType = interval as INTERVAL_TYPE;
-    const description = interval
+    const intervalType = effectiveInterval as INTERVAL_TYPE;
+    const description = effectiveInterval
       ? INTERVAL_DESCRIPTIONS.TOTALS[intervalType] || ""
       : "";
 
@@ -385,6 +390,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           description={description}
           metricName={metricName!}
           interval={intervalType}
+          isAggregateTotal={!!isAggregateTotal}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           projectId={projectId!}

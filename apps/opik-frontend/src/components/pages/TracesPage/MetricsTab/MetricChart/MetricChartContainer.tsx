@@ -55,6 +55,7 @@ interface MetricContainerChartProps {
   chartOnly?: boolean;
   breakdown?: BreakdownConfig;
   getLabelAction?: (label: string) => LegendLabelAction | undefined;
+  isAggregateTotal?: boolean;
 }
 
 const customColorMap = {
@@ -94,6 +95,7 @@ const MetricContainerChart = ({
   chartOnly = false,
   breakdown,
   getLabelAction,
+  isAggregateTotal = false,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -201,6 +203,7 @@ const MetricContainerChart = ({
       isPending={isPending}
       data={data}
       labelActions={labelActions}
+      isAggregateTotal={isAggregateTotal}
     />
   );
 

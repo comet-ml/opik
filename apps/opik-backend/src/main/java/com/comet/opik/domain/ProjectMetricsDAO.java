@@ -130,7 +130,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final Map<TimeInterval, String> INTERVAL_TO_SQL = Map.of(
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
             TimeInterval.DAILY, "toIntervalDay(1)",
-            TimeInterval.HOURLY, "toIntervalHour(1)");
+            TimeInterval.HOURLY, "toIntervalHour(1)",
+            TimeInterval.TOTAL, "toIntervalYear(100)");
 
     private static final String PROJECT_METRIC_QUERY_NAME_PREFIX = "ProjectMetrics_";
     private static final String ALERT_METRIC_QUERY_NAME_PREFIX = "AlertMetrics_";
