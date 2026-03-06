@@ -894,7 +894,23 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     div_dedup.last_updated_by AS item_last_updated_by,
                     div_dedup.dataset_version_id AS dataset_version_id
                 FROM (
-                    SELECT div.*
+                    SELECT
+                        div.id,
+                        div.dataset_item_id,
+                        div.dataset_id,
+                        div.data,
+                        div.source,
+                        div.trace_id,
+                        div.span_id,
+                        div.tags,
+                        div.evaluators,
+                        div.execution_policy,
+                        div.created_at,
+                        div.last_updated_at,
+                        div.created_by,
+                        div.last_updated_by,
+                        div.dataset_version_id,
+                        div.workspace_id
                     FROM dataset_item_versions div
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
@@ -951,7 +967,24 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     div_dedup.dataset_version_id AS dataset_version_id,
                     div_dedup.description AS description
                 FROM (
-                    SELECT div.*
+                    SELECT
+                        div.id,
+                        div.dataset_item_id,
+                        div.dataset_id,
+                        div.data,
+                        div.source,
+                        div.trace_id,
+                        div.span_id,
+                        div.tags,
+                        div.evaluators,
+                        div.execution_policy,
+                        div.created_at,
+                        div.last_updated_at,
+                        div.created_by,
+                        div.last_updated_by,
+                        div.dataset_version_id,
+                        div.description,
+                        div.workspace_id
                     FROM dataset_item_versions div
                     INNER JOIN experiment_aggregates ea FINAL ON
                         ea.workspace_id = div.workspace_id
