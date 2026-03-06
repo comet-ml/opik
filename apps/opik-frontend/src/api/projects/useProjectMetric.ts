@@ -26,6 +26,7 @@ export enum INTERVAL_TYPE {
   HOURLY = "HOURLY",
   DAILY = "DAILY",
   WEEKLY = "WEEKLY",
+  TOTAL = "TOTAL",
 }
 
 type UseProjectMetricsParams = {
