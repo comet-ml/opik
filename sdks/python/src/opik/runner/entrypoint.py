@@ -140,7 +140,7 @@ def dispatch_agent(func: Callable) -> None:
     except (json.JSONDecodeError, EOFError):
         inputs = {}
 
-    mask_id = os.environ.get("OPIK_MASK_ID", "")
+    mask_id = os.environ.get("OPIK_MASK_ID")
     try:
         with agent_config_context(mask_id):
             result = func(**inputs) if isinstance(inputs, dict) else func(inputs)
