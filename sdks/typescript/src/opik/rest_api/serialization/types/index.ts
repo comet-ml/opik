@@ -6,6 +6,8 @@ export * from "./AgentBlueprintPublicType.js";
 export * from "./AgentBlueprintWrite.js";
 export * from "./AgentBlueprintWriteType.js";
 export * from "./AgentConfigEnv.js";
+export * from "./AgentConfigValueHistory.js";
+export * from "./AgentConfigValueHistoryType.js";
 export * from "./AgentConfigValuePublic.js";
 export * from "./AgentConfigValuePublicType.js";
 export * from "./AgentConfigValueWrite.js";
