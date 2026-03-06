@@ -20,6 +20,7 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
+import com.comet.opik.api.events.ExperimentUpdated;
 import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.grouping.GroupBy;
@@ -605,29 +606,61 @@ public class ExperimentService {
     @WithSpan
     public Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
-        return experimentDAO.getById(id)
-                .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
-                .then(experimentDAO.update(id, experimentUpdate))
-                .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
-                .onErrorResume(TagOperations::mapTagLimitError)
-                .onErrorResume(throwable -> {
-                    log.error("Failed to update experiment with id '{}'", id, throwable);
-                    return Mono.error(throwable);
-                });
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return experimentDAO.getById(id)
+                    .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
+                    .flatMap(experiment -> {
+                        var effectiveStatus = experimentUpdate.status() != null
+                                ? experimentUpdate.status()
+                                : experiment.status();
+                        return experimentDAO.update(id, experimentUpdate)
+                                .doOnSuccess(unused -> {
+                                    log.info("Successfully updated experiment with id '{}'", id);
+                                    eventBus.post(new ExperimentUpdated(id, effectiveStatus, workspaceId, userName));
+                                })
+                                .onErrorResume(TagOperations::mapTagLimitError)
+                                .onErrorResume(throwable -> {
+                                    log.error("Failed to update experiment with id '{}'", id, throwable);
+                                    return Mono.error(throwable);
+                                });
+                    });
+        });
     }
 
     public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
         log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
 
         boolean mergeTags = batchUpdate.mergeTags();
-        return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
-                .onErrorResume(TagOperations::mapTagLimitError)
-                .onErrorResume(throwable -> {
-                    log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
-                            throwable);
-                    return Mono.error(throwable);
-                });
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            return experimentDAO.getByIds(batchUpdate.ids())
+                    .collectMap(Experiment::id, Experiment::status)
+                    .flatMap(currentStatuses -> experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                            .doOnSuccess(__ -> {
+                                log.info("Completed batch update for '{}' experiments",
+                                        batchUpdate.ids().size());
+                                batchUpdate.ids().forEach(id -> {
+                                    var effectiveStatus = batchUpdate.update().status() != null
+                                            ? batchUpdate.update().status()
+                                            : currentStatuses.get(id);
+                                    if (effectiveStatus != null) {
+                                        eventBus.post(new ExperimentUpdated(id, effectiveStatus, workspaceId,
+                                                userName));
+                                    }
+                                });
+                            }))
+                    .onErrorResume(TagOperations::mapTagLimitError)
+                    .onErrorResume(throwable -> {
+                        log.error("Failed to complete batch update of the '{}' experiments",
+                                batchUpdate.ids().size(), throwable);
+                        return Mono.error(throwable);
+                    });
+        });
     }
 
     private NotFoundException newNotFoundException(String message) {

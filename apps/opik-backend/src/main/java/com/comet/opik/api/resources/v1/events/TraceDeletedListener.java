@@ -2,8 +2,8 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.domain.CommentDAO;
-import com.comet.opik.domain.EntityType;
-import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.CommentService;
+import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -25,8 +25,8 @@ import static com.comet.opik.api.attachment.EntityType.TRACE;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class TraceDeletedListener {
 
-    private final @NonNull FeedbackScoreDAO feedbackScoreDAO;
-    private final @NonNull CommentDAO commentDAO;
+    private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull CommentService commentService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull SpanService spanService;
 
@@ -72,8 +72,8 @@ public class TraceDeletedListener {
     private Mono<Void> processTraceDeletion(Set<UUID> traceIds, UUID projectId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
-        return feedbackScoreDAO.deleteByEntityIds(EntityType.TRACE, traceIds, projectId)
-                .then(Mono.defer(() -> commentDAO.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds)))
+        return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
+                .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds)))
                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds)))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }

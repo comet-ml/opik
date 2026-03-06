@@ -417,20 +417,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(entityIds), "Argument 'entityIds' must not be empty");
         log.info("Deleting feedback scores for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
-        return switch (entityType) {
-            case TRACE ->
-                asyncTemplate.nonTransaction(connection -> cascadeSpanDelete(entityIds, projectId, connection))
-                        .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                        .then(Mono.defer(() -> asyncTemplate
-                                .nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, projectId,
-                                        connection))))
-                        .then();
-            case SPAN, THREAD ->
-                asyncTemplate
-                        .nonTransaction(
-                                connection -> deleteScoresByEntityIds(entityType, entityIds, projectId, connection))
-                        .then();
-        };
+        return asyncTemplate
+                .nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, projectId, connection))
+                .then();
     }
 
     @Override

@@ -10,14 +10,12 @@ import java.util.UUID;
 
 @Getter
 @Accessors(fluent = true)
-public class TracesUpdated extends BaseEvent {
-    private final @NonNull Set<UUID> projectIds;
-    private final @NonNull Set<UUID> traceIds;
+public class ExperimentItemsDeleted extends BaseEvent {
+    private final @NonNull Set<UUID> experimentIds;
 
-    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
+    public ExperimentItemsDeleted(@NonNull Set<UUID> experimentIds, @NonNull String workspaceId,
             @NonNull String userName) {
         super(workspaceId, userName);
-        this.projectIds = projectIds;
-        this.traceIds = traceIds;
+        this.experimentIds = experimentIds;
     }
 }

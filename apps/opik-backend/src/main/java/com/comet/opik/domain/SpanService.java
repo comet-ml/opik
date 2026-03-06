@@ -13,11 +13,12 @@ import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.events.SpansCreated;
+import com.comet.opik.api.events.SpansDeleted;
+import com.comet.opik.api.events.SpansUpdated;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
-import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -65,11 +66,11 @@ public class SpanService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull CommentService commentService;
+    private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
-    private final @NonNull ServiceTogglesConfig serviceTogglesConfig;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -183,16 +184,13 @@ public class SpanService {
                         log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
                                 processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
                                 processedSpan.parentSpanId());
+                        var savedSpan = processedSpan.toBuilder()
+                                .projectId(project.id())
+                                .projectName(projectName)
+                                .build();
                         return spanDAO.insert(processedSpan)
-                                .doOnSuccess(__ -> {
-                                    if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-                                        var savedSpan = processedSpan.toBuilder()
-                                                .projectId(project.id())
-                                                .projectName(projectName)
-                                                .build();
-                                        eventBus.post(new SpansCreated(List.of(savedSpan), workspaceId, userName));
-                                    }
-                                })
+                                .doOnSuccess(__ -> eventBus.post(
+                                        new SpansCreated(List.of(savedSpan), workspaceId, userName)))
                                 .thenReturn(processedSpan.id());
                     });
         });
@@ -204,20 +202,30 @@ public class SpanService {
 
         String projectName = WorkspaceUtils.getProjectName(spanUpdate.projectName());
 
-        return IdGenerator
-                .validateVersionAsync(id, SPAN_KEY)
-                .then(Mono.defer(() -> getProjectById(spanUpdate)
-                        .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                        //TODO: refactor to implement proper conflict resolution
-                        .flatMap(project -> lockService.executeWithLock(
-                                new LockService.Lock(id, SPAN_KEY),
-                                Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
-                                        .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
-                                        .switchIfEmpty(
-                                                Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
-                                        .onErrorResume(this::handleSpanDBError)
-                                        .then()))));
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return IdGenerator
+                    .validateVersionAsync(id, SPAN_KEY)
+                    .then(Mono.defer(() -> getProjectById(spanUpdate)
+                            .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
+                            .subscribeOn(Schedulers.boundedElastic()))
+                            //TODO: refactor to implement proper conflict resolution
+                            .flatMap(project -> lockService.executeWithLock(
+                                    new LockService.Lock(id, SPAN_KEY),
+                                    Mono.defer(() -> spanDAO.getOnlySpanDataById(id, project.id())
+                                            .flatMap(span -> updateOrFail(spanUpdate, id, span, project))
+                                            .switchIfEmpty(
+                                                    Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
+                                            .onErrorResume(this::handleSpanDBError)
+                                            .then()))))
+                    .doOnSuccess(__ -> {
+                        if (spanUpdate.traceId() != null) {
+                            eventBus.post(new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName));
+                        }
+                    });
+        });
     }
 
     @WithSpan
@@ -225,9 +233,20 @@ public class SpanService {
         log.info("Batch updating '{}' spans", batchUpdate.ids().size());
 
         boolean mergeTags = Boolean.TRUE.equals(batchUpdate.mergeTags());
-        return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
-                .doOnSuccess(__ -> log.info("Completed batch update for '{}' spans", batchUpdate.ids().size()))
-                .onErrorResume(TagOperations::mapTagLimitError);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                    .onErrorResume(TagOperations::mapTagLimitError)
+                    .doOnSuccess(__ -> {
+                        log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
+                        if (batchUpdate.update().traceId() != null) {
+                            eventBus.post(
+                                    new SpansUpdated(Set.of(batchUpdate.update().traceId()), workspaceId, userName));
+                        }
+                    });
+        });
     }
 
     private Mono<Long> insertUpdate(Project project, SpanUpdate spanUpdate, UUID id) {
@@ -373,11 +392,8 @@ public class SpanService {
                     return resolveProjects
                             .flatMap(this::stripAttachmentsFromSpanBatch)
                             .flatMap(spans -> spanDAO.batchInsert(spans)
-                                    .doOnSuccess(__ -> {
-                                        if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-                                            eventBus.post(new SpansCreated(spans, workspaceId, userName));
-                                        }
-                                    }));
+                                    .doOnSuccess(__ -> eventBus.post(
+                                            new SpansCreated(spans, workspaceId, userName))));
                 }));
     }
 
@@ -461,17 +477,36 @@ public class SpanService {
     }
 
     @WithSpan
-    public Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }
 
-        return spanDAO.getSpanIdsForTraces(traceIds)
-                .flatMap(
-                        spanIds -> commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
-                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds))))
-                .then(Mono.defer(() -> spanDAO.deleteByTraceIds(traceIds, projectId)))
-                .then();
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return spanDAO.getSpanIdsForTraces(traceIds, projectId)
+                    .flatMap(spanIds -> {
+                        if (spanIds.isEmpty()) {
+                            return Mono.empty();
+                        }
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                                .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
+                                .then(spanDAO.deleteByIds(spanIds, projectId)
+                                        .doOnSuccess(__ -> log.info(
+                                                "Deleted '{}' spans for workspace '{}', project '{}'",
+                                                spanIds.size(), workspaceId, projectId)))
+                                .thenReturn(spanIds);
+                    })
+                    .doOnSuccess(spanIds -> {
+                        if (spanIds != null) {
+                            eventBus.post(new SpansDeleted(spanIds, traceIds, workspaceId, userName));
+                        }
+                    })
+                    .then();
+        });
     }
 
     @WithSpan
