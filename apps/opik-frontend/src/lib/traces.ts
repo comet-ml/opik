@@ -398,6 +398,9 @@ const prettifyDemoProjectLogic = (
 const UNTRUSTED_METADATA_BLOCK_RE =
   /^(?:[^\n]*\(untrusted metadata\):\s*```json\s*\n[\s\S]*?```\s*)+/;
 
+// e.g. "[Fri 2026-03-06 11:35 GMT+1] "
+const LEADING_TIMESTAMP_RE = /^\[[\w\s\-:+/]+\]\s*/;
+
 const prettifyOpenClawMessageLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -413,6 +416,7 @@ const prettifyOpenClawMessageLogic = (
   ) {
     const stripped = message.prompt
       .replace(UNTRUSTED_METADATA_BLOCK_RE, "")
+      .replace(LEADING_TIMESTAMP_RE, "")
       .trim();
     return stripped.length > 0 ? stripped : message.prompt;
   }

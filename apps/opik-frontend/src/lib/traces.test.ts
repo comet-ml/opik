@@ -511,4 +511,31 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("handles OpenClaw input by stripping leading timestamp", () => {
+    const message = {
+      prompt: "[Fri 2026-03-06 11:35 GMT+1] Hi",
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Hi",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenClaw input with metadata blocks and timestamp", () => {
+    const message = {
+      prompt:
+        'Conversation info (untrusted metadata):\n```json\n{\n  "id": "1"\n}\n```\n\n[Fri 2026-03-06 12:08 GMT+1] Hi OpenClaw!!! How are you doing today?',
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Hi OpenClaw!!! How are you doing today?",
+      prettified: true,
+    });
+  });
 });
