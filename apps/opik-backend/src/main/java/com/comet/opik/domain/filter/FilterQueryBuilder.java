@@ -21,7 +21,9 @@ import com.comet.opik.api.sorting.SortingField;
 import com.google.common.collect.ImmutableMap;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.stringtemplate.v4.ST;
 
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -555,6 +557,10 @@ public class FilterQueryBuilder {
                 TraceThreadField.FEEDBACK_SCORES,
                 ExperimentField.FEEDBACK_SCORES));
 
+        map.put(FilterStrategy.FEEDBACK_SCORES_AGGREGATED, Set.of(
+                ExperimentField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES));
+
         map.put(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
 
         map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(SpanField.FEEDBACK_SCORES));
@@ -711,8 +717,9 @@ public class FilterQueryBuilder {
 
     private static String toAnalyticsDbOperator(@NonNull Filter filter, @NonNull FilterStrategy filterStrategy) {
         // For aggregated feedback scores, use map access patterns instead of groupArray patterns
-        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
-                filter.field().getType() == FieldType.FEEDBACK_SCORES_NUMBER) {
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && filter.field().getType() == FieldType.FEEDBACK_SCORES_NUMBER) {
             return getAggregatedFeedbackScoresTemplate(filter.operator());
         }
 
@@ -721,13 +728,20 @@ public class FilterQueryBuilder {
 
     private static String getAggregatedFeedbackScoresTemplate(Operator operator) {
         return switch (operator) {
-            case EQUAL -> "%1$s[lower(:filterKey%2$d)] = toDecimal64(:filter%2$d, 9)";
-            case NOT_EQUAL -> "%1$s[lower(:filterKey%2$d)] != toDecimal64(:filter%2$d, 9)";
-            case GREATER_THAN -> "%1$s[lower(:filterKey%2$d)] > toDecimal64(:filter%2$d, 9)";
-            case GREATER_THAN_EQUAL -> "%1$s[lower(:filterKey%2$d)] >= toDecimal64(:filter%2$d, 9)";
-            case LESS_THAN -> "%1$s[lower(:filterKey%2$d)] < toDecimal64(:filter%2$d, 9)";
-            case LESS_THAN_EQUAL -> "%1$s[lower(:filterKey%2$d)] <= toDecimal64(:filter%2$d, 9)";
-            case IS_NOT_EMPTY -> "mapContains(%1$s, lower(:filterKey%2$d))";
+            case EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] = toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case NOT_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] != toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case GREATER_THAN ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] > toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case GREATER_THAN_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] >= toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case LESS_THAN ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] < toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case LESS_THAN_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] <= toDecimal64(:filter%2$d, 9), mapKeys(%1$s))";
+            case IS_EMPTY -> "NOT arrayExists(k -> lower(k) = lower(:filterKey%2$d), mapKeys(%1$s))";
+            case IS_NOT_EMPTY -> "arrayExists(k -> lower(k) = lower(:filterKey%2$d), mapKeys(%1$s))";
             default -> throw new IllegalArgumentException(
                     "Unsupported operator for aggregated feedback scores: '%s'".formatted(operator));
         };
@@ -776,9 +790,15 @@ public class FilterQueryBuilder {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES));
         }
 
-        // For aggregated feedback scores, use the EXPERIMENT filter fields
-        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED ||
-                filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES_AGGREGATED));
+        }
+
+        // For aggregated feedback scores with non-IS_EMPTY operators, use EXPERIMENT fields (will skip feedback score filters)
+        if (filter.operator() != Operator.IS_EMPTY && isFeedbackScore(filter)
+                && (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                        || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT));
         }
 
@@ -786,7 +806,9 @@ public class FilterQueryBuilder {
             return Optional.empty();
         }
 
-        if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)) {
+        // Only allow IS_EMPTY for _IS_EMPTY strategies (not for regular AGGREGATED strategy)
+        if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)
+                && filterStrategy != FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
             return Optional.empty();
         }
 
@@ -796,7 +818,8 @@ public class FilterQueryBuilder {
     private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
         return filter.operator() == Operator.IS_NOT_EMPTY
                 && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY,
-                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY)
+                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY,
+                        FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
                         .contains(filterStrategy);
     }
 
@@ -824,14 +847,24 @@ public class FilterQueryBuilder {
             return EXPERIMENT_SCORE_COUNT_DB;
         }
 
-        // For aggregated feedback scores, use the pre-computed average map
-        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
-                field == ExperimentField.FEEDBACK_SCORES) {
+        // For aggregated feedback scores, use the appropriate column based on context
+        // ExperimentField.FEEDBACK_SCORES -> experiment_aggregates table uses feedback_scores_avg
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentField.FEEDBACK_SCORES) {
             return "feedback_scores_avg";
         }
 
-        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED &&
-                field == ExperimentField.EXPERIMENT_SCORES) {
+        // ExperimentsComparisonValidKnownField.FEEDBACK_SCORES -> experiment_item_aggregates table uses feedback_scores
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentsComparisonValidKnownField.FEEDBACK_SCORES) {
+            return "feedback_scores";
+        }
+
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentField.EXPERIMENT_SCORES) {
             return "experiment_scores";
         }
 
@@ -909,6 +942,51 @@ public class FilterQueryBuilder {
                     statement = statement.bind("filterKey%d".formatted(i), key);
                 }
             }
+        }
+        return statement;
+    }
+
+    /**
+     * Maps a {@link FilterStrategy} to the StringTemplate parameter name it populates.
+     */
+    public record FilterStrategyParam(FilterStrategy strategy, String templateParam) {
+    }
+
+    /**
+     * Applies a configurable list of filter strategies to a StringTemplate.
+     * For each entry whose strategy produces a non-empty SQL fragment, adds the fragment
+     * under the corresponding template parameter name.
+     *
+     * @param template       the ST template to populate
+     * @param filters        the caller-supplied filter list (may be null or empty)
+     * @param strategyParams ordered list of (strategy, templateParam) pairs to evaluate
+     */
+    public static void applyFiltersToTemplate(ST template, List<? extends Filter> filters,
+            List<FilterStrategyParam> strategyParams) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return;
+        }
+        for (var entry : strategyParams) {
+            toAnalyticsDbFilters(filters, entry.strategy())
+                    .ifPresent(sql -> template.add(entry.templateParam(), sql));
+        }
+    }
+
+    /**
+     * Binds filter parameters for a configurable list of filter strategies to an R2DBC statement.
+     *
+     * @param statement  the statement to bind parameters to
+     * @param filters    the caller-supplied filter list (may be null or empty)
+     * @param strategies ordered list of strategies whose parameters should be bound
+     * @return the statement with all parameters bound
+     */
+    public static Statement bindFilters(Statement statement, List<? extends Filter> filters,
+            List<FilterStrategy> strategies) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return statement;
+        }
+        for (var strategy : strategies) {
+            statement = bind(statement, filters, strategy);
         }
         return statement;
     }
