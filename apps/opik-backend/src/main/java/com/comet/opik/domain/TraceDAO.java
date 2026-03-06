@@ -634,19 +634,10 @@ class TraceDAOImpl implements TraceDAO {
                     toInt64(countIf(type = 'llm')) AS llm_span_count,
                     countIf(type = 'tool') > 0 AS has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM (
-                    SELECT
-                        trace_id,
-                        usage,
-                        total_estimated_cost,
-                        id,
-                        type,
-                        provider
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                    AND trace_id IN :ids
-                )
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                AND trace_id IN :ids
                 GROUP BY trace_id
             ), experiments_agg AS (
                 SELECT DISTINCT
