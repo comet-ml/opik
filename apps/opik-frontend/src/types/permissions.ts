@@ -8,6 +8,7 @@ export interface Permissions {
   canDeletePrompts: boolean;
   canDeleteDatasets: boolean;
   canDeleteOptimizationRuns: boolean;
+  canUpdateAIProviders: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -26,6 +27,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canDeletePrompts: true,
     canDeleteDatasets: true,
     canDeleteOptimizationRuns: true,
+    canUpdateAIProviders: true,
   },
   isPending: false,
 };
