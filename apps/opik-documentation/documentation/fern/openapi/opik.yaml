@@ -7061,6 +7061,7 @@ components:
     AgentBlueprint_History:
       required:
       - type
+      - values
       type: object
       properties:
         id:
@@ -7094,6 +7095,53 @@ components:
         last_updated_at:
           type: string
           format: date-time
+          readOnly: true
+        values:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_History"
+    AgentConfigValue_History:
+      required:
+      - key
+      - type
+      - value
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - integer
+          - float
+          - boolean
+          - prompt
+          - prompt_commit
+        description:
+          type: string
+        valid_from_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+        valid_to_blueprint_id:
+          type: string
+          format: uuid
           readOnly: true
     BlueprintPage_History:
       type: object
