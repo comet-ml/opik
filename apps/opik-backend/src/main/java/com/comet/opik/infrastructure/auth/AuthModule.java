@@ -1,5 +1,8 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.domain.LocalWorkspacePermissionsService;
+import com.comet.opik.domain.RemoteWorkspacePermissionsService;
+import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
@@ -44,5 +47,23 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
     public Client client() {
         return ClientBuilder.newClient();
+    }
+
+    @Provides
+    @Singleton
+    public WorkspacePermissionsService workspacePermissionsService(
+            @Config("authentication") AuthenticationConfig config) {
+
+        if (!config.isEnabled()) {
+            return new LocalWorkspacePermissionsService();
+        }
+
+        Objects.requireNonNull(config.getReactService(),
+                "The property authentication.reactService.url is required when authentication is enabled");
+
+        Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
+                "The property authentication.reactService.url must not be blank when authentication is enabled");
+
+        return new RemoteWorkspacePermissionsService(client(), config.getReactService());
     }
 }
