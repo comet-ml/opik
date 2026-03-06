@@ -477,7 +477,7 @@ class ExperimentDAO {
                 GROUP BY ei.experiment_id
             ),
             experiments_eval_suite AS (
-                SELECT id, dataset_id, dataset_version_id, execution_policy
+                SELECT id, dataset_id, dataset_version_id, execution_policy AS suite_execution_policy
                 FROM experiments_final
                 WHERE evaluation_method = 'evaluation_suite'
             ),
@@ -488,7 +488,7 @@ class ExperimentDAO {
                     ei.trace_id AS trace_id,
                     eif.dataset_item_id AS dataset_item_id,
                     JSONExtractUInt(eif.execution_policy, 'pass_threshold') AS item_pass_threshold,
-                    JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold
+                    JSONExtractUInt(ef.suite_execution_policy, 'pass_threshold') AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
                     SELECT ei2.id, ei2.dataset_item_id, ei2.execution_policy
@@ -1092,7 +1092,7 @@ class ExperimentDAO {
                 GROUP BY experiment_id
             ),
             experiments_eval_suite AS (
-                SELECT id, dataset_id, dataset_version_id, execution_policy
+                SELECT id, dataset_id, dataset_version_id, execution_policy AS suite_execution_policy
                 FROM experiments_final
                 WHERE evaluation_method = 'evaluation_suite'
             ),
@@ -1103,7 +1103,7 @@ class ExperimentDAO {
                     ei.trace_id AS trace_id,
                     eif.dataset_item_id AS dataset_item_id,
                     JSONExtractUInt(eif.execution_policy, 'pass_threshold') AS item_pass_threshold,
-                    JSONExtractUInt(ef.execution_policy, 'pass_threshold') AS suite_pass_threshold
+                    JSONExtractUInt(ef.suite_execution_policy, 'pass_threshold') AS suite_pass_threshold
                 FROM experiment_items_final ei
                 INNER JOIN (
                     SELECT ei2.id, ei2.dataset_item_id, ei2.execution_policy
