@@ -335,7 +335,7 @@ class TestConfigDecoratorTraceMetadata:
             assert field_entry["type"] == "float"
             assert "description" not in field_entry
 
-    def test_field_access_inside_trace__injects_description_when_annotated(
+    def test_field_access_inside_trace__annotated_field__injects_description(
         self, mock_backend
     ):
         mock_backend.set_blueprint_values(
