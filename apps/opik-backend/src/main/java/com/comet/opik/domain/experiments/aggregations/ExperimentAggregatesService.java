@@ -126,7 +126,11 @@ public class ExperimentAggregatesService {
     }
 
     public Mono<Long> countTotal(@NonNull ExperimentSearchCriteria criteria) {
-        return experimentAggregatesDAO.countTotal(criteria);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            log.info("Counting total experiments from aggregates for workspace: '{}'", workspaceId);
+            return experimentAggregatesDAO.countTotal(criteria);
+        });
     }
 
     /**

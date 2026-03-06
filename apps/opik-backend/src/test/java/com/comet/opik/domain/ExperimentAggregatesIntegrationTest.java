@@ -68,6 +68,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -954,9 +955,9 @@ class ExperimentAggregatesIntegrationTest {
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        List<List<UUID>> experimentIdsList = new ArrayList<>();
-        List<List<UUID>> datasetIdsList = new ArrayList<>();
-        List<List<String>> feedbackScoresList = new ArrayList<>();
+        List<List<UUID>> experimentIdsList = Collections.synchronizedList(new ArrayList<>());
+        List<List<UUID>> datasetIdsList = Collections.synchronizedList(new ArrayList<>());
+        List<List<String>> feedbackScoresList = Collections.synchronizedList(new ArrayList<>());
 
         IntStream.range(0, 2)
                 .parallel()
