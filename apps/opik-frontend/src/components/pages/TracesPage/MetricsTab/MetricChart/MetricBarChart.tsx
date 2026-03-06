@@ -39,11 +39,7 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       if (isAggregateTotal) {
-        return (
-          <div className="comet-body-xs mb-1 text-light-slate">
-            Whole period
-          </div>
-        );
+        return <div className="comet-body-xs mb-1 text-light-slate">Total</div>;
       }
       return (
         <div className="comet-body-xs mb-1 text-light-slate">

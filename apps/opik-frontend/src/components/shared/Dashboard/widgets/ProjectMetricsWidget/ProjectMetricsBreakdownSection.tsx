@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useEffect, useCallback } from "react";
 import { Control, useController } from "react-hook-form";
-import { Plus, X } from "lucide-react";
 import get from "lodash/get";
 
 import {
@@ -9,8 +8,6 @@ import {
   FormItem,
   FormMessage,
 } from "@/components/ui/form";
-import { Description } from "@/components/ui/description";
-import { Button } from "@/components/ui/button";
 import {
   Accordion,
   AccordionContent,
@@ -63,17 +60,12 @@ const ProjectMetricsBreakdownSection: React.FC<
   const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
   const hasBreakdownField = breakdown.field !== BREAKDOWN_FIELD.NONE;
 
-  // Combined check for group by disabled state
   const isGroupByDisabled =
+    !metricType ||
     isGroupByDisabledForFeedbackScore ||
     isGroupByDisabledForDuration ||
     isGroupByDisabledForUsage;
 
-  // Local state to track if the group row UI should be shown
-  // This allows showing the dropdown without immediately triggering a BE call
-  const [showGroupRow, setShowGroupRow] = useState(hasBreakdownField);
-
-  // Get the form field controller for resetting values
   const { field: breakdownFieldController } = useController({
     control,
     name: "breakdown.field",
@@ -84,19 +76,9 @@ const ProjectMetricsBreakdownSection: React.FC<
     name: "breakdown.metadataKey",
   });
 
-  // Sync showGroupRow with actual breakdown state when breakdown changes externally
-  useEffect(() => {
-    if (hasBreakdownField) {
-      setShowGroupRow(true);
-    }
-  }, [hasBreakdownField]);
-
-  // Get compatible breakdown fields for the current metric type (excluding NONE)
   const compatibleBreakdownFields = useMemo(() => {
     if (!metricType) return [];
-    return getCompatibleBreakdownFields(metricType).filter(
-      (field) => field !== BREAKDOWN_FIELD.NONE,
-    );
+    return getCompatibleBreakdownFields(metricType);
   }, [metricType]);
 
   const breakdownFieldOptions = useMemo(() => {
@@ -106,108 +88,151 @@ const ProjectMetricsBreakdownSection: React.FC<
     }));
   }, [compatibleBreakdownFields]);
 
-  const handleAddGroup = useCallback(() => {
-    // Only show the group row UI without setting a breakdown field
-    // The preview won't update until a field is actually selected
-    setShowGroupRow(true);
-  }, []);
+  const handleFieldChange = useCallback(
+    (value: string) => {
+      const field = value as BREAKDOWN_FIELD;
+      if (field === BREAKDOWN_FIELD.NONE) {
+        breakdownFieldController.onChange(BREAKDOWN_FIELD.NONE);
+        breakdownMetadataKeyController.onChange(undefined);
+        onBreakdownChange({
+          field: BREAKDOWN_FIELD.NONE,
+          metadataKey: undefined,
+        });
+      } else {
+        breakdownFieldController.onChange(field);
+        onBreakdownChange({
+          field,
+          metadataKey:
+            field === BREAKDOWN_FIELD.METADATA
+              ? breakdown.metadataKey
+              : undefined,
+          aggregateTotal: true,
+        });
+      }
+    },
+    [
+      breakdownFieldController,
+      breakdownMetadataKeyController,
+      onBreakdownChange,
+      breakdown.metadataKey,
+    ],
+  );
 
-  const handleRemoveGroup = useCallback(() => {
-    setShowGroupRow(false);
-    // Reset the form field values so they don't retain the previous selection
-    breakdownFieldController.onChange(BREAKDOWN_FIELD.NONE);
-    breakdownMetadataKeyController.onChange(undefined);
-    onBreakdownChange({
-      field: BREAKDOWN_FIELD.NONE,
-      metadataKey: undefined,
-      aggregateTotal: undefined,
-    });
+  const disabledExplainer = isGroupByDisabledForDuration
+    ? EXPLAINERS_MAP[EXPLAINER_ID.duration_groupby_requires_single_metric]
+    : isGroupByDisabledForUsage
+      ? EXPLAINERS_MAP[EXPLAINER_ID.usage_groupby_requires_single_metric]
+      : isGroupByDisabledForFeedbackScore
+        ? EXPLAINERS_MAP[
+            EXPLAINER_ID.feedback_score_groupby_requires_single_metric
+          ]
+        : null;
+
+  useEffect(() => {
+    if (isGroupByDisabled && hasBreakdownField) {
+      breakdownFieldController.onChange(BREAKDOWN_FIELD.NONE);
+      breakdownMetadataKeyController.onChange(undefined);
+      onBreakdownChange({
+        field: BREAKDOWN_FIELD.NONE,
+        metadataKey: undefined,
+      });
+    }
   }, [
+    isGroupByDisabled,
+    hasBreakdownField,
     breakdownFieldController,
     breakdownMetadataKeyController,
     onBreakdownChange,
   ]);
 
-  // Effect to reset when group by is disabled
-  useEffect(() => {
-    if (isGroupByDisabled && showGroupRow) {
-      setShowGroupRow(false);
-    }
-  }, [isGroupByDisabled, showGroupRow]);
-
   return (
-    <Accordion type="single" collapsible className="w-full">
-      <AccordionItem value="groupby" className="">
+    <Accordion type="single" collapsible className="!-mt-0 w-full">
+      <AccordionItem value="groupby">
         <AccordionTrigger className="h-11 py-1.5 hover:no-underline">
-          Group by {hasBreakdownField && "(1)"}
+          Group by
         </AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
-          <Description>Add groups to aggregate data.</Description>
-          <div className="space-y-3">
-            {isGroupByDisabled ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled
-                  className="w-fit"
-                >
-                  <Plus className="mr-1 size-3.5" />
-                  Add group
-                </Button>
-                <ExplainerIcon
-                  {...EXPLAINERS_MAP[
-                    isGroupByDisabledForDuration
-                      ? EXPLAINER_ID.duration_groupby_requires_single_metric
-                      : isGroupByDisabledForUsage
-                        ? EXPLAINER_ID.usage_groupby_requires_single_metric
-                        : EXPLAINER_ID.feedback_score_groupby_requires_single_metric
-                  ]}
-                />
-              </div>
-            ) : showGroupRow ? (
-              <>
-                {/* Group row with field selector and remove button */}
-                <div className="flex items-start gap-2">
-                  <span className="comet-body-s flex h-8 items-center pr-2">
-                    By
-                  </span>
-                  <FormField
-                    control={control}
-                    name="breakdown.field"
-                    render={({ field, formState }) => {
-                      const validationErrors = get(formState.errors, [
-                        "breakdown",
-                        "field",
-                      ]);
-                      return (
-                        <FormItem className="min-w-40">
-                          <FormControl>
-                            <SelectBox
-                              className={cn({
+          <div className="flex items-start gap-4">
+            <div className="flex-1">
+              <Label className="comet-body-s-accented mb-1 flex items-center gap-1">
+                Group by property
+                {isGroupByDisabled && disabledExplainer && (
+                  <ExplainerIcon {...disabledExplainer} />
+                )}
+              </Label>
+              <div
+                className={cn(
+                  "group/groupby flex items-start rounded-md border border-input hover:shadow-sm focus-within:border-primary",
+                  isGroupByDisabled && "hover:shadow-none",
+                )}
+              >
+                <FormField
+                  control={control}
+                  name="breakdown.field"
+                  render={({ field, formState }) => {
+                    const validationErrors = get(formState.errors, [
+                      "breakdown",
+                      "field",
+                    ]);
+                    return (
+                      <FormItem
+                        className={cn(
+                          "min-w-32",
+                          isMetadataBreakdown ? "flex-1" : "w-full",
+                        )}
+                      >
+                        <FormControl>
+                          <SelectBox
+                            className={cn(
+                              "border-0 shadow-none hover:shadow-none focus:border-0",
+                              {
                                 "border-destructive": Boolean(
                                   validationErrors?.message,
                                 ),
-                              })}
-                              value={
-                                field.value === BREAKDOWN_FIELD.NONE
-                                  ? ""
-                                  : field.value || ""
+                              },
+                              isMetadataBreakdown && "rounded-r-none",
+                            )}
+                            value={field.value || BREAKDOWN_FIELD.NONE}
+                            onChange={handleFieldChange}
+                            options={breakdownFieldOptions}
+                            disabled={isGroupByDisabled}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+                {isMetadataBreakdown && (
+                  <FormField
+                    control={control}
+                    name="breakdown.metadataKey"
+                    render={({ field, formState }) => {
+                      const validationErrors = get(formState.errors, [
+                        "breakdown",
+                        "metadataKey",
+                      ]);
+                      return (
+                        <FormItem className="min-w-32 flex-1 border-l border-input group-focus-within/groupby:border-primary [&_input]:rounded-l-none [&_input]:border-0 [&_input]:shadow-none [&_input]:hover:shadow-none [&_input]:focus-visible:border-0">
+                          <FormControl>
+                            <TracesOrSpansPathsAutocomplete
+                              hasError={Boolean(validationErrors?.message)}
+                              rootKeys={["metadata"]}
+                              projectId={projectId}
+                              type={
+                                isSpanMetric
+                                  ? TRACE_DATA_TYPE.spans
+                                  : TRACE_DATA_TYPE.traces
                               }
-                              onChange={(value) => {
+                              placeholder="key"
+                              excludeRoot={true}
+                              value={field.value || ""}
+                              onValueChange={(value) => {
                                 field.onChange(value);
                                 onBreakdownChange({
-                                  field: value as BREAKDOWN_FIELD,
-                                  metadataKey:
-                                    value === BREAKDOWN_FIELD.METADATA
-                                      ? breakdown.metadataKey
-                                      : undefined,
-                                  aggregateTotal: true,
+                                  metadataKey: value,
                                 });
                               }}
-                              options={breakdownFieldOptions}
-                              placeholder="Select field"
                             />
                           </FormControl>
                           <FormMessage />
@@ -215,105 +240,47 @@ const ProjectMetricsBreakdownSection: React.FC<
                       );
                     }}
                   />
-                  {/* Configuration key input when Configuration field is selected */}
-                  {isMetadataBreakdown && (
-                    <FormField
-                      control={control}
-                      name="breakdown.metadataKey"
-                      render={({ field, formState }) => {
-                        const validationErrors = get(formState.errors, [
-                          "breakdown",
-                          "metadataKey",
-                        ]);
-                        return (
-                          <FormItem className="min-w-32 max-w-[30vw] flex-1">
-                            <FormControl>
-                              <TracesOrSpansPathsAutocomplete
-                                hasError={Boolean(validationErrors?.message)}
-                                rootKeys={["metadata"]}
-                                projectId={projectId}
-                                type={
-                                  isSpanMetric
-                                    ? TRACE_DATA_TYPE.spans
-                                    : TRACE_DATA_TYPE.traces
-                                }
-                                placeholder="key"
-                                excludeRoot={true}
-                                value={field.value || ""}
-                                onValueChange={(value) => {
-                                  field.onChange(value);
-                                  onBreakdownChange({
-                                    metadataKey: value,
-                                  });
-                                }}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        );
-                      }}
-                    />
-                  )}
-                  <Button
-                    type="button"
-                    variant="minimal"
-                    size="icon-xs"
-                    onClick={handleRemoveGroup}
-                    className="mt-1.5"
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddGroup}
-                className="w-fit"
+                )}
+              </div>
+            </div>
+            <div className="min-w-fit">
+              <Label className="comet-body-s-accented mb-1 flex items-center gap-1">
+                Aggregation{" "}
+                <ExplainerIcon
+                  className="inline"
+                  description="Choose how data is aggregated: 'Over time' shows values in time buckets (hourly, daily, or weekly), while 'Total' shows one value per group for the entire selected date range."
+                />
+              </Label>
+              <ToggleGroup
+                type="single"
+                variant="ghost"
+                value={breakdown.aggregateTotal ? "total" : "interval"}
+                onValueChange={(value) => {
+                  if (value) {
+                    onBreakdownChange({
+                      aggregateTotal: value === "total",
+                    });
+                  }
+                }}
+                disabled={!hasBreakdownField}
+                className="w-fit justify-start"
               >
-                <Plus className="mr-1 size-3.5" />
-                Add group
-              </Button>
-            )}
-          </div>
-          <div>
-            <Label className="comet-body-s mb-1.5 flex items-center gap-1">
-              Aggregation{" "}
-              <ExplainerIcon
-                className="inline"
-                description="Choose how data is aggregated: 'Over time' shows values in time buckets (hourly, daily, or weekly), while 'Whole period' shows one total per group for the entire selected date range."
-              />
-            </Label>
-            <ToggleGroup
-              type="single"
-              variant="ghost"
-              value={breakdown.aggregateTotal ? "total" : "interval"}
-              onValueChange={(value) => {
-                if (value) {
-                  onBreakdownChange({
-                    aggregateTotal: value === "total",
-                  });
-                }
-              }}
-              className="w-fit justify-start"
-            >
-              <ToggleGroupItem
-                value="interval"
-                aria-label="Over time"
-                className="gap-1.5"
-              >
-                <span>Over time</span>
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="total"
-                aria-label="Whole period"
-                className="gap-1.5"
-              >
-                <span>Whole period</span>
-              </ToggleGroupItem>
-            </ToggleGroup>
+                <ToggleGroupItem
+                  value="interval"
+                  aria-label="Over time"
+                  className="gap-1.5"
+                >
+                  <span>Over time</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="total"
+                  aria-label="Total"
+                  className="gap-1.5"
+                >
+                  <span>Total</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>

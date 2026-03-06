@@ -334,8 +334,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     return null;
   }
 
-  const isAggregateTotal =
-    effectiveBreakdown && breakdown?.aggregateTotal;
+  const isAggregateTotal = effectiveBreakdown && breakdown?.aggregateTotal;
 
   const effectiveInterval = isAggregateTotal ? INTERVAL_TYPE.TOTAL : interval;
 

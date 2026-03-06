@@ -34,27 +34,35 @@ const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({
   isPending,
   data,
   labelActions,
+  isAggregateTotal = false,
 }) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
+      if (isAggregateTotal) {
+        return <div className="comet-body-xs mb-1 text-light-slate">Total</div>;
+      }
       return (
         <div className="comet-body-xs mb-1 text-light-slate">
           {formatDate(payload?.[0]?.payload?.time, { utc: true })} UTC
         </div>
       );
     },
-    [],
+    [isAggregateTotal],
   );
 
   const xTickFormatter = useCallback(
     (val: string) => {
+      if (isAggregateTotal) {
+        return "";
+      }
+
       if (interval === INTERVAL_TYPE.HOURLY) {
         return dayjs(val).utc().format("MM/DD hh:mm A");
       }
 
       return dayjs(val).utc().format("MM/DD");
     },
-    [interval],
+    [interval, isAggregateTotal],
   );
 
   if (isPending) {
