@@ -110,6 +110,7 @@ class GepaV2Optimizer:
             reflection_lm=context.model,
             reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
             batch_sampler=sampler,
+            prompt_descriptions=context.prompt_descriptions,
         )
         self.adapter = adapter
 

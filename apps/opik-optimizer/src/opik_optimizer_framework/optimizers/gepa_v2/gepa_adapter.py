@@ -137,6 +137,7 @@ class FrameworkGEPAAdapter:
         batch_sampler: FailureAwareBatchSampler | None = None,
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
+        prompt_descriptions: dict[str, str] | None = None,
     ) -> None:
         self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
@@ -147,7 +148,9 @@ class FrameworkGEPAAdapter:
         if reflection_proposer is not None:
             self._proposer: ReflectionProposer | None = reflection_proposer
         elif reflection_lm is not None:
-            self._proposer = ReflectionProposer(reflection_lm, reflection_prompt_template)
+            self._proposer = ReflectionProposer(
+                reflection_lm, reflection_prompt_template, prompt_descriptions,
+            )
         else:
             self._proposer = None
 

@@ -174,6 +174,10 @@ def main():
             "seed": 42,
         },
         optimizable_keys=["system_prompt", "user_message"],
+        prompt_descriptions={
+            "system_prompt": "Main customer-facing support agent system prompt",
+            "user_message": "User message template with question placeholder",
+        },
         baseline_config={
             "system_prompt": "You are a customer support agent. Answer questions briefly.",
             "user_message": "{question}",

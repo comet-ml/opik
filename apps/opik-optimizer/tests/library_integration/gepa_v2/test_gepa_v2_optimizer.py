@@ -1365,7 +1365,7 @@ class TestGepaV2Optimizer:
         assert gepa_adapter._reflection_prompt_template == GENERALIZATION_REFLECTION_TEMPLATE
         assert "<curr_param>" in gepa_adapter._reflection_prompt_template
         assert "<side_info>" in gepa_adapter._reflection_prompt_template
-        assert "generalize" in gepa_adapter._reflection_prompt_template.lower()
+        assert "DIAGNOSE" in gepa_adapter._reflection_prompt_template
 
     def test_cache_evaluation_disabled(self):
         context = _make_context()

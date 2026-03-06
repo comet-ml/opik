@@ -48,6 +48,7 @@ class OptimizationContext:
     optimizer_parameters: dict[str, Any]
     optimizable_keys: list[str]
     baseline_config: CandidateConfig = field(default_factory=dict)
+    prompt_descriptions: dict[str, str] = field(default_factory=dict)
 
 
 

@@ -7,24 +7,23 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 GENERALIZATION_REFLECTION_TEMPLATE = """\
-I provided an assistant with the following instructions to perform a task for me:
+I have a system that uses the following parameter to guide its behavior:
 ```
 <curr_param>
 ```
 
-The following are examples of different task inputs provided to the assistant \
-along with the assistant's response for each of them, and feedback showing \
-which assertions PASSED and which FAILED. \
+The following are examples of inputs along with the system's outputs and \
+feedback showing which assertions PASSED and which FAILED. \
 Examples are sorted by priority — the ones with the most failures come first:
 ```
 <side_info>
 ```
 
-Your task is to write an improved instruction. Preserve working rules and \
-make targeted additions or tweaks to fix the FAILED assertions.
+Your task is to write an improved version of this parameter. Preserve working \
+rules and make targeted additions or tweaks to fix the FAILED assertions.
 
 STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what behaviors \
-are missing. Read the PASSED assertions — the current instruction already \
+are missing. Read the PASSED assertions — the current parameter already \
 produces these. Preserve the rules that drive successes.
 
 STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History" \
@@ -35,16 +34,14 @@ different approach.
 
 STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify \
 a specific rule. Every rule must describe an observable action (what to say, \
-include, or avoid) — abstract advice like "be empathetic" does not reliably \
-work. Rules must generalize to any input in this domain; do NOT reference \
-specific test inputs.
+include, or avoid) — vague guidance does not reliably work. Rules must \
+generalize to any input in this domain; do NOT reference specific test inputs.
 
-STEP 4 — STRUCTURE: Group related rules under short topic headers \
-(e.g., "## Empathy", "## Resolution", "## Policy"). Merge overlapping \
-rules. Remove redundant ones. Keep the instruction concise — prefer \
-tightening existing rules over appending new ones.
+STEP 4 — STRUCTURE: Group related rules under short descriptive headers. \
+Merge overlapping rules. Remove redundant ones. Keep the parameter concise \
+— prefer tightening existing rules over appending new ones.
 
-Provide the new instructions within ``` blocks."""
+Provide the new parameter within ``` blocks."""
 
 
 class ReflectionProposer:
@@ -58,9 +55,11 @@ class ReflectionProposer:
         self,
         reflection_lm: Any,
         reflection_prompt_template: str | None = None,
+        prompt_descriptions: dict[str, str] | None = None,
     ) -> None:
         self._reflection_lm = reflection_lm
         self._reflection_prompt_template = reflection_prompt_template
+        self._prompt_descriptions = prompt_descriptions or {}
         self._reflection_log: list[dict[str, Any]] = []
 
     @property
@@ -91,6 +90,25 @@ class ReflectionProposer:
             return _lm
         raise ValueError(f"reflection_lm must be a string or callable, got {type(self._reflection_lm)}")
 
+    def _build_header(self, name: str, candidate: dict[str, str]) -> str:
+        """Build the parameter header with optional description and sibling context."""
+        header = f"Parameter: {name}"
+        description = self._prompt_descriptions.get(name, "")
+        if description:
+            header += f"\nDescription: {description}"
+
+        others = [k for k in candidate if k != name]
+        if others:
+            header += "\n\nOther parameters in this system (for context only — do NOT modify these):"
+            for other in others:
+                other_desc = self._prompt_descriptions.get(other, "")
+                if other_desc:
+                    header += f"\n- {other}: {other_desc}"
+                else:
+                    header += f"\n- {other}"
+
+        return header
+
     def propose(
         self,
         candidate: dict[str, str],
@@ -107,7 +125,8 @@ class ReflectionProposer:
                 logger.info("Component '%s' not in reflective dataset, skipping.", name)
                 continue
 
-            current_instruction = f"Parameter: {name}\n{candidate[name]}"
+            header = self._build_header(name, candidate)
+            current_instruction = f"{header}\n{candidate[name]}"
             dataset_with_feedback = reflective_dataset[name]
 
             input_dict = {
@@ -130,9 +149,13 @@ class ReflectionProposer:
                 input_dict=input_dict,
             )
             new_text = result["new_instruction"]
-            prefix = f"Parameter: {name}\n"
-            if new_text.startswith(prefix):
-                new_text = new_text[len(prefix):]
+
+            # Strip the header so it doesn't leak into the proposed text
+            if new_text.startswith(header + "\n"):
+                new_text = new_text[len(header) + 1:]
+            elif new_text.startswith(f"Parameter: {name}\n"):
+                new_text = new_text[len(f"Parameter: {name}\n"):]
+
             new_texts[name] = new_text
 
             log_entry["proposed_text"] = new_text
