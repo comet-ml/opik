@@ -1504,6 +1504,14 @@ class TestReflectionProposer:
         assert "## headers" in GENERALIZATION_REFLECTION_TEMPLATE
         assert "Do NOT include any metadata" in GENERALIZATION_REFLECTION_TEMPLATE
 
+    def test_template_preserves_template_variables(self):
+        from opik_optimizer_framework.optimizers.gepa_v2.reflection_proposer import (
+            GENERALIZATION_REFLECTION_TEMPLATE,
+        )
+        assert "template variables" in GENERALIZATION_REFLECTION_TEMPLATE
+        assert "{var}" in GENERALIZATION_REFLECTION_TEMPLATE
+        assert "{{var}}" in GENERALIZATION_REFLECTION_TEMPLATE
+
 
 # -- registration test --------------------------------------------------------
 

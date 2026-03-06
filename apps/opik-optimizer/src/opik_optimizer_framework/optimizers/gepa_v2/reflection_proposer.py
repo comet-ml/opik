@@ -41,9 +41,13 @@ STEP 4 — STRUCTURE: Use markdown formatting. Group related rules under \
 ## headers. Merge overlapping rules. Remove redundant ones. Keep the \
 parameter concise — prefer tightening existing rules over appending new ones.
 
-IMPORTANT: Output ONLY the parameter text. Do NOT include any metadata \
-such as "Parameter:", "Description:", or "Other parameters" lines — those \
-are context for you, not part of the parameter.
+IMPORTANT:
+- Output ONLY the parameter text. Do NOT include any metadata such as \
+"Parameter:", "Description:", or "Other parameters" lines — those are \
+context for you, not part of the parameter.
+- Preserve ALL template variables exactly as they appear in the original \
+parameter (e.g. {{var}}, {var}, <var>, {% var %}). These are runtime \
+placeholders filled by the system — do NOT rename, remove, or reformat them.
 
 Provide the new parameter within ``` blocks."""
 
