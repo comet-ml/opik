@@ -22,20 +22,6 @@ OPTIMIZATION_NAME = "gepa-v2-quick"
 OBJECTIVE_NAME = "pass_rate"
 MODEL = os.environ.get("OPIK_TEST_MODEL", "gpt-4o-mini")
 
-PROMPT_MESSAGES = [
-    {
-        "role": "system",
-        "content": "You are a customer support agent. Answer questions briefly.",
-        "name": "system_prompt",
-    },
-    {
-        "role": "user",
-        "content": "{question}",
-        "name": "user_message",
-    },
-]
-
-
 def _update_optimization_status(client, optimization_id, status):
     client.rest_client.optimizations.update_optimizations_by_id(
         optimization_id, status=status,
@@ -195,15 +181,14 @@ def main():
         dataset_name=SUITE_NAME,
         optimization_id=optimization_id,
         metric_type=OBJECTIVE_NAME,
-        metric_parameters={},
         state=state,
         event_emitter=event_emitter,
         optimizer_type=optimizer_type,
+        optimizable_keys=context.optimizable_keys,
     )
 
-    baseline_config = {**context.baseline_config, "optimizable_keys": context.optimizable_keys}
     baseline_trial = eval_adapter.evaluate(
-        config=baseline_config,
+        config=context.baseline_config,
         dataset_item_ids=dataset_item_ids,
         eval_purpose="baseline",
     )
@@ -233,7 +218,7 @@ def main():
         # Dump reflection log
         reflection_log = []
         if optimizer.adapter is not None:
-            reflection_log = optimizer.adapter._reflection_log
+            reflection_log = optimizer.adapter.reflection_log
 
         log_path = f"reflection_log_{int(time.time())}.json"
         with open(log_path, "w") as f:

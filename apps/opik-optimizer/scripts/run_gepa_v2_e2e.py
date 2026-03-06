@@ -41,19 +41,11 @@ OBJECTIVE_NAME = "pass_rate"
 
 MODEL = os.environ.get("OPIK_TEST_MODEL", "gpt-4o-mini")
 
-PROMPT_MESSAGES = [
-    {
-        "role": "system",
-        "content": (
-            "You are a customer support agent for an online store. "
-            "Help customers with their questions and issues."
-        ),
-    },
-    {
-        "role": "user",
-        "content": "Customer question: {question}\nContext: {context}",
-    },
-]
+SYSTEM_PROMPT = (
+    "You are a customer support agent for an online store. "
+    "Help customers with their questions and issues."
+)
+USER_MESSAGE = "Customer question: {question}\nContext: {context}"
 
 
 def _update_optimization_status(client, optimization_id, status):
@@ -393,8 +385,8 @@ def main():
             "user_message": "User message template with question and context placeholders",
         },
         baseline_config={
-            "system_prompt": PROMPT_MESSAGES[0]["content"],
-            "user_message": PROMPT_MESSAGES[1]["content"],
+            "system_prompt": SYSTEM_PROMPT,
+            "user_message": USER_MESSAGE,
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },
