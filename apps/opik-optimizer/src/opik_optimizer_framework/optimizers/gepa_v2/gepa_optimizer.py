@@ -26,6 +26,7 @@ from .gepa_adapter import (
     FrameworkGEPAAdapter,
     GEPAProgressCallback,
 )
+from .reflection_proposer import GENERALIZATION_REFLECTION_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -41,47 +42,6 @@ def _make_config_builder(baseline_config: dict, optimizable_keys: list[str]):
     def build(candidate: dict[str, str]) -> dict:
         return {**baseline_config, **candidate, "optimizable_keys": optimizable_keys}
     return build
-
-
-GENERALIZATION_REFLECTION_TEMPLATE = """\
-I provided an assistant with the following instructions to perform a task for me:
-```
-<curr_param>
-```
-
-The following are examples of different task inputs provided to the assistant \
-along with the assistant's response for each of them, and feedback showing \
-which assertions PASSED and which FAILED. \
-Examples are sorted by priority — the ones with the most failures come first:
-```
-<side_info>
-```
-
-Your task is to write an improved instruction. Preserve working rules and \
-make targeted additions or tweaks to fix the FAILED assertions.
-
-STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what behaviors \
-are missing. Read the PASSED assertions — the current instruction already \
-produces these. Preserve the rules that drive successes.
-
-STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History" \
-section, the current rules for that assertion already failed before. \
-Do NOT add another generic rule of the same kind. Instead embed concrete \
-example phrases or lookup instructions directly, or try a structurally \
-different approach.
-
-STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify \
-a specific rule. Every rule must describe an observable action (what to say, \
-include, or avoid) — abstract advice like "be empathetic" does not reliably \
-work. Rules must generalize to any input in this domain; do NOT reference \
-specific test inputs.
-
-STEP 4 — STRUCTURE: Group related rules under short topic headers \
-(e.g., "## Empathy", "## Resolution", "## Policy"). Merge overlapping \
-rules. Remove redundant ones. Keep the instruction concise — prefer \
-tightening existing rules over appending new ones.
-
-Provide the new instructions within ``` blocks."""
 
 
 class GepaV2Optimizer:
