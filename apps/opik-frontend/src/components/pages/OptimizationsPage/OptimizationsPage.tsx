@@ -12,22 +12,23 @@ import {
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import DatasetNameCell from "@/components/pages/OptimizationsPage/DatasetNameCell";
 import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
 import {
+  OptimizationPassRateCell,
   OptimizationAccuracyCell,
   OptimizationLatencyCell,
   OptimizationCostCell,
   OptimizationTotalCostCell,
 } from "@/components/pages/OptimizationsPage/OptimizationMetricCells";
 import OptimizationDeployCell from "@/components/pages/OptimizationsPage/OptimizationDeployCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
+import { getFeedbackScore } from "@/lib/feedback-scores";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
@@ -51,21 +52,16 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v3";
-const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v4";
-const COLUMNS_ORDER_KEY = "optimizations-columns-order-v3";
+const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v4";
+const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v5";
+const COLUMNS_ORDER_KEY = "optimizations-columns-order-v4";
 
 export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
     id: "dataset_name",
     label: "Dataset name",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "dataset_name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.dataset,
-    },
+    cell: DatasetNameCell as never,
     size: 200,
   },
   {
@@ -83,11 +79,20 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
     size: 120,
   },
   {
-    id: "accuracy",
-    label: "Accuracy",
+    id: "pass_rate",
+    label: "Pass rate",
     type: COLUMN_TYPE.number,
     size: 200,
     accessorFn: (row) => row.best_objective_score,
+    cell: OptimizationPassRateCell as never,
+  },
+  {
+    id: "accuracy",
+    label: "Accuracy",
+    type: COLUMN_TYPE.numberDictionary,
+    size: 200,
+    accessorFn: (row) =>
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
     cell: OptimizationAccuracyCell as never,
   },
   {
@@ -137,6 +142,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "dataset_name",
   "created_at",
   "status",
+  "pass_rate",
   "accuracy",
   "latency",
   "cost",
@@ -148,6 +154,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "dataset_name",
   "created_at",
   "status",
+  "pass_rate",
   "accuracy",
   "latency",
   "cost",
@@ -253,13 +260,29 @@ const OptimizationsPage: React.FunctionComponent = () => {
     rowSelection,
   });
 
+  const hasOldTypeOptimizations = useMemo(
+    () =>
+      optimizations.some(
+        (opt) => !opt.experiment_scores || opt.experiment_scores.length === 0,
+      ),
+    [optimizations],
+  );
+
+  const visibleColumns = useMemo(
+    () =>
+      hasOldTypeOptimizations
+        ? DEFAULT_COLUMNS
+        : DEFAULT_COLUMNS.filter((c) => c.id !== "accuracy"),
+    [hasOldTypeOptimizations],
+  );
+
   const defaultColumns = useMemo(
     () =>
-      convertColumnDataToColumn(DEFAULT_COLUMNS, {
+      convertColumnDataToColumn(visibleColumns, {
         columnsOrder,
         selectedColumns,
       }),
-    [columnsOrder, selectedColumns],
+    [visibleColumns, columnsOrder, selectedColumns],
   );
 
   const columns = useMemo(() => {
@@ -348,7 +371,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               </Button>
             </TooltipWrapper>
             <ColumnsButton
-              columns={DEFAULT_COLUMNS}
+              columns={visibleColumns}
               selectedColumns={selectedColumns}
               onSelectionChange={setSelectedColumns}
               order={columnsOrder}

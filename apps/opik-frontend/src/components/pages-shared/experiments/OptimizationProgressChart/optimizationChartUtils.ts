@@ -9,12 +9,12 @@ export type FeedbackScore = {
   value: number;
 };
 
-export type TrialStatus = "baseline" | "passed" | "lost";
+export type TrialStatus = "baseline" | "passed" | "pruned";
 
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
   baseline: "var(--color-gray)",
   passed: "var(--color-blue)",
-  lost: "var(--color-pink)",
+  pruned: "var(--color-pink)",
 };
 
 export type CandidateDataPoint = {
@@ -34,9 +34,11 @@ export type ParentChildEdge = {
 /**
  * Compute status for each candidate:
  * - Step 0 candidates = "baseline"
- * - "lost" when a candidate has no children AND we're confident it won't
+ * - "pruned" when a candidate has no children AND we're confident it won't
  *   get any: either the optimization is finished, or a candidate exists
- *   at step X+2 (meaning step X+1 has fully produced its generation)
+ *   at step X+2 (meaning step X+1 has fully produced its generation).
+ *   After completion, last-step candidates that scored below the best are
+ *   also pruned (they have no children and aren't the winner).
  * - Otherwise "passed"
  */
 export const computeCandidateStatuses = (
@@ -59,6 +61,15 @@ export const computeCandidateStatuses = (
     }
   }
 
+  // Find the best score across all non-baseline candidates
+  let bestScore: number | undefined;
+  for (const c of candidates) {
+    if (c.stepIndex === 0) continue;
+    if (c.score != null && (bestScore == null || c.score > bestScore)) {
+      bestScore = c.score;
+    }
+  }
+
   for (const c of candidates) {
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
@@ -67,7 +78,15 @@ export const computeCandidateStatuses = (
       c.stepIndex < maxStep &&
       (isOptimizationFinished || stepsWithCandidates.has(c.stepIndex + 2))
     ) {
-      statusMap.set(c.candidateId, "lost");
+      statusMap.set(c.candidateId, "pruned");
+    } else if (
+      isOptimizationFinished &&
+      c.stepIndex === maxStep &&
+      !referencedParents.has(c.candidateId) &&
+      bestScore != null &&
+      (c.score == null || c.score < bestScore)
+    ) {
+      statusMap.set(c.candidateId, "pruned");
     } else {
       statusMap.set(c.candidateId, "passed");
     }
@@ -100,7 +119,7 @@ export const buildCandidateChartData = (
       stepIndex: c.stepIndex,
       parentCandidateIds: c.parentCandidateIds,
       value: c.score ?? null,
-      status: statusMap.get(c.candidateId) ?? "lost",
+      status: statusMap.get(c.candidateId) ?? "pruned",
       name: c.name,
     }));
 };

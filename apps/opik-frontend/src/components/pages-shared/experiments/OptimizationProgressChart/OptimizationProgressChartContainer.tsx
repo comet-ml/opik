@@ -27,6 +27,8 @@ type OptimizationProgressChartContainerProps = {
   status?: OPTIMIZATION_STATUS;
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
+  onTrialClick?: (candidateId: string) => void;
+  isEvaluationSuite?: boolean;
 };
 
 const OptimizationProgressChartContainer: React.FC<
@@ -38,6 +40,8 @@ const OptimizationProgressChartContainer: React.FC<
   objectiveName = "",
   selectedTrialId,
   onTrialSelect,
+  onTrialClick,
+  isEvaluationSuite,
 }) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
@@ -105,14 +109,18 @@ const OptimizationProgressChartContainer: React.FC<
     return (
       <OptimizationProgressChartContent
         chartData={chartData}
+        candidates={candidates}
         bestCandidateId={bestCandidateId}
         objectiveName={objectiveName}
         selectedTrialId={selectedTrialId}
         onTrialSelect={onTrialSelect}
+        onTrialClick={onTrialClick}
+        isEvaluationSuite={isEvaluationSuite}
       />
     );
   }, [
     chartData,
+    candidates,
     noData,
     bestCandidateId,
     objectiveName,
@@ -120,6 +128,8 @@ const OptimizationProgressChartContainer: React.FC<
     currentTip,
     selectedTrialId,
     onTrialSelect,
+    onTrialClick,
+    isEvaluationSuite,
   ]);
 
   return (

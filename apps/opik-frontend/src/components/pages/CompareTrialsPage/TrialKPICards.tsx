@@ -14,6 +14,7 @@ type TrialKPICardsProps = {
   experiments: Experiment[];
   allOptimizationExperiments: Experiment[];
   objectiveName?: string;
+  isEvaluationSuite?: boolean;
 };
 
 const aggregateExperiments = (
@@ -73,6 +74,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
   experiments,
   allOptimizationExperiments,
   objectiveName,
+  isEvaluationSuite,
 }) => {
   const currentMetrics = useMemo(
     () => aggregateExperiments(experiments, objectiveName),
@@ -120,7 +122,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
         <div className="mb-2 flex items-center gap-2">
           <Target className="size-4 text-muted-slate" />
           <span className="comet-body-s text-muted-slate">
-            {objectiveName ?? "Accuracy"}
+            {isEvaluationSuite ? "Pass rate" : objectiveName ?? "Accuracy"}
           </span>
         </div>
         <MetricComparisonCell

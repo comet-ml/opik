@@ -255,7 +255,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       },
     );
 
-  const total = data?.total ?? 0;
+  const apiTotal = data?.total ?? 0;
   const noDataText = "There is no data for the selected trials";
 
   const experimentIndexMap = useMemo(() => {
@@ -708,7 +708,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           pageChange={setPage}
           size={size as number}
           sizeChange={setSize}
-          total={total}
+          total={Math.max(apiTotal, rows.length)}
           supportsTruncation
           truncationEnabled={truncationEnabled}
         />

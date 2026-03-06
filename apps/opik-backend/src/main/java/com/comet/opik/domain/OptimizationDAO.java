@@ -124,6 +124,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     id,
                     optimization_id,
                     experiment_scores,
+                    metadata AS experiment_metadata,
                     created_at AS experiment_created_at
                 FROM experiments
                 WHERE workspace_id = :workspace_id
@@ -244,12 +245,40 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     ) AS experiment_scores
                 FROM experiment_scores_parsed
                 GROUP BY experiment_id
-            ), baseline_experiment AS (
+            ), experiment_durations AS (
                 SELECT
-                    optimization_id,
-                    argMin(id, experiment_created_at) AS experiment_id
-                FROM experiments_final
-                GROUP BY optimization_id
+                    ei.experiment_id,
+                    count(DISTINCT ei.trace_id) AS trace_count,
+                    arrayElement(
+                        quantiles(0.5)(t.duration), 1
+                    ) AS duration_p50,
+                    sum(s.total_estimated_cost) AS total_estimated_cost
+                FROM experiment_items_final ei
+                LEFT JOIN (
+                    SELECT id, duration
+                    FROM traces FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
+                ) AS t ON ei.trace_id = t.id
+                LEFT JOIN (
+                    SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                    GROUP BY trace_id
+                ) AS s ON t.id = s.trace_id
+                GROUP BY ei.experiment_id
+            ), experiment_candidates AS (
+                SELECT
+                    ef.id AS experiment_id,
+                    ef.optimization_id,
+                    ef.experiment_created_at,
+                    if(
+                        JSONHas(ef.experiment_metadata, 'candidate_id') AND JSONExtractString(ef.experiment_metadata, 'candidate_id') != '',
+                        JSONExtractString(ef.experiment_metadata, 'candidate_id'),
+                        toString(ef.id)
+                    ) AS candidate_id
+                FROM experiments_final ef
             ), objective_scores_per_experiment AS (
                 SELECT
                     ef.optimization_id,
@@ -259,20 +288,50 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
                 INNER JOIN optimization_final o ON ef.optimization_id = o.id
                 WHERE esp.name = o.objective_name
-            ), best_experiment_scores AS (
+            ), candidate_metrics AS (
                 SELECT
-                    optimization_id,
-                    max(objective_score) AS best_score
-                FROM objective_scores_per_experiment
-                GROUP BY optimization_id
-            ), baseline_experiment_scores AS (
+                    ec.optimization_id AS optim_id,
+                    ec.candidate_id,
+                    sum(ospe.objective_score * ed.trace_count)
+                        / nullIf(sumIf(ed.trace_count, isNotNull(ospe.objective_score)), 0)
+                        AS weighted_score,
+                    sum(ed.duration_p50 / 1000.0 * ed.trace_count)
+                        / nullIf(sumIf(ed.trace_count, isNotNull(ed.duration_p50)), 0)
+                        AS weighted_duration,
+                    sum(ed.total_estimated_cost)
+                        / nullIf(sum(ed.trace_count), 0)
+                        AS per_trace_cost,
+                    min(ec.experiment_created_at) AS earliest_created_at
+                FROM experiment_candidates ec
+                LEFT JOIN objective_scores_per_experiment ospe
+                    ON ec.experiment_id = ospe.experiment_id
+                    AND ec.optimization_id = ospe.optimization_id
+                LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
+                GROUP BY ec.optimization_id, ec.candidate_id
+            ), best_candidate AS (
                 SELECT
-                    be.optimization_id,
-                    os.objective_score AS baseline_score
-                FROM baseline_experiment be
-                LEFT JOIN objective_scores_per_experiment os
-                    ON be.experiment_id = os.experiment_id
-                    AND be.optimization_id = os.optimization_id
+                    optim_id AS optimization_id,
+                    max(weighted_score) AS best_score,
+                    argMax(weighted_duration, weighted_score) AS best_duration,
+                    argMax(per_trace_cost, weighted_score) AS best_cost
+                FROM candidate_metrics
+                WHERE isNotNull(weighted_score)
+                GROUP BY optim_id
+            ), baseline_candidate AS (
+                SELECT
+                    optim_id AS optimization_id,
+                    argMin(weighted_score, earliest_created_at) AS baseline_score,
+                    argMin(weighted_duration, earliest_created_at) AS baseline_duration,
+                    argMin(per_trace_cost, earliest_created_at) AS baseline_cost
+                FROM candidate_metrics
+                GROUP BY optim_id
+            ), optimization_costs AS (
+                SELECT
+                    ef2.optimization_id AS optimization_id,
+                    sum(ed2.total_estimated_cost) AS total_optimization_cost
+                FROM experiments_final ef2
+                LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
+                GROUP BY ef2.optimization_id
             )
             SELECT
                 o.*,
@@ -280,14 +339,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
                 maxMap(fs.feedback_scores) AS feedback_scores,
                 maxMap(es.experiment_scores) AS experiment_scores,
-                any(bes.best_score) AS best_objective_score,
-                any(bls.baseline_score) AS baseline_objective_score
+                any(bc.best_score) AS best_objective_score,
+                any(blc.baseline_score) AS baseline_objective_score,
+                any(bc.best_duration) AS best_duration,
+                any(bc.best_cost) AS best_cost,
+                any(blc.baseline_duration) AS baseline_duration,
+                any(blc.baseline_cost) AS baseline_cost,
+                any(oc.total_optimization_cost) AS total_optimization_cost
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
-            LEFT JOIN best_experiment_scores AS bes ON o.id = bes.optimization_id
-            LEFT JOIN baseline_experiment_scores AS bls ON o.id = bls.optimization_id
+            LEFT JOIN best_candidate AS bc ON o.id = bc.optimization_id
+            LEFT JOIN baseline_candidate AS blc ON o.id = blc.optimization_id
+            LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -717,6 +782,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .numTrials(row.get("num_trials", Long.class))
                     .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
                     .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
+                    .baselineDuration(row.get("baseline_duration", BigDecimal.class))
+                    .bestDuration(row.get("best_duration", BigDecimal.class))
+                    .baselineCost(row.get("baseline_cost", BigDecimal.class))
+                    .bestCost(row.get("best_cost", BigDecimal.class))
+                    .totalOptimizationCost(row.get("total_optimization_cost", BigDecimal.class))
                     .build();
         });
     }

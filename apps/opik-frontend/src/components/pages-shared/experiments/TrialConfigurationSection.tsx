@@ -7,9 +7,12 @@ import get from "lodash/get";
 import { GitCompareArrows, List } from "lucide-react";
 
 import { Experiment } from "@/types/datasets";
+import { OptimizationStudioConfig } from "@/types/optimizations";
 import { Tag } from "@/components/ui/tag";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { detectConfigValueType } from "@/lib/configuration-renderer";
+import { getOptimizerLabel } from "@/lib/optimizations";
+import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import ConfigurationDiffContent from "@/components/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
 
 const PROMPT_MAX_LENGTH = 200;
@@ -22,6 +25,7 @@ type TrialConfigurationSectionProps = {
   experiments: Experiment[];
   title?: string;
   referenceExperiment?: Experiment | null;
+  studioConfig?: OptimizationStudioConfig;
 };
 
 const formatPrimitive = (value: unknown): string => {
@@ -164,20 +168,63 @@ const ConfigEntry: React.FC<{ label: string; value: unknown }> = ({
   return null;
 };
 
+const getMetricLabel = (type: string): string =>
+  OPTIMIZATION_METRIC_OPTIONS.find((opt) => opt.value === type)?.label || type;
+
+const buildConfigFromStudioConfig = (
+  studioConfig: OptimizationStudioConfig,
+): Record<string, unknown> => {
+  const config: Record<string, unknown> = {};
+
+  if (studioConfig.dataset_name) {
+    config.Dataset = studioConfig.dataset_name;
+  }
+
+  if (studioConfig.llm_model?.model) {
+    config.Model = String(studioConfig.llm_model.model);
+  }
+
+  if (studioConfig.optimizer?.type) {
+    config.Algorithm = getOptimizerLabel(studioConfig.optimizer.type);
+  }
+
+  if (studioConfig.evaluation?.metrics?.[0]?.type) {
+    config.Metric = getMetricLabel(studioConfig.evaluation.metrics[0].type);
+  }
+
+  if (studioConfig.prompt?.messages) {
+    config["Initial prompt"] = studioConfig.prompt.messages;
+  }
+
+  return config;
+};
+
 const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
   experiments,
   title = "Configuration",
   referenceExperiment,
+  studioConfig,
 }) => {
   const [viewMode, setViewMode] = useState<ConfigViewMode>("config");
 
   const experiment = experiments[0];
   const configuration = useMemo(() => {
-    if (!experiment?.metadata || !isObject(experiment.metadata)) return null;
-    const config = get(experiment.metadata, "configuration");
-    if (!config || !isObject(config)) return null;
-    return config as Record<string, unknown>;
-  }, [experiment]);
+    if (experiment?.metadata && isObject(experiment.metadata)) {
+      const config = get(experiment.metadata, "configuration");
+      if (config && isObject(config)) {
+        const configObj = config as Record<string, unknown>;
+        const hasRichContent =
+          "prompt_messages" in configObj || "model" in configObj;
+        if (hasRichContent || !studioConfig) {
+          return configObj;
+        }
+      }
+    }
+    if (studioConfig) {
+      return buildConfigFromStudioConfig(studioConfig);
+    }
+    return null;
+  }, [experiment, studioConfig]);
 
   type ConfigEntryItem = {
     key: string;

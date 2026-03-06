@@ -39,8 +39,9 @@ export const TrialStepCell = (context: CellContext<unknown, unknown>) => {
 export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { candidates } = (custom ?? {}) as {
+  const { candidates, isEvaluationSuite } = (custom ?? {}) as {
     candidates: AggregatedCandidate[];
+    isEvaluationSuite?: boolean;
   };
 
   const baselineCandidate = candidates?.find((c) => c.stepIndex === 0);
@@ -56,6 +57,13 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
     percentage = ((row.score - baselineScore) / Math.abs(baselineScore)) * 100;
   }
 
+  const passRateFraction =
+    isEvaluationSuite && isNumber(row.score) && row.totalDatasetItemCount > 0
+      ? ` (${Math.round(row.score * row.totalDatasetItemCount)}/${
+          row.totalDatasetItemCount
+        })`
+      : "";
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -64,7 +72,10 @@ export const TrialAccuracyCell = (context: CellContext<unknown, unknown>) => {
     >
       {isNumber(row.score) ? (
         <TooltipWrapper content={String(row.score)}>
-          <span>{formatAsPercentage(row.score)}</span>
+          <span>
+            {formatAsPercentage(row.score)}
+            {passRateFraction}
+          </span>
         </TooltipWrapper>
       ) : (
         "-"

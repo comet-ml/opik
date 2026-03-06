@@ -1,19 +1,35 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
+import isObject from "lodash/isObject";
 
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import MetricComparisonCell from "@/components/pages-shared/experiments/MetricComparisonCell/MetricComparisonCell";
+import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import { Optimization } from "@/types/optimizations";
+import { getFeedbackScore } from "@/lib/feedback-scores";
 import {
   formatAsPercentage,
   formatAsDuration,
   formatAsCurrency,
 } from "@/lib/optimization-formatters";
 
-export const OptimizationAccuracyCell = (
+export const OptimizationPassRateCell = (
   context: CellContext<unknown, unknown>,
 ) => {
   const row = context.row.original as Optimization;
+  const isEvaluationSuite = (row.experiment_scores?.length ?? 0) > 0;
+
+  if (!isEvaluationSuite) {
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        <span className="comet-body-s text-light-slate">-</span>
+      </CellWrapper>
+    );
+  }
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -23,7 +39,49 @@ export const OptimizationAccuracyCell = (
         baseline={row.baseline_objective_score}
         current={row.best_objective_score}
         formatter={formatAsPercentage}
+        compact
       />
+    </CellWrapper>
+  );
+};
+
+export const OptimizationAccuracyCell = (
+  context: CellContext<unknown, unknown>,
+) => {
+  const row = context.row.original as Optimization;
+  const isEvaluationSuite = (row.experiment_scores?.length ?? 0) > 0;
+
+  if (isEvaluationSuite) {
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+      >
+        <span className="comet-body-s text-light-slate">-</span>
+      </CellWrapper>
+    );
+  }
+
+  const feedbackScore = getFeedbackScore(
+    row.feedback_scores ?? [],
+    row.objective_name,
+  );
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="gap-1"
+    >
+      {isObject(feedbackScore) ? (
+        <FeedbackScoreTag
+          label={feedbackScore.name}
+          value={feedbackScore.value}
+          className="overflow-hidden"
+        />
+      ) : (
+        "-"
+      )}
     </CellWrapper>
   );
 };
@@ -42,6 +100,7 @@ export const OptimizationLatencyCell = (
         current={row.best_duration}
         formatter={formatAsDuration}
         trend="inverted"
+        compact
       />
     </CellWrapper>
   );
@@ -61,6 +120,7 @@ export const OptimizationCostCell = (
         current={row.best_cost}
         formatter={formatAsCurrency}
         trend="inverted"
+        compact
       />
     </CellWrapper>
   );

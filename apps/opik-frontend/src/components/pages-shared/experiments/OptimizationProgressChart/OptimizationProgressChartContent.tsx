@@ -1,4 +1,5 @@
-import React, { useMemo, useCallback, useRef } from "react";
+import React, { useMemo, useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Dot,
   XAxis,
@@ -15,6 +16,12 @@ import {
   DEFAULT_CHART_TICK,
 } from "@/constants/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
+import { AggregatedCandidate } from "@/types/optimizations";
+import {
+  formatAsPercentage,
+  formatAsDuration,
+  formatAsCurrency,
+} from "@/lib/optimization-formatters";
 import {
   TRIAL_STATUS_COLORS,
   CandidateDataPoint,
@@ -23,10 +30,13 @@ import {
 
 type OptimizationProgressChartContentProps = {
   chartData: CandidateDataPoint[];
+  candidates: AggregatedCandidate[];
   bestCandidateId?: string;
   objectiveName: string;
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
+  onTrialClick?: (candidateId: string) => void;
+  isEvaluationSuite?: boolean;
 };
 
 const CHART_CONFIG = {
@@ -39,10 +49,13 @@ const OptimizationProgressChartContent: React.FC<
   OptimizationProgressChartContentProps
 > = ({
   chartData,
+  candidates,
   bestCandidateId,
   objectiveName,
   selectedTrialId,
   onTrialSelect,
+  onTrialClick,
+  isEvaluationSuite,
 }) => {
   const steps = useMemo(() => {
     const s = new Set(chartData.map((d) => d.stepIndex));
@@ -54,6 +67,27 @@ const OptimizationProgressChartContent: React.FC<
       ...d,
       x: d.stepIndex,
     }));
+  }, [chartData]);
+
+  // Track pixel offsets for dots that share the same (step, score)
+  const overlapOffsets = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const d of chartData) {
+      const key = `${d.stepIndex}:${d.value}`;
+      const list = groups.get(key) ?? [];
+      list.push(d.candidateId);
+      groups.set(key, list);
+    }
+    const offsets = new Map<string, number>();
+    for (const ids of groups.values()) {
+      if (ids.length <= 1) continue;
+      const spacing = 16;
+      const totalWidth = (ids.length - 1) * spacing;
+      ids.forEach((id, i) => {
+        offsets.set(id, -totalWidth / 2 + i * spacing);
+      });
+    }
+    return offsets;
   }, [chartData]);
 
   const values = useMemo(
@@ -72,12 +106,27 @@ const OptimizationProgressChartContent: React.FC<
     showMinMaxDomain: true,
   });
 
+  const candidateMap = useMemo(() => {
+    const map = new Map<string, AggregatedCandidate>();
+    for (const c of candidates) {
+      map.set(c.candidateId, c);
+    }
+    return map;
+  }, [candidates]);
+
   const edges = useMemo(() => buildParentChildEdges(chartData), [chartData]);
 
   // Ref to collect dot pixel positions during Scatter rendering.
   // Scatter renders before Customized (JSX order), so positions are
   // available when renderEdges executes in the same render pass.
+  const containerRef = useRef<HTMLDivElement>(null);
   const dotPositionsRef = useRef<Map<string, DotPosition>>(new Map());
+
+  const [hoveredTrial, setHoveredTrial] = useState<{
+    candidateId: string;
+    cx: number;
+    cy: number;
+  } | null>(null);
 
   const renderScatterDot = useCallback(
     (props: {
@@ -86,13 +135,21 @@ const OptimizationProgressChartContent: React.FC<
       payload: (typeof positionedData)[0];
       [key: string]: unknown;
     }) => {
-      const { cx, cy, payload } = props;
+      const { cx: rawCx, cy, payload } = props;
+      const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
+      const cx = rawCx + pxOffset;
       const color = TRIAL_STATUS_COLORS[payload.status];
       const isBest = payload.candidateId === bestCandidateId;
       const isSelected = payload.candidateId === selectedTrialId;
       const radius = isBest ? 8 : 6;
 
-      const handleClick = () => onTrialSelect?.(payload.candidateId);
+      const handleClick = () => {
+        if (onTrialClick) {
+          onTrialClick(payload.candidateId);
+        } else {
+          onTrialSelect?.(payload.candidateId);
+        }
+      };
 
       dotPositionsRef.current.set(payload.candidateId, { cx, cy });
 
@@ -100,6 +157,10 @@ const OptimizationProgressChartContent: React.FC<
         <g
           key={payload.candidateId}
           onClick={handleClick}
+          onMouseEnter={() =>
+            setHoveredTrial({ candidateId: payload.candidateId, cx, cy })
+          }
+          onMouseLeave={() => setHoveredTrial(null)}
           style={{ cursor: "pointer" }}
         >
           {isSelected && (
@@ -147,7 +208,13 @@ const OptimizationProgressChartContent: React.FC<
         </g>
       );
     },
-    [bestCandidateId, selectedTrialId, onTrialSelect],
+    [
+      bestCandidateId,
+      selectedTrialId,
+      onTrialSelect,
+      onTrialClick,
+      overlapOffsets,
+    ],
   );
 
   const renderEdges = useCallback(() => {
@@ -186,11 +253,11 @@ const OptimizationProgressChartContent: React.FC<
   }, [steps]);
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <ChartContainer config={CHART_CONFIG} className="h-48 w-full">
         <ComposedChart
           data={positionedData}
-          margin={{ top: 20, bottom: 10, left: 10, right: 10 }}
+          margin={{ top: 30, bottom: 10, left: 10, right: 10 }}
         >
           <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
           <XAxis
@@ -229,6 +296,78 @@ const OptimizationProgressChartContent: React.FC<
         </ComposedChart>
       </ChartContainer>
 
+      {hoveredTrial &&
+        containerRef.current &&
+        (() => {
+          const c = candidateMap.get(hoveredTrial.candidateId);
+          if (!c) return null;
+          const chartPoint = chartData.find(
+            (d) => d.candidateId === hoveredTrial.candidateId,
+          );
+          const status = chartPoint?.status ?? "passed";
+          const scoreLabel = isEvaluationSuite ? "Pass rate" : "Score";
+          const percentageDisplay =
+            c.score != null ? formatAsPercentage(c.score) : "-";
+          const fractionDisplay =
+            isEvaluationSuite && c.score != null && c.totalDatasetItemCount > 0
+              ? ` (${Math.round(c.score * c.totalDatasetItemCount)}/${
+                  c.totalDatasetItemCount
+                })`
+              : "";
+
+          const rect = containerRef.current!.getBoundingClientRect();
+          const fixedLeft = rect.left + hoveredTrial.cx;
+          const fixedTop = rect.top + hoveredTrial.cy - 12;
+
+          return createPortal(
+            <div
+              className="pointer-events-none rounded-md border border-border px-3 py-2 shadow-md"
+              style={{
+                position: "fixed",
+                left: fixedLeft,
+                top: fixedTop,
+                transform: "translate(-50%, -100%)",
+                zIndex: 9999,
+                backgroundColor: "hsl(var(--background))",
+              }}
+            >
+              <div className="comet-body-xs-accented mb-1">
+                Trial #{c.trialNumber}
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <div className="comet-body-xs text-muted-slate">
+                  Status:{" "}
+                  <span className="capitalize text-foreground">{status}</span>
+                </div>
+                <div className="comet-body-xs text-muted-slate">
+                  {scoreLabel}:{" "}
+                  <span className="text-foreground">
+                    {percentageDisplay}
+                    {fractionDisplay}
+                  </span>
+                </div>
+                {c.latencyP50 != null && (
+                  <div className="comet-body-xs text-muted-slate">
+                    Latency:{" "}
+                    <span className="text-foreground">
+                      {formatAsDuration(c.latencyP50)}
+                    </span>
+                  </div>
+                )}
+                {c.runtimeCost != null && (
+                  <div className="comet-body-xs text-muted-slate">
+                    Avg. runtime cost:{" "}
+                    <span className="text-foreground">
+                      {formatAsCurrency(c.runtimeCost)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body,
+          );
+        })()}
+
       <div className="mt-1 flex items-center justify-center gap-4">
         <div className="flex items-center gap-1.5">
           <span
@@ -244,13 +383,15 @@ const OptimizationProgressChartContent: React.FC<
           />
           <span className="comet-body-xs text-muted-slate">Passed</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: TRIAL_STATUS_COLORS.lost }}
-          />
-          <span className="comet-body-xs text-muted-slate">Lost</span>
-        </div>
+        {chartData.some((d) => d.status === "pruned") && (
+          <div className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: TRIAL_STATUS_COLORS.pruned }}
+            />
+            <span className="comet-body-xs text-muted-slate">Pruned</span>
+          </div>
+        )}
       </div>
     </div>
   );

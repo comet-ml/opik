@@ -14,11 +14,12 @@ type OptimizationKPICardsProps = {
   experiments: Experiment[];
   baselineCandidate?: AggregatedCandidate;
   bestCandidate?: AggregatedCandidate;
+  isEvaluationSuite?: boolean;
 };
 
 const OptimizationKPICards: React.FunctionComponent<
   OptimizationKPICardsProps
-> = ({ experiments, baselineCandidate, bestCandidate }) => {
+> = ({ experiments, baselineCandidate, bestCandidate, isEvaluationSuite }) => {
   const kpiData = useMemo(() => {
     const baselineScore = baselineCandidate?.score;
     const bestScore = bestCandidate?.score;
@@ -61,7 +62,9 @@ const OptimizationKPICards: React.FunctionComponent<
       <div className="rounded-lg border bg-muted/20 p-4">
         <div className="mb-2 flex items-center gap-2">
           <Target className="size-4 text-muted-slate" />
-          <span className="comet-body-s text-muted-slate">Accuracy</span>
+          <span className="comet-body-s text-muted-slate">
+            {isEvaluationSuite ? "Pass rate" : "Accuracy"}
+          </span>
         </div>
         <MetricComparisonCell
           baseline={kpiData.baselineScore}

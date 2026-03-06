@@ -1,6 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import isUndefined from "lodash/isUndefined";
-import { JsonParam, useQueryParam } from "use-query-params";
+import { JsonParam, NumberParam, useQueryParam } from "use-query-params";
+import { BarChart3, Settings } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import TrialItemsTab from "@/components/pages/CompareTrialsPage/TrialsItemsTab/TrialItemsTab";
 import TrialConfigurationSection from "@/components/pages-shared/experiments/TrialConfigurationSection";
@@ -30,6 +32,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
   const [experimentsIds = []] = useQueryParam("trials", JsonParam, {
     updateType: "replaceIn",
   });
+  const [trialNumber] = useQueryParam("trialNumber", NumberParam);
 
   const { datasetId, optimizationId } = useParams({
     select: (params) => params,
@@ -103,42 +106,28 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     };
   }, [optimizationExperimentsData?.content, optimization?.objective_name]);
 
-  const parentExperiment = useMemo(() => {
+  const baselineExperiment = useMemo(() => {
+    if (!baselineExperimentId) return undefined;
     const allExperiments = optimizationExperimentsData?.content ?? [];
-    if (!memorizedExperiments.length || !allExperiments.length)
-      return undefined;
-
-    const currentMeta = memorizedExperiments[0]?.metadata as
-      | Record<string, unknown>
-      | undefined;
-    const parentCandidateIds = currentMeta?.parent_candidate_ids as
-      | string[]
-      | undefined;
-
-    if (!parentCandidateIds?.length) return undefined;
-
-    const parentCandidateId = parentCandidateIds[0];
-    return allExperiments.find((exp) => {
-      const meta = exp.metadata as Record<string, unknown> | undefined;
-      return meta?.candidate_id === parentCandidateId;
-    });
-  }, [memorizedExperiments, optimizationExperimentsData?.content]);
+    return allExperiments.find((exp) => exp.id === baselineExperimentId);
+  }, [baselineExperimentId, optimizationExperimentsData?.content]);
 
   const isGepa =
     optimization?.studio_config?.optimizer?.type === OPTIMIZER_TYPE.GEPA ||
     (optimization?.metadata as Record<string, unknown> | undefined)
       ?.optimizer === "GepaOptimizer";
 
+  const [tab, setTab] = useState<"results" | "configuration">("results");
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
         <CompareTrialsDetails
           optimization={optimization}
-          experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
-          isEvaluationSuite={isEvaluationSuite}
           baselineExperimentId={baselineExperimentId}
           baselineScore={baselineScore}
+          trialNumber={trialNumber ?? undefined}
         />
       </PageBodyStickyContainer>
 
@@ -148,44 +137,79 @@ const CompareTrialsPage: React.FunctionComponent = () => {
           limitWidth
           className="mb-6"
         >
-          <TrialKPICards
-            experiments={memorizedExperiments}
-            allOptimizationExperiments={
-              optimizationExperimentsData?.content ?? []
+          <ToggleGroup
+            type="single"
+            value={tab}
+            onValueChange={(val) =>
+              val && setTab(val as "results" | "configuration")
             }
-            objectiveName={optimization?.objective_name}
-          />
+            variant="ghost"
+            className="w-fit"
+          >
+            <ToggleGroupItem value="results" size="sm" className="gap-2">
+              <BarChart3 className="size-3" />
+              Results
+            </ToggleGroupItem>
+            <ToggleGroupItem value="configuration" size="sm" className="gap-2">
+              <Settings className="size-3" />
+              Configuration
+            </ToggleGroupItem>
+          </ToggleGroup>
         </PageBodyStickyContainer>
       )}
 
-      {!isPending && memorizedExperiments.length > 0 && (
-        <PageBodyStickyContainer
-          direction="horizontal"
-          limitWidth
-          className="mb-6"
-        >
-          <TrialConfigurationSection
-            experiments={memorizedExperiments}
-            referenceExperiment={parentExperiment}
-          />
-        </PageBodyStickyContainer>
-      )}
-
-      {canViewDatasets && (
+      {tab === "results" && (
         <>
-          <PageBodyStickyContainer direction="horizontal" limitWidth>
-            <h2 className="comet-title-s mb-4">Evaluation Results</h2>
-          </PageBodyStickyContainer>
-          <TrialItemsTab
-            objectiveName={optimization?.objective_name}
-            datasetId={datasetId}
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isEvaluationSuite={isEvaluationSuite}
-            showMinibatch={isGepa}
-          />
+          {!isPending && memorizedExperiments.length > 0 && (
+            <PageBodyStickyContainer
+              direction="horizontal"
+              limitWidth
+              className="mb-6"
+            >
+              <TrialKPICards
+                experiments={memorizedExperiments}
+                allOptimizationExperiments={
+                  optimizationExperimentsData?.content ?? []
+                }
+                objectiveName={optimization?.objective_name}
+                isEvaluationSuite={isEvaluationSuite}
+              />
+            </PageBodyStickyContainer>
+          )}
+
+          {canViewDatasets && (
+            <>
+              <PageBodyStickyContainer direction="horizontal" limitWidth>
+                <h2 className="comet-title-s mb-4">Evaluation Results</h2>
+              </PageBodyStickyContainer>
+              <TrialItemsTab
+                objectiveName={optimization?.objective_name}
+                datasetId={datasetId}
+                experimentsIds={experimentsIds}
+                experiments={memorizedExperiments}
+                isEvaluationSuite={isEvaluationSuite}
+                showMinibatch={isGepa}
+              />
+            </>
+          )}
         </>
       )}
+
+      {tab === "configuration" &&
+        !isPending &&
+        memorizedExperiments.length > 0 && (
+          <PageBodyStickyContainer
+            direction="horizontal"
+            limitWidth
+            className="mb-6"
+          >
+            <TrialConfigurationSection
+              experiments={memorizedExperiments}
+              referenceExperiment={baselineExperiment}
+              studioConfig={optimization?.studio_config}
+            />
+          </PageBodyStickyContainer>
+        )}
     </PageBodyScrollContainer>
   );
 };

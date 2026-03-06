@@ -195,15 +195,19 @@ const aggregateCandidates = (
 
   // Sort by creation time and assign trial numbers
   candidates.sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  // Assign incremental step indices for old-style experiments
   candidates.forEach((c, i) => {
-    c.trialNumber = i + 1;
-    // Assign incremental step indices and chain parents for old-style experiments
     if (c.stepIndex === -1) {
       c.stepIndex = i;
       if (i > 0) {
         c.parentCandidateIds = [candidates[i - 1].candidateId];
       }
     }
+  });
+
+  candidates.forEach((c, i) => {
+    c.trialNumber = i + 1;
   });
 
   return candidates;

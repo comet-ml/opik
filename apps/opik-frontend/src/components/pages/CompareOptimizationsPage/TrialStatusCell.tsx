@@ -6,12 +6,12 @@ import { Tag, TagProps } from "@/components/ui/tag";
 import { AggregatedCandidate } from "@/types/optimizations";
 import { computeCandidateStatuses } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
-type TrialStatus = "baseline" | "passed" | "lost";
+type TrialStatus = "baseline" | "passed" | "pruned";
 
 const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
   baseline: "gray",
   passed: "blue",
-  lost: "pink",
+  pruned: "pink",
 };
 
 const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
@@ -30,7 +30,7 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
     candidates ?? [],
     isOptimizationFinished,
   );
-  const status = statusMap.get(row.candidateId) ?? "lost";
+  const status = statusMap.get(row.candidateId) ?? "pruned";
 
   return (
     <CellWrapper

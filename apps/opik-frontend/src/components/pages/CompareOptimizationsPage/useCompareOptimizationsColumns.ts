@@ -25,6 +25,7 @@ type UseCompareOptimizationsColumnsParams = {
   sortableBy: string[];
   isOptimizationFinished?: boolean;
   bestCandidateId?: string;
+  isEvaluationSuite?: boolean;
 };
 
 export const useCompareOptimizationsColumns = ({
@@ -34,6 +35,7 @@ export const useCompareOptimizationsColumns = ({
   sortableBy,
   isOptimizationFinished,
   bestCandidateId,
+  isEvaluationSuite,
 }: UseCompareOptimizationsColumnsParams) => {
   const columnsDef: ColumnData<AggregatedCandidate>[] = useMemo(() => {
     return [
@@ -59,13 +61,14 @@ export const useCompareOptimizationsColumns = ({
       },
       {
         id: "objective_name",
-        label: "Accuracy",
+        label: isEvaluationSuite ? "Pass rate" : "Accuracy",
         type: COLUMN_TYPE.number,
         size: 160,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell as never,
         customMeta: {
           candidates,
+          isEvaluationSuite,
         },
       },
       {
@@ -117,7 +120,7 @@ export const useCompareOptimizationsColumns = ({
         cell: TimeCell as never,
       },
     ];
-  }, [candidates, isOptimizationFinished, bestCandidateId]);
+  }, [candidates, isOptimizationFinished, bestCandidateId, isEvaluationSuite]);
 
   const columns = useMemo(() => {
     return [
