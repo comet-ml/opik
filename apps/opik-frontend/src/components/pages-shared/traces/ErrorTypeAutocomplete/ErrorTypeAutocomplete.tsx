@@ -53,7 +53,7 @@ const ErrorTypeAutocomplete: React.FC<ErrorTypeAutocompleteProps> = ({
     const traces = (data?.content || []) as BaseTraceData[];
 
     const exceptionTypes = traces
-      .map((trace) => trace.error_info?.exception_type)
+      .map((trace) => trace.error_info?.exception_type?.trim())
       .filter((t): t is string => Boolean(t));
 
     return uniq(exceptionTypes)

@@ -44,7 +44,7 @@ const LegendItem: React.FC<LegendItemProps> = ({
         <div
           className={cn(
             "comet-body-xs truncate text-foreground",
-            isClickable && "border-b border-foreground hover:text-primary",
+            isClickable && "text-muted-slate border-b border-muted-slate hover:text-primary",
           )}
         >
           {displayLabel}
