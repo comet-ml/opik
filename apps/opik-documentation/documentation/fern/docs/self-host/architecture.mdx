@@ -12,6 +12,7 @@ Opik's architecture consists of multiple services that each handle a specific ro
 
 - **A backend service**: Java + Dropwizard.
 - **A frontend application**: TypeScript + React, served by Nginx.
+- **An AI backend service** (optional): Python + FastAPI service that powers Opik Assist, the AI-powered trace analysis feature.
 - **Data stores**:
   - ClickHouse for large-scale data ingestion and fast queries (e.g., for traces or experiments).
     - With Zookeeper to coordinate the cluster.
@@ -40,6 +41,24 @@ interacting with the backend services. The frontend is built using a modular app
 encapsulating a specific feature or functionality.
 
 _You can find the full frontend codebase in Github under the [`apps/opik-frontend`](https://github.com/comet-ml/opik/tree/main/apps/opik-frontend) folder._
+
+## AI Backend Service (Optional)
+
+Opik Assist is an optional AI-powered trace analysis service built with Python 3.13, FastAPI, and Google's Agent Development Kit (ADK). It enables conversational debugging of traces through an AI agent that can:
+
+- Analyze trace and span data to identify performance bottlenecks, errors, and anomalies
+- Answer natural language questions about trace behavior
+- Provide debugging recommendations and optimization suggestions
+
+**Key characteristics:**
+- **LLM Integration**: Routes all LLM calls through the Opik backend's `/v1/private/chat/completions` proxy, using the end-user's configured AI provider API key
+- **Session Storage**: Uses MySQL (same database as the main backend) to store conversation history via Google ADK's DatabaseSessionService
+- **Streaming**: Delivers responses via Server-Sent Events (SSE) for real-time interaction
+- **Dependencies**: Requires the Opik backend (for data retrieval and LLM proxy) and MySQL (for session storage)
+
+This service is disabled by default and can be enabled in Docker Compose via the `--opik-ai` flag or in Kubernetes by setting `component.ai-backend.enabled: true` in Helm values.
+
+_You can find the full AI backend codebase in Github under the [`apps/opik-ai-backend`](https://github.com/comet-ml/opik/tree/main/apps/opik-ai-backend) folder._
 
 ## SDK's
 

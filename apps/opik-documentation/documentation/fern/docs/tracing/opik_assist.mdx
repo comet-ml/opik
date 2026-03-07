@@ -11,10 +11,10 @@ title: ✨ Opik Assist (Beta)
 <img src="/img/tracing/trace_inspector_with_response.png" alt="Opik Assist AI response with recommendations" />
 
 <Warning>
-**Beta Feature**: Opik Assist is currently in beta and available exclusively on Opik Cloud (www.comet.com). Features and functionality may change as we continue to improve the experience.
+**Beta Feature**: Opik Assist is currently in beta. Features and functionality may change as we continue to improve the experience.
 </Warning>
 
-Opik Assist is an AI-powered assistant that helps you quickly analyze, debug, and optimize your LLM application traces. By conversing with the AI agent, you can:
+Opik Assist is an AI-powered assistant that helps you quickly analyze, debug, and optimize your LLM application traces. Available in both Opik Cloud and self-hosted deployments, you can converse with the AI agent to:
 
 - **Ask natural language questions** about your current trace and its spans
 - **Identify performance issues** and bottlenecks automatically  
@@ -22,9 +22,17 @@ Opik Assist is an AI-powered assistant that helps you quickly analyze, debug, an
 - **Analyze patterns** within the selected trace
 - **Understand cost implications** of your LLM calls
 
+## Prerequisites
+
+Before using Opik Assist, you need to configure an OpenAI provider in your workspace:
+
+1. **Navigate to Workspace Settings** → **[AI Providers](/administration/workspace-settings/ai_providers)**
+2. **Add an OpenAI provider** with your API key
+3. Opik Assist uses OpenAI's GPT-4.1 model
+
 ## How to Use Opik Assist
 
-1. **Navigate to your project** in Opik Cloud
+1. **Navigate to your project** in Opik
 2. **Open any trace** you want to analyze
 3. **Click the "Debug with AI" button** (marked with a Beta badge)
 4. **Use the chat interface** on the right panel to ask questions
@@ -32,17 +40,59 @@ Opik Assist is an AI-powered assistant that helps you quickly analyze, debug, an
 
 <img src="/img/tracing/trace_inspector_initial_view.png" alt="Opik Assist interface" />
 
+## Self-Hosted Setup
+
+Opik Assist is available for self-hosted deployments and can be enabled as follows:
+
+### Docker Compose
+
+To enable Opik Assist when using the `opik.sh` script:
+
+```bash
+./opik.sh --opik-ai
+```
+
+For manual Docker Compose configuration:
+
+```bash
+cd deployment/docker-compose
+docker compose --profile opik-ai-backend \
+  -e TOGGLE_OPIK_AI_ENABLED=true \
+  -e OPIK_FRONTEND_FLAVOR=opik-ai-backend \
+  up --detach
+```
+
+### Kubernetes (Helm)
+
+Add the following to your Helm values file:
+
+```yaml
+component:
+  ai-backend:
+    enabled: true
+```
+
+Then upgrade your deployment:
+
+```bash
+helm upgrade opik opik/opik -f values.yaml
+```
+
+<Tip>
+After enabling Opik Assist, remember to configure an OpenAI provider in Workspace Settings → AI Providers before using the feature.
+</Tip>
+
 ## Data Privacy & Security
 
 Your trace data security and privacy are our top priorities. Here's exactly how your data is handled:
 
-### Privacy Guarantees
+### Privacy Guarantees (Opik Cloud)
 - **No Training**: Your trace data is **never used** to train AI models
 - **Quality Assurance Only**: Comet retains logs of prompts and responses solely for internal quality assurance and debugging
 - **No Third-Party Training**: These logs are not used for training third-party models
 
 ### What Data is Shared with OpenAI
-To provide intelligent analysis, Opik Assist sends the following to OpenAI's AI models:
+To provide intelligent analysis, Opik Assist sends the following to OpenAI:
 - **Trace and span metadata**: Names, timestamps, latency information
 - **Input/output content**: The actual prompts, responses, and tool outputs from your trace
 - **Performance metrics**: Token counts, costs, and timing data
@@ -54,16 +104,15 @@ To provide intelligent analysis, Opik Assist sends the following to OpenAI's AI 
 - **Historical data**: Only the current trace being analyzed
 
 <Warning>
-**Important**: While Opik doesn't send system identifiers, your trace data (inputs/outputs) may contain personal or sensitive information that you've included in prompts or responses. This content will be sent to OpenAI as part of the trace analysis.
+**Important**: Your trace data (inputs/outputs) may contain personal or sensitive information that you've included in prompts or responses. This content will be sent to OpenAI as part of the trace analysis.
 </Warning>
 
 ## Current Limitations (Beta)
 
 As a beta feature, Opik Assist currently has some limitations:
 
-- **Cloud Only**: Available exclusively on Opik Cloud, not in self-hosted deployments
 - **Single Trace Analysis**: Can only analyze one trace at a time, no cross-trace comparisons or aggregations
-- **Rate Limits**: Usage may be subject to rate limiting during peak times
+- **Rate Limits**: Usage may be subject to rate limiting during peak times (Opik Cloud only)
 
 ## Feedback & Support
 
@@ -71,9 +120,3 @@ Since this is a beta feature, we'd love to hear your feedback:
 
 - Report issues via [GitHub Issues](https://github.com/comet-ml/opik/issues)
 - Join our [Slack community](http://chat.comet.com/) for real-time support
-
----
-
-<Info>
-**Coming Soon**: We're working on expanding Opik Assist to self-hosted deployments and adding support for advanced analysis capabilities.
-</Info>
