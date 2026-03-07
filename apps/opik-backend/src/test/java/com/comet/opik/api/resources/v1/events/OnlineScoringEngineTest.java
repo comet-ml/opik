@@ -65,6 +65,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -484,30 +485,30 @@ class OnlineScoringEngineTest {
         assertThat(variableMappings).hasSize(6);
 
         var varSummary = variableMappings.getFirst();
-        assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(varSummary.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(varSummary.jsonPath()).isEqualTo("$.questions.question1");
 
         var varInstruction = variableMappings.get(1);
-        assertThat(varInstruction.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(varInstruction.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.OUTPUT);
         assertThat(varInstruction.jsonPath()).isEqualTo("$.output");
 
         var varNonUsed = variableMappings.get(2);
-        assertThat(varNonUsed.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(varNonUsed.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(varNonUsed.jsonPath()).isEqualTo("$.questions.question2");
 
         var varToFail = variableMappings.get(3);
-        assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(varToFail.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.METADATA);
         assertThat(varToFail.jsonPath()).isEqualTo("$.nonexistent.path");
 
         var actualVarNonexistent = variableMappings.get(4);
-        var expectedVarNonexistent = OnlineScoringEngine.MessageVariableMapping.builder()
+        var expectedVarNonexistent = OnlineScoringDataExtractor.MessageVariableMapping.builder()
                 .variableName("nonexistent")
                 .valueToReplace("some.nonexistent.path")
                 .build();
         assertThat(actualVarNonexistent).isEqualTo(expectedVarNonexistent);
 
         var actualVarLiteral = variableMappings.get(5);
-        var expectedVarLiteral = OnlineScoringEngine.MessageVariableMapping.builder()
+        var expectedVarLiteral = OnlineScoringDataExtractor.MessageVariableMapping.builder()
                 .variableName("literal")
                 .valueToReplace("some literal value")
                 .build();
@@ -536,7 +537,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_input".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(inputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(inputMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(inputMapping.jsonPath()).isEqualTo("$");
 
         // Test "output" maps to root "$"
@@ -544,7 +545,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_output".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(outputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(outputMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.OUTPUT);
         assertThat(outputMapping.jsonPath()).isEqualTo("$");
 
         // Test "metadata" maps to root "$"
@@ -552,7 +553,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "full_metadata".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.METADATA);
         assertThat(metadataMapping.jsonPath()).isEqualTo("$");
 
         // Test subtree works correctly
@@ -560,7 +561,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "subtree".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(subtreeMapping.jsonPath()).isEqualTo("$.questions");
 
         // Test nested field still works correctly
@@ -568,7 +569,7 @@ class OnlineScoringEngineTest {
                 .filter(mapping -> "nested_field".equals(mapping.variableName()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(nestedMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(nestedMapping.traceSection()).isEqualTo(OnlineScoringDataExtractor.TraceSection.INPUT);
         assertThat(nestedMapping.jsonPath()).isEqualTo("$.questions.question1");
     }
 
@@ -1679,4 +1680,59 @@ class OnlineScoringEngineTest {
                 .startTime(java.time.Instant.now())
                 .build();
     }
+
+    @ParameterizedTest(name = "renderMessages with {0} variablesMap should render templates using dot-notation variables")
+    @NullAndEmptySource
+    void testRenderMessagesWithEmptyOrNullVariablesMap(Map<String, String> variablesMap)
+            throws JsonProcessingException {
+        // Given
+        List<LlmAsJudgeMessage> messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content("Question: {{input.questions.question1}}\nAnswer: {{output.output}}")
+                        .build());
+
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, variablesMap, trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.get(0);
+        var messageText = userMessage.singleText();
+
+        assertThat(messageText).contains("Question: " + SUMMARY_STR);
+        assertThat(messageText).contains("Answer: " + OUTPUT_STR);
+    }
+
+    @Test
+    @DisplayName("renderMessages with empty variablesMap should handle root section variables")
+    void testRenderMessagesWithEmptyVariablesMap_rootSection() throws JsonProcessingException {
+        // Given - template with root section variable
+        List<LlmAsJudgeMessage> messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content("Full input: {{input}}")
+                        .build());
+
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When - pass empty map to trigger direct JSONPath mode
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, Map.of(), trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.get(0);
+        var messageText = userMessage.singleText();
+
+        // Should contain the entire input JSON
+        assertThat(messageText).contains("Full input: {");
+        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+    }
+
 }

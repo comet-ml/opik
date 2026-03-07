@@ -792,7 +792,7 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -805,6 +805,27 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
     metadata: "metadata",
   },
 };
+
+export const DEFAULT_PYTHON_CODE_TRACE_DATA_DIRECT: PythonCodeDetailsTraceForm =
+  {
+    metric:
+      "from typing import Any\n" +
+      "from opik.evaluation.metrics import base_metric, score_result\n" +
+      "\n" +
+      "class MyCustomMetric(base_metric.BaseMetric):\n" +
+      '    def __init__(self, name: str = "my_custom_metric"):\n' +
+      "        self.name = name\n" +
+      "\n" +
+      "    def score(self, input: dict, output: dict, metadata: dict, **ignored_kwargs: Any):\n" +
+      "        # Add your logic here\n" +
+      "\n" +
+      "        return score_result.ScoreResult(\n" +
+      "            value=0,\n" +
+      "            name=self.name,\n" +
+      '            reason="Optional reason for the score"\n' +
+      "        )",
+    arguments: {},
+  };
 
 export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
   metric:
@@ -827,7 +848,7 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
     "        # conversation is a List[Dict] where each dict has:\n" +
     '        # {"role": "user" | "assistant", "content": "message text"}\n' +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -846,7 +867,7 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
     "        self.name = name\n" +
     "\n" +
     "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
@@ -858,4 +879,24 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
     output: "output",
     metadata: "metadata",
   },
+};
+
+export const DEFAULT_PYTHON_CODE_SPAN_DATA_DIRECT: PythonCodeDetailsSpanForm = {
+  metric:
+    "from typing import Any\n" +
+    "from opik.evaluation.metrics import base_metric, score_result\n" +
+    "\n" +
+    "class MyCustomMetric(base_metric.BaseMetric):\n" +
+    '    def __init__(self, name: str = "my_custom_metric"):\n' +
+    "        self.name = name\n" +
+    "\n" +
+    "    def score(self, input: dict, output: dict, metadata: dict, **ignored_kwargs: Any):\n" +
+    "        # Add your logic here\n" +
+    "\n" +
+    "        return score_result.ScoreResult(\n" +
+    "            value=0,\n" +
+    "            name=self.name,\n" +
+    '            reason="Optional reason for the score"\n' +
+    "        )",
+  arguments: {},
 };

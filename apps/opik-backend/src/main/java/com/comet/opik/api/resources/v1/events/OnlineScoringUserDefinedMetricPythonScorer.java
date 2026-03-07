@@ -73,12 +73,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
-            Map<String, String> data;
+            Map<String, Object> data;
             try {
-                data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
-            } catch (Exception exception) {
+                data = OnlineScoringDataExtractor.preparePythonEvaluatorData(message.code().arguments(), trace);
+            } catch (IllegalArgumentException exception) {
                 userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
-                        trace.id(), exception.getMessage());
+                        trace.id(), exception.getMessage(), exception);
                 throw exception;
             }
 

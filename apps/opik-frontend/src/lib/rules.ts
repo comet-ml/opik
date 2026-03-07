@@ -6,7 +6,9 @@ import {
 } from "@/types/automations";
 import { LLMJudgeSchema } from "@/types/llm";
 
-export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
+export const isPythonCodeRule = (
+  rule: EvaluatorsRule,
+): rule is EvaluatorsRule & PythonCodeDetails => {
   return (
     rule.type === EVALUATORS_RULE_TYPE.python_code ||
     rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
@@ -29,7 +31,9 @@ export const extractMetricNameFromPythonCode = (
   return match?.[1] || null;
 };
 
-export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {
+export const isLLMJudgeRule = (
+  rule: EvaluatorsRule,
+): rule is EvaluatorsRule & LLMJudgeDetails => {
   return (
     rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
     rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
@@ -39,17 +43,10 @@ export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {
 
 export const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
   if (isLLMJudgeRule(rule)) {
-    const llmRule = rule as EvaluatorsRule & LLMJudgeDetails;
-    return llmRule.code.schema?.map((s: LLMJudgeSchema) => s.name) || [];
+    return rule.code.schema?.map((s: LLMJudgeSchema) => s.name) || [];
   }
   if (isPythonCodeRule(rule)) {
-    const pythonRule = rule as EvaluatorsRule & PythonCodeDetails;
-    // Attempt to extract metric name from Python code by parsing __init__ default parameter
-    // This works for the common pattern: def __init__(self, name: str = "metric_name")
-    // Falls back to empty array if name cannot be extracted (dynamic names, etc.)
-    const metricName = extractMetricNameFromPythonCode(
-      pythonRule.code.metric || "",
-    );
+    const metricName = extractMetricNameFromPythonCode(rule.code.metric || "");
     return metricName ? [metricName] : [];
   }
   return [];
