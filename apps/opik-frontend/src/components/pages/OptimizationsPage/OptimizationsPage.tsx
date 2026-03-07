@@ -1,13 +1,7 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
-import { GroupingState, Row, RowSelectionState } from "@tanstack/react-table";
+import { RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
@@ -15,29 +9,26 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
-import get from "lodash/get";
-import isObject from "lodash/isObject";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
-import FeedbackScoreTagCell from "@/components/shared/DataTableCells/FeedbackScoreTagCell";
+import DatasetNameCell from "@/components/pages/OptimizationsPage/DatasetNameCell";
 import OptimizationStatusCell from "@/components/pages/OptimizationsPage/OptimizationStatusCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import {
+  OptimizationPassRateCell,
+  OptimizationAccuracyCell,
+  OptimizationLatencyCell,
+  OptimizationCostCell,
+  OptimizationTotalCostCell,
+} from "@/components/pages/OptimizationsPage/OptimizationMetricCells";
+import OptimizationDeployCell from "@/components/pages/OptimizationsPage/OptimizationDeployCell";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
-import { toString } from "@/lib/utils";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
-import {
-  COLUMN_DATASET_ID,
-  COLUMN_ID_ID,
-  COLUMN_NAME_ID,
-  COLUMN_TYPE,
-  ColumnData,
-} from "@/types/shared";
+import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { Filter } from "@/types/filters";
 import { Optimization } from "@/types/optimizations";
+import { getFeedbackScore } from "@/lib/feedback-scores";
 import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
@@ -49,23 +40,10 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { GroupedOptimization } from "@/hooks/useGroupedOptimizationsList";
-import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   generateActionsColumDef,
-  generateGroupedRowCellDef,
-  generateDataRowCellDef,
-  getIsGroupRow,
-  getRowId,
-  getSharedShiftCheckboxClickHandler,
-  renderCustomRow,
+  generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { GROUPING_COLUMN } from "@/constants/groups";
-import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
-import {
-  getOptimizerLabel,
-  getBestOptimizationScore,
-} from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/components/pages-shared/optimizations/StudioTemplates";
@@ -74,69 +52,80 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useOptimizationsView } from "@/hooks/useOptimizationsView";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
-const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
-const COLUMNS_ORDER_KEY = "optimizations-columns-order";
-
-export const GROUPING_CONFIG = {
-  groupedColumnMode: false as const,
-  grouping: [GROUPING_COLUMN] as GroupingState,
-};
+const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v4";
+const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v5";
+const COLUMNS_ORDER_KEY = "optimizations-columns-order-v4";
 
 export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
   {
-    id: COLUMN_ID_ID,
-    label: "ID",
+    id: "dataset_name",
+    label: "Dataset name",
     type: COLUMN_TYPE.string,
-    cell: IdCell as never,
+    cell: DatasetNameCell as never,
+    size: 200,
   },
   {
     id: "created_at",
-    label: "Created",
+    label: "Start time",
     type: COLUMN_TYPE.time,
     cell: TimeCell as never,
-  },
-  {
-    id: "created_by",
-    label: "Created by",
-    type: COLUMN_TYPE.string,
-  },
-  {
-    id: "num_trials",
-    label: "Trial count",
-    type: COLUMN_TYPE.number,
-  },
-  {
-    id: "optimizer",
-    label: "Optimizer",
-    type: COLUMN_TYPE.string,
-    size: 200,
-    accessorFn: (row) => {
-      const metadataVal = get(row.metadata ?? {}, OPTIMIZATION_OPTIMIZER_KEY);
-      if (metadataVal) {
-        return isObject(metadataVal)
-          ? JSON.stringify(metadataVal, null, 2)
-          : toString(metadataVal);
-      }
-
-      const studioVal = row.studio_config?.optimizer?.type;
-      return studioVal ? getOptimizerLabel(studioVal) : "-";
-    },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimizer],
-  },
-  {
-    id: "objective_name",
-    label: "Best score",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) => getBestOptimizationScore(row),
-    cell: FeedbackScoreTagCell as never,
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
+    size: 140,
   },
   {
     id: "status",
     label: "Status",
     type: COLUMN_TYPE.string,
     cell: OptimizationStatusCell as never,
+    size: 120,
+  },
+  {
+    id: "pass_rate",
+    label: "Pass rate",
+    type: COLUMN_TYPE.numberDictionary,
+    size: 200,
+    accessorFn: (row) => row.best_objective_score,
+    cell: OptimizationPassRateCell as never,
+  },
+  {
+    id: "accuracy",
+    label: "Accuracy",
+    type: COLUMN_TYPE.numberDictionary,
+    size: 200,
+    accessorFn: (row) =>
+      getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+    cell: OptimizationAccuracyCell as never,
+  },
+  {
+    id: "latency",
+    label: "Latency",
+    type: COLUMN_TYPE.duration,
+    size: 180,
+    accessorFn: (row) => row.best_duration,
+    cell: OptimizationLatencyCell as never,
+  },
+  {
+    id: "cost",
+    label: "Cost",
+    type: COLUMN_TYPE.cost,
+    size: 180,
+    accessorFn: (row) => row.best_cost,
+    cell: OptimizationCostCell as never,
+  },
+  {
+    id: "opt_cost",
+    label: "Opt. cost",
+    type: COLUMN_TYPE.cost,
+    size: 120,
+    accessorFn: (row) => row.total_optimization_cost,
+    cell: OptimizationTotalCostCell as never,
+  },
+  {
+    id: "deploy",
+    label: "Deploy",
+    type: COLUMN_TYPE.string,
+    size: 120,
+    accessorFn: () => undefined,
+    cell: OptimizationDeployCell as never,
   },
 ];
 
@@ -150,58 +139,30 @@ export const FILTER_COLUMNS = [
 ];
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "status",
-  "num_trials",
-  "objective_name",
+  "dataset_name",
   "created_at",
+  "status",
+  "pass_rate",
+  "accuracy",
+  "latency",
+  "cost",
+  "opt_cost",
+  "deploy",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
-  COLUMN_ID_ID,
-  "status",
-  "num_trials",
-  "objective_name",
+  "dataset_name",
   "created_at",
-  "optimizer",
-  "created_by",
+  "status",
+  "pass_rate",
+  "accuracy",
+  "latency",
+  "cost",
+  "opt_cost",
+  "deploy",
 ];
 
-const checkboxClickHandler = getSharedShiftCheckboxClickHandler();
-
-const nameColumn = generateDataRowCellDef(
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.optimization,
-      getSearch: (data: Optimization) => ({
-        optimizations: [data.id],
-      }),
-    },
-    headerCheckbox: true,
-    size: 200,
-  },
-  checkboxClickHandler,
-);
-
-const groupingColumn = generateGroupedRowCellDef<GroupedOptimization, unknown>(
-  {
-    id: GROUPING_COLUMN,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    customMeta: {
-      nameKey: "dataset_name",
-      idKey: "dataset_id",
-      resource: RESOURCE_TYPE.dataset,
-    },
-  },
-  checkboxClickHandler,
-);
+const selectColumn = generateSelectColumDef();
 
 const actionsColumn = generateActionsColumDef({
   cell: OptimizationRowActionsCell,
@@ -231,14 +192,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
-
-  const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
-    "limits",
-    { ...JsonParam, default: {} },
-    {
-      updateType: "replaceIn",
-    },
-  );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -292,40 +245,49 @@ const OptimizationsPage: React.FunctionComponent = () => {
 
   const {
     optimizations,
-    groupIds,
     total,
     selectedRows,
     isPending,
     isPlaceholderData,
     isFetching,
     refetch,
-    columnPinning,
     pageSize,
   } = useOptimizationsView({
     workspaceName,
     datasetId,
     search: search || "",
     page: page || 1,
-    groupLimit,
     rowSelection,
   });
 
+  const hasOldTypeOptimizations = useMemo(
+    () =>
+      optimizations.some(
+        (opt) => !opt.experiment_scores || opt.experiment_scores.length === 0,
+      ),
+    [optimizations],
+  );
+
+  const visibleColumns = useMemo(
+    () =>
+      hasOldTypeOptimizations
+        ? DEFAULT_COLUMNS
+        : DEFAULT_COLUMNS.filter((c) => c.id !== "accuracy"),
+    [hasOldTypeOptimizations],
+  );
+
   const defaultColumns = useMemo(
     () =>
-      convertColumnDataToColumn(DEFAULT_COLUMNS, {
+      convertColumnDataToColumn(visibleColumns, {
         columnsOrder,
         selectedColumns,
       }),
-    [columnsOrder, selectedColumns],
+    [visibleColumns, columnsOrder, selectedColumns],
   );
 
   const columns = useMemo(() => {
-    if (canViewDatasets) {
-      return [nameColumn, groupingColumn, ...defaultColumns, actionsColumn];
-    }
-
-    return [nameColumn, ...defaultColumns, actionsColumn];
-  }, [canViewDatasets, defaultColumns]);
+    return [selectColumn, ...defaultColumns, actionsColumn];
+  }, [defaultColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -337,7 +299,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const handleRowClick = useCallback(
-    (row: Optimization | GroupedOptimization) => {
+    (row: Optimization) => {
       navigate({
         to: "/$workspaceName/optimizations/$datasetId/compare",
         params: {
@@ -352,41 +314,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [navigate, workspaceName],
   );
 
-  const expandingConfig = useExpandingConfig({});
-
-  const openGroupsRef = useRef<Record<string, boolean>>({});
-  useEffect(() => {
-    const updateForExpandedState: Record<string, boolean> = {};
-    groupIds.forEach((groupId) => {
-      const id = `${GROUPING_COLUMN}:${groupId}`;
-      if (!openGroupsRef.current[id]) {
-        openGroupsRef.current[id] = true;
-        updateForExpandedState[id] = true;
-      }
-    });
-
-    if (Object.keys(updateForExpandedState).length) {
-      expandingConfig.setExpanded((state) => {
-        if (state === true) return state;
-        return {
-          ...state,
-          ...updateForExpandedState,
-        };
-      });
-    }
-  }, [expandingConfig, groupIds]);
-
   const handleNewOptimizationClick = useCallback(() => {
     setOpenDialog(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
-
-  const renderCustomRowCallback = useCallback(
-    (row: Row<GroupedOptimization>) => {
-      return renderCustomRow(row, setGroupLimit);
-    },
-    [setGroupLimit],
-  );
 
   if (isPending) {
     return <Loader />;
@@ -405,14 +336,14 @@ const OptimizationsPage: React.FunctionComponent = () => {
       {isOptimizationStudioEnabled && <StudioTemplates />}
       <div className="pt-6">
         <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-          Optimization runs
+          Optimization Runs
         </h2>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
           <div className="flex items-center gap-2">
             <SearchInput
               searchText={search!}
               setSearchText={setSearch}
-              placeholder="Search by name"
+              placeholder="Search by dataset name"
               className="w-[320px]"
               dimension="sm"
             ></SearchInput>
@@ -440,7 +371,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               </Button>
             </TooltipWrapper>
             <ColumnsButton
-              columns={DEFAULT_COLUMNS}
+              columns={visibleColumns}
               selectedColumns={selectedColumns}
               onSelectionChange={setSelectedColumns}
               order={columnsOrder}
@@ -452,17 +383,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
           columns={columns as never}
           data={optimizations as never}
           onRowClick={handleRowClick}
-          renderCustomRow={renderCustomRowCallback}
-          getIsCustomRow={getIsGroupRow}
           resizeConfig={resizeConfig}
           selectionConfig={{
             rowSelection,
             setRowSelection,
           }}
-          expandingConfig={expandingConfig}
-          groupingConfig={GROUPING_CONFIG}
-          getRowId={getRowId}
-          columnPinning={columnPinning}
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (

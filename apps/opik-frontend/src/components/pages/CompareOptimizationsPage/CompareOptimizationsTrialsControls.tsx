@@ -5,13 +5,13 @@ import { ColumnData, ROW_HEIGHT } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
-import { Experiment } from "@/types/datasets";
+import { AggregatedCandidate } from "@/types/optimizations";
 
 interface CompareOptimizationsTrialsControlsProps {
   onRefresh: () => void;
   rowHeight: ROW_HEIGHT;
   onRowHeightChange: (height: ROW_HEIGHT) => void;
-  columnsDef: ColumnData<Experiment>[];
+  columnsDef: ColumnData<AggregatedCandidate>[];
   selectedColumns: string[];
   onSelectedColumnsChange: (columns: string[]) => void;
   columnsOrder: string[];

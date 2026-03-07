@@ -402,15 +402,15 @@ class FrameworkGEPAAdapter:
             return [self._baseline_candidate_id]
         return None
 
-    def _determine_eval_purpose(self) -> str:
-        """Determine the evaluation purpose based on current adapter state."""
+    def _determine_experiment_type(self, key: str) -> str | None:
+        """Determine experiment_type based on current adapter state."""
         if self._current_step < 0:
-            return "initialization"
+            return None  # initialization / baseline → full trial
         if self._pending_eval_capture_traces is not None:
             if self._pending_eval_capture_traces:
-                return "exploration:minibatch"
-            return "exploration:mutation"
-        return "validation"
+                return "mini-batch"  # reflection minibatch
+            return "mutation"  # new candidate exploration
+        return None  # validation → full trial
 
     def _record_trial_lineage(
         self,
@@ -508,16 +508,16 @@ class FrameworkGEPAAdapter:
         config = {**self._baseline_config, "prompt_messages": prompt_messages}
 
         batch_index = self._current_step if self._current_step >= 0 else None
-        eval_purpose = self._determine_eval_purpose()
+        experiment_type = self._determine_experiment_type(key)
 
         trial_count = getattr(self._evaluation_adapter, "trial_count", "?")
         logger.debug(
             "[adapter.evaluate] step_index=%s batch_index=%s num_items=%d "
             "capture_traces=%s candidate_id=%s parent_ids=%s "
-            "eval_purpose=%s",
+            "experiment_type=%s",
             trial_count, batch_index, len(batch),
             effective_capture_traces, existing_candidate_id,
-            parent_candidate_ids, eval_purpose,
+            parent_candidate_ids, experiment_type,
         )
 
         trial, raw_result = self._evaluation_adapter.evaluate_with_details(
@@ -528,7 +528,7 @@ class FrameworkGEPAAdapter:
             batch_index=batch_index,
             num_items=len(batch),
             capture_traces=effective_capture_traces,
-            eval_purpose=eval_purpose,
+            experiment_type=experiment_type,
         )
 
         if trial is not None:

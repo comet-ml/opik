@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Play, RotateCw, X } from "lucide-react";
+import { Play, Rocket, RotateCw, X } from "lucide-react";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
@@ -123,40 +123,50 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
             </Tag>
           )}
         </div>
-        {(canStop || canRerun || canDeploy) && (
-          <div className="flex items-center gap-2">
-            {canDeploy && (
-              <TooltipWrapper content="Deploy best prompt to Playground">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDeployClick}
-                  disabled={isPendingProviderKeys}
-                >
-                  <Play className="mr-2 size-4" />
-                  Run in Playground
-                </Button>
-              </TooltipWrapper>
-            )}
-            {canRerun && (
-              <Button variant="outline" size="sm" onClick={handleRerun}>
-                <RotateCw className="mr-2 size-4" />
-                Rerun
-              </Button>
-            )}
-            {canStop && (
+        <div className="flex items-center gap-2">
+          {canDeploy && (
+            <TooltipWrapper content="Deploy best prompt to Playground">
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
-                onClick={handleStop}
-                disabled={isStoppingOptimization}
+                onClick={handleDeployClick}
+                disabled={isPendingProviderKeys}
               >
-                <X className="mr-2 size-4" />
-                Stop Execution
+                <Play className="mr-2 size-4" />
+                Run in Playground
               </Button>
-            )}
-          </div>
-        )}
+            </TooltipWrapper>
+          )}
+          {!isInProgress && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.alert("Promote to prod — coming soon")}
+              >
+                <Rocket className="mr-2 size-4" />
+                Promote to prod
+              </Button>
+            </>
+          )}
+          {canRerun && (
+            <Button variant="outline" size="sm" onClick={handleRerun}>
+              <RotateCw className="mr-2 size-4" />
+              Rerun
+            </Button>
+          )}
+          {canStop && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleStop}
+              disabled={isStoppingOptimization}
+            >
+              <X className="mr-2 size-4" />
+              Stop Execution
+            </Button>
+          )}
+        </div>
       </div>
       <ConfirmDialog
         key={resetKeyRef.current}

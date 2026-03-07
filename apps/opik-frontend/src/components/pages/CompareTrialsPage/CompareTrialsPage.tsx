@@ -1,11 +1,12 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import isUndefined from "lodash/isUndefined";
-import { JsonParam, StringParam, useQueryParam } from "use-query-params";
+import { JsonParam, NumberParam, useQueryParam } from "use-query-params";
+import { BarChart3, Settings } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import PromptTab from "@/components/pages/CompareTrialsPage/PromptTab/PromptTab";
 import TrialItemsTab from "@/components/pages/CompareTrialsPage/TrialsItemsTab/TrialItemsTab";
-import ConfigurationTab from "@/components/pages/CompareTrialsPage/ConfigurationTab/ConfigurationTab";
+import TrialConfigurationSection from "@/components/pages-shared/experiments/TrialConfigurationSection";
+import TrialKPICards from "@/components/pages/CompareTrialsPage/TrialKPICards";
 import CompareTrialsDetails from "@/components/pages/CompareTrialsPage/CompareTrialsDetails/CompareTrialsDetails";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -16,6 +17,7 @@ import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useAppStore from "@/store/AppStore";
 import { checkIsEvaluationSuite } from "@/lib/optimizations";
+import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -26,13 +28,10 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     permissions: { canViewDatasets },
   } = usePermissions();
 
-  const [tab = "prompt", setTab] = useQueryParam("tab", StringParam, {
-    updateType: "replaceIn",
-  });
-
   const [experimentsIds = []] = useQueryParam("trials", JsonParam, {
     updateType: "replaceIn",
   });
+  const [trialNumber] = useQueryParam("trialNumber", NumberParam);
 
   const { datasetId, optimizationId } = useParams({
     select: (params) => params,
@@ -57,7 +56,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     {
       workspaceName,
       optimizationId,
-      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
       size: 100,
     },
@@ -87,63 +86,123 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     return checkIsEvaluationSuite(allExperiments);
   }, [memorizedExperiments, optimizationExperimentsData?.content]);
 
+  const { baselineExperimentId, baselineScore } = useMemo(() => {
+    const allExperiments = optimizationExperimentsData?.content ?? [];
+    if (!allExperiments.length || !optimization?.objective_name) {
+      return { baselineExperimentId: undefined, baselineScore: undefined };
+    }
+    const sorted = allExperiments
+      .slice()
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const baseline = sorted[0];
+    const score = getFeedbackScoreValue(
+      baseline.feedback_scores ?? [],
+      optimization.objective_name,
+    );
+    return {
+      baselineExperimentId: baseline.id,
+      baselineScore: score ?? undefined,
+    };
+  }, [optimizationExperimentsData?.content, optimization?.objective_name]);
+
+  const baselineExperiment = useMemo(() => {
+    if (!baselineExperimentId) return undefined;
+    const allExperiments = optimizationExperimentsData?.content ?? [];
+    return allExperiments.find((exp) => exp.id === baselineExperimentId);
+  }, [baselineExperimentId, optimizationExperimentsData?.content]);
+
+  const [tab, setTab] = useState<"results" | "configuration">("results");
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
         <CompareTrialsDetails
           optimization={optimization}
-          experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
-          isEvaluationSuite={isEvaluationSuite}
+          baselineExperimentId={baselineExperimentId}
+          baselineScore={baselineScore}
+          trialNumber={trialNumber ?? undefined}
         />
       </PageBodyStickyContainer>
-      <Tabs
-        defaultValue="input"
-        value={tab as string}
-        onValueChange={setTab}
-        className="min-w-min"
-      >
-        <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="prompt">
-              Prompt
-            </TabsTrigger>
-            {canViewDatasets && (
-              <TabsTrigger variant="underline" value="items">
-                Trial items
-              </TabsTrigger>
-            )}
-            <TabsTrigger variant="underline" value="config">
+
+      {!isPending && memorizedExperiments.length > 0 && (
+        <PageBodyStickyContainer
+          direction="horizontal"
+          limitWidth
+          className="mb-6"
+        >
+          <ToggleGroup
+            type="single"
+            value={tab}
+            onValueChange={(val) =>
+              val && setTab(val as "results" | "configuration")
+            }
+            variant="ghost"
+            className="w-fit"
+          >
+            <ToggleGroupItem value="results" size="sm" className="gap-2">
+              <BarChart3 className="size-3" />
+              Results
+            </ToggleGroupItem>
+            <ToggleGroupItem value="configuration" size="sm" className="gap-2">
+              <Settings className="size-3" />
               Configuration
-            </TabsTrigger>
-          </TabsList>
+            </ToggleGroupItem>
+          </ToggleGroup>
         </PageBodyStickyContainer>
-        <TabsContent value="prompt">
-          <PromptTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isPending={isPending}
-          />
-        </TabsContent>
-        {canViewDatasets && (
-          <TabsContent value="items">
-            <TrialItemsTab
-              objectiveName={optimization?.objective_name}
-              datasetId={datasetId}
-              experimentsIds={experimentsIds}
+      )}
+
+      {tab === "results" && (
+        <>
+          {!isPending && memorizedExperiments.length > 0 && (
+            <PageBodyStickyContainer
+              direction="horizontal"
+              limitWidth
+              className="mb-6"
+            >
+              <TrialKPICards
+                experiments={memorizedExperiments}
+                allOptimizationExperiments={
+                  optimizationExperimentsData?.content ?? []
+                }
+                objectiveName={optimization?.objective_name}
+                isEvaluationSuite={isEvaluationSuite}
+              />
+            </PageBodyStickyContainer>
+          )}
+
+          {canViewDatasets && (
+            <>
+              <PageBodyStickyContainer direction="horizontal" limitWidth>
+                <h2 className="comet-title-s mb-4">Evaluation results</h2>
+              </PageBodyStickyContainer>
+              <TrialItemsTab
+                objectiveName={optimization?.objective_name}
+                datasetId={datasetId}
+                experimentsIds={experimentsIds}
+                experiments={memorizedExperiments}
+                isEvaluationSuite={isEvaluationSuite}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {tab === "configuration" &&
+        !isPending &&
+        memorizedExperiments.length > 0 && (
+          <PageBodyStickyContainer
+            direction="horizontal"
+            limitWidth
+            className="mb-6"
+          >
+            <TrialConfigurationSection
               experiments={memorizedExperiments}
-              isEvaluationSuite={isEvaluationSuite}
+              referenceExperiment={baselineExperiment}
+              studioConfig={optimization?.studio_config}
             />
-          </TabsContent>
+          </PageBodyStickyContainer>
         )}
-        <TabsContent value="config">
-          <ConfigurationTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isPending={isPending}
-          />
-        </TabsContent>
-      </Tabs>
     </PageBodyScrollContainer>
   );
 };

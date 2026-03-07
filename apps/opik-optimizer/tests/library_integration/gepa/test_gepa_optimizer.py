@@ -270,8 +270,8 @@ class TestFrameworkGEPAAdapterEvaluate:
         assert adapter.known_candidates[key] == "c-123"
 
     @patch("gepa.core.adapter.EvaluationBatch")
-    def test_eval_purpose_initialization_before_iterations(self, mock_eb_cls):
-        """Before any iteration starts (_current_step == -1), purpose is 'initialization'."""
+    def test_experiment_type_none_before_iterations(self, mock_eb_cls):
+        """Before any iteration starts (_current_step == -1), experiment_type is None (full trial)."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.9)
@@ -286,11 +286,11 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
-        assert call_kwargs["eval_purpose"] == "initialization"
+        assert call_kwargs["experiment_type"] is None
 
     @patch("gepa.core.adapter.EvaluationBatch")
-    def test_eval_purpose_exploration_minibatch(self, mock_eb_cls):
-        """Minibatch reflection eval (capture_traces=True) → 'exploration:minibatch'."""
+    def test_experiment_type_minibatch_for_known_candidate(self, mock_eb_cls):
+        """Minibatch reflection eval on known candidate → 'mini-batch'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.9)
@@ -307,11 +307,11 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
-        assert call_kwargs["eval_purpose"] == "exploration:minibatch"
+        assert call_kwargs["experiment_type"] == "mini-batch"
 
     @patch("gepa.core.adapter.EvaluationBatch")
-    def test_eval_purpose_exploration_mutation(self, mock_eb_cls):
-        """Mutated candidate eval (capture_traces=False) → 'exploration:mutation'."""
+    def test_experiment_type_mutation_for_new_candidate(self, mock_eb_cls):
+        """Mutated candidate eval (new candidate, not full) → 'mutation'."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.9)
@@ -328,11 +328,11 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
-        assert call_kwargs["eval_purpose"] == "exploration:mutation"
+        assert call_kwargs["experiment_type"] == "mutation"
 
     @patch("gepa.core.adapter.EvaluationBatch")
-    def test_eval_purpose_validation_without_callback_metadata(self, mock_eb_cls):
-        """During iteration without on_evaluation_start metadata, purpose is 'validation'."""
+    def test_experiment_type_none_for_full_eval(self, mock_eb_cls):
+        """Full validation eval on known candidate → None (full trial)."""
         mock_eb_cls.side_effect = lambda **kwargs: SimpleNamespace(**kwargs)
         mock_eval_adapter = MagicMock()
         trial = _make_trial("c-1", 0.9)
@@ -350,7 +350,7 @@ class TestFrameworkGEPAAdapterEvaluate:
         )
 
         call_kwargs = mock_eval_adapter.evaluate_with_details.call_args.kwargs
-        assert call_kwargs["eval_purpose"] == "validation"
+        assert call_kwargs["experiment_type"] is None
 
 
 # -- adapter parent tracking tests -------------------------------------------

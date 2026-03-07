@@ -92,27 +92,14 @@ trial = evaluation_adapter.evaluate(
     config=config,
     dataset_item_ids=[str(item["id"]) for item in training_set],
     parent_candidate_ids=["parent-uuid"],   # Lineage (optional)
-    eval_purpose="exploration",             # See eval_purpose values below
 )
 
 if trial is not None:
     print(f"Score: {trial.score}")
 ```
 
-Each `evaluate()` call creates an experiment visible in the UI.
-
-### `eval_purpose` Values
-
-Use these standard values so the UI can categorize experiments:
-
-| Value | When to use |
-|-------|-------------|
-| `"baseline"` | Reserved — set by the orchestrator for the original prompt |
-| `"initialization"` | One-time setup evals before the main loop |
-| `"exploration"` | Main optimization loop evaluations |
-| `"validation"` | Final validation of accepted candidates |
-
-Algorithms may use colon-separated subtypes for finer granularity (e.g., `"exploration:minibatch"`, `"exploration:mutation"`). The UI groups by the prefix before the colon.
+Each `evaluate()` call creates an experiment visible in the UI. The `experiment_type`
+is set by the adapter based on the evaluation context (full trial, mini-batch, or mutation).
 
 ### `OptimizationState`
 
@@ -153,7 +140,6 @@ def run(self, context, training_set, validation_set,
         trial = evaluation_adapter.evaluate(
             config=config,
             dataset_item_ids=[str(item["id"]) for item in training_set],
-            eval_purpose="exploration",
         )
 
         # 3. state.best_trial is updated automatically

@@ -137,20 +137,6 @@ class CandidateTracker:
 
         return []
 
-    def determine_eval_purpose(self, key: str, capture_traces: bool) -> str:
-        """Determine eval_purpose from callback metadata or fallback detection."""
-        if self._current_step < 0:
-            return "initialization"
-
-        if capture_traces:
-            return "exploration:minibatch"
-
-        is_known = key in self._known_candidates
-        if not is_known:
-            return "exploration:mutation"
-
-        return "validation"
-
     def record_trial(
         self,
         key: str,

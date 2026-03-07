@@ -11,6 +11,7 @@ import java.util.UUID;
 @Builder(toBuilder = true)
 public record OptimizationSearchCriteria(
         String name,
+        String datasetName,
         UUID datasetId,
         @NonNull EntityType entityType,
         Boolean datasetDeleted,

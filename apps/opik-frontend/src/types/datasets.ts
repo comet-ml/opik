@@ -67,6 +67,11 @@ export enum DATASET_ITEM_DRAFT_STATUS {
   // deleted items are filtered out, not shown
 }
 
+export interface ExecutionPolicy {
+  runs_per_item?: number;
+  pass_threshold?: number;
+}
+
 export interface DatasetItem {
   id: string;
   data: object;
@@ -74,6 +79,7 @@ export interface DatasetItem {
   trace_id?: string;
   span_id?: string;
   tags?: string[];
+  execution_policy?: ExecutionPolicy;
   created_at: string;
   last_updated_at: string;
 }
@@ -105,6 +111,7 @@ export enum EXPERIMENT_TYPE {
   REGULAR = "regular",
   TRIAL = "trial",
   MINI_BATCH = "mini-batch",
+  MUTATION = "mutation",
 }
 
 export interface Experiment {
@@ -130,6 +137,7 @@ export interface Experiment {
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];
   trace_count: number;
+  dataset_item_count?: number;
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
   evaluation_method?: string;

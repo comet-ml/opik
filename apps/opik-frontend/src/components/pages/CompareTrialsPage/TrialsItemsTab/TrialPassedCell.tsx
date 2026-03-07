@@ -1,36 +1,56 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
 
-import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
-import VerticallySplitCellWrapper from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+type FlattenedTrialItem = {
+  experimentItem: {
+    feedback_scores?: { name: string; value: number }[];
+  };
+  allRuns: {
+    feedback_scores?: { name: string; value: number }[];
+  }[];
+  executionPolicy?: {
+    runs_per_item?: number;
+    pass_threshold?: number;
+  };
+};
 
-const TrialPassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
+const TrialPassedCell: React.FC<CellContext<FlattenedTrialItem, unknown>> = (
   context,
 ) => {
-  const experimentCompare = context.row.original;
+  const row = context.row.original;
+  const { allRuns, executionPolicy } = row;
 
-  const renderContent = (item: ExperimentItem | undefined) => {
-    if (!item?.feedback_scores?.length) {
-      return <span>-</span>;
-    }
+  const hasScores = allRuns.some(
+    (r) => r.feedback_scores && r.feedback_scores.length > 0,
+  );
 
-    const passed = item.feedback_scores.every((s) => s.value >= 1.0);
+  if (!hasScores) {
+    return <span>-</span>;
+  }
 
+  const passThreshold = executionPolicy?.pass_threshold ?? 1;
+  const totalRuns = allRuns.length;
+
+  const runsPassed = allRuns.filter((run) => {
+    const scores = run.feedback_scores;
+    if (!scores?.length) return true;
+    return scores.every((s) => s.value >= 1.0);
+  }).length;
+
+  const itemPassed = runsPassed >= passThreshold;
+
+  if (totalRuns === 1) {
     return (
-      <span className={passed ? "text-success" : "text-destructive"}>
-        {passed ? "Yes" : "No"}
+      <span className={itemPassed ? "text-success" : "text-destructive"}>
+        {itemPassed ? "Yes" : "No"}
       </span>
     );
-  };
+  }
 
   return (
-    <VerticallySplitCellWrapper
-      renderContent={renderContent}
-      experimentCompare={experimentCompare}
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-      rowId={context.row.id}
-    />
+    <span className={itemPassed ? "text-success" : "text-destructive"}>
+      {runsPassed}/{totalRuns} (threshold: {passThreshold})
+    </span>
   );
 };
 

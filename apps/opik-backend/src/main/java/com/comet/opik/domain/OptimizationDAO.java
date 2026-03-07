@@ -29,6 +29,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -114,6 +115,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
@@ -121,7 +123,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 SELECT
                     id,
                     optimization_id,
-                    experiment_scores
+                    experiment_scores,
+                    metadata AS experiment_metadata,
+                    created_at AS experiment_created_at
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND optimization_id IN (SELECT id FROM optimization_final)
@@ -241,17 +245,114 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     ) AS experiment_scores
                 FROM experiment_scores_parsed
                 GROUP BY experiment_id
+            ), experiment_durations AS (
+                SELECT
+                    ei.experiment_id,
+                    count(DISTINCT ei.trace_id) AS trace_count,
+                    arrayElement(
+                        quantiles(0.5)(t.duration), 1
+                    ) AS duration_p50,
+                    sum(s.total_estimated_cost) AS total_estimated_cost
+                FROM experiment_items_final ei
+                LEFT JOIN (
+                    SELECT id, duration
+                    FROM traces FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
+                ) AS t ON ei.trace_id = t.id
+                LEFT JOIN (
+                    SELECT trace_id, sum(total_estimated_cost) AS total_estimated_cost
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
+                    GROUP BY trace_id
+                ) AS s ON t.id = s.trace_id
+                GROUP BY ei.experiment_id
+            ), experiment_candidates AS (
+                SELECT
+                    ef.id AS experiment_id,
+                    ef.optimization_id,
+                    ef.experiment_created_at,
+                    if(
+                        JSONHas(ef.experiment_metadata, 'candidate_id') AND JSONExtractString(ef.experiment_metadata, 'candidate_id') != '',
+                        JSONExtractString(ef.experiment_metadata, 'candidate_id'),
+                        toString(ef.id)
+                    ) AS candidate_id
+                FROM experiments_final ef
+            ), objective_scores_per_experiment AS (
+                SELECT
+                    ef.optimization_id,
+                    esp.experiment_id,
+                    esp.value AS objective_score
+                FROM experiment_scores_parsed esp
+                INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
+                INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                WHERE esp.name = o.objective_name
+            ), candidate_metrics AS (
+                SELECT
+                    ec.optimization_id AS optim_id,
+                    ec.candidate_id,
+                    sum(ospe.objective_score * ed.trace_count)
+                        / nullIf(sumIf(ed.trace_count, isNotNull(ospe.objective_score)), 0)
+                        AS weighted_score,
+                    sum(ed.duration_p50 / 1000.0 * ed.trace_count)
+                        / nullIf(sumIf(ed.trace_count, isNotNull(ed.duration_p50)), 0)
+                        AS weighted_duration,
+                    sum(ed.total_estimated_cost)
+                        / nullIf(sum(ed.trace_count), 0)
+                        AS per_trace_cost,
+                    min(ec.experiment_created_at) AS earliest_created_at
+                FROM experiment_candidates ec
+                LEFT JOIN objective_scores_per_experiment ospe
+                    ON ec.experiment_id = ospe.experiment_id
+                    AND ec.optimization_id = ospe.optimization_id
+                LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
+                GROUP BY ec.optimization_id, ec.candidate_id
+            ), best_candidate AS (
+                SELECT
+                    optim_id AS optimization_id,
+                    max(weighted_score) AS best_score,
+                    argMax(weighted_duration, weighted_score) AS best_duration,
+                    argMax(per_trace_cost, weighted_score) AS best_cost
+                FROM candidate_metrics
+                WHERE isNotNull(weighted_score)
+                GROUP BY optim_id
+            ), baseline_candidate AS (
+                SELECT
+                    optim_id AS optimization_id,
+                    argMin(weighted_score, earliest_created_at) AS baseline_score,
+                    argMin(weighted_duration, earliest_created_at) AS baseline_duration,
+                    argMin(per_trace_cost, earliest_created_at) AS baseline_cost
+                FROM candidate_metrics
+                GROUP BY optim_id
+            ), optimization_costs AS (
+                SELECT
+                    ef2.optimization_id AS optimization_id,
+                    sum(ed2.total_estimated_cost) AS total_optimization_cost
+                FROM experiments_final ef2
+                LEFT JOIN experiment_durations ed2 ON ef2.id = ed2.experiment_id
+                GROUP BY ef2.optimization_id
             )
             SELECT
                 o.*,
                 o.id as id,
                 COUNT(DISTINCT e.id) FILTER (WHERE e.id != '') AS num_trials,
                 maxMap(fs.feedback_scores) AS feedback_scores,
-                maxMap(es.experiment_scores) AS experiment_scores
+                maxMap(es.experiment_scores) AS experiment_scores,
+                any(bc.best_score) AS best_objective_score,
+                any(blc.baseline_score) AS baseline_objective_score,
+                any(bc.best_duration) AS best_duration,
+                any(bc.best_cost) AS best_cost,
+                any(blc.baseline_duration) AS baseline_duration,
+                any(blc.baseline_cost) AS baseline_cost,
+                any(oc.total_optimization_cost) AS total_optimization_cost
             FROM optimization_final AS o
             LEFT JOIN experiments_final AS e ON o.id = e.optimization_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
+            LEFT JOIN best_candidate AS bc ON o.id = bc.optimization_id
+            LEFT JOIN baseline_candidate AS blc ON o.id = blc.optimization_id
+            LEFT JOIN optimization_costs AS oc ON o.id = oc.optimization_id
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -269,6 +370,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
+                <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
@@ -563,6 +665,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> template.add("dataset_id", datasetId));
 
+        Optional.ofNullable(searchCriteria.datasetIds())
+                .filter(ids -> !ids.isEmpty())
+                .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
+
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
 
@@ -585,6 +691,10 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(searchCriteria.datasetId())
                 .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+
+        Optional.ofNullable(searchCriteria.datasetIds())
+                .filter(ids -> !ids.isEmpty())
+                .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds));
 
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
@@ -670,6 +780,13 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .experimentScores(getFeedbackScores(row, "experiment_scores"))
                     .numTrials(row.get("num_trials", Long.class))
+                    .baselineObjectiveScore(row.get("baseline_objective_score", BigDecimal.class))
+                    .bestObjectiveScore(row.get("best_objective_score", BigDecimal.class))
+                    .baselineDuration(row.get("baseline_duration", BigDecimal.class))
+                    .bestDuration(row.get("best_duration", BigDecimal.class))
+                    .baselineCost(row.get("baseline_cost", BigDecimal.class))
+                    .bestCost(row.get("best_cost", BigDecimal.class))
+                    .totalOptimizationCost(row.get("total_optimization_cost", BigDecimal.class))
                     .build();
         });
     }

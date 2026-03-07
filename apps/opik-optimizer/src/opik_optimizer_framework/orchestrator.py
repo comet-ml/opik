@@ -76,14 +76,14 @@ def run_optimization(
 
     optimizer = create_optimizer(context.optimizer_type)
 
-    # Evaluate baseline (original prompt)
     baseline_trial = adapter.evaluate(
         config=context.baseline_config,
         dataset_item_ids=dataset_item_ids,
-        eval_purpose="baseline",
     )
-    initial_score = baseline_trial.score if baseline_trial else 0.0
-    logger.info("Baseline score: %.4f", initial_score)
+    logger.info(
+        "Baseline score: %.4f",
+        baseline_trial.score if baseline_trial else 0.0,
+    )
 
     # Run optimization
     try:
@@ -101,6 +101,10 @@ def run_optimization(
 
         best = state.best_trial
         score = best.score if best else 0.0
+        initial_score = (
+            baseline_trial.score if baseline_trial
+            else (state.trials[0].score if state.trials else 0.0)
+        )
         result = OptimizationResult(
             best_trial=best,
             all_trials=list(state.trials),

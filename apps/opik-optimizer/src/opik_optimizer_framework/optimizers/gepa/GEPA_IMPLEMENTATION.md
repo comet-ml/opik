@@ -146,7 +146,7 @@ on_iteration_end(state, proposal_accepted)
 
 ### Seed evaluation (special case)
 
-GEPA's `initialize_gepa_state()` evaluates the seed candidate on the full valset BEFORE the main loop and before callbacks fire. The adapter detects this via `_current_step < 0` and labels it `eval_purpose="initialization"`.
+GEPA's `initialize_gepa_state()` evaluates the seed candidate on the full valset BEFORE the main loop and before callbacks fire. The adapter detects this via `_current_step < 0` and sets `experiment_type=None` (full trial).
 
 ## Candidate Tracking
 
@@ -290,21 +290,19 @@ Each evaluation produces a trial with metadata for the UI:
 | `batch_index` | `adapter._current_step` | GEPA iteration number |
 | `num_items` | `len(batch)` | Distinguishes minibatch from full eval |
 | `capture_traces` | `on_evaluation_start` | Whether this was the reflection eval |
-| `experiment_type` | `None` or `"mini-batch"` | Full eval → `None`; minibatch → `"mini-batch"` |
-| `eval_purpose` | Derived | See below |
+| `experiment_type` | Derived | Full eval → `None` (trial); known candidate minibatch → `"mini-batch"`; new candidate → `"mutation"` |
 
-### `eval_purpose` values
+### `experiment_type` values
 
 | Value | When |
 |-------|------|
-| `"initialization"` | Seed eval before iteration loop (`_current_step < 0`) |
-| `"exploration:minibatch"` | Minibatch eval with `capture_traces=True` |
-| `"exploration:mutation"` | New candidate eval with `capture_traces=False` |
-| `"validation"` | Known candidate, no capture_traces |
+| `None` (trial) | Full eval: initialization, baseline, or validation |
+| `"mini-batch"` | Reflection minibatch on a known candidate |
+| `"mutation"` | New candidate exploration (not yet known) |
 
 ### Full eval detection
 
-The first evaluation sets `_full_dataset_size = len(batch)`. Subsequent evals with `len(batch) >= _full_dataset_size` are considered full evals; smaller batches are minibatches tagged with `experiment_type="mini-batch"`.
+The first evaluation sets `_full_dataset_size = len(batch)`. Subsequent evals with `len(batch) >= _full_dataset_size` are considered full evals (experiment_type=None → trial); smaller batches are either `"mini-batch"` (known candidate) or `"mutation"` (new candidate).
 
 ## Configuration Parameters
 
@@ -324,12 +322,12 @@ All passed via `context.optimizer_parameters`:
 ## Example Experiment Table
 
 ```
-step  batch  candidate  parents    num  type        eval_purpose
-   0      -  AAA        []           5  (full)      initialization
-   1      1  AAA        []           4  mini-batch  exploration:minibatch
-   1      1  BBB        [AAA]        4  mini-batch  exploration:mutation
-   1      1  BBB        [AAA]        5  (full)      validation
-   2      2  BBB        [AAA]        4  mini-batch  exploration:minibatch
-   2      2  CCC        [BBB]        4  mini-batch  exploration:mutation
-   2      2  CCC        [BBB]        5  (full)      validation
+step  batch  candidate  parents    num  experiment_type
+   0      -  AAA        []           5  (trial)
+   1      1  AAA        []           4  mini-batch
+   1      1  BBB        [AAA]        4  mutation
+   1      1  BBB        [AAA]        5  (trial)
+   2      2  BBB        [AAA]        4  mini-batch
+   2      2  CCC        [BBB]        4  mutation
+   2      2  CCC        [BBB]        5  (trial)
 ```

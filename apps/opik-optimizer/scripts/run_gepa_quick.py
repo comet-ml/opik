@@ -190,7 +190,6 @@ def main():
     baseline_trial = eval_adapter.evaluate(
         config=context.baseline_config,
         dataset_item_ids=dataset_item_ids,
-        eval_purpose="baseline",
     )
     initial_score = baseline_trial.score if baseline_trial else 0.0
     logger.info("Baseline score: %.4f", initial_score)

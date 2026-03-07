@@ -331,7 +331,6 @@ class FrameworkGEPAAdapter:
         effective_capture_traces = pending if pending is not None else capture_traces
 
         existing_candidate_id = self._tracker.get_existing_candidate_id(key)
-        eval_purpose = self._tracker.determine_eval_purpose(key, effective_capture_traces)
         parent_candidate_ids = self._tracker.resolve_parent_ids(key)
 
         dataset_item_ids = [
@@ -348,18 +347,25 @@ class FrameworkGEPAAdapter:
             self._full_dataset_size = len(batch)
 
         is_full_eval = len(batch) >= self._full_dataset_size
-        experiment_type = None if is_full_eval else "mini-batch"
+        is_known = key in self._tracker._known_candidates
+        if is_full_eval:
+            experiment_type = None
+        elif not is_known:
+            experiment_type = "mutation"
+        else:
+            experiment_type = "mini-batch"
 
         logger.debug(
-            "[adapter.evaluate] eval_purpose=%s batch_index=%s num_items=%d "
-            "capture_traces=%s candidate_id=%s parent_ids=%s is_full=%s",
-            eval_purpose,
+            "[adapter.evaluate] batch_index=%s num_items=%d "
+            "capture_traces=%s candidate_id=%s parent_ids=%s is_full=%s "
+            "experiment_type=%s",
             batch_index,
             len(batch),
             effective_capture_traces,
             existing_candidate_id,
             parent_candidate_ids,
             is_full_eval,
+            experiment_type,
         )
 
         trial, raw_result = self._evaluation_adapter.evaluate_with_details(
@@ -370,7 +376,6 @@ class FrameworkGEPAAdapter:
             batch_index=batch_index,
             num_items=len(batch),
             capture_traces=effective_capture_traces,
-            eval_purpose=eval_purpose,
             experiment_type=experiment_type,
         )
 

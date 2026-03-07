@@ -22,7 +22,6 @@ def run_experiment(
     batch_index: int | None = None,
     num_items: int | None = None,
     capture_traces: bool | None = None,
-    eval_purpose: str | None = None,
     experiment_type: str | None = None,
     optimizer_type: str | None = None,
     optimizable_keys: list[str] | None = None,
@@ -39,7 +38,6 @@ def run_experiment(
         batch_index=batch_index,
         num_items=num_items,
         capture_traces=capture_traces,
-        eval_purpose=eval_purpose,
         experiment_type=experiment_type,
         optimizer_type=optimizer_type,
         optimizable_keys=optimizable_keys,
@@ -58,7 +56,6 @@ def run_experiment_with_details(
     batch_index: int | None = None,
     num_items: int | None = None,
     capture_traces: bool | None = None,
-    eval_purpose: str | None = None,
     experiment_type: str | None = None,
     optimizer_type: str | None = None,
     optimizable_keys: list[str] | None = None,
@@ -102,8 +99,6 @@ def run_experiment_with_details(
         experiment_config["num_items"] = num_items
     if capture_traces is not None:
         experiment_config["capture_traces"] = capture_traces
-    if eval_purpose is not None:
-        experiment_config["eval_purpose"] = eval_purpose
 
     for key in (optimizable_keys or []):
         value = candidate.config.get(key)

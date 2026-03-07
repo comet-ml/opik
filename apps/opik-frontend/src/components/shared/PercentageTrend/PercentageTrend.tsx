@@ -6,8 +6,12 @@ import { formatNumericData } from "@/lib/utils";
 import { Tag, TagProps } from "@/components/ui/tag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const getConfig = (percentage: number, trend: PercentageTrendType) => {
-  if (percentage === 0) {
+const getConfig = (
+  percentage: number,
+  trend: PercentageTrendType,
+  precision: number,
+) => {
+  if (Math.abs(percentage) < Math.pow(10, -precision) / 2) {
     return {
       Icon: MoveRight,
       variant: "gray",
@@ -44,7 +48,7 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
 }) => {
   if (isUndefined(percentage)) return null;
 
-  const { Icon, variant } = getConfig(percentage, trend);
+  const { Icon, variant } = getConfig(percentage, trend, precision);
   const tag = (
     <Tag
       size="md"

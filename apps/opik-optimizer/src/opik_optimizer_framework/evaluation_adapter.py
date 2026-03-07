@@ -79,14 +79,12 @@ class EvaluationAdapter:
         config: CandidateConfig,
         dataset_item_ids: list[str],
         parent_candidate_ids: list[str] | None = None,
-        eval_purpose: str | None = None,
     ) -> TrialResult | None:
         """Evaluate a single candidate. Returns TrialResult or None if rejected."""
         trial, _ = self.evaluate_with_details(
             config=config,
             dataset_item_ids=dataset_item_ids,
             parent_candidate_ids=parent_candidate_ids,
-            eval_purpose=eval_purpose,
         )
         return trial
 
@@ -99,7 +97,6 @@ class EvaluationAdapter:
         batch_index: int | None = None,
         num_items: int | None = None,
         capture_traces: bool | None = None,
-        eval_purpose: str | None = None,
         experiment_type: str | None = None,
     ) -> tuple[TrialResult | None, Any]:
         """Evaluate a candidate and return both the TrialResult and the raw EvaluationResult.
@@ -113,14 +110,16 @@ class EvaluationAdapter:
             logger.warning("Candidate rejected: %s", reason)
             return None, None
 
-        # step_index derived from parent lineage: parent's step + 1.
-        # Re-evaluations of the same candidate reuse its step_index.
+        # Known candidates keep their original step (re-evaluations like
+        # GEPA reflection minibatches shouldn't shift the candidate's step).
+        # New candidates use lineage-based derivation (parent step + 1)
+        # so that step == generation depth in the evolutionary tree.
         if candidate_id is not None and candidate_id in self._candidate_step_index:
             step_index = self._candidate_step_index[candidate_id]
         else:
             step_index = self._resolve_step_index(parent_candidate_ids)
 
-        if step_index != self._last_emitted_step:
+        if step_index > self._last_emitted_step:
             self._event_emitter.on_step_started(step_index)
             self._last_emitted_step = step_index
 
@@ -150,7 +149,6 @@ class EvaluationAdapter:
                 batch_index=batch_index,
                 num_items=num_items,
                 capture_traces=capture_traces,
-                eval_purpose=eval_purpose,
                 experiment_type=experiment_type,
                 optimizer_type=self._optimizer_type,
                 optimizable_keys=self._optimizable_keys,
