@@ -28,6 +28,7 @@ import {
   CandidateDataPoint,
   buildParentChildEdges,
 } from "./optimizationChartUtils";
+import type { InProgressInfo } from "./optimizationChartUtils";
 
 type OptimizationProgressChartContentProps = {
   chartData: CandidateDataPoint[];
@@ -38,6 +39,8 @@ type OptimizationProgressChartContentProps = {
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
   isEvaluationSuite?: boolean;
+  isInProgress?: boolean;
+  inProgressInfo?: InProgressInfo;
 };
 
 const CHART_CONFIG = {
@@ -57,6 +60,8 @@ const OptimizationProgressChartContent: React.FC<
   onTrialSelect,
   onTrialClick,
   isEvaluationSuite,
+  isInProgress = false,
+  inProgressInfo,
 }) => {
   const steps = useMemo(() => {
     const s = new Set(chartData.map((d) => d.stepIndex));
@@ -247,11 +252,117 @@ const OptimizationProgressChartContent: React.FC<
     );
   }, [edges]);
 
+  // Ghost step: derived from parent step + 1. Always at the proposed step —
+  // if another candidate already exists at that step, the chart handles overlap.
+  const ghostStep = useMemo(() => {
+    if (!isInProgress || steps.length === 0 || !inProgressInfo) return null;
+    return inProgressInfo.stepIndex;
+  }, [isInProgress, steps, inProgressInfo]);
+
   const xDomain = useMemo(() => {
     if (steps.length === 0) return [0, 1];
-    const max = steps[steps.length - 1];
+    const maxDataStep = steps[steps.length - 1];
+    const max =
+      ghostStep != null ? Math.max(maxDataStep, ghostStep) : maxDataStep;
     return [0, max + 0.3];
-  }, [steps]);
+  }, [steps, ghostStep]);
+
+  const renderGhostCandidate = useCallback(() => {
+    if (ghostStep == null || !inProgressInfo) return null;
+
+    const positions = dotPositionsRef.current;
+
+    // Collect all parent positions (crossover can merge 2+ parents)
+    const parentPositions: DotPosition[] = [];
+    for (const pid of inProgressInfo.parentCandidateIds) {
+      const pos = positions.get(pid);
+      if (pos) parentPositions.push(pos);
+    }
+    if (!parentPositions.length) return null;
+
+    // Calculate ghost X from existing dot positions
+    const sortedCandidatesByStep = chartData
+      .slice()
+      .sort((a, b) => a.stepIndex - b.stepIndex);
+    if (sortedCandidatesByStep.length < 2) return null;
+
+    let refA: { step: number; cx: number } | null = null;
+    let refB: { step: number; cx: number } | null = null;
+    for (const d of sortedCandidatesByStep) {
+      const pos = positions.get(d.candidateId);
+      if (!pos) continue;
+      if (!refA) {
+        refA = { step: d.stepIndex, cx: pos.cx };
+      } else if (d.stepIndex !== refA.step) {
+        refB = { step: d.stepIndex, cx: pos.cx };
+        break;
+      }
+    }
+    if (!refA || !refB) return null;
+
+    const pxPerStep = (refB.cx - refA.cx) / (refB.step - refA.step);
+    const ghostCx = refA.cx + pxPerStep * (ghostStep - refA.step);
+    const ghostCy =
+      parentPositions.reduce((sum, p) => sum + p.cy, 0) /
+      parentPositions.length;
+
+    return (
+      <g>
+        {parentPositions.map((parentPos, i) => {
+          const midX = (parentPos.cx + ghostCx) / 2;
+          const pathD = `M ${parentPos.cx},${parentPos.cy} C ${midX},${parentPos.cy} ${midX},${ghostCy} ${ghostCx},${ghostCy}`;
+          return (
+            <path
+              key={i}
+              d={pathD}
+              fill="none"
+              stroke="hsl(var(--muted-foreground))"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              strokeOpacity={0.5}
+            >
+              <animate
+                attributeName="stroke-dashoffset"
+                from="14"
+                to="0"
+                dur="1s"
+                repeatCount="indefinite"
+              />
+            </path>
+          );
+        })}
+        <circle
+          cx={ghostCx}
+          cy={ghostCy}
+          r={6}
+          fill="var(--color-blue)"
+          fillOpacity={0.2}
+          stroke="var(--color-blue)"
+          strokeWidth={1.5}
+          strokeOpacity={0.4}
+        >
+          <animate
+            attributeName="r"
+            values="4;8;4"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="fill-opacity"
+            values="0.3;0.1;0.3"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="stroke-opacity"
+            values="0.6;0.2;0.6"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+        </circle>
+      </g>
+    );
+  }, [ghostStep, inProgressInfo, chartData]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -267,7 +378,11 @@ const OptimizationProgressChartContent: React.FC<
             axisLine={false}
             tickLine={false}
             tick={DEFAULT_CHART_TICK}
-            ticks={steps}
+            ticks={
+              ghostStep != null && !steps.includes(ghostStep)
+                ? [...steps, ghostStep]
+                : steps
+            }
             tickFormatter={(value) => `Step ${value}`}
             domain={xDomain}
             padding={{ left: 20 }}
@@ -294,6 +409,9 @@ const OptimizationProgressChartContent: React.FC<
           {/* Edges render on top of dots in SVG paint order, but they are
               thin translucent lines so the dots remain clearly visible. */}
           <Customized component={renderEdges} />
+
+          {/* Ghost candidate with animated connector during optimization */}
+          {isInProgress && <Customized component={renderGhostCandidate} />}
         </ComposedChart>
       </ChartContainer>
 

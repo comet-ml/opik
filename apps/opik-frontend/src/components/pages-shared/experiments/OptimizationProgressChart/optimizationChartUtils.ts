@@ -31,6 +31,11 @@ export type ParentChildEdge = {
   childCandidateId: string;
 };
 
+export type InProgressInfo = {
+  stepIndex: number;
+  parentCandidateIds: string[];
+};
+
 /**
  * Compute status for each candidate:
  * - Step 0 candidates = "baseline"
@@ -44,14 +49,19 @@ export type ParentChildEdge = {
 export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
   isOptimizationFinished = false,
+  inProgressStepIndex?: number,
 ): Map<string, TrialStatus> => {
   const statusMap = new Map<string, TrialStatus>();
   if (!candidates.length) return statusMap;
 
   const maxStep = Math.max(...candidates.map((c) => c.stepIndex));
 
-  // Collect which steps exist
+  // Collect which steps exist — include the in-progress ghost step so that
+  // candidates two steps behind it can be marked as pruned immediately.
   const stepsWithCandidates = new Set(candidates.map((c) => c.stepIndex));
+  if (inProgressStepIndex != null) {
+    stepsWithCandidates.add(inProgressStepIndex);
+  }
 
   // Build set of candidate IDs that are referenced as parents
   const referencedParents = new Set<string>();
@@ -70,12 +80,17 @@ export const computeCandidateStatuses = (
     }
   }
 
+  const effectiveMaxStep =
+    inProgressStepIndex != null
+      ? Math.max(maxStep, inProgressStepIndex)
+      : maxStep;
+
   for (const c of candidates) {
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
     } else if (
       !referencedParents.has(c.candidateId) &&
-      c.stepIndex < maxStep &&
+      c.stepIndex < effectiveMaxStep &&
       (isOptimizationFinished || stepsWithCandidates.has(c.stepIndex + 2))
     ) {
       statusMap.set(c.candidateId, "pruned");
@@ -102,10 +117,12 @@ export const computeCandidateStatuses = (
 export const buildCandidateChartData = (
   candidates: AggregatedCandidate[],
   isOptimizationFinished = false,
+  inProgressStepIndex?: number,
 ): CandidateDataPoint[] => {
   const statusMap = computeCandidateStatuses(
     candidates,
     isOptimizationFinished,
+    inProgressStepIndex,
   );
 
   return candidates

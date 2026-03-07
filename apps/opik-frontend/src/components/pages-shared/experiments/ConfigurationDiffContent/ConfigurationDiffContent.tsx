@@ -150,13 +150,29 @@ const ConfigurationDiffContent: React.FunctionComponent<
     const flatBase: Record<string, unknown> = {};
     const flatCurr: Record<string, unknown> = {};
 
-    const collectFlat = (
+    // When a structured "prompt" key exists (messages array), skip
+    // individual keys like system_prompt / user_message that duplicate it.
+    const basePrompt = get(baseConfig, "prompt", null);
+    const currPrompt = get(currConfig, "prompt", null);
+    const hasStructuredPrompt = !!(basePrompt || currPrompt);
+
+    const REDUNDANT_WHEN_STRUCTURED = [
+      "system_prompt",
+      "user_prompt",
+      "user_message",
+    ];
+
+    const shouldSkipKey = (key: string) =>
+      hasStructuredPrompt && REDUNDANT_WHEN_STRUCTURED.includes(key);
+
+    const collectFlatFiltered = (
       obj: Record<string, unknown>,
       target: Record<string, unknown>,
       prefix: string,
     ) => {
       for (const [key, value] of Object.entries(obj)) {
         if (!prefix && EXCLUDED_KEYS.includes(key)) continue;
+        if (!prefix && shouldSkipKey(key)) continue;
         const path = prefix ? `${prefix}.${key}` : key;
         const type = detectConfigValueType(key, value);
 
@@ -167,14 +183,14 @@ const ConfigurationDiffContent: React.FunctionComponent<
           isObject(value) &&
           !isArray(value)
         ) {
-          collectFlat(value as Record<string, unknown>, target, path);
+          collectFlatFiltered(value as Record<string, unknown>, target, path);
         } else {
           target[path] = value;
         }
       }
     };
 
-    const collectPrompts = (
+    const collectPromptsFiltered = (
       base: Record<string, unknown>,
       curr: Record<string, unknown>,
       prefix: string,
@@ -183,6 +199,7 @@ const ConfigurationDiffContent: React.FunctionComponent<
 
       for (const key of allKeys) {
         if (!prefix && EXCLUDED_KEYS.includes(key)) continue;
+        if (!prefix && shouldSkipKey(key)) continue;
         const path = prefix ? `${prefix}.${key}` : key;
         const bVal = base[key];
         const cVal = curr[key];
@@ -202,7 +219,7 @@ const ConfigurationDiffContent: React.FunctionComponent<
           !isArray(bVal) &&
           !isArray(cVal)
         ) {
-          collectPrompts(
+          collectPromptsFiltered(
             (bVal as Record<string, unknown>) ?? {},
             (cVal as Record<string, unknown>) ?? {},
             path,
@@ -211,15 +228,13 @@ const ConfigurationDiffContent: React.FunctionComponent<
       }
     };
 
-    collectFlat(baseConfig, flatBase, "");
-    collectFlat(currConfig, flatCurr, "");
-    collectPrompts(baseConfig, currConfig, "");
+    collectFlatFiltered(baseConfig, flatBase, "");
+    collectFlatFiltered(currConfig, flatCurr, "");
+    collectPromptsFiltered(baseConfig, currConfig, "");
 
     // Handle top-level "prompt" key
-    const basePrompt = get(baseConfig, "prompt", null);
-    const currPrompt = get(currConfig, "prompt", null);
     if (
-      (basePrompt || currPrompt) &&
+      hasStructuredPrompt &&
       JSON.stringify(basePrompt) !== JSON.stringify(currPrompt)
     ) {
       prompts.unshift({

@@ -26,6 +26,7 @@ type UseCompareOptimizationsColumnsParams = {
   isOptimizationFinished?: boolean;
   bestCandidateId?: string;
   isEvaluationSuite?: boolean;
+  inProgressStepIndex?: number;
 };
 
 export const useCompareOptimizationsColumns = ({
@@ -36,6 +37,7 @@ export const useCompareOptimizationsColumns = ({
   isOptimizationFinished,
   bestCandidateId,
   isEvaluationSuite,
+  inProgressStepIndex,
 }: UseCompareOptimizationsColumnsParams) => {
   const columnsDef: ColumnData<AggregatedCandidate>[] = useMemo(() => {
     return [
@@ -111,6 +113,7 @@ export const useCompareOptimizationsColumns = ({
           candidates,
           isOptimizationFinished,
           bestCandidateId,
+          inProgressStepIndex,
         },
       },
       {
@@ -120,7 +123,13 @@ export const useCompareOptimizationsColumns = ({
         cell: TimeCell as never,
       },
     ];
-  }, [candidates, isOptimizationFinished, bestCandidateId, isEvaluationSuite]);
+  }, [
+    candidates,
+    isOptimizationFinished,
+    bestCandidateId,
+    isEvaluationSuite,
+    inProgressStepIndex,
+  ]);
 
   const columns = useMemo(() => {
     return [

@@ -12,7 +12,8 @@ import java.util.Arrays;
 public enum ExperimentType {
     REGULAR("regular"),
     TRIAL("trial"),
-    MINI_BATCH("mini-batch");
+    MINI_BATCH("mini-batch"),
+    MUTATION("mutation");
 
     @JsonValue
     private final String value;

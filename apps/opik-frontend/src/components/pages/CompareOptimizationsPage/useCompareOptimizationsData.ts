@@ -118,6 +118,11 @@ const aggregateCandidates = (
     const existing = groups.get(key);
     if (existing) {
       existing.experiments.push(exp);
+      // Keep the metadata with the lowest step_index — that's when the
+      // candidate was first created, not a later re-evaluation step.
+      if (meta.step_index >= 0 && meta.step_index < existing.meta.step_index) {
+        existing.meta = meta;
+      }
     } else {
       groups.set(key, { experiments: [exp], meta });
     }
@@ -302,12 +307,36 @@ export const useCompareOptimizationsData = () => {
           }
           return column;
         }),
-      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
       size: MAX_EXPERIMENTS_LOADED,
     },
     {
       placeholderData: keepPreviousData,
+      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
+    },
+  );
+
+  const isInProgress =
+    !!optimization?.status &&
+    IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
+
+  // Lightweight query: fetch the most recent mutation experiment to detect
+  // in-progress work. Mutation experiments are created when the optimizer
+  // explores a new candidate, so they indicate upcoming work on the chart.
+  const { data: latestExpData } = useExperimentsList(
+    {
+      workspaceName,
+      optimizationId: optimizationId,
+      types: [EXPERIMENT_TYPE.MUTATION],
+      sorting: [{ id: "created_at", desc: true }],
+      forceSorting: true,
+      page: 1,
+      size: 1,
+      queryKey: "experiments-latest-mutation",
+    },
+    {
+      enabled: !!optimizationId && isInProgress,
       refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
     },
   );
@@ -367,6 +396,38 @@ export const useCompareOptimizationsData = () => {
     [experiments, optimization?.objective_name],
   );
 
+  // Derive in-progress candidate info from the latest mutation experiment.
+  // Mutation experiments carry parent_candidate_ids from the optimizer.
+  // The ghost step is always parent step + 1 (each mutation is one generation ahead).
+  // If the mutation's candidate already has a score, the work is done — no ghost.
+  const inProgressInfo = useMemo(() => {
+    if (!isInProgress) return undefined;
+
+    const latestMutation = latestExpData?.content?.[0];
+    if (!latestMutation) return undefined;
+
+    const meta = getOptimizationMetadata(
+      latestMutation.metadata,
+      latestMutation.id,
+    );
+    if (!meta || !meta.parent_candidate_ids.length) return undefined;
+
+    const existingCandidate = candidates.find(
+      (c) => c.candidateId === meta.candidate_id,
+    );
+    if (existingCandidate?.score != null) return undefined;
+
+    const parentSteps = candidates
+      .filter((c) => meta.parent_candidate_ids.includes(c.candidateId))
+      .map((c) => c.stepIndex);
+    if (!parentSteps.length) return undefined;
+
+    return {
+      stepIndex: Math.max(...parentSteps) + 1,
+      parentCandidateIds: meta.parent_candidate_ids,
+    };
+  }, [isInProgress, latestExpData?.content, candidates]);
+
   const rows = useMemo(
     () =>
       candidates.filter(({ name }) =>
@@ -388,23 +449,12 @@ export const useCompareOptimizationsData = () => {
   const bestCandidate = useMemo(() => {
     if (!candidates.length) return undefined;
 
-    const isFinished =
-      !!optimization?.status &&
-      !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(optimization.status);
-    const maxStep = Math.max(...candidates.map((c) => c.stepIndex));
-
-    // Only consider candidates whose step is fully evaluated:
-    // either the optimization is done, or a later step already exists
-    const settled = candidates.filter(
-      (c) => isFinished || c.stepIndex < maxStep,
-    );
-
-    return settled.reduce<AggregatedCandidate | undefined>((best, c) => {
+    return candidates.reduce<AggregatedCandidate | undefined>((best, c) => {
       if (c.score == null) return best;
       if (!best || best.score == null || c.score > best.score) return c;
       return best;
     }, undefined);
-  }, [candidates, optimization?.status]);
+  }, [candidates]);
 
   const baselineExperiment = useMemo(() => {
     if (!experiments.length) return undefined;
@@ -453,6 +503,7 @@ export const useCompareOptimizationsData = () => {
     bestCandidate,
     baselineCandidate,
     baselineExperiment,
+    inProgressInfo,
     sortableBy,
     // Loading states
     isOptimizationPending,

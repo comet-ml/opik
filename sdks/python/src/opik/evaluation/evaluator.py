@@ -352,14 +352,52 @@ def evaluate_suite(
     Returns:
         EvaluationResult containing test results for building suite results.
     """
-    client = opik_client.get_client_cached()
+    return _run_suite_evaluation(
+        dataset=dataset,
+        task=task,
+        client=None,
+        experiment_name_prefix=experiment_name_prefix,
+        experiment_name=experiment_name,
+        project_name=project_name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        experiment_tags=experiment_tags,
+        verbose=verbose,
+        task_threads=task_threads,
+        evaluator_model=evaluator_model,
+    )
+
+
+def _run_suite_evaluation(
+    *,
+    dataset: dataset.Dataset,
+    task: LLMTask,
+    client: Optional[opik_client.Opik] = None,
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 1,
+    task_threads: int = 16,
+    evaluator_model: Optional[str] = None,
+    optimization_id: Optional[str] = None,
+    experiment_type: Optional[str] = None,
+) -> evaluation_result.EvaluationResult:
+    _validate_dataset_is_evaluation_suite(dataset)
+
+    if client is None:
+        client = opik_client.get_client_cached()
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    experiment_ = client.create_experiment(
+    create_experiment_kwargs: Dict[str, Any] = dict(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
@@ -368,6 +406,11 @@ def evaluate_suite(
         tags=experiment_tags,
         dataset_version_id=None,
     )
+    if optimization_id is not None:
+        create_experiment_kwargs["type"] = experiment_type or "trial"
+        create_experiment_kwargs["optimization_id"] = optimization_id
+
+    experiment_ = client.create_experiment(**create_experiment_kwargs)
 
     return _evaluate_suite_task(
         client=client,
@@ -378,6 +421,8 @@ def evaluate_suite(
         verbose=verbose,
         task_threads=task_threads,
         evaluator_model=evaluator_model,
+        dataset_item_ids=dataset_item_ids,
+        dataset_filter_string=dataset_filter_string,
     )
 
 
@@ -477,6 +522,14 @@ def _evaluate_task(
         )
 
     return evaluation_result_
+
+
+def _validate_dataset_is_evaluation_suite(dataset_: dataset.Dataset) -> None:
+    if dataset_.dataset_type != "evaluation_suite":
+        raise ValueError(
+            f"Dataset '{dataset_.name}' is not configured as an evaluation suite. "
+            f"Use opik_client.create_evaluation_suite() to create a dataset with suite configuration."
+        )
 
 
 def _evaluate_suite_task(
@@ -1163,6 +1216,7 @@ def evaluate_optimization_suite_trial(
     verbose: int = 1,
     task_threads: int = 16,
     evaluator_model: Optional[str] = None,
+    experiment_type: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Run an optimization trial on a dataset configured as an evaluation suite.
@@ -1205,40 +1259,29 @@ def evaluate_optimization_suite_trial(
         evaluator_model: Optional model name to use for LLMJudge evaluators.
             If not provided, uses the default model.
 
+        experiment_type: Optional experiment type. Defaults to "trial".
+            Use "mini-batch" for minibatch evaluations.
+
     Returns:
         EvaluationResult containing test results for the optimization trial.
     """
-    if client is None:
-        client = opik_client.get_client_cached()
-
-    experiment_name = _use_or_create_experiment_name(
-        experiment_name=experiment_name,
-        experiment_name_prefix=experiment_name_prefix,
-    )
-
-    experiment_ = client.create_experiment(
-        name=experiment_name,
-        dataset_name=dataset.name,
-        experiment_config=experiment_config,
-        prompts=prompts,
-        type="trial",
-        optimization_id=optimization_id,
-        evaluation_method="evaluation_suite",
-        tags=experiment_tags,
-        dataset_version_id=None,
-    )
-
-    return _evaluate_suite_task(
-        client=client,
-        experiment=experiment_,
+    return _run_suite_evaluation(
         dataset=dataset,
         task=task,
+        client=client,
+        dataset_item_ids=dataset_item_ids,
+        dataset_filter_string=dataset_filter_string,
+        experiment_name_prefix=experiment_name_prefix,
+        experiment_name=experiment_name,
         project_name=project_name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        experiment_tags=experiment_tags,
         verbose=verbose,
         task_threads=task_threads,
         evaluator_model=evaluator_model,
-        dataset_item_ids=dataset_item_ids,
-        dataset_filter_string=dataset_filter_string,
+        optimization_id=optimization_id,
+        experiment_type=experiment_type,
     )
 
 

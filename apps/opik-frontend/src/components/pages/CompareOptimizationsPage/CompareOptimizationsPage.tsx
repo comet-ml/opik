@@ -23,6 +23,7 @@ const CompareOptimizationsPage: React.FC = () => {
     bestCandidate,
     baselineCandidate,
     baselineExperiment,
+    inProgressInfo,
     isEvaluationSuite,
     isOptimizationPending,
     isExperimentsPending,
@@ -101,6 +102,7 @@ const CompareOptimizationsPage: React.FC = () => {
           status={optimization?.status}
           onTrialClick={handleTrialClick}
           isEvaluationSuite={isEvaluationSuite}
+          inProgressInfo={inProgressInfo}
         />
       </div>
 

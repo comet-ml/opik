@@ -51,12 +51,10 @@ Add your optimizer to `_load_registry()` in `factory.py`:
 
 ```python
 def _load_registry() -> dict[str, type]:
-    from opik_optimizer_framework.optimizers.simple_optimizer import SimpleOptimizer
     from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
     from opik_optimizer_framework.optimizers.my_optimizer import MyOptimizer
 
     return {
-        "SimpleOptimizer": SimpleOptimizer,
         "GepaOptimizer": GepaOptimizer,
         "MyOptimizer": MyOptimizer,
     }
@@ -72,10 +70,10 @@ Contains the optimization configuration:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `prompt_messages` | `list[dict]` | The original prompt (list of `{"role": ..., "content": ...}`) |
 | `model` | `str` | LiteLLM model identifier (e.g., `"gpt-4o-mini"`) |
-| `model_parameters` | `dict` | Model call parameters (temperature, etc.) |
-| `baseline_config` | `dict[str, Any]` | Full config dict for baseline evaluation (prompt_messages, model, model_parameters, etc.) |
+| `baseline_config` | `dict[str, Any]` | Full config dict for baseline evaluation — includes optimizable keys plus `model`, `model_parameters`, etc. |
+| `optimizable_keys` | `list[str]` | Config keys the optimizer is allowed to modify — any string values in `baseline_config` |
+| `config_descriptions` | `dict[str, str]` | Descriptions of each optimizable key for the reflection LLM |
 | `optimizer_parameters` | `dict` | Algorithm-specific parameters from the UI |
 | `optimization_id` | `str` | Unique ID for this optimization run |
 | `dataset_name` | `str` | Name of the evaluation suite dataset |
@@ -85,34 +83,23 @@ Contains the optimization configuration:
 The main interface for evaluating candidates. Call `evaluate()` to score a prompt variant:
 
 ```python
-# Build config by copying baseline and replacing prompt_messages
-config = {**context.baseline_config, "prompt_messages": new_messages}
+# Build config by copying baseline and replacing optimizable keys
+config = {**context.baseline_config}
+for key in context.optimizable_keys:
+    config[key] = improved_texts[key]  # your algorithm produces these
 
 trial = evaluation_adapter.evaluate(
     config=config,
     dataset_item_ids=[str(item["id"]) for item in training_set],
     parent_candidate_ids=["parent-uuid"],   # Lineage (optional)
-    eval_purpose="exploration",             # See eval_purpose values below
 )
 
 if trial is not None:
     print(f"Score: {trial.score}")
 ```
 
-Each `evaluate()` call creates an experiment visible in the UI.
-
-### `eval_purpose` Values
-
-Use these standard values so the UI can categorize experiments:
-
-| Value | When to use |
-|-------|-------------|
-| `"baseline"` | Reserved — set by the orchestrator for the original prompt |
-| `"initialization"` | One-time setup evals before the main loop |
-| `"exploration"` | Main optimization loop evaluations |
-| `"validation"` | Final validation of accepted candidates |
-
-Algorithms may use colon-separated subtypes for finer granularity (e.g., `"exploration:minibatch"`, `"exploration:mutation"`). The UI groups by the prefix before the colon.
+Each `evaluate()` call creates an experiment visible in the UI. The `experiment_type`
+is set by the adapter based on the evaluation context (full trial, mini-batch, or mutation).
 
 ### `OptimizationState`
 
@@ -137,21 +124,22 @@ The orchestrator evaluates the original prompt on the **full dataset** before ca
 
 ## Minimal Example
 
-See `simple_optimizer.py` for a complete working example. The core pattern is:
+The core pattern is:
 
 ```python
 def run(self, context, training_set, validation_set,
         evaluation_adapter, state, baseline_trial=None):
     for step in range(num_steps):
-        # 1. Generate candidate prompt (your algorithm's logic)
-        new_messages = generate_improved_prompt(context.prompt_messages)
+        # 1. Generate improved texts for each optimizable key
+        improved = {}
+        for key in context.optimizable_keys:
+            improved[key] = generate_improved(context.baseline_config[key])
 
-        # 2. Evaluate it — copy baseline config, replace prompt_messages
-        config = {**context.baseline_config, "prompt_messages": new_messages}
+        # 2. Evaluate — copy baseline config, replace optimizable keys
+        config = {**context.baseline_config, **improved}
         trial = evaluation_adapter.evaluate(
             config=config,
             dataset_item_ids=[str(item["id"]) for item in training_set],
-            eval_purpose="exploration",
         )
 
         # 3. state.best_trial is updated automatically
@@ -159,7 +147,7 @@ def run(self, context, training_set, validation_set,
 
 ## Testing
 
-Add tests in `tests/unit/`. Mock `EvaluationAdapter` to test your optimizer's logic without hitting real APIs. See `test_simple_optimizer.py` for patterns.
+Add tests in `tests/unit/`. Mock `EvaluationAdapter` to test your optimizer's logic without hitting real APIs.
 
 If your optimizer depends on an optional library (like `gepa`), place tests in `tests/library_integration/<library>/` and guard with `pytest.importorskip("<library>")` at the top of the file so the unit suite stays fast and dependency-free.
 

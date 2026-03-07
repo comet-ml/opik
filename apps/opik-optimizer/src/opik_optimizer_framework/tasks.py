@@ -17,26 +17,32 @@ class Task(Protocol):
     def __call__(self, dataset_item: dict[str, Any]) -> dict[str, Any]: ...
 
 
+MESSAGE_KEYS: list[tuple[str, str]] = [
+    ("system_prompt", "system"),
+    ("user_message", "user"),
+]
+
+
 class LLMTask:
     """Task that runs an LLM completion via litellm.
 
-    Formats prompt_messages by substituting dataset item values into
+    Reads named prompt parameters (system_prompt, user_message) from the config,
+    constructs the messages list, substitutes dataset item values into
     template placeholders, then calls litellm.completion().
     """
 
-    def __init__(
-        self,
-        prompt_messages: list[dict[str, str]],
-        model: str,
-        model_parameters: dict[str, Any],
-    ) -> None:
-        self.prompt_messages = prompt_messages
-        self.model = model
-        self.model_parameters = model_parameters
+    def __init__(self, config: CandidateConfig) -> None:
+        self.messages: list[dict[str, str]] = []
+        for key, role in MESSAGE_KEYS:
+            content = config.get(key)
+            if content is not None:
+                self.messages.append({"role": role, "content": str(content)})
+        self.model: str = config["model"]
+        self.model_parameters: dict[str, Any] = config.get("model_parameters", {})
 
     def __call__(self, dataset_item: dict[str, Any]) -> dict[str, Any]:
         formatted_messages = []
-        for msg in self.prompt_messages:
+        for msg in self.messages:
             content = msg["content"]
             for key, value in dataset_item.items():
                 content = content.replace(f"{{{key}}}", str(value))
@@ -71,16 +77,8 @@ class RemoteExecutionTask:
 
 
 def create_task(config: CandidateConfig) -> Task:
-    """Factory that selects the appropriate Task implementation.
-
-    Routes to RemoteExecutionTask when config has a mask_id,
-    otherwise falls back to LLMTask.
-    """
+    """Factory that selects the appropriate Task implementation."""
     if config.get("mask_id") is not None:
         return RemoteExecutionTask(mask_id=config["mask_id"])
 
-    return LLMTask(
-        prompt_messages=config["prompt_messages"],
-        model=config["model"],
-        model_parameters=config.get("model_parameters", {}),
-    )
+    return LLMTask(config)

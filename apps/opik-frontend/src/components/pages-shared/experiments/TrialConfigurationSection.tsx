@@ -19,6 +19,12 @@ const PROMPT_MAX_LENGTH = 200;
 
 const EXCLUDED_CONFIG_KEYS = ["prompt", "examples"];
 
+const REDUNDANT_WHEN_STRUCTURED = [
+  "system_prompt",
+  "user_prompt",
+  "user_message",
+];
+
 type ConfigViewMode = "config" | "diff";
 
 type TrialConfigurationSectionProps = {
@@ -237,9 +243,16 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
 
     const result: ConfigEntryItem[] = [];
 
+    // When a structured "prompt" key exists, skip individual keys
+    // like system_prompt / user_message that duplicate its content.
+    const hasStructuredPrompt = "prompt" in configuration;
+    const shouldSkipKey = (key: string) =>
+      hasStructuredPrompt && REDUNDANT_WHEN_STRUCTURED.includes(key);
+
     const collectEntries = (obj: Record<string, unknown>, prefix: string) => {
       for (const [key, value] of Object.entries(obj)) {
         if (!prefix && EXCLUDED_CONFIG_KEYS.includes(key)) continue;
+        if (!prefix && shouldSkipKey(key)) continue;
 
         const path = prefix ? `${prefix}.${key}` : key;
         const type = detectConfigValueType(key, value);
@@ -254,6 +267,8 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
 
     collectEntries(configuration, "");
 
+    // If no prompt was found (old format without structured "prompt" key),
+    // try the top-level "prompt" as a fallback.
     const hasPrompt = result.some((e) => e.type === "prompt");
     if (!hasPrompt) {
       const configPrompt = get(configuration, "prompt");

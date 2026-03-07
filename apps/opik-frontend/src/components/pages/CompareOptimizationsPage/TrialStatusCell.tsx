@@ -17,11 +17,16 @@ const STATUS_VARIANT_MAP: Record<TrialStatus, TagProps["variant"]> = {
 const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { candidates, isOptimizationFinished, bestCandidateId } = (custom ??
-    {}) as {
+  const {
+    candidates,
+    isOptimizationFinished,
+    bestCandidateId,
+    inProgressStepIndex,
+  } = (custom ?? {}) as {
     candidates: AggregatedCandidate[];
     isOptimizationFinished?: boolean;
     bestCandidateId?: string;
+    inProgressStepIndex?: number;
   };
 
   const isBest = bestCandidateId === row.candidateId;
@@ -29,6 +34,7 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const statusMap = computeCandidateStatuses(
     candidates ?? [],
     isOptimizationFinished,
+    inProgressStepIndex,
   );
   const status = statusMap.get(row.candidateId) ?? "pruned";
 

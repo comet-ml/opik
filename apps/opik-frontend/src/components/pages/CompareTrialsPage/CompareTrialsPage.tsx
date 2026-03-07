@@ -21,7 +21,6 @@ import { getFeedbackScoreValue } from "@/lib/feedback-scores";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { OPTIMIZER_TYPE } from "@/types/optimizations";
 
 const CompareTrialsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -57,7 +56,7 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     {
       workspaceName,
       optimizationId,
-      types: [EXPERIMENT_TYPE.TRIAL, EXPERIMENT_TYPE.MINI_BATCH],
+      types: [EXPERIMENT_TYPE.TRIAL],
       page: 1,
       size: 100,
     },
@@ -111,11 +110,6 @@ const CompareTrialsPage: React.FunctionComponent = () => {
     const allExperiments = optimizationExperimentsData?.content ?? [];
     return allExperiments.find((exp) => exp.id === baselineExperimentId);
   }, [baselineExperimentId, optimizationExperimentsData?.content]);
-
-  const isGepa =
-    optimization?.studio_config?.optimizer?.type === OPTIMIZER_TYPE.GEPA ||
-    (optimization?.metadata as Record<string, unknown> | undefined)
-      ?.optimizer === "GepaOptimizer";
 
   const [tab, setTab] = useState<"results" | "configuration">("results");
 
@@ -188,7 +182,6 @@ const CompareTrialsPage: React.FunctionComponent = () => {
                 experimentsIds={experimentsIds}
                 experiments={memorizedExperiments}
                 isEvaluationSuite={isEvaluationSuite}
-                showMinibatch={isGepa}
               />
             </>
           )}

@@ -111,6 +111,7 @@ export enum EXPERIMENT_TYPE {
   REGULAR = "regular",
   TRIAL = "trial",
   MINI_BATCH = "mini-batch",
+  MUTATION = "mutation",
 }
 
 export interface Experiment {

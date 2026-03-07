@@ -2,49 +2,38 @@ from opik_optimizer_framework.candidate_validator import validate_candidate
 
 
 class TestCandidateValidator:
-    def test_valid_candidate(self, sample_candidate_config, sample_optimization_state):
-        valid, reason = validate_candidate(sample_candidate_config, sample_optimization_state)
+    def test_valid_candidate(self):
+        config = {"system_prompt": "You are helpful.", "model": "gpt-4"}
+        valid, reason = validate_candidate(config, ["system_prompt"])
         assert valid is True
         assert reason is None
 
-    def test_empty_messages_rejected(self, sample_optimization_state):
-        config = {"prompt_messages": [], "model": "gpt-4"}
-        valid, reason = validate_candidate(config, sample_optimization_state)
+    def test_missing_key_rejected(self):
+        config = {"model": "gpt-4"}
+        valid, reason = validate_candidate(config, ["system_prompt"])
         assert valid is False
-        assert reason == "empty_messages"
+        assert reason == "missing_or_empty:system_prompt"
 
-    def test_missing_role_rejected(self, sample_optimization_state):
-        config = {
-            "prompt_messages": [{"content": "hi"}],
-            "model": "gpt-4",
-        }
-        valid, reason = validate_candidate(config, sample_optimization_state)
+    def test_empty_string_rejected(self):
+        config = {"system_prompt": "", "model": "gpt-4"}
+        valid, reason = validate_candidate(config, ["system_prompt"])
         assert valid is False
-        assert "missing_role_or_content" in reason
+        assert reason == "missing_or_empty:system_prompt"
 
-    def test_missing_content_rejected(self, sample_optimization_state):
-        config = {
-            "prompt_messages": [{"role": "user"}],
-            "model": "gpt-4",
-        }
-        valid, reason = validate_candidate(config, sample_optimization_state)
-        assert valid is False
-        assert "missing_role_or_content" in reason
+    def test_multiple_keys_all_present(self):
+        config = {"system_prompt": "Be helpful.", "user_message": "Hello", "model": "gpt-4"}
+        valid, reason = validate_candidate(config, ["system_prompt", "user_message"])
+        assert valid is True
+        assert reason is None
 
-    def test_empty_role_rejected(self, sample_optimization_state):
-        config = {
-            "prompt_messages": [{"role": "", "content": "hi"}],
-            "model": "gpt-4",
-        }
-        valid, reason = validate_candidate(config, sample_optimization_state)
+    def test_multiple_keys_one_missing(self):
+        config = {"system_prompt": "Be helpful.", "model": "gpt-4"}
+        valid, reason = validate_candidate(config, ["system_prompt", "user_message"])
         assert valid is False
-        assert "empty_role_or_content" in reason
+        assert reason == "missing_or_empty:user_message"
 
-    def test_empty_content_rejected(self, sample_optimization_state):
-        config = {
-            "prompt_messages": [{"role": "user", "content": ""}],
-            "model": "gpt-4",
-        }
-        valid, reason = validate_candidate(config, sample_optimization_state)
-        assert valid is False
-        assert "empty_role_or_content" in reason
+    def test_no_optimizable_keys_always_valid(self):
+        config = {"model": "gpt-4"}
+        valid, reason = validate_candidate(config, [])
+        assert valid is True
+        assert reason is None

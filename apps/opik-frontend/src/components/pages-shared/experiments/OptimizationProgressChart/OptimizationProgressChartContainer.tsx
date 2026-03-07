@@ -9,7 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import useProgressSimulation from "@/hooks/useProgressSimulation";
 import OptimizationProgressChartContent from "./OptimizationProgressChartContent";
-import { buildCandidateChartData } from "./optimizationChartUtils";
+import {
+  buildCandidateChartData,
+  type InProgressInfo,
+} from "./optimizationChartUtils";
 
 const OPTIMIZATION_TIPS = [
   "Running optimization trials...",
@@ -29,6 +32,7 @@ type OptimizationProgressChartContainerProps = {
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
   isEvaluationSuite?: boolean;
+  inProgressInfo?: InProgressInfo;
 };
 
 const OptimizationProgressChartContainer: React.FC<
@@ -42,6 +46,7 @@ const OptimizationProgressChartContainer: React.FC<
   onTrialSelect,
   onTrialClick,
   isEvaluationSuite,
+  inProgressInfo,
 }) => {
   const isInProgress =
     !!status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
@@ -56,8 +61,13 @@ const OptimizationProgressChartContainer: React.FC<
     !!status && !IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
   const chartData = useMemo(
-    () => buildCandidateChartData(candidates, isOptimizationFinished),
-    [candidates, isOptimizationFinished],
+    () =>
+      buildCandidateChartData(
+        candidates,
+        isOptimizationFinished,
+        inProgressInfo?.stepIndex,
+      ),
+    [candidates, isOptimizationFinished, inProgressInfo?.stepIndex],
   );
 
   const noData = useMemo(
@@ -116,6 +126,8 @@ const OptimizationProgressChartContainer: React.FC<
         onTrialSelect={onTrialSelect}
         onTrialClick={onTrialClick}
         isEvaluationSuite={isEvaluationSuite}
+        isInProgress={isInProgress}
+        inProgressInfo={inProgressInfo}
       />
     );
   }, [
@@ -130,6 +142,7 @@ const OptimizationProgressChartContainer: React.FC<
     onTrialSelect,
     onTrialClick,
     isEvaluationSuite,
+    inProgressInfo,
   ]);
 
   return (
@@ -137,7 +150,16 @@ const OptimizationProgressChartContainer: React.FC<
       <CardHeader className="space-y-0.5 px-4 pt-3">
         <CardTitle className="comet-body-s-accented flex items-center gap-2">
           Optimization progress
-          {isInProgress && !noData && <Spinner size="xs" />}
+          {isInProgress && !noData && (
+            <>
+              <Spinner size="xs" />
+              <span className="comet-body-xs font-normal text-muted-slate">
+                {inProgressInfo
+                  ? "Evaluating new candidate..."
+                  : "Reflecting on results..."}
+              </span>
+            </>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-3">{renderContent()}</CardContent>

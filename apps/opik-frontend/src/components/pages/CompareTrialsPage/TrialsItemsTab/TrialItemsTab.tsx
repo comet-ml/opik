@@ -61,7 +61,6 @@ type FlattenedTrialItem = {
   id: string;
   dataset_item_id: string;
   data: object;
-  minibatchNumber: number;
   experimentId: string;
   experimentItem: ExperimentItem;
   allRuns: ExperimentItem[];
@@ -101,18 +100,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const COLUMN_MINIBATCH_ID = "minibatch_number";
-
-export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_MINIBATCH_ID];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 
 const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
-  {
-    id: COLUMN_MINIBATCH_ID,
-    label: "Minibatch #",
-    type: COLUMN_TYPE.number,
-    accessorFn: (row) => row.minibatchNumber,
-    size: 110,
-  },
   {
     id: COLUMN_ID_ID,
     label: "Dataset item ID",
@@ -129,7 +119,6 @@ export type TrialItemsTabProps = {
   experimentsIds: string[];
   experiments?: Experiment[];
   isEvaluationSuite?: boolean;
-  showMinibatch?: boolean;
 };
 
 const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
@@ -138,7 +127,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   experimentsIds = [],
   experiments,
   isEvaluationSuite = false,
-  showMinibatch = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
@@ -258,12 +246,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   const apiTotal = data?.total ?? 0;
   const noDataText = "There is no data for the selected trials";
 
-  const experimentIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    experimentsIds.forEach((id, idx) => map.set(id, idx + 1));
-    return map;
-  }, [experimentsIds]);
-
   const allFlatRows = useMemo(() => {
     const apiRows: ExperimentsCompare[] = data?.content ?? [];
     const flat: FlattenedTrialItem[] = [];
@@ -281,7 +263,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           id: `${row.id}_${experimentId}`,
           dataset_item_id: row.id,
           data: row.data,
-          minibatchNumber: experimentIndexMap.get(experimentId) ?? 0,
           experimentId,
           experimentItem: runs[0],
           allRuns: runs,
@@ -290,9 +271,8 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       }
     }
 
-    flat.sort((a, b) => a.minibatchNumber - b.minibatchNumber);
     return flat;
-  }, [data?.content, experimentIndexMap]);
+  }, [data?.content]);
 
   const [passFilter, setPassFilter] = useState<"all" | "passed" | "failed">(
     "all",
@@ -483,13 +463,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     }
   }, [scoresColumnsData, selectedColumns, setSelectedColumns]);
 
-  const activeDefaultColumns = useMemo(
-    () =>
-      showMinibatch
-        ? DEFAULT_COLUMNS
-        : DEFAULT_COLUMNS.filter((c) => c.id !== COLUMN_MINIBATCH_ID),
-    [showMinibatch],
-  );
+  const activeDefaultColumns = DEFAULT_COLUMNS;
 
   const columns = useMemo(() => {
     const retVal = [
