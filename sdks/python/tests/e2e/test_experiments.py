@@ -38,6 +38,71 @@ def equals_scoring_function(dataset_item: Dict[str, Any], task_outputs: Dict[str
     )
 
 
+def test__experiment_insert__happy_path(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    dataset = opik_client.create_dataset(dataset_name)
+    dataset.insert(
+        [
+            {"input": {"question": "What is the capital of France?"}},
+        ]
+    )
+    # Separate inserts ensure that item id is different from id
+    dataset.insert([{"input": {"question": "What is the capital of Germany?"}}])
+
+    dataset_items = list(dataset.__internal_api__stream_items_as_dataclasses__())
+    assert len(dataset_items) == 2
+
+    trace1 = opik_client.trace(
+        name="trace-1",
+        input={"question": "What is the capital of France?"},
+        output={"answer": "Paris"},
+    )
+    trace2 = opik_client.trace(
+        name="trace-2",
+        input={"question": "What is the capital of Germany?"},
+        output={"answer": "Berlin"},
+    )
+    opik_client.flush()
+
+    experiment = opik_client.create_experiment(
+        dataset_name=dataset_name,
+        name=experiment_name,
+    )
+
+    experiment.insert(
+        [
+            experiment_item.ExperimentItemReferences(
+                dataset_item_id=dataset_items[0].id,
+                trace_id=trace1.id,
+            ),
+            experiment_item.ExperimentItemReferences(
+                dataset_item_id=dataset_items[1].id,
+                trace_id=trace2.id,
+            ),
+        ]
+    )
+    opik_client.flush()
+
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=experiment.id,
+        experiment_name=experiment_name,
+        experiment_metadata=None,
+        traces_amount=2,
+        feedback_scores_amount=0,
+    )
+
+    items = experiment.get_items()
+    assert len(items) == 2
+
+    retrieved_trace_ids = {item.trace_id for item in items}
+    assert retrieved_trace_ids == {trace1.id, trace2.id}
+
+    retrieved_dataset_item_ids = {item.dataset_item_id for item in items}
+    assert retrieved_dataset_item_ids == {dataset_items[0].id, dataset_items[1].id}
+
+
 def test__find_experiment_items_for_dataset__happy_path(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):

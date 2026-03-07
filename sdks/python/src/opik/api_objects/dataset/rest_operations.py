@@ -118,7 +118,7 @@ def stream_dataset_items(
                 )
 
             reconstructed_item = dataset_item.DatasetItem(
-                id=item.id,
+                id=item.dataset_item_id,  # id used for all the item operations
                 trace_id=item.trace_id,
                 span_id=item.span_id,
                 source=item.source,

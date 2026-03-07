@@ -118,7 +118,7 @@ describe("DatasetVersion", () => {
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: "item-1",
             data: { input: "test input" },
             source: "sdk",
           }) + "\n"
@@ -136,10 +136,11 @@ describe("DatasetVersion", () => {
     });
 
     it("should return items with id included", async () => {
+      const mockDatasetItemId = "019c6c79-9bfe-73d1-ad1a-4b7ec5b84371";
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: mockDatasetItemId,
             data: { input: "test input", output: "test output" },
             source: "sdk",
           }) + "\n"
@@ -150,7 +151,7 @@ describe("DatasetVersion", () => {
 
       expect(items).toHaveLength(1);
       expect(items[0]).toEqual({
-        id: "item-1",
+        id: mockDatasetItemId,
         input: "test input",
         output: "test output",
       });
@@ -160,7 +161,7 @@ describe("DatasetVersion", () => {
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: "item-1",
             data: { input: "test input" },
             source: "sdk",
           }) + "\n"
@@ -181,7 +182,7 @@ describe("DatasetVersion", () => {
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: "item-1",
             data: { input: "test input" },
             source: "sdk",
           }) + "\n"
@@ -199,10 +200,15 @@ describe("DatasetVersion", () => {
     });
 
     it("should handle multiple items", async () => {
+      const mockItemIds = [
+        "019c6c79-9c02-719c-bd07-a566592034aa",
+        "019c6c79-9c03-719c-bd07-a566592034bb",
+        "019c6c79-9c04-719c-bd07-a566592034cc",
+      ];
       const items = [
-        { id: "item-1", data: { input: "input 1" }, source: "sdk" },
-        { id: "item-2", data: { input: "input 2" }, source: "sdk" },
-        { id: "item-3", data: { input: "input 3" }, source: "sdk" },
+        { dataset_item_id: mockItemIds[0], data: { input: "input 1" }, source: "sdk" },
+        { dataset_item_id: mockItemIds[1], data: { input: "input 2" }, source: "sdk" },
+        { dataset_item_id: mockItemIds[2], data: { input: "input 3" }, source: "sdk" },
       ];
 
       streamDatasetItemsSpy.mockImplementation(() =>
@@ -214,9 +220,9 @@ describe("DatasetVersion", () => {
       const result = await datasetVersion.getItems();
 
       expect(result).toHaveLength(3);
-      expect(result[0].id).toBe("item-1");
-      expect(result[1].id).toBe("item-2");
-      expect(result[2].id).toBe("item-3");
+      expect(result[0].id).toBe(mockItemIds[0]);
+      expect(result[1].id).toBe(mockItemIds[1]);
+      expect(result[2].id).toBe(mockItemIds[2]);
     });
   });
 
@@ -231,10 +237,11 @@ describe("DatasetVersion", () => {
     });
 
     it("should convert items to JSON string", async () => {
+      const mockDatasetItemId = "019c6c79-9d5e-760b-aca7-2d8013169209";
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: mockDatasetItemId,
             data: { input: "test input", output: "test output" },
             source: "sdk",
           }) + "\n"
@@ -247,17 +254,18 @@ describe("DatasetVersion", () => {
       expect(Array.isArray(parsed)).toBe(true);
       expect(parsed).toHaveLength(1);
       expect(parsed[0]).toEqual({
-        id: "item-1",
+        id: mockDatasetItemId,
         input: "test input",
         output: "test output",
       });
     });
 
     it("should apply key mappings when provided", async () => {
+      const mockDatasetItemId = "019c6c79-9d5f-760b-aca7-2d8013169210";
       streamDatasetItemsSpy.mockImplementation(() =>
         mockAPIFunctionWithStream(
           JSON.stringify({
-            id: "item-1",
+            dataset_item_id: mockDatasetItemId,
             data: { input: "test input", output: "test output" },
             source: "sdk",
           }) + "\n"
@@ -274,7 +282,7 @@ describe("DatasetVersion", () => {
       expect(parsed[0]).toHaveProperty("answer", "test output");
       expect(parsed[0]).not.toHaveProperty("input");
       expect(parsed[0]).not.toHaveProperty("output");
-      expect(parsed[0]).toHaveProperty("id", "item-1");
+      expect(parsed[0]).toHaveProperty("id", mockDatasetItemId);
     });
 
     it("should handle empty items list", async () => {
