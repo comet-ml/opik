@@ -120,16 +120,20 @@ class OpikUsage(pydantic.BaseModel):
     def from_anthropic_dict(cls, usage: Dict[str, Any]) -> "OpikUsage":
         provider_usage = anthropic_usage.AnthropicUsage.from_original_usage_dict(usage)
 
-        prompt_tokens = provider_usage.input_tokens + (
-            provider_usage.cache_read_input_tokens
-            if provider_usage.cache_read_input_tokens is not None
-            else 0
+        prompt_tokens = (
+            provider_usage.input_tokens
+            + (
+                provider_usage.cache_read_input_tokens
+                if provider_usage.cache_read_input_tokens is not None
+                else 0
+            )
+            + (
+                provider_usage.cache_creation_input_tokens
+                if provider_usage.cache_creation_input_tokens is not None
+                else 0
+            )
         )
-        completion_tokens = provider_usage.output_tokens + (
-            provider_usage.cache_creation_input_tokens
-            if provider_usage.cache_creation_input_tokens is not None
-            else 0
-        )
+        completion_tokens = provider_usage.output_tokens
         total_tokens = prompt_tokens + completion_tokens
 
         return cls(
