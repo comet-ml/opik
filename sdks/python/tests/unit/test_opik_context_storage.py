@@ -220,3 +220,143 @@ def test_opik_storage__multithreaded__each_thread_has_independent_context():
     # Main thread context is not affected by the changes in children threads
     assert shared_context.span_data_stack_empty() is False
     assert shared_context.get_trace_data() is main_trace
+
+
+# === Async Context Bridge Tests ===
+
+
+def test_async_bridge__top_span_data__no_contextvar_span__falls_back_to_bridge():
+    """When the ContextVar span stack is empty, top_span_data falls back to the bridge."""
+    tested = OpikContextStorage()
+    bridge_span = span.SpanData(trace_id="bridge-trace-id")
+
+    # ContextVar stack is empty, bridge has data
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=None)
+
+    assert tested.span_data_stack_empty() is True  # ContextVar stack is still empty
+    assert tested.top_span_data() is bridge_span  # Falls back to bridge
+
+
+def test_async_bridge__get_trace_data__no_contextvar_trace__falls_back_to_bridge():
+    """When ContextVar trace is None, get_trace_data falls back to the bridge."""
+    tested = OpikContextStorage()
+    bridge_trace = trace.TraceData()
+
+    tested.set_async_context_bridge(span_data=None, trace_data=bridge_trace)
+
+    assert tested.get_trace_data() is bridge_trace
+
+
+def test_async_bridge__contextvar_takes_priority_over_bridge():
+    """When ContextVar has data, it takes priority over the bridge."""
+    tested = OpikContextStorage()
+
+    cv_trace = trace.TraceData()
+    cv_span = span.SpanData(trace_id=cv_trace.id)
+
+    bridge_trace = trace.TraceData()
+    bridge_span = span.SpanData(trace_id=bridge_trace.id)
+
+    tested.set_trace_data(cv_trace)
+    tested.add_span_data(cv_span)
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=bridge_trace)
+
+    assert tested.get_trace_data() is cv_trace
+    assert tested.top_span_data() is cv_span
+
+
+def test_async_bridge__pop_span__removes_top_span():
+    tested = OpikContextStorage()
+    span1 = span.SpanData(trace_id="trace-id")
+    span2 = span.SpanData(trace_id="trace-id")
+
+    tested.set_async_context_bridge(span_data=span1, trace_data=None)
+    tested.set_async_context_bridge(span_data=span2, trace_data=None)
+
+    popped = tested.pop_async_context_bridge_span()
+    assert popped is span2
+
+    # span1 should still be there
+    assert tested.top_span_data() is span1
+
+
+def test_async_bridge__pop_span__with_ensure_id__matching():
+    tested = OpikContextStorage()
+    bridge_span = span.SpanData(trace_id="trace-id")
+
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=None)
+
+    popped = tested.pop_async_context_bridge_span(ensure_id=bridge_span.id)
+    assert popped is bridge_span
+
+
+def test_async_bridge__pop_span__with_ensure_id__not_matching():
+    tested = OpikContextStorage()
+    bridge_span = span.SpanData(trace_id="trace-id")
+
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=None)
+
+    popped = tested.pop_async_context_bridge_span(ensure_id="non_matching_id")
+    assert popped is None
+
+
+def test_async_bridge__clear__removes_all():
+    tested = OpikContextStorage()
+    bridge_trace = trace.TraceData()
+    bridge_span = span.SpanData(trace_id=bridge_trace.id)
+
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=bridge_trace)
+    tested.clear_async_context_bridge()
+
+    # Both contextvar and bridge are empty, should return None
+    assert tested.top_span_data() is None
+    assert tested.get_trace_data() is None
+
+
+def test_async_bridge__trim_to_span__trims_stack():
+    tested = OpikContextStorage()
+    span1 = span.SpanData(trace_id="trace-id")
+    span2 = span.SpanData(trace_id="trace-id")
+    span3 = span.SpanData(trace_id="trace-id")
+
+    tested.set_async_context_bridge(span_data=span1, trace_data=None)
+    tested.set_async_context_bridge(span_data=span2, trace_data=None)
+    tested.set_async_context_bridge(span_data=span3, trace_data=None)
+
+    tested.trim_async_context_bridge_to_span(span2.id)
+
+    # After trimming, span2 should be on top
+    assert tested.top_span_data() is span2
+
+
+def test_async_bridge__cross_thread__bridge_visible_from_child_thread():
+    """
+    Test that the async context bridge allows span/trace data set in one context
+    to be visible in a child thread (simulating async context boundary crossing).
+    """
+    tested = OpikContextStorage()
+    bridge_trace = trace.TraceData()
+    bridge_span = span.SpanData(trace_id=bridge_trace.id)
+
+    tested.set_async_context_bridge(span_data=bridge_span, trace_data=bridge_trace)
+
+    child_results = {}
+
+    def child_thread_func():
+        # ContextVar stack is empty in child thread (separate context)
+        child_results["contextvar_span"] = tested._spans_data_stack_context.get()
+        child_results["contextvar_trace"] = tested._current_trace_data_context.get()
+        # But bridge should be visible
+        child_results["top_span"] = tested.top_span_data()
+        child_results["trace_data"] = tested.get_trace_data()
+
+    child = threading.Thread(target=child_thread_func)
+    child.start()
+    child.join()
+
+    # ContextVar is empty in child thread
+    assert child_results["contextvar_span"] == tuple()
+    assert child_results["contextvar_trace"] is None
+    # Bridge is visible from child thread
+    assert child_results["top_span"] is bridge_span
+    assert child_results["trace_data"] is bridge_trace

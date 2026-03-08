@@ -1,5 +1,6 @@
 import contextvars
 import contextlib
+import threading
 
 from typing import List, Optional, Generator, Tuple
 from opik.api_objects import span, trace
@@ -33,6 +34,16 @@ class OpikContextStorage:
 
     The methods in this class follow these patterns and provide a safe API
     for manipulating the context stacks.
+
+    ## Async Context Bridge
+
+    In async frameworks like LangGraph, callbacks and node functions may run in
+    different async contexts (tasks), causing ContextVar values set in one context
+    to be invisible in another. The async context bridge provides a non-ContextVar
+    fallback so that span/trace data set by callback-based integrations (e.g.,
+    OpikTracer) can be accessed by @track-decorated functions running inside
+    graph nodes, even when the ContextVar-based storage is empty due to async
+    context isolation.
     """
 
     def __init__(self) -> None:
@@ -43,6 +54,82 @@ class OpikContextStorage:
         self._spans_data_stack_context: contextvars.ContextVar[
             Tuple[span.SpanData, ...]
         ] = contextvars.ContextVar("spans_data_stack", default=default_span_stack)
+
+        # Async context bridge: non-ContextVar storage that bridges span/trace
+        # data across async context boundaries. Protected by a lock for thread safety.
+        self._bridge_lock = threading.Lock()
+        self._bridge_span_stack: Tuple[span.SpanData, ...] = tuple()
+        self._bridge_trace_data: Optional[trace.TraceData] = None
+
+    def set_async_context_bridge(
+        self,
+        span_data: Optional[span.SpanData],
+        trace_data: Optional[trace.TraceData],
+    ) -> None:
+        """
+        Set span and trace data in the async context bridge.
+
+        This should be called by callback-based integrations (e.g., OpikTracer)
+        when they create spans/traces that need to be visible to code running
+        in a different async context (e.g., LangGraph node functions during
+        astream() execution).
+
+        Args:
+            span_data: The span data to store in the bridge. If not None, it is
+                pushed onto the bridge's span stack.
+            trace_data: The trace data to store in the bridge.
+        """
+        with self._bridge_lock:
+            if span_data is not None:
+                self._bridge_span_stack = self._bridge_span_stack + (span_data,)
+            if trace_data is not None:
+                self._bridge_trace_data = trace_data
+
+    def pop_async_context_bridge_span(
+        self, ensure_id: Optional[str] = None
+    ) -> Optional[span.SpanData]:
+        """
+        Pop the top span from the async context bridge's span stack.
+
+        Args:
+            ensure_id: If provided, only pop if the top span has this id.
+
+        Returns:
+            The popped span data, or None if the stack is empty or the id does not match.
+        """
+        with self._bridge_lock:
+            if len(self._bridge_span_stack) == 0:
+                return None
+
+            if ensure_id is not None and self._bridge_span_stack[-1].id != ensure_id:
+                return None
+
+            top = self._bridge_span_stack[-1]
+            self._bridge_span_stack = self._bridge_span_stack[:-1]
+            return top
+
+    def clear_async_context_bridge(self) -> None:
+        """Clear all data from the async context bridge."""
+        with self._bridge_lock:
+            self._bridge_span_stack = tuple()
+            self._bridge_trace_data = None
+
+    def trim_async_context_bridge_to_span(self, span_id: str) -> None:
+        """
+        Trim the async context bridge span stack to the given span id,
+        similar to trim_span_data_stack_to_certain_span.
+        """
+        with self._bridge_lock:
+            has_span = any(s.id == span_id for s in self._bridge_span_stack)
+            if not has_span:
+                return
+
+            new_stack: List[span.SpanData] = []
+            for s in self._bridge_span_stack:
+                new_stack.append(s)
+                if s.id == span_id:
+                    break
+            self._bridge_span_stack = tuple(new_stack)
 
     def _has_span_id(self, span_id: str) -> bool:
         return any(span.id == span_id for span in self._spans_data_stack_context.get())
@@ -76,10 +163,16 @@ class OpikContextStorage:
         self._spans_data_stack_context.set(tuple(new_stack_list))
 
     def top_span_data(self) -> Optional[span.SpanData]:
-        if self.span_data_stack_empty():
-            return None
-        stack = self._spans_data_stack_context.get()
-        return stack[-1]
+        if not self.span_data_stack_empty():
+            stack = self._spans_data_stack_context.get()
+            return stack[-1]
+
+        # Fallback: check the async context bridge
+        with self._bridge_lock:
+            if len(self._bridge_span_stack) > 0:
+                return self._bridge_span_stack[-1]
+
+        return None
 
     def pop_span_data(
         self,
@@ -121,7 +214,15 @@ class OpikContextStorage:
 
     def get_trace_data(self) -> Optional[trace.TraceData]:
         trace_data = self._current_trace_data_context.get()
-        return trace_data
+        if trace_data is not None:
+            return trace_data
+
+        # Fallback: check the async context bridge
+        with self._bridge_lock:
+            if self._bridge_trace_data is not None:
+                return self._bridge_trace_data
+
+        return None
 
     def pop_trace_data(
         self, ensure_id: Optional[str] = None
