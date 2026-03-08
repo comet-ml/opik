@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -39,6 +40,12 @@ public interface OpenTelemetryService {
 @RequiredArgsConstructor
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
+    private static final String OPEN_INFERENCE = "OpenInference";
+    private static final String LANGFUSE = "LangFuse";
+    private static final String LIVE_KIT = "LiveKit";
+    private static final String LOGFIRE = "Logfire";
+    private static final String PYDANTIC = "Pydantic";
+    private static final String SMOLAGENTS = "Smolagents";
 
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
@@ -78,6 +85,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                     var integrationName = traceRequest.getResourceSpansList().stream()
                             .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                             .map(scopeSpans -> scopeSpans.getScope().getName())
+                            .map(OpenTelemetryServiceImpl::normalizeIntegrationName)
                             .distinct()
                             .filter(OpenTelemetryMappingRuleFactory::isValidInstrumentation)
                             .findFirst()
@@ -95,6 +103,51 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
 
     private String base64OtelId(ByteString idBytes) {
         return Base64.getEncoder().encodeToString(idBytes.toByteArray());
+    }
+
+    static String normalizeIntegrationName(String scopeName) {
+        if (Objects.isNull(scopeName)) {
+            return null;
+        }
+
+        var normalized = scopeName.trim().toLowerCase();
+
+        if (normalized.isEmpty()) {
+            return null;
+        }
+
+        if (normalized.startsWith("openinference")
+                || normalized.contains(".openinference.")
+                || normalized.startsWith("traceloop")
+                || normalized.contains("openllmetry")) {
+            return OPEN_INFERENCE;
+        }
+
+        if (normalized.contains("openlit")) {
+            return LOGFIRE;
+        }
+
+        if (normalized.contains("langfuse")) {
+            return LANGFUSE;
+        }
+
+        if (normalized.contains("livekit")) {
+            return LIVE_KIT;
+        }
+
+        if (normalized.contains("logfire")) {
+            return LOGFIRE;
+        }
+
+        if (normalized.contains("pydantic")) {
+            return PYDANTIC;
+        }
+
+        if (normalized.contains("smolagents")) {
+            return SMOLAGENTS;
+        }
+
+        return scopeName;
     }
 
     private String redisKey(String workspaceId, UUID projectId, String otelId) {
