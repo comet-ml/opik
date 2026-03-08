@@ -298,6 +298,7 @@ public class OnlineScoringEngine {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
             case METADATA -> trace.metadata();
+            case ERROR_INFO -> trace.errorInfo() != null ? OBJECT_MAPPER.valueToTree(trace.errorInfo()) : null;
         });
     }
 
@@ -306,6 +307,7 @@ public class OnlineScoringEngine {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
             case METADATA -> span.metadata();
+            case ERROR_INFO -> span.errorInfo() != null ? OBJECT_MAPPER.valueToTree(span.errorInfo()) : null;
         });
     }
 
@@ -555,7 +557,8 @@ public class OnlineScoringEngine {
     enum TraceSection {
         INPUT("input."),
         OUTPUT("output."),
-        METADATA("metadata.");
+        METADATA("metadata."),
+        ERROR_INFO("error_info.");
 
         final String prefix;
     }

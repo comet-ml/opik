@@ -12,10 +12,15 @@ import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import { PROJECTS_SELECT_QUERY_KEY } from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { Project } from "@/types/projects";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import { JsonNode } from "@/types/shared";
 
 type CachedProjectsData = { content: Project[]; total: number };
 
-export type TRACE_AUTOCOMPLETE_ROOT_KEY = "input" | "output" | "metadata";
+export type TRACE_AUTOCOMPLETE_ROOT_KEY =
+  | "input"
+  | "output"
+  | "metadata"
+  | "error_info";
 
 const PLAYGROUND_DEFAULT_SUGGESTIONS = [
   "output.output",
@@ -135,11 +140,15 @@ const TracesOrSpansPathsAutocomplete: React.FC<
             (internalAcc, key) =>
               internalAcc.concat(
                 isObject(d[key]) || isArray(d[key])
-                  ? getJSONPaths(d[key], key, [], includeIntermediateNodes).map(
-                      (path) =>
-                        excludeRoot
-                          ? path.substring(path.indexOf(".") + 1)
-                          : path,
+                  ? getJSONPaths(
+                      d[key] as JsonNode,
+                      key,
+                      [],
+                      includeIntermediateNodes,
+                    ).map((path) =>
+                      excludeRoot
+                        ? path.substring(path.indexOf(".") + 1)
+                        : path,
                     )
                   : [],
               ),
