@@ -195,7 +195,7 @@ interface PromptVersionDAO {
     int deleteByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
-            SELECT pv.id, pv.commit, p.name AS prompt_name
+            SELECT pv.id, pv.commit, p.name AS prompt_name, pv.change_description
             FROM prompt_versions pv
             INNER JOIN prompts p ON pv.prompt_id = p.id
             WHERE pv.id IN (<ids>) AND pv.workspace_id = :workspace_id

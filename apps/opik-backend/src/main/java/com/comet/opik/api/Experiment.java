@@ -89,7 +89,9 @@ public record Experiment(
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String commit,
             @JsonView({Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID promptId,
             @JsonView({
-                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String promptName){
+                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String promptName,
+            @JsonView({
+                    Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String changeDescription){
     }
 
     public static class View {

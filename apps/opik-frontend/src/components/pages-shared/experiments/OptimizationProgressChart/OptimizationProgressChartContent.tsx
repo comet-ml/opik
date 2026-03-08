@@ -5,6 +5,7 @@ import { LineDot } from "recharts/types/cartesian/Line";
 import debounce from "lodash/debounce";
 
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import ExperimentChartTooltipHeader from "@/components/pages-shared/experiments/ExperimentChartTooltipHeader";
 import OptimizationProgressTooltip from "./OptimizationProgressTooltip";
 import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
 import {
@@ -29,6 +30,7 @@ export type DataRecord = {
   createdDate: string;
   value: number | null;
   allFeedbackScores?: { name: string; value: number }[];
+  changeDescription?: string;
 };
 
 export type ChartData = {
@@ -99,17 +101,13 @@ const OptimizationProgressChartContent: React.FC<
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
-
+      const { entityName, createdDate, changeDescription } = payload[0].payload;
       return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 truncate">
-            {entityName}
-          </div>
-          <div className="comet-body-xs mb-1 text-light-slate">
-            {createdDate}
-          </div>
-        </>
+        <ExperimentChartTooltipHeader
+          entityName={entityName}
+          createdDate={createdDate}
+          changeDescription={changeDescription}
+        />
       );
     },
     [],

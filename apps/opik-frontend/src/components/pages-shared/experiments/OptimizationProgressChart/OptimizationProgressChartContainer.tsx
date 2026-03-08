@@ -3,6 +3,7 @@ import isNull from "lodash/isNull";
 import isUndefined from "lodash/isUndefined";
 
 import { formatDate } from "@/lib/date";
+import { getExperimentChangeDescription } from "@/lib/experiments";
 import { Experiment } from "@/types/datasets";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
@@ -58,6 +59,8 @@ const OptimizationProgressChartContainer: React.FC<
           objectiveName,
         );
 
+        const changeDescription = getExperimentChangeDescription(experiment);
+
         retVal.data.push({
           entityId: experiment.id,
           entityName: experiment.name,
@@ -67,6 +70,7 @@ const OptimizationProgressChartContainer: React.FC<
             experiment.feedback_scores
               ?.map((score) => ({ name: score.name, value: score.value }))
               ?.filter((score) => score.name !== objectiveName) || [],
+          changeDescription,
         });
       });
 

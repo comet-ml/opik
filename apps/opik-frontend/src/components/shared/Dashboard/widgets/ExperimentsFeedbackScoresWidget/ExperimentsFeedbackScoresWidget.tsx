@@ -20,8 +20,10 @@ import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useAppStore from "@/store/AppStore";
 import useChartConfig from "@/hooks/useChartConfig";
 import { formatDate } from "@/lib/date";
+import { getExperimentChangeDescription } from "@/lib/experiments";
 import { CHART_TYPE } from "@/constants/chart";
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import ExperimentChartTooltipHeader from "@/components/pages-shared/experiments/ExperimentChartTooltipHeader";
 import { Spinner } from "@/components/ui/spinner";
 import {
   ExperimentsGroupNodeWithAggregations,
@@ -45,6 +47,7 @@ type DataRecord = {
   entityName: string;
   createdDate: string;
   scores: Record<string, number>;
+  changeDescription?: string;
 };
 
 type ChartData = {
@@ -198,6 +201,7 @@ function transformUngroupedExperimentsToChartData(
       entityName: experiment.name,
       createdDate: formatDate(experiment.created_at),
       scores,
+      changeDescription: getExperimentChangeDescription(experiment),
     };
   });
 
@@ -439,25 +443,21 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       entityId: record.entityId,
       entityName: record.entityName,
       createdDate: record.createdDate,
+      changeDescription: record.changeDescription ?? null,
       ...record.scores,
     }));
   }, [chartData, isRadarOrBar, entityLabels]);
 
   const renderHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
-      const { entityName, createdDate } = payload[0].payload;
-
+      const { entityName, createdDate, changeDescription } = payload[0].payload;
       return (
-        <>
-          <div className="comet-body-xs-accented mb-0.5 line-clamp-3 max-w-64 break-words">
-            {entityName}
-          </div>
-          {createdDate && (
-            <div className="comet-body-xs mb-1 text-light-slate">
-              {createdDate}
-            </div>
-          )}
-        </>
+        <ExperimentChartTooltipHeader
+          entityName={entityName}
+          createdDate={createdDate}
+          changeDescription={changeDescription}
+          entityNameClassName="line-clamp-3 max-w-64 break-words"
+        />
       );
     },
     [],
