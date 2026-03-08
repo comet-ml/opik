@@ -2,9 +2,13 @@ import {
   OPTIMIZER_TYPE,
   OPTIMIZATION_STATUS,
   METRIC_TYPE,
+  Optimization,
   OptimizerParameters,
   MetricParameters,
 } from "@/types/optimizations";
+import { AggregatedFeedbackScore } from "@/types/shared";
+import { getFeedbackScore } from "@/lib/feedback-scores";
+import { Experiment } from "@/types/datasets";
 import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
@@ -35,6 +39,15 @@ import { Filters } from "@/types/filters";
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
 };
+
+export const getBestOptimizationScore = (
+  row: Pick<
+    Optimization,
+    "feedback_scores" | "experiment_scores" | "objective_name"
+  >,
+): AggregatedFeedbackScore | undefined =>
+  getFeedbackScore(row.feedback_scores ?? [], row.objective_name) ??
+  getFeedbackScore(row.experiment_scores ?? [], row.objective_name);
 
 export const extractMetricNameFromCode = (code: string): string => {
   return extractMetricNameFromPythonCode(code) || "code";
@@ -158,6 +171,10 @@ export const getOptimizationDefaultConfigByProvider = (
   }
 
   return {};
+};
+
+export const checkIsEvaluationSuite = (experiments: Experiment[]): boolean => {
+  return experiments.some((e) => e.evaluation_method === "evaluation_suite");
 };
 
 export const convertOptimizationVariableFormat = (

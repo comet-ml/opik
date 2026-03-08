@@ -31,6 +31,7 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
 import CompareExperimentsFeedbackScoreCell from "@/components/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
+import TrialPassedCell from "./TrialPassedCell";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsNameCell from "@/components/pages-shared/experiments/CompareExperimentsNameCell/CompareExperimentsNameCell";
 import CompareExperimentsNameHeader from "@/components/pages-shared/experiments/CompareExperimentsNameHeader/CompareExperimentsNameHeader";
@@ -115,6 +116,7 @@ export type TrialItemsTabProps = {
   datasetId: string;
   experimentsIds: string[];
   experiments?: Experiment[];
+  isEvaluationSuite?: boolean;
 };
 
 const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
@@ -122,6 +124,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   datasetId,
   experimentsIds = [],
   experiments,
+  isEvaluationSuite = false,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
@@ -322,6 +325,21 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   }, [dynamicOutputColumns, experiments, experimentsIds, setTraceId]);
 
   const scoresColumnsData = useMemo(() => {
+    // For evaluation suite experiments, show a single "passed" column
+    if (isEvaluationSuite) {
+      return [
+        {
+          id: "score_passed",
+          label: "passed",
+          type: COLUMN_TYPE.string,
+          cell: TrialPassedCell as never,
+          customMeta: {
+            experimentsIds,
+          },
+        },
+      ] as ColumnData<ExperimentsCompare>[];
+    }
+
     // Extract all unique feedback score names from experiments
     const feedbackScoreNames = new Set<string>();
 
@@ -367,7 +385,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         )?.value,
       },
     })) as ColumnData<ExperimentsCompare>[];
-  }, [experiments, experimentsIds, objectiveName]);
+  }, [experiments, experimentsIds, objectiveName, isEvaluationSuite]);
 
   // Auto-select all score columns when they become available
   useEffect(() => {

@@ -23,9 +23,11 @@ import { Optimization } from "@/types/optimizations";
 import { convertColumnDataToColumn } from "@/lib/table";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { toString } from "@/lib/utils";
-import { getFeedbackScore } from "@/lib/feedback-scores";
 import { OPTIMIZATION_OPTIMIZER_KEY } from "@/constants/experiments";
-import { getOptimizerLabel } from "@/lib/optimizations";
+import {
+  getOptimizerLabel,
+  getBestOptimizationScore,
+} from "@/lib/optimizations";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
@@ -78,8 +80,7 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
       id: "objective_name",
       label: "Best score",
       type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) =>
-        getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+      accessorFn: (row) => getBestOptimizationScore(row),
       cell: FeedbackScoreTagCell as never,
       explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_best_score],
     },

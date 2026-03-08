@@ -37,6 +37,7 @@ public class OptimizationResourceClient {
                 .status(OptimizationStatus.INITIALIZED)
                 .numTrials(0L)
                 .feedbackScores(null)
+                .experimentScores(null)
                 .studioConfig(null);
     }
 

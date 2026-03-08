@@ -6,6 +6,7 @@ import lombok.Getter;
 public enum Queue {
 
     OPTIMIZER_CLOUD("opik:optimizer-cloud", "opik_backend.rq_worker.process_optimizer_job"),
+    OPTIMIZER_FRAMEWORK("opik:optimizer-framework", "opik_backend.rq_worker.process_framework_optimizer_job"),
     ;
 
     @JsonValue

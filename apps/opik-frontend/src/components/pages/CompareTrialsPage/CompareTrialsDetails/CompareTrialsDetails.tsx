@@ -16,12 +16,14 @@ type CompareTrialsDetailsProps = {
   optimization?: Optimization;
   experimentsIds: string[];
   experiments: Experiment[];
+  isEvaluationSuite?: boolean;
 };
 
 const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   optimization,
   experiments,
   experimentsIds,
+  isEvaluationSuite = false,
 }) => {
   const {
     permissions: { canViewDatasets },
@@ -43,13 +45,22 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
 
     const objectiveName = optimization?.objective_name;
 
+    // For evaluation suite experiments, only show the aggregated objective score
+    // The pass_rate is stored in experiment_scores (not feedback_scores)
+    if (isEvaluationSuite && objectiveName) {
+      const objectiveScore =
+        experiment.feedback_scores.find((s) => s.name === objectiveName) ??
+        experiment.experiment_scores?.find((s) => s.name === objectiveName);
+      return objectiveScore ? [objectiveScore] : [];
+    }
+
     // Sort scores: main objective first, then alphabetically
     return [...experiment.feedback_scores].sort((a, b) => {
       if (a.name === objectiveName) return -1;
       if (b.name === objectiveName) return 1;
       return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
-  }, [experiment, isCompare, optimization?.objective_name]);
+  }, [experiment, isCompare, isEvaluationSuite, optimization?.objective_name]);
 
   const colorMap = useMemo(() => {
     if (!optimization?.objective_name || scores.length === 0) return {};

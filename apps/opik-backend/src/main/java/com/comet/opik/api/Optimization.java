@@ -35,6 +35,8 @@ public record Optimization(
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Long numTrials,
         @JsonView({
                 Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
+        @JsonView({
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> experimentScores,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({Optimization.View.Public.class,

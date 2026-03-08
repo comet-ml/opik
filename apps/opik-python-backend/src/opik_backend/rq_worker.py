@@ -15,6 +15,7 @@ import logging
 from rq import Worker
 from opentelemetry import trace
 from opik_backend.jobs.optimizer import process_optimizer_job as _process_optimizer_job
+from opik_backend.jobs.framework_optimizer import process_framework_optimizer_job as _process_framework_optimizer_job
 from opik_backend.workers.metrics_worker import MetricsWorker as _MetricsWorker
 from opik_backend.workers.death_penalty import NoOpDeathPenalty as _NoOpDeathPenalty
 
@@ -24,6 +25,10 @@ tracer = trace.get_tracer(__name__)
 def process_optimizer_job(*args, **kwargs):
     # Re-export to preserve import path stability
     return _process_optimizer_job(*args, **kwargs)
+
+def process_framework_optimizer_job(*args, **kwargs):
+    # Re-export to preserve import path stability
+    return _process_framework_optimizer_job(*args, **kwargs)
 
 class MetricsWorker(_MetricsWorker):
     pass

@@ -223,6 +223,8 @@ services:
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
+      additional_contexts:
+        opik-optimizer: ../../apps/opik-optimizer
     hostname: python-backend
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
@@ -324,6 +326,8 @@ services:
     build:
       context: ../../apps/opik-python-backend
       dockerfile: Dockerfile
+      additional_contexts:
+        opik-optimizer: ../../apps/opik-optimizer
     hostname: demo-data-generator
     environment:
       CREATE_DEMO_DATA: ${CREATE_DEMO_DATA:-true}

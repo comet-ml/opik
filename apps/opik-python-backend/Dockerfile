@@ -13,6 +13,10 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install the optimizer framework package
+COPY --from=opik-optimizer . /opt/opik-optimizer
+RUN pip install -e /opt/opik-optimizer
+
 ##############################################################
 # Runtime stage - minimal packages only
 FROM docker:29.2.1
