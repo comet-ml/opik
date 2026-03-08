@@ -624,7 +624,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columnHelper.group({
           id: "evaluation",
           meta: {
-            header: "Evaluation task",
+            header: "Evaluation task (last trial)",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
