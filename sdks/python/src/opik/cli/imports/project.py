@@ -9,12 +9,14 @@ import opik
 from opik import id_helpers
 from rich.console import Console
 
+from ..migration_manifest import MigrationManifest
 from .experiment import recreate_experiments
 from .utils import (
     matches_name_pattern,
     clean_feedback_scores,
     clean_usage_for_import,
     sort_spans_topologically,
+    debug_print,
 )
 
 console = Console()
@@ -27,6 +29,7 @@ def import_projects_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     recreate_experiments_flag: bool = False,
+    manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
     """Import projects from a directory.
 
@@ -51,11 +54,14 @@ def import_projects_from_directory(
         error_count = 0
         total_traces_imported = 0
         total_traces_errors = 0
+
+        # Seed trace_id_map from the manifest so experiments can cross-reference
+        # traces that were imported in a previous (interrupted) run.
+        trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
+
         for project_dir in project_dirs:
             try:
                 project_name = project_dir.name
-                # Maintain a per-project mapping from original -> new trace ids
-                trace_id_map: Dict[str, str] = {}
 
                 # Filter by name pattern if specified
                 if name_pattern and not matches_name_pattern(
@@ -76,13 +82,25 @@ def import_projects_from_directory(
                 if debug:
                     console.print(f"[blue]Importing project: {project_name}[/blue]")
 
-                # Import traces from the project directory
+                # Per-project span ID map (only needed during this import session,
+                # not persisted — span IDs are not referenced across files).
+                span_id_map: Dict[str, str] = {}
+
                 trace_files = list(project_dir.glob("trace_*.json"))
                 traces_imported = 0
                 traces_errors = 0
 
                 for trace_file in trace_files:
                     try:
+                        # Skip trace files already imported in a previous run
+                        if manifest and manifest.is_file_completed(trace_file):
+                            debug_print(
+                                f"Skipping {trace_file.name} (already imported in a previous run)",
+                                debug,
+                            )
+                            traces_imported += 1
+                            continue
+
                         with open(trace_file, "r", encoding="utf-8") as f:
                             trace_data = json.load(f)
 
@@ -91,7 +109,6 @@ def import_projects_from_directory(
                         spans_info = trace_data.get("spans", [])
                         original_trace_id = trace_info.get("id")
 
-                        # Create trace with full data
                         # Clean feedback scores to remove read-only fields
                         feedback_scores = clean_feedback_scores(
                             trace_info.get("feedback_scores")
@@ -128,15 +145,14 @@ def import_projects_from_directory(
 
                         if original_trace_id:
                             trace_id_map[original_trace_id] = trace.id
+                            # Persist the mapping so it survives if we are interrupted
+                            # before completing all files.
+                            if manifest:
+                                manifest.add_trace_mapping(original_trace_id, trace.id)
 
-                        # Create spans with full data, preserving parent-child relationships
-                        # Build span_id_map to translate parent_span_id references
-                        span_id_map: Dict[
-                            str, str
-                        ] = {}  # Maps original span ID to new span ID
-
+                        # Create spans with full data, preserving parent-child relationships.
                         # Sort spans topologically to ensure parents are processed before children
-                        # This handles multi-level hierarchies correctly
+                        # so that multi-level hierarchies are handled correctly.
                         sorted_spans = sort_spans_topologically(spans_info)
 
                         for span_info in sorted_spans:
@@ -146,9 +162,9 @@ def import_projects_from_directory(
                             )
 
                             original_span_id = span_info.get("id")
+                            # Translate parent_span_id to the new ID if it was already created
                             original_parent_span_id = span_info.get("parent_span_id")
 
-                            # Translate parent_span_id if it exists
                             new_parent_span_id = None
                             if (
                                 original_parent_span_id
@@ -158,7 +174,6 @@ def import_projects_from_directory(
                                     original_parent_span_id
                                 ]
 
-                            # Create span with parent_span_id if available
                             # Clean usage data to avoid double-prefixing of original_usage keys
                             usage_data = clean_usage_for_import(span_info.get("usage"))
 
@@ -200,10 +215,16 @@ def import_projects_from_directory(
 
                         traces_imported += 1
 
+                        # Mark file as completed and flush trace mapping to disk
+                        if manifest:
+                            manifest.mark_file_completed(trace_file)
+
                     except Exception as e:
                         console.print(
                             f"[red]Error importing trace from {trace_file}: {e}[/red]"
                         )
+                        if manifest:
+                            manifest.mark_file_failed(trace_file, str(e))
                         traces_errors += 1
                         continue
 
@@ -219,7 +240,6 @@ def import_projects_from_directory(
                                 f"[blue]Found {len(experiment_files)} experiment files in project {project_name}[/blue]"
                             )
 
-                        # Recreate experiments
                         experiments_recreated = recreate_experiments(
                             client,
                             project_dir,
@@ -229,6 +249,7 @@ def import_projects_from_directory(
                             trace_id_map,
                             None,  # dataset_item_id_map - not available in project import context
                             debug,
+                            manifest=manifest,
                         )
 
                         if debug and experiments_recreated > 0:

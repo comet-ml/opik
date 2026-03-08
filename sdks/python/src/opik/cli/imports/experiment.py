@@ -23,6 +23,7 @@ from opik.rest_api.types.experiment_item import ExperimentItem
 # it's not directly used in this module's code.
 from rich.console import Console
 
+from ..migration_manifest import MigrationManifest
 from .utils import (
     handle_trace_reference,
     translate_trace_id,
@@ -77,6 +78,7 @@ def _build_dataset_item_id_map(
     datasets_dir: Path,
     dry_run: bool,
     debug: bool,
+    manifest: Optional[MigrationManifest] = None,
 ) -> tuple[Dict[str, str], Dict[str, int]]:
     """Build a mapping from original dataset_item_id to new dataset_item_id.
 
@@ -191,7 +193,7 @@ def _build_dataset_item_id_map(
 
     # Import datasets (this will create dataset items with new IDs)
     dataset_import_stats = import_datasets_from_directory(
-        client, datasets_dir, dry_run, None, debug
+        client, datasets_dir, dry_run, None, debug, manifest=manifest
     )
 
     # Update dataset_stats with import results
@@ -645,6 +647,7 @@ def recreate_experiments(
     trace_id_map: Optional[Dict[str, str]] = None,
     dataset_item_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
+    manifest: Optional[MigrationManifest] = None,
 ) -> int:
     """Recreate experiments from JSON files.
 
@@ -653,6 +656,7 @@ def recreate_experiments(
                      If None, will be treated as empty dict (all items will be skipped).
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id.
                             If None, will be treated as empty dict (all items will be skipped).
+        manifest: Optional migration manifest for resumable imports.
     """
     experiment_files = find_experiment_files(project_dir)
 
@@ -690,6 +694,15 @@ def recreate_experiments(
 
     for experiment_file in experiment_files:
         try:
+            # Skip experiment files already completed in a previous run
+            if manifest and not dry_run and manifest.is_file_completed(experiment_file):
+                if debug:
+                    console.print(
+                        f"[blue]Skipping {experiment_file.name} (already imported in a previous run)[/blue]"
+                    )
+                successful += 1
+                continue
+
             experiment_data = load_experiment_data(experiment_file)
 
             if recreate_experiment(
@@ -702,11 +715,19 @@ def recreate_experiments(
                 debug,
             ):
                 successful += 1
+                if manifest and not dry_run:
+                    manifest.mark_file_completed(experiment_file)
             else:
                 failed += 1
+                if manifest and not dry_run:
+                    manifest.mark_file_failed(
+                        experiment_file, "recreate_experiment returned False"
+                    )
 
         except Exception as e:
             console.print(f"[red]Error processing {experiment_file.name}: {e}[/red]")
+            if manifest and not dry_run:
+                manifest.mark_file_failed(experiment_file, str(e))
             failed += 1
             continue
 
@@ -718,6 +739,7 @@ def _import_traces_from_projects_directory(
     workspace_root: Path,
     dry_run: bool,
     debug: bool,
+    manifest: Optional[MigrationManifest] = None,
 ) -> tuple[Dict[str, str], Dict[str, int]]:
     """Import traces from projects directory and return trace_id_map and statistics.
 
@@ -726,7 +748,8 @@ def _import_traces_from_projects_directory(
         - trace_id_map: mapping from original trace ID to new trace ID
         - stats_dict: dictionary with 'traces' and 'traces_errors' keys
     """
-    trace_id_map: Dict[str, str] = {}
+    # Seed from manifest so traces imported in a previous interrupted run are included.
+    trace_id_map: Dict[str, str] = manifest.get_trace_id_map() if manifest else {}
     traces_imported = 0
     traces_errors = 0
     projects_dir = workspace_root / "projects"
@@ -764,6 +787,17 @@ def _import_traces_from_projects_directory(
 
         for trace_file in trace_files:
             try:
+                # Skip trace files already imported in a previous run.
+                # Their ID mappings are already in trace_id_map (seeded from manifest).
+                if manifest and not dry_run and manifest.is_file_completed(trace_file):
+                    if debug:
+                        debug_print(
+                            f"Skipping {trace_file.name} (already imported in a previous run)",
+                            debug,
+                        )
+                    traces_imported += 1
+                    continue
+
                 with open(trace_file, "r", encoding="utf-8") as f:
                     trace_data = json.load(f)
 
@@ -820,6 +854,8 @@ def _import_traces_from_projects_directory(
 
                 # Map original trace ID to new trace ID
                 trace_id_map[original_trace_id] = trace.id
+                if manifest:
+                    manifest.add_trace_mapping(original_trace_id, trace.id)
                 traces_imported += 1
                 debug_print(
                     f"Mapped trace {original_trace_id} -> {trace.id} (project: {project_name})",
@@ -891,10 +927,16 @@ def _import_traces_from_projects_directory(
                     if original_span_id and span.id:
                         span_id_map[original_span_id] = span.id
 
+                # Mark trace file completed and persist trace mapping to disk
+                if manifest:
+                    manifest.mark_file_completed(trace_file)
+
             except Exception as e:
                 console.print(
                     f"[yellow]Warning: Failed to import trace from {trace_file}: {e}[/yellow]"
                 )
+                if manifest:
+                    manifest.mark_file_failed(trace_file, str(e))
                 traces_errors += 1
                 continue
 
@@ -926,6 +968,7 @@ def import_experiments_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
+    manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
     """Import experiments from a directory.
 
@@ -964,7 +1007,7 @@ def import_experiments_from_directory(
         if prompts_dir.exists():
             debug_print("Importing prompts from prompts directory...", debug)
             prompts_stats = import_prompts_from_directory(
-                client, prompts_dir, dry_run, name_pattern, debug
+                client, prompts_dir, dry_run, name_pattern, debug, manifest=manifest
             )
             if prompts_stats.get("prompts", 0) > 0 and not dry_run:
                 # Flush client to ensure prompts are persisted
@@ -990,7 +1033,12 @@ def import_experiments_from_directory(
                 debug,
             )
             dataset_item_id_map, datasets_stats = _build_dataset_item_id_map(
-                client, experiment_files, datasets_dir, dry_run, debug
+                client,
+                experiment_files,
+                datasets_dir,
+                dry_run,
+                debug,
+                manifest=manifest,
             )
         else:
             debug_print(
@@ -1000,7 +1048,7 @@ def import_experiments_from_directory(
 
         # Import traces first to build trace_id_map
         trace_id_map, traces_stats = _import_traces_from_projects_directory(
-            client, workspace_root, dry_run, debug
+            client, workspace_root, dry_run, debug, manifest=manifest
         )
 
         if not trace_id_map and not dry_run:
@@ -1060,6 +1108,19 @@ def import_experiments_from_directory(
         error_count = 0
         for experiment_file in experiment_files:
             try:
+                # Skip experiment files already completed in a previous run
+                if (
+                    manifest
+                    and not dry_run
+                    and manifest.is_file_completed(experiment_file)
+                ):
+                    debug_print(
+                        f"Skipping {experiment_file.name} (already imported in a previous run)",
+                        debug,
+                    )
+                    skipped_count += 1
+                    continue
+
                 experiment_data = load_experiment_data(experiment_file)
 
                 experiment_info = experiment_data.experiment
@@ -1156,11 +1217,21 @@ def import_experiments_from_directory(
                 if success:
                     imported_count += 1
                     debug_print(f"Imported experiment: {experiment_name}", debug)
+                    if manifest and not dry_run:
+                        manifest.mark_file_completed(experiment_file)
+                else:
+                    error_count += 1
+                    if manifest and not dry_run:
+                        manifest.mark_file_failed(
+                            experiment_file, "recreate_experiment returned False"
+                        )
 
             except Exception as e:
                 console.print(
                     f"[red]Error importing experiment from {experiment_file}: {e}[/red]"
                 )
+                if manifest and not dry_run:
+                    manifest.mark_file_failed(experiment_file, str(e))
                 error_count += 1
                 continue
 
