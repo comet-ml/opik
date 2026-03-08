@@ -1,12 +1,53 @@
 from typing import Optional
+from uuid import uuid4
 
 import pytest
 from opik import exceptions
+from opik.api_objects import span as span_module, trace as trace_module
 from opik.integrations import langchain
+from opik.integrations.langchain.opik_tracer import OpikTracer
 from opik.integrations.langchain.run_parse_helpers import (
     parse_graph_interrupt_value,
     is_langgraph_parent_command,
 )
+
+
+def test_opik_tracer__attach_span_to_parent_span__stream_restart_root(fake_backend):
+    """When a parent run is a stream-restart root (in _span_data_map but NOT in
+    _created_traces_data_map), trace data should be propagated to the child via
+    a trace_id fallback lookup rather than raising a KeyError."""
+    tracer = OpikTracer(opik_context_read_only_mode=True)
+
+    # Simulate an original root run that created a trace
+    trace_data = trace_module.TraceData(name="test-trace")
+    trace_id = trace_data.id
+    root_run_id = uuid4()
+    tracer._created_traces_data_map[root_run_id] = trace_data
+
+    # Simulate a stream-restart root: has a span with the same trace_id but is
+    # NOT in _created_traces_data_map (the scenario that previously caused a KeyError)
+    stream_restart_run_id = uuid4()
+    parent_span = span_module.SpanData(trace_id=trace_id, name="stream-restart-span")
+    tracer._span_data_map[stream_restart_run_id] = parent_span
+
+    child_run_id = uuid4()
+    run_dict = {
+        "inputs": {"input": "hello"},
+        "name": "child-span",
+        "run_type": "general",
+        "extra": {},
+    }
+
+    # Should not raise KeyError
+    tracer._attach_span_to_parent_span(
+        run_id=child_run_id,
+        parent_run_id=stream_restart_run_id,
+        run_dict=run_dict,
+    )
+
+    # Child should inherit the trace data via trace_id fallback lookup
+    assert child_run_id in tracer._created_traces_data_map
+    assert tracer._created_traces_data_map[child_run_id] is trace_data
 
 
 def test_opik_tracer__init_validation():
