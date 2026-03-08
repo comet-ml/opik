@@ -8,7 +8,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.UriInfo;
-import jakarta.ws.rs.ext.Provider;
 import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
@@ -18,7 +17,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-@Provider
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AuthFilter implements ContainerRequestFilter {
 
@@ -38,12 +36,19 @@ public class AuthFilter implements ContainerRequestFilter {
             authService.authenticate(headers, sessionToken, ContextInfoHolder.builder()
                     .uriInfo(uriInfo)
                     .method(context.getMethod())
+                    .requiredPermissions(getRequiredPermissions(context))
                     .build());
         } else if (Pattern.matches("/v1/session/.*", uriInfo.getRequestUri().getPath())) {
             authService.authenticateSession(sessionToken);
         }
 
         requestContext.get().setHeaders(context.getHeaders());
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getRequiredPermissions(ContainerRequestContext context) {
+        Object permissionsValue = context.getProperty(AuthDynamicFeature.REQUIRED_PERMISSIONS_PROPERTY);
+        return permissionsValue instanceof List ? (List<String>) permissionsValue : List.of();
     }
 
     HttpHeaders getHttpHeaders(ContainerRequestContext context) {
