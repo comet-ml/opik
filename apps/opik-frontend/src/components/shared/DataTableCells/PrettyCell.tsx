@@ -16,6 +16,16 @@ type CustomMeta = {
 const MAX_DATA_LENGTH_KEY = "pretty-cell-data-length-limit";
 const MAX_DATA_LENGTH = 10000;
 
+const flattenPreviewMessage = (message: string): string => {
+  const normalized = message
+    .replace(/\\r\\n|\\n|\\r/g, " ")
+    .replace(/\r\n|\n|\r/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized.length > 0 ? normalized : "-";
+};
+
 const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
   const truncationEnabled = useTruncationEnabled();
   const [maxDataLength] = useLocalStorageState(MAX_DATA_LENGTH_KEY, {
@@ -50,13 +60,17 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
     ROW_HEIGHT.small;
 
   const isSmall = rowHeight === ROW_HEIGHT.small;
+  const previewMessage = useMemo(
+    () => (isSmall ? flattenPreviewMessage(displayMessage) : displayMessage),
+    [isSmall, displayMessage],
+  );
 
   const content = useMemo(() => {
     if (isSmall) {
       return (
-        <CellTooltipWrapper content={displayMessage}>
+        <CellTooltipWrapper content={previewMessage}>
           <span className="comet-code truncate">
-            <LinkifyText>{displayMessage}</LinkifyText>
+            <LinkifyText>{previewMessage}</LinkifyText>
           </span>
         </CellTooltipWrapper>
       );
@@ -67,7 +81,7 @@ const PrettyCell = <TData,>(context: CellContext<TData, string | object>) => {
         <LinkifyText>{displayMessage}</LinkifyText>
       </div>
     );
-  }, [isSmall, displayMessage]);
+  }, [isSmall, displayMessage, previewMessage]);
 
   return (
     <CellWrapper
