@@ -449,7 +449,9 @@ class OpikTracer:
 
     def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
-        self._init_internal_attributes()
+        self._last_model_output = None
+        self._opik_client = opik_client.get_client_cached()
+        self._ttft_tracking = {}
 
 
 def _try_add_agent_graph_to_metadata(

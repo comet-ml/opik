@@ -15,6 +15,9 @@ from google.adk.agents import base_agent
 
 LOGGER = logging.getLogger(__name__)
 
+_adk_opentelemetry_tracers_patched = False
+_patched_adk_tracer: Optional[opik_adk_otel_tracer.OpikADKOtelTracer] = None
+
 
 def patch_adk(
     opik_client: opik_client.Opik,
@@ -64,13 +67,23 @@ def _patch_adk_opentelemetry_tracers(
     opik_client: opik_client.Opik,
     distributed_headers: Optional[DistributedTraceHeadersDict],
 ) -> None:
-    no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
+    global _adk_opentelemetry_tracers_patched, _patched_adk_tracer
+    if _adk_opentelemetry_tracers_patched:
+        if _patched_adk_tracer is not None:
+            _patched_adk_tracer.opik_client = opik_client
+        return
+
+    _patched_adk_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
         opik_client, distributed_headers=distributed_headers
     )
 
-    adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
-    adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
+    adk_telemetry.tracer.start_as_current_span = (
+        _patched_adk_tracer.start_as_current_span
+    )
+    adk_telemetry.tracer.start_span = _patched_adk_tracer.start_span
 
-    base_agent.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
-    base_agent.tracer.start_span = no_op_opik_tracer.start_span
+    base_agent.tracer.start_as_current_span = _patched_adk_tracer.start_as_current_span
+    base_agent.tracer.start_span = _patched_adk_tracer.start_span
+
+    _adk_opentelemetry_tracers_patched = True
     LOGGER.debug("Patched ADK tracers")
