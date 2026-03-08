@@ -7,6 +7,7 @@ import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -50,17 +51,18 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private static final String NOGROUP = "NOGROUP";
 
     /**
-     * Non-retryable: programming and validation exceptions that won't succeed on retry.
+     * Non-retryable exception types that won't succeed on retry. Checked via {@code instanceof} in
+     * {@link #isRetryableException(Throwable)}, so subclasses are automatically covered.
+     * These are usually programming, validation, client etc. exceptions.
      */
     private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
             ArithmeticException.class,
-            ArrayIndexOutOfBoundsException.class,
             ClassCastException.class,
+            ClientErrorException.class,
             IllegalArgumentException.class,
             IllegalStateException.class,
             IndexOutOfBoundsException.class,
             NullPointerException.class,
-            NumberFormatException.class,
             UnsupportedOperationException.class);
 
     /**
@@ -547,7 +549,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Provide a particular implementation for processing the event.
      * <p>
-     * Exception handling: Exceptions in {@link #NON_RETRYABLE_EXCEPTIONS} are immediately removed from the stream.
+     * Exception handling: see {@link #isRetryableException(Throwable)} for the full non-retryable classification.
+     * Non-retryable exceptions are immediately removed from the stream.
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
      *
      * @param message a Redis message
@@ -571,12 +574,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Non-retryable exceptions are programming errors or validation failures that won't succeed on retry.
-     * All other exceptions are considered retryable (transient errors like network issues, timeouts, etc.)
+     * Non-retryable exceptions are checked via {@code instanceof} against {@link #NON_RETRYABLE_EXCEPTIONS},
+     * so both exact types and their subclasses are covered.
+     * Non-retryable exceptions are usually programming, validation, client errors that won't succeed on retry.
+     * All other exceptions are considered retryable (transient errors like network issues, timeouts, server errors, etc.)
      * Unknown exceptions default to retryable for safety.
      */
     private boolean isRetryableException(Throwable exception) {
-        return !NON_RETRYABLE_EXCEPTIONS.contains(exception.getClass());
+        return NON_RETRYABLE_EXCEPTIONS.stream()
+                .noneMatch(nonRetryable -> nonRetryable.isInstance(exception));
     }
 
     /**
