@@ -237,7 +237,7 @@ class ChatCompletionsResourceTest {
                             UUID.randomUUID().toString(), actualContainsExpectedEval),
                     arguments(AnthropicModelName.CLAUDE_SONNET_3_7.toString(), LlmProvider.ANTHROPIC,
                             System.getenv("ANTHROPIC_API_KEY"), actualContainsExpectedEval),
-                    arguments(GeminiModelName.GEMINI_1_5_PRO.toString(), LlmProvider.GEMINI,
+                    arguments(GeminiModelName.GEMINI_2_0_FLASH.toString(), LlmProvider.GEMINI,
                             System.getenv("GEMINI_API_KEY"), actualContainsExpectedEval),
                     arguments(OpenRouterModelName.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_09_2025.toString(),
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
@@ -253,7 +253,7 @@ class ChatCompletionsResourceTest {
 
             var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
                     .stream(true)
-                    .model(GeminiModelName.GEMINI_1_5_PRO.toString())
+                    .model(GeminiModelName.GEMINI_2_0_FLASH.toString())
                     .maxCompletionTokens(100)
                     .addUserMessage("Say 'Hello World'")
                     .build();
