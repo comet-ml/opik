@@ -118,4 +118,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
 }
