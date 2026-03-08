@@ -38,20 +38,24 @@ class ActionQueue<EntityData = object, EntityId = string> {
       clearTimeout(this.timerId);
     }
 
-    this.timerId = setTimeout(() => this.flush(), this.delay);
+    this.timerId = setTimeout(() => {
+      this.timerId = null;
+      void this.flush().catch(() => undefined);
+    }, this.delay);
+    this.timerId.unref?.();
   };
 
   public add = (id: EntityId, entity: EntityData) => {
     this.queue.set(id, entity);
 
     if (!this.enableBatch) {
-      this.flush();
+      void this.flush().catch(() => undefined);
       return;
     }
 
     // @todo: change to check payload size instead of batch size
     if (this.queue.size >= this.batchSize) {
-      this.flush();
+      void this.flush().catch(() => undefined);
       return;
     }
 
@@ -68,6 +72,11 @@ class ActionQueue<EntityData = object, EntityId = string> {
   };
 
   public flush = async () => {
+    if (this.timerId) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
+    }
+
     if (this.queue.size === 0) {
       return this.promise;
     }
@@ -76,16 +85,18 @@ class ActionQueue<EntityData = object, EntityId = string> {
     this.queue.clear();
 
     logger.debug(`Adding ${queue.size} items to ${this.name} promise:`, queue);
-    this.promise = this.promise
-      .finally(() => {
+    const currentFlush = this.promise
+      .catch(() => undefined)
+      .then(async () => {
         logger.debug(`Flushing ${this.name}:`, queue);
-        return this.action(queue);
-      })
-      .catch((error) => {
-        logger.error(`Failed to flush ${this.name}:`, error, queue);
+        await this.action(queue);
       });
 
-    await this.promise;
+    this.promise = currentFlush.catch((error) => {
+      logger.error(`Failed to flush ${this.name}:`, error, queue);
+    });
+
+    await currentFlush;
   };
 }
 
