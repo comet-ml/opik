@@ -320,4 +320,78 @@ describe("OpikCallbackHandler", () => {
       expect(mockOpikClient.flush).toHaveBeenCalled();
     });
   });
+
+  describe("tool and retriever metadata", () => {
+    beforeEach(() => {
+      handler = new OpikCallbackHandler({ client: mockOpikClient });
+    });
+
+    it("should add opik tool metadata in handleToolStart", async () => {
+      const mockTrace = createMockTrace();
+      (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTrace
+      );
+
+      const tool = {
+        lc: 1 as const,
+        type: "not_implemented" as const,
+        id: ["langchain", "tools", "Calculator"],
+      };
+
+      await handler.handleToolStart(
+        tool,
+        JSON.stringify({ a: 1, b: 2 }),
+        "tool-run-id",
+        undefined,
+        undefined,
+        { ls_provider: "langchainjs" }
+      );
+
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "tool",
+          metadata: expect.objectContaining({
+            created_from: "langchainjs",
+            "opik.kind": "tool",
+            "opik.provider": "langchainjs",
+            "opik.operation": "tool_call",
+          }),
+        })
+      );
+    });
+
+    it("should add opik retrieval metadata in handleRetrieverStart", async () => {
+      const mockTrace = createMockTrace();
+      (mockOpikClient.trace as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockTrace
+      );
+
+      const retriever = {
+        lc: 1 as const,
+        type: "not_implemented" as const,
+        id: ["langchain", "retrievers", "VectorStoreRetriever"],
+      };
+
+      await handler.handleRetrieverStart(
+        retriever,
+        "what is opik?",
+        "retriever-run-id",
+        undefined,
+        undefined,
+        { ls_provider: "langchainjs" }
+      );
+
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "tool",
+          metadata: expect.objectContaining({
+            created_from: "langchainjs",
+            "opik.kind": "retrieval",
+            "opik.provider": "langchainjs",
+            "opik.operation": "search",
+          }),
+        })
+      );
+    });
+  });
 });

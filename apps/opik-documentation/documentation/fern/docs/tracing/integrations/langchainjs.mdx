@@ -131,6 +131,16 @@ const opikHandler = new OpikCallbackHandler({
 });
 ```
 
+## Tool and retriever metadata
+
+`OpikCallbackHandler` now annotates LangChain.js tool and retriever spans with integration metadata:
+
+- tools: `opik.kind=tool`, `opik.operation=tool_call`
+- retrievers: `opik.kind=retrieval`, `opik.operation=search`
+- both: `created_from=<provider>`, `opik.provider=<provider>` (defaults to `langchainjs`)
+
+Retriever runs are still emitted as `tool` span type, and are distinguished through `opik.kind`/`opik.operation` for filtering and analytics.
+
 ## Troubleshooting
 
 **Missing Traces**: Ensure you're providing the `OpikCallbackHandler` to both the component constructor and each invoke call.
