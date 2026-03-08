@@ -667,6 +667,9 @@ navigation:
           - section: Other
             skip-slug: true
             contents:
+              - page: Qdrant
+                path: docs/tracing/integrations/qdrant.mdx
+                slug: qdrant
               - page: Guardrails AI
                 path: docs/tracing/integrations/guardrails-ai.mdx
                 slug: guardrails-ai
