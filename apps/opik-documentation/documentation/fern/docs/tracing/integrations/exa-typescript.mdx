@@ -1,0 +1,42 @@
+---
+title: Observability for Exa (TypeScript) with Opik
+description: Trace Exa search operations with Opik using the TypeScript SDK.
+headline: Exa | Opik Documentation
+---
+
+Opik provides integration with the Exa JavaScript SDK through the `opik-exa` package.
+
+## Installation
+
+```bash
+npm install opik-exa exa-js
+```
+
+## Usage
+
+```typescript
+import Exa from "exa-js";
+import { trackExa } from "opik-exa";
+
+const exa = new Exa(process.env.EXA_API_KEY);
+const trackedExa = trackExa(exa, {
+  traceMetadata: { tags: ["search"] },
+});
+
+const result = await trackedExa.search("latest ai eval benchmarks");
+await trackedExa.flush();
+```
+
+Supported wrapped methods:
+
+- `search`
+- `search_and_contents` / `searchAndContents`
+- `find_similar` / `findSimilar`
+- `get_contents` / `getContents`
+- `answer`
+
+All wrapped operations are logged as `tool` spans with:
+
+- `opik.kind=search`
+- `opik.provider=exa`
+- `opik.operation=<method_name>`
