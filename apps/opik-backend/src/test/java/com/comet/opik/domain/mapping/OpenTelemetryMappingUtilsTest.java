@@ -3,7 +3,6 @@ package com.comet.opik.domain.mapping;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
-import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,7 +19,6 @@ import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJ
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.data.Offset.offset;
 
 public class OpenTelemetryMappingUtilsTest {
@@ -152,6 +150,37 @@ public class OpenTelemetryMappingUtilsTest {
     }
 
     @Test
+    void testExtractUsageField_ExactUsageRules() {
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule inputTokensRule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.input_tokens")
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+        OpenTelemetryMappingRule cacheReadRule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.cache_read.input_tokens")
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+        OpenTelemetryMappingRule cacheWriteRule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.cache_creation.input_tokens")
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        extractUsageField(usage, inputTokensRule, "gen_ai.usage.input_tokens",
+                AnyValue.newBuilder().setIntValue(100).build());
+        extractUsageField(usage, cacheReadRule, "gen_ai.usage.cache_read.input_tokens",
+                AnyValue.newBuilder().setIntValue(30).build());
+        extractUsageField(usage, cacheWriteRule, "gen_ai.usage.cache_creation.input_tokens",
+                AnyValue.newBuilder().setIntValue(25).build());
+
+        assertThat(usage).containsEntry("prompt_tokens", 100);
+        assertThat(usage).containsEntry("cache_read.input_tokens", 30);
+        assertThat(usage).containsEntry("cache_creation.input_tokens", 25);
+    }
+
+    @Test
     void testExtractUsageField_JsonObjectWithUsageData() {
         // Test extracting usage from a nested JSON object string
         Map<String, Integer> usage = new HashMap<>();
@@ -196,8 +225,8 @@ public class OpenTelemetryMappingUtilsTest {
     }
 
     @Test
-    void testExtractUsageField_InvalidJsonString_ThrowsBadRequestException() {
-        // Test extracting usage from invalid JSON string - should throw BadRequestException
+    void testExtractUsageField_InvalidJsonString_DoesNotThrow() {
+        // Test extracting usage from invalid JSON string - should skip and continue
         Map<String, Integer> usage = new HashMap<>();
         OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
                 .rule("gen_ai.usage.")
@@ -210,9 +239,8 @@ public class OpenTelemetryMappingUtilsTest {
         String invalidJson = "not a valid integer and not valid json {";
         AnyValue value = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
-        assertThatThrownBy(() -> extractUsageField(usage, rule, key, value))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Failed to parse JSON string for usage field");
+        assertThatCode(() -> extractUsageField(usage, rule, key, value)).doesNotThrowAnyException();
+        assertThat(usage).isEmpty();
     }
 
     @Test
