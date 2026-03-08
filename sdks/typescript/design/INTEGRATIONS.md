@@ -24,6 +24,7 @@ The TypeScript SDK provides integrations with popular LLM frameworks through **s
 
 | Package | Framework | Pattern |
 |---------|-----------|---------|
+| `opik-agentica` | Symbolica Agentica SDK | Proxy wrapper |
 | `opik-openai` | OpenAI SDK | Proxy wrapper |
 | `opik-langchain` | LangChain.js | Callback handler |
 | `opik-vercel` | Vercel AI SDK | OpenTelemetry exporter |
