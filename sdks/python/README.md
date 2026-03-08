@@ -120,6 +120,36 @@ Opik provides powerful CLI commands for exporting and importing data between pro
 
 For detailed information about the CLI export/import functionality, see [Import/Export Commands](../../apps/opik-documentation/documentation/fern/docs/tracing/import_export_commands.mdx).
 
+For agent-friendly terminal queries (JSON output supported), use:
+
+```bash
+# List resources
+opik query projects --json
+opik query datasets --json
+opik query prompts --json
+
+# Fetch a single resource
+opik query dataset --name my-dataset --json
+opik query prompt --name my-prompt --json
+
+# Search runtime data
+opik query traces --project-name "Default Project" --filter 'tags contains "prod"' --limit 50 --json
+opik query spans --project-name "Default Project" --filter 'model = "gpt-4"' --limit 50 --json
+```
+
+Shell completion setup:
+
+```bash
+# Bash
+eval "$(opik query completion --shell bash)"
+
+# Zsh
+eval "$(opik query completion --shell zsh)"
+
+# Fish
+opik query completion --shell fish | source
+```
+
 ## Development & Contribution Guidelines
 
 For a more general contribution guide (backend + frontend + SDK) see our root [Contribution guide](../../CONTRIBUTING.md).
