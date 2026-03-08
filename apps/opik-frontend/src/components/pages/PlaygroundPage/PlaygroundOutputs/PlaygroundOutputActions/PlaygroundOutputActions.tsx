@@ -102,7 +102,7 @@ const PlaygroundOutputActions = ({
   const createProjectMutation = useProjectCreateMutation();
 
   const {
-    permissions: { canViewExperiments, canViewDatasets },
+    permissions: { canViewExperiments, canViewDatasets, canCreateProjects },
   } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
@@ -238,7 +238,7 @@ const PlaygroundOutputActions = ({
       }
 
       // If project doesn't exist (404), create it
-      if (!projectId && isProjectNotFound) {
+      if (!projectId && isProjectNotFound && canCreateProjects) {
         const result = await createProjectMutation.mutateAsync({
           project: { name: PLAYGROUND_PROJECT_NAME },
         });
@@ -265,6 +265,7 @@ const PlaygroundOutputActions = ({
     isLoadingProject,
     createProjectMutation,
     queryClient,
+    canCreateProjects,
   ]);
 
   const renderActionButton = () => {
@@ -515,6 +516,7 @@ const PlaygroundOutputActions = ({
                   datasetId={datasetId}
                   onCreateRuleClick={handleCreateRuleClick}
                   workspaceName={workspaceName}
+                  canCreateRule={!!playgroundProject?.id || canCreateProjects}
                 />
               </div>
               {datasetId && (

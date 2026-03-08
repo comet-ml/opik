@@ -133,6 +133,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_CREATE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -146,6 +151,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteDatasets,
     canDeleteOptimizationRuns,
     canUpdateAIProviders,
+    canCreateProjects,
     isPending: isEnabled && isPending,
   };
 };

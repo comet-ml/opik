@@ -71,6 +71,7 @@ export enum ManagementPermissionsNames {
   DATASET_DELETE = "dataset_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   AI_PROVIDER_UPDATE = "ai_provider_update",
+  PROJECT_CREATE = "project_create",
 }
 
 export interface UserPermission {

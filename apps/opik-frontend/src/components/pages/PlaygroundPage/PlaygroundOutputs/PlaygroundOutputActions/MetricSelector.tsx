@@ -22,8 +22,9 @@ interface MetricSelectorProps {
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
   datasetId: string | null;
-  onCreateRuleClick?: () => void;
+  onCreateRuleClick: () => void;
   workspaceName: string;
+  canCreateRule: boolean;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -33,6 +34,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   datasetId,
   onCreateRuleClick,
   workspaceName,
+  canCreateRule,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -217,10 +219,12 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               <div className="comet-body-s-accented pb-1 text-foreground">
                 No metrics available
               </div>
-              <div className="comet-body-s text-muted-slate">
-                Create an online evaluation rule for the Playground project to
-                generate metrics for your outputs.
-              </div>
+              {canCreateRule && (
+                <div className="comet-body-s text-muted-slate">
+                  Create an online evaluation rule for the Playground project to
+                  generate metrics for your outputs.
+                </div>
+              )}
             </div>
           ) : filteredRules.length > 0 ? (
             <>
@@ -288,7 +292,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               </div>
             </>
           )}
-          {onCreateRuleClick && (
+          {canCreateRule && (
             <>
               <Separator className="my-1" />
               <ListAction
