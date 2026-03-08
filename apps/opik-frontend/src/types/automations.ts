@@ -27,6 +27,8 @@ export interface LLMJudgeModel {
   temperature: number;
   seed?: number | null;
   custom_parameters?: Record<string, unknown> | null;
+  throttling?: number | null;
+  max_concurrent_requests?: number | null;
 }
 
 export interface LLMJudgeObject {

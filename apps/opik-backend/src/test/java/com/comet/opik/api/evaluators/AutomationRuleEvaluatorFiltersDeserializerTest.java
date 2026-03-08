@@ -352,5 +352,81 @@ class AutomationRuleEvaluatorFiltersDeserializerTest {
             assertThat(filter2.field()).isEqualTo(SpanField.MODEL);
             assertThat(filter2.value()).isEqualTo("gpt-4o-mini");
         }
+
+        @Test
+        @DisplayName("Should round-trip serialize and deserialize throttling and maxConcurrentRequests")
+        void shouldRoundTripSerializeDeserializeThrottlingAndConcurrency() throws Exception {
+            // Given: Create an evaluator with throttling and maxConcurrentRequests
+            UUID projectId = UUID.randomUUID();
+            AutomationRuleEvaluatorSpanLlmAsJudge originalEvaluator = AutomationRuleEvaluatorSpanLlmAsJudge.builder()
+                    .id(UUID.randomUUID())
+                    .projects(toProjects(Set.of(projectId)))
+                    .name("Test Rule With Throttling")
+                    .samplingRate(1.0f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .code(AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
+                            .model(LlmAsJudgeModelParameters.builder()
+                                    .name("gpt-4o-mini")
+                                    .temperature(0.5)
+                                    .throttling(2.5)
+                                    .maxConcurrentRequests(3)
+                                    .build())
+                            .messages(List.of())
+                            .variables(java.util.Map.of())
+                            .schema(List.of())
+                            .build())
+                    .build();
+
+            // When: Serialize and deserialize
+            String json = objectMapper.writeValueAsString(originalEvaluator);
+            AutomationRuleEvaluator<?, ?> deserialized = objectMapper.readValue(json, AutomationRuleEvaluator.class);
+
+            // Then: Throttling and maxConcurrentRequests should be preserved
+            assertThat(deserialized).isInstanceOf(AutomationRuleEvaluatorSpanLlmAsJudge.class);
+            AutomationRuleEvaluatorSpanLlmAsJudge spanEvaluator = (AutomationRuleEvaluatorSpanLlmAsJudge) deserialized;
+            LlmAsJudgeModelParameters model = spanEvaluator.getCode().model();
+            assertThat(model.name()).isEqualTo("gpt-4o-mini");
+            assertThat(model.temperature()).isEqualTo(0.5);
+            assertThat(model.throttling()).isEqualTo(2.5);
+            assertThat(model.maxConcurrentRequests()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Should handle null throttling and maxConcurrentRequests for backward compatibility")
+        void shouldHandleNullThrottlingAndConcurrency() throws Exception {
+            // Given: Create an evaluator without throttling (backward compatibility)
+            UUID projectId = UUID.randomUUID();
+            AutomationRuleEvaluatorSpanLlmAsJudge originalEvaluator = AutomationRuleEvaluatorSpanLlmAsJudge.builder()
+                    .id(UUID.randomUUID())
+                    .projects(toProjects(Set.of(projectId)))
+                    .name("Test Rule Without Throttling")
+                    .samplingRate(1.0f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .code(AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
+                            .model(LlmAsJudgeModelParameters.builder()
+                                    .name("gpt-4o-mini")
+                                    .temperature(0.0)
+                                    .build())
+                            .messages(List.of())
+                            .variables(java.util.Map.of())
+                            .schema(List.of())
+                            .build())
+                    .build();
+
+            // When: Serialize and deserialize
+            String json = objectMapper.writeValueAsString(originalEvaluator);
+            AutomationRuleEvaluator<?, ?> deserialized = objectMapper.readValue(json, AutomationRuleEvaluator.class);
+
+            // Then: Throttling and maxConcurrentRequests should be null
+            assertThat(deserialized).isInstanceOf(AutomationRuleEvaluatorSpanLlmAsJudge.class);
+            AutomationRuleEvaluatorSpanLlmAsJudge spanEvaluator = (AutomationRuleEvaluatorSpanLlmAsJudge) deserialized;
+            LlmAsJudgeModelParameters model = spanEvaluator.getCode().model();
+            assertThat(model.name()).isEqualTo("gpt-4o-mini");
+            assertThat(model.temperature()).isEqualTo(0.0);
+            assertThat(model.throttling()).isNull();
+            assertThat(model.maxConcurrentRequests()).isNull();
+        }
     }
 }
