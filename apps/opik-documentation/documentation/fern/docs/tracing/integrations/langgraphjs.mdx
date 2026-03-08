@@ -1,0 +1,119 @@
+---
+description: Start here to integrate Opik into your LangGraph.js application for end-to-end observability.
+headline: LangGraph.js | Opik Documentation
+og:description: Trace and debug LangGraph.js workflows with automatic callback injection and graph metadata capture in Opik.
+og:site_name: Opik Documentation
+og:title: Observability for LangGraph.js with Opik
+title: Observability for LangGraph.js with Opik
+---
+
+Opik provides a dedicated [LangGraph.js](https://langchain-ai.github.io/langgraphjs/) integration through the `opik-langgraph` package. It injects Opik tracing callbacks into your compiled graph so each run is tracked automatically.
+
+## Features
+
+- **Automatic Callback Injection**: Configure once, then call `invoke()` and `stream()` normally
+- **Node-Level Tracing**: Capture nested LangChain and LangGraph operations in the same trace tree
+- **Graph Definition Metadata**: Store graph structure in trace metadata for UI visualization
+- **Thread-Aware Tracing**: Set `threadId` in handler options for conversation grouping
+
+## Installation
+
+### Option 1: Using npm
+
+```bash
+npm install opik-langgraph @langchain/langgraph @langchain/openai
+```
+
+### Option 2: Using yarn
+
+```bash
+yarn add opik-langgraph @langchain/langgraph @langchain/openai
+```
+
+### Requirements
+
+- Node.js >= 18
+- `@langchain/langgraph` (`>=0.3.8 <0.5.0`)
+- `opik`
+
+## Basic Usage
+
+```typescript
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { HumanMessage } from "@langchain/core/messages";
+import { trackLangGraph } from "opik-langgraph";
+
+const GraphState = Annotation.Root({
+  messages: Annotation<HumanMessage[]>({
+    reducer: (left, right) => left.concat(right),
+  }),
+});
+
+const model = new ChatOpenAI({ model: "gpt-4o-mini" });
+
+const workflow = new StateGraph(GraphState)
+  .addNode("chat", async (state) => {
+    const response = await model.invoke(state.messages);
+    return { messages: [response] };
+  })
+  .addEdge(START, "chat")
+  .addEdge("chat", END);
+
+const app = workflow.compile();
+
+const trackedApp = trackLangGraph(app, {
+  projectName: "langgraph-js-project",
+  tags: ["langgraph", "typescript"],
+});
+
+const result = await trackedApp.invoke({
+  messages: [new HumanMessage("How do I instrument LangGraph.js?")],
+});
+
+console.log(result);
+await trackedApp.flush();
+```
+
+## Streaming Usage
+
+```typescript
+const stream = await trackedApp.stream(
+  { messages: [new HumanMessage("Stream this response")] },
+  {
+    configurable: { thread_id: "thread-123" },
+    streamMode: "updates",
+  }
+);
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+await trackedApp.flush();
+```
+
+## Using an Existing Handler
+
+If you already use `OpikCallbackHandler` in LangChain components, you can pass the same handler:
+
+```typescript
+import { OpikCallbackHandler, trackLangGraph } from "opik-langgraph";
+
+const handler = new OpikCallbackHandler({
+  projectName: "shared-langchain-langgraph-project",
+  threadId: "conversation-123",
+});
+
+const trackedApp = trackLangGraph(app, handler);
+await trackedApp.invoke({ messages: [] });
+await trackedApp.flush();
+```
+
+## Troubleshooting
+
+**No traces visible**: make sure Opik is configured and call `await trackedApp.flush()` before process exit.
+
+**Duplicate spans**: avoid injecting multiple callback handlers into the same graph instance.
+
+**Missing graph metadata**: keep `includeGraphDefinition` enabled (default) in `trackLangGraph` options.

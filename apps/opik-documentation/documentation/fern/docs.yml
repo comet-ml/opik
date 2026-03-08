@@ -462,6 +462,9 @@ navigation:
               - page: LangChain
                 path: docs/tracing/integrations/langchainjs.mdx
                 slug: langchainjs
+              - page: LangGraph
+                path: docs/tracing/integrations/langgraphjs.mdx
+                slug: langgraphjs
               - page: Mastra
                 path: docs/tracing/integrations/mastra.mdx
                 slug: mastra
@@ -1198,6 +1201,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/integrations/langchainjs"
     destination: "/docs/opik/integrations/langchainjs"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/langgraphjs"
+    destination: "/docs/opik/integrations/langgraphjs"
     permanent: true
   - source: "/docs/opik/tracing/integrations/langgraph"
     destination: "/docs/opik/integrations/langgraph"

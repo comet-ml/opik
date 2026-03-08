@@ -1,0 +1,78 @@
+{
+  "name": "opik-langgraph",
+  "description": "Opik TypeScript and JavaScript SDK integration with LangGraph.js",
+  "version": "1.10.16",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comet-ml/opik.git",
+    "directory": "sdks/typescript/src/opik/integrations/opik-langgraph"
+  },
+  "homepage": "https://www.comet.com/docs/opik/",
+  "author": {
+    "name": "Comet",
+    "email": "support@comet.com",
+    "url": "https://github.com/comet-ml"
+  },
+  "bugs": {
+    "url": "https://github.com/comet-ml/opik/issues",
+    "email": "support@comet.com"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "opik",
+    "langgraph",
+    "langgraphjs",
+    "langgraph-integration",
+    "sdk",
+    "javascript",
+    "javascript-sdk",
+    "typescript",
+    "typescript-sdk",
+    "comet"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch",
+    "lint": "eslint '**/*.{ts,tsx}'",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@langchain/core": "^0.3.78",
+    "@langchain/langgraph": ">=0.3.8 <0.5.0",
+    "opik": "^1.8.75"
+  },
+  "dependencies": {
+    "opik-langchain": "^1.10.16"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.34.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.6.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0",
+    "vitest": "^3.0.5"
+  }
+}
