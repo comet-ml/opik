@@ -70,6 +70,7 @@ export enum ManagementPermissionsNames {
   PROMPT_DELETE = "prompt_delete",
   DATASET_DELETE = "dataset_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
+  USER_ROLE_UPDATE = "user_role_update",
   AI_PROVIDER_UPDATE = "ai_provider_update",
 }
 
