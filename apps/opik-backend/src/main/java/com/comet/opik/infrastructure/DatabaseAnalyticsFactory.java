@@ -20,6 +20,7 @@ public class DatabaseAnalyticsFactory {
     private @NotNull String password;
     private @NotBlank String databaseName;
     private String queryParameters;
+    private int healthCheckTimeoutSeconds = 1;
 
     public ConnectionFactory build() {
         var options = queryParameters == null ? "" : "?%s".formatted(queryParameters);
