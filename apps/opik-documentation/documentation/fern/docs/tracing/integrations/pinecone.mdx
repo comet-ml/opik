@@ -1,0 +1,40 @@
+---
+title: Pinecone
+description: Track Pinecone retrieval operations in Opik.
+headline: Pinecone | Opik Documentation
+---
+
+Opik can instrument Pinecone retrieval calls and log them as tool spans.
+
+## Install
+
+```bash
+pip install opik pinecone
+```
+
+## Usage
+
+```python
+from pinecone import Pinecone
+from opik.integrations.pinecone import track_pinecone
+
+pc = Pinecone(api_key="...")
+index = pc.Index("docs-index")
+index = track_pinecone(index, project_name="retrieval-demo")
+
+result = index.query(
+    vector=[0.1, 0.2, 0.3],
+    top_k=5,
+)
+```
+
+## What gets logged
+
+- span `type`: `tool`
+- span name format: `pinecone.<operation>`
+- metadata keys:
+- `opik.kind=retrieval`
+- `opik.provider=pinecone`
+- `opik.operation=<operation>`
+
+Tracked operations include `query`, `search`, `search_records`, and `fetch` when available.
