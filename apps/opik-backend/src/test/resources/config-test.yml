@@ -437,6 +437,8 @@ experimentDenormalization:
   claimIntervalRatio: 10
   pendingMessageDuration: 10m
   maxRetries: 3
+  streamMaxLen: 10000
+  streamTrimLimit: 100
 
 # Configuration AWS S3
 s3Config:
