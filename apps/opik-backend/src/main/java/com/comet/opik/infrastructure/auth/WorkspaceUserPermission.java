@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 public enum WorkspaceUserPermission {
 
     DASHBOARD_VIEW("dashboard_view"),
-    EXPERIMENT_VIEW("experiment_view"),
     TRACE_SPAN_THREAD_LOG("trace_span_thread_log");
 
     @JsonValue
