@@ -14,4 +14,5 @@ export interface CreateLocalRunnerJobRequest {
     project?: string;
     runnerId?: string;
     maskId?: string;
+    metadata?: OpikApi.LocalRunnerJobMetadata;
 }
