@@ -10,6 +10,8 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -89,6 +91,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "200", description = "Dashboard resource", content = @Content(schema = @Schema(implementation = Dashboard.class))),
             @ApiResponse(responseCode = "404", description = "Dashboard not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response getDashboardById(@PathParam("dashboardId") UUID id) {
 
@@ -105,6 +108,7 @@ public class DashboardsResource {
     @Operation(operationId = "findDashboards", summary = "Find dashboards", description = "Find dashboards in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Dashboard page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response findDashboards(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,

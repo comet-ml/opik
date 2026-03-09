@@ -4,4 +4,5 @@ public enum TimeInterval {
     HOURLY,
     DAILY,
     WEEKLY,
+    TOTAL,
 }
