@@ -15039,6 +15039,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         results:
           type: array
           items:
@@ -15063,6 +15064,7 @@ components:
           - metadata
           - name
           - error_info
+          - error_type
           - model
           - provider
           - type
@@ -15095,6 +15097,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         interval_start:
           type: string
           format: date-time
@@ -15547,6 +15550,15 @@ components:
           enum:
           - text
           - chat
+        action:
+          type: string
+          description: Action to perform after creating the prompt version. 'update_blueprint'
+            (default) triggers automatic blueprint auto-increment. 'no_action' skips
+            blueprint updates.
+          default: update_blueprint
+          enum:
+          - update_blueprint
+          - no_action
     Prompt_Detail:
       required:
       - name

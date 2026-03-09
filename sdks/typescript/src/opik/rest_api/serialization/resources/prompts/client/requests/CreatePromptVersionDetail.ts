@@ -4,6 +4,7 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { PromptVersionDetail } from "../../../../types/PromptVersionDetail.js";
+import { CreatePromptVersionDetailAction } from "../../types/CreatePromptVersionDetailAction.js";
 import { CreatePromptVersionDetailTemplateStructure } from "../../types/CreatePromptVersionDetailTemplateStructure.js";
 
 export const CreatePromptVersionDetail: core.serialization.Schema<
@@ -16,6 +17,7 @@ export const CreatePromptVersionDetail: core.serialization.Schema<
         "template_structure",
         CreatePromptVersionDetailTemplateStructure.optional(),
     ),
+    action: CreatePromptVersionDetailAction.optional(),
 });
 
 export declare namespace CreatePromptVersionDetail {
@@ -23,5 +25,6 @@ export declare namespace CreatePromptVersionDetail {
         name: string;
         version: PromptVersionDetail.Raw;
         template_structure?: CreatePromptVersionDetailTemplateStructure.Raw | null;
+        action?: CreatePromptVersionDetailAction.Raw | null;
     }
 }
