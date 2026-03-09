@@ -213,7 +213,7 @@ class DashboardsResourceTest {
         }
 
         @Test
-        @DisplayName("Create dashboard without type and scope")
+        @DisplayName("Create dashboard without type and scope defaults to multi-project/workspace")
         void createDashboardWithoutTypeAndScope() {
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .type(null)
@@ -222,7 +222,8 @@ class DashboardsResourceTest {
 
             var createdDashboard = dashboardResourceClient.createAndGet(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertDashboard(dashboard, createdDashboard);
+            assertThat(createdDashboard.type()).isEqualTo(DashboardType.MULTI_PROJECT);
+            assertThat(createdDashboard.scope()).isEqualTo(DashboardScope.WORKSPACE);
         }
 
         @Test

@@ -2,6 +2,8 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
+import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -181,6 +183,8 @@ public class DashboardResourceClient {
         return Dashboard.builder()
                 .name(UUID.randomUUID().toString())
                 .description("Test dashboard description")
+                .type(DashboardType.MULTI_PROJECT)
+                .scope(DashboardScope.WORKSPACE)
                 .config(createValidConfig());
     }
 
