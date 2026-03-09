@@ -633,7 +633,12 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
+from .prompts import (
+    CreatePromptVersionDetailAction,
+    CreatePromptVersionDetailTemplateStructure,
+    PromptWriteTemplateStructure,
+    PromptWriteType,
+)
 from .runners import LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
@@ -815,6 +820,7 @@ __all__ = [
     "CompletionTokensDetails",
     "ConflictError",
     "CountValueStatPublic",
+    "CreatePromptVersionDetailAction",
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",

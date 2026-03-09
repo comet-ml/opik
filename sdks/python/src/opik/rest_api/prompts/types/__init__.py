@@ -2,8 +2,14 @@
 
 # isort: skip_file
 
+from .create_prompt_version_detail_action import CreatePromptVersionDetailAction
 from .create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .prompt_write_template_structure import PromptWriteTemplateStructure
 from .prompt_write_type import PromptWriteType
 
-__all__ = ["CreatePromptVersionDetailTemplateStructure", "PromptWriteTemplateStructure", "PromptWriteType"]
+__all__ = [
+    "CreatePromptVersionDetailAction",
+    "CreatePromptVersionDetailTemplateStructure",
+    "PromptWriteTemplateStructure",
+    "PromptWriteType",
+]

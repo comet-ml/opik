@@ -17,6 +17,7 @@ import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.LocalRunnerJobMetadata;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
@@ -748,23 +749,30 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void storesMaskId() {
+        void storesMaskIdAndMetadata() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunner("cj-mask-meta", ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.maskId()).isEqualTo(maskId);
+            assertThat(job.metadata()).isEqualTo(metadata);
         }
 
         @Test
-        void storesMaskIdNullWhenNotProvided() {
+        void storesMaskIdAndMetadataNullWhenNotProvided() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-no-mask-id", ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunner("cj-no-mask-meta", ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME).runnerId(runnerId).build(),
@@ -772,6 +780,7 @@ class LocalRunnersResourceTest {
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.maskId()).isNull();
+            assertThat(job.metadata()).isNull();
         }
 
         @Test
@@ -809,17 +818,24 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void returnsMaskIdWhenClaimed() {
+        void returnsMaskIdAndMetadataWhenClaimed() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("nj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunner("nj-mask-meta", ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
             assertThat(claimed.maskId()).isEqualTo(maskId);
+            assertThat(claimed.metadata()).isEqualTo(metadata);
         }
 
         @Test
@@ -866,19 +882,26 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void returnsMaskIdInList() {
+        void returnsMaskIdAndMetadataInList() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-mask-id", ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunner("lj-mask-meta", ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
                     ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().getFirst().maskId()).isEqualTo(maskId);
+            assertThat(page.content().getFirst().metadata()).isEqualTo(metadata);
         }
 
         @Test
