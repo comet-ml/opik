@@ -17,7 +17,7 @@ class GepaConfig:
     seed: int = 42
     """Random seed for reproducibility across sampling and GEPA internals."""
 
-    reflection_minibatch_size: int = 4
+    reflection_minibatch_size: int = 6
     """Number of items in the minibatch used for the reflection LLM and
     the acceptance gate. Larger = less noise but more expensive per iteration."""
 

@@ -97,7 +97,7 @@ The passed items act as **behavioral anchors**. The reflection LLM sees both wha
 
 ### Minimum batch size
 
-The minimum `reflection_minibatch_size` is clamped to **4** to ensure the 50/50 split is meaningful (at least 2 failed + 2 passed). Default is 4.
+Default `reflection_minibatch_size` is **6**. The 50/50 split needs at least 4 items to be meaningful (2 failed + 2 passed); 6 gives the reflection LLM enough signal per iteration without excessive cost.
 
 ### Failure streak tracking
 
@@ -323,7 +323,7 @@ All passed via `context.optimizer_parameters` and parsed into `GepaConfig`:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `seed` | `42` | Random seed for GEPA and the batch sampler |
-| `reflection_minibatch_size` | `4` (min 4) | Items per minibatch for reflection |
+| `reflection_minibatch_size` | `6` | Items per minibatch for reflection |
 | `candidate_selection_strategy` | `"current_best"` | How GEPA selects candidates (`"current_best"`, `"pareto"`, or `"epsilon_greedy"`) |
 | `max_candidates` | `5` | Maximum candidates to explore |
 | `max_metric_calls_multiplier` | `5` | Budget multiplier: `max_candidates * len(dataset) * multiplier` |
