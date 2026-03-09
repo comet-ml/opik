@@ -522,6 +522,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` |  |
 | zookeeper.commonLabels."app.kubernetes.io/name" | string | `"zookeeper-opik"` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
