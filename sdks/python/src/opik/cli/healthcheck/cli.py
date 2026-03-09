@@ -72,6 +72,10 @@ def healthcheck(
       Run smoke test with custom project name:
 
         opik healthcheck --smoke-test my-workspace --project-name my-test-project
+
+      Run healthcheck with specific workspace permissions check:
+
+        opik healthcheck --check-permissions my-workspace
     """
     # Always run the standard healthcheck
     standard_check.run(show_installed_packages)
