@@ -98,6 +98,15 @@ This workflow will:
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
+    ```bash
+    # Issue comments (general PR comments, including deployment bot messages)
+    gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
+
+    # Review comments (inline code comments)
+    gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+    ```
+    > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the deployment bot comment with the test environment link may end up on page 2 and get silently missed.
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
