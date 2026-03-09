@@ -550,7 +550,9 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
+    public Response findFeedbackScoreNames(
+            @QueryParam("experiment_ids") String experimentIdsQueryParam,
+            @QueryParam("exclude_category_name") String excludeCategoryName) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
@@ -561,7 +563,7 @@ public class ExperimentsResource {
         log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
                 experimentIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNames(experimentIds)
+                .getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryName)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
