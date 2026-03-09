@@ -158,7 +158,7 @@ class TestBalancedSampling:
         assert len(ids) == 3
         assert 0 in ids
 
-    def test_assertion_priority_ordering(self):
+    def test_failed_items_shuffled_across_calls(self):
         sampler = FailureAwareBatchSampler(
             minibatch_size=3,
             min_failed_per_batch=3,
@@ -179,9 +179,14 @@ class TestBalancedSampling:
         sampler.update_scores(feedback)
         sampler.update_assertion_failures(feedback)
 
-        ids = sampler.next_minibatch_ids(loader, FakeState())
-        assert 3 in ids
-        assert 1 in ids
+        failed_indices = {0, 1, 2, 3}
+        batches = set()
+        for _ in range(20):
+            ids = sampler.next_minibatch_ids(loader, FakeState())
+            assert len(ids) == 3
+            assert all(idx in failed_indices for idx in ids)
+            batches.add(tuple(sorted(ids)))
+        assert len(batches) > 1
 
 
 class TestUpdateScores:

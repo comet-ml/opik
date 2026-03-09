@@ -87,17 +87,6 @@ class FailureAwareBatchSampler:
             if streak >= min_streak
         }
 
-    def _failure_priority(self, idx: int) -> tuple[int, int]:
-        """Sort key: failed items first, then by number of failing assertions.
-
-        Returns (0/-1 for pass/fail, negative assertion count).
-        """
-        item_id = self._idx_to_item_id.get(idx, "")
-        failed = self._item_failed_assertions.get(item_id, [])
-        if not failed:
-            return (0, 0)
-        return (-1, -len(failed))
-
     def next_minibatch_ids(self, loader: DataLoader, state: GEPAState) -> list[int]:
         self._ensure_mapping(loader)
         all_ids = list(loader.all_ids())
@@ -116,7 +105,7 @@ class FailureAwareBatchSampler:
             else:
                 passed_ids.append(idx)
 
-        failed_ids.sort(key=self._failure_priority)
+        self.rng.shuffle(failed_ids)
 
         selected: list[int] = []
         remaining = n
