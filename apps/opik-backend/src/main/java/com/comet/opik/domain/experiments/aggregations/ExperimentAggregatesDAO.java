@@ -843,7 +843,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '' <endif>
+            <if(project_deleted)> AND project_id = :zero_uuid <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -869,7 +869,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '' <endif>
+            <if(project_deleted)> AND project_id = :zero_uuid <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1012,6 +1012,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     FROM experiment_item_aggregates eia FINAL
                     INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
                     WHERE eia.workspace_id = :workspace_id
+                    AND ea.dataset_id = :dataset_id
                     <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
                 )
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
@@ -2114,7 +2115,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {
         return TraceAggregations.builder()
                 .experimentId(experimentId)
-                .projectId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                .projectId(ExperimentGroupMappers.ZERO_UUID)
                 .durationPercentiles(Map.of())
                 .traceCount(0L)
                 .build();
@@ -2162,6 +2163,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("workspace_id", workspaceId);
 
             bindGroupCriteria(statement, criteria, filterQueryBuilder);
+            if (Boolean.TRUE.equals(criteria.projectDeleted())) {
+                statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID.toString());
+            }
 
             int groupsCount = criteria.groups().size();
 
