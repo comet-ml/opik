@@ -34,6 +34,7 @@ public class TraceAssertions {
 
     private static final String[] IGNORED_FIELDS_THREADS = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "threadModelId", "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt",
+            "feedbackScores.createdBy", "feedbackScores.lastUpdatedBy",
             "feedbackScores.valueByAuthor"};
 
     /**
