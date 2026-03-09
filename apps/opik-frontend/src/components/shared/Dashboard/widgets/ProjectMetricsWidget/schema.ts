@@ -7,6 +7,7 @@ export const BreakdownConfigSchema = z
   .object({
     field: z.nativeEnum(BREAKDOWN_FIELD).default(BREAKDOWN_FIELD.NONE),
     metadataKey: z.string().optional(),
+    aggregateTotal: z.boolean().optional(),
   })
   .refine(
     (data) => {

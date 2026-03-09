@@ -9,5 +9,5 @@ import lombok.Data;
 public class ExperimentAggregatesConfig {
 
     @Valid @JsonProperty
-    @Positive private int batchSize;
+    @Positive private int batchSize = 1000;
 }

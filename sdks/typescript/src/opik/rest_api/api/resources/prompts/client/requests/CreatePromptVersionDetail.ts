@@ -16,4 +16,6 @@ export interface CreatePromptVersionDetail {
     version: OpikApi.PromptVersionDetail;
     /** Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation. */
     templateStructure?: OpikApi.CreatePromptVersionDetailTemplateStructure;
+    /** Action to perform after creating the prompt version. 'update_blueprint' (default) triggers automatic blueprint auto-increment. 'no_action' skips blueprint updates. */
+    action?: OpikApi.CreatePromptVersionDetailAction;
 }
