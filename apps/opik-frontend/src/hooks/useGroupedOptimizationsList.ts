@@ -83,7 +83,9 @@ const generateMoreRow = (dataset: Dataset) => {
 
 export default function useGroupedOptimizationsList(
   params: UseGroupedOptimizationsListParams,
+  options?: { enabled?: boolean },
 ) {
+  const enabled = options?.enabled ?? true;
   const refetchInterval = params.polling ? 30000 : undefined;
   const optimizationsCache = useRef<
     Record<string, UseOptimizationsListResponse>
@@ -104,6 +106,7 @@ export default function useGroupedOptimizationsList(
     {
       placeholderData: keepPreviousData,
       refetchInterval,
+      enabled,
     },
   );
 
@@ -115,7 +118,7 @@ export default function useGroupedOptimizationsList(
     {
       datasetId: params.datasetId!,
     },
-    { enabled: isFilteredByDataset },
+    { enabled: enabled && isFilteredByDataset },
   );
 
   const hasRemovedDatasetOptimizations =
@@ -138,7 +141,7 @@ export default function useGroupedOptimizationsList(
     {
       placeholderData: keepPreviousData,
       refetchInterval,
-      enabled: !isFilteredByDataset,
+      enabled: enabled && !isFilteredByDataset,
     } as never,
   );
 

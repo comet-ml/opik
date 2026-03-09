@@ -7,10 +7,7 @@ import {
   WORKSPACE_ROLE_TYPE,
   ManagementPermissionsNames,
 } from "@/plugins/comet/types";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 
 interface UseWorkspaceUserRolesParams {
   workspaceId: string;
@@ -92,12 +89,12 @@ export const useWorkspaceUserRolesMap = ({
         ? permissionsMap.get(member.userName) || []
         : [];
 
-      const permissionByType = getPermissionByType(
+      const isWorkspaceOwner = !!getUserPermissionValue(
         userPermissions,
         ManagementPermissionsNames.MANAGEMENT,
       );
 
-      const role = isUserPermissionValid(permissionByType?.permissionValue)
+      const role = isWorkspaceOwner
         ? WORKSPACE_ROLE_TYPE.owner
         : WORKSPACE_ROLE_TYPE.member;
 

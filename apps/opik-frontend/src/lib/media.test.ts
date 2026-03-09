@@ -6,6 +6,7 @@ import {
   clearMediaTypeCache,
   getMediaTypeCacheSize,
   isHttpUrl,
+  containsTruncatedMedia,
 } from "@/lib/media";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
 
@@ -344,6 +345,142 @@ describe("media utilities", () => {
       expect(
         result.find((m) => m.type === ATTACHMENT_TYPE.AUDIO),
       ).toBeDefined();
+    });
+  });
+});
+
+describe("containsTruncatedMedia", () => {
+  describe("backend-generated [image] placeholders", () => {
+    it("should detect [image] placeholder", () => {
+      expect(containsTruncatedMedia("[image]")).toBe(true);
+    });
+
+    it("should detect [image_0] numbered placeholder", () => {
+      expect(containsTruncatedMedia("[image_0]")).toBe(true);
+    });
+
+    it("should detect [image_12] multi-digit placeholder", () => {
+      expect(containsTruncatedMedia("[image_12]")).toBe(true);
+    });
+
+    it("should be case-insensitive for placeholders", () => {
+      expect(containsTruncatedMedia("[IMAGE]")).toBe(true);
+      expect(containsTruncatedMedia("[Image_0]")).toBe(true);
+    });
+  });
+
+  describe("truncated base64 data URIs", () => {
+    it("should detect truncated image data URI", () => {
+      expect(containsTruncatedMedia("data:image/png;base64,iVBORw0KGgo")).toBe(
+        true,
+      );
+    });
+
+    it("should detect truncated video data URI", () => {
+      expect(
+        containsTruncatedMedia("data:video/mp4;base64,AAAAIGZ0eXBpc29t"),
+      ).toBe(true);
+    });
+
+    it("should detect truncated audio data URI", () => {
+      expect(
+        containsTruncatedMedia("data:audio/wav;base64,UklGRqxYAQBXQVZF"),
+      ).toBe(true);
+    });
+
+    it("should detect data URI with leading quote from ClickHouse JSON", () => {
+      expect(
+        containsTruncatedMedia('"data:video/mp4;base64,AAAAIGZ0eXBpc29t'),
+      ).toBe(true);
+    });
+
+    it("should detect data URI with leading quote for images", () => {
+      expect(
+        containsTruncatedMedia('"data:image/jpeg;base64,/9j/4AAQSkZJR'),
+      ).toBe(true);
+    });
+  });
+
+  describe("nested structures", () => {
+    it("should detect placeholder in object values", () => {
+      expect(containsTruncatedMedia({ key: "[image]" })).toBe(true);
+    });
+
+    it("should detect truncated URI in nested object", () => {
+      expect(
+        containsTruncatedMedia({
+          outer: { inner: "data:video/mp4;base64,AAAA" },
+        }),
+      ).toBe(true);
+    });
+
+    it("should detect placeholder in array", () => {
+      expect(containsTruncatedMedia(["text", "[image_0]"])).toBe(true);
+    });
+
+    it("should detect in deeply nested structure", () => {
+      expect(
+        containsTruncatedMedia({
+          messages: [
+            {
+              content: [
+                { type: "text", text: "hello" },
+                { type: "image_url", image_url: { url: "[image_0]" } },
+              ],
+            },
+          ],
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe("false positives - should NOT match", () => {
+    it("should not match [video] (backend never generates this)", () => {
+      expect(containsTruncatedMedia("[video]")).toBe(false);
+    });
+
+    it("should not match [audio] (backend never generates this)", () => {
+      expect(containsTruncatedMedia("[audio]")).toBe(false);
+    });
+
+    it("should not match [video_0] placeholder", () => {
+      expect(containsTruncatedMedia("[video_0]")).toBe(false);
+    });
+
+    it("should not match plain text", () => {
+      expect(containsTruncatedMedia("hello world")).toBe(false);
+    });
+
+    it("should not match empty string", () => {
+      expect(containsTruncatedMedia("")).toBe(false);
+    });
+
+    it("should not match data URI for non-media types", () => {
+      expect(
+        containsTruncatedMedia("data:application/json;base64,eyJrZXkiOiJ2YW"),
+      ).toBe(false);
+    });
+
+    it("should not match data URI embedded in middle of text", () => {
+      expect(
+        containsTruncatedMedia(
+          "some text data:video/mp4;base64,AAAA more text",
+        ),
+      ).toBe(false);
+    });
+
+    it("should return false for null/undefined/numbers", () => {
+      expect(containsTruncatedMedia(null)).toBe(false);
+      expect(containsTruncatedMedia(undefined)).toBe(false);
+      expect(containsTruncatedMedia(42)).toBe(false);
+    });
+
+    it("should return false for empty object", () => {
+      expect(containsTruncatedMedia({})).toBe(false);
+    });
+
+    it("should return false for empty array", () => {
+      expect(containsTruncatedMedia([])).toBe(false);
     });
   });
 });

@@ -6,7 +6,6 @@ import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
-import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentType;
@@ -422,8 +421,6 @@ class DatasetServiceImpl implements DatasetService {
                 .map(filterQueryBuilder::toStateSQLMapping)
                 .orElse(Map.of());
 
-        String typeValue = Optional.ofNullable(criteria.type()).map(DatasetType::getValue).orElse(null);
-
         // withExperimentsOnly refers to Regular experiments only
         if (criteria.withExperimentsOnly() || criteria.promptId() != null) {
 
@@ -443,10 +440,10 @@ class DatasetServiceImpl implements DatasetService {
                 } else {
                     if (ids.size() <= maxExperimentInClauseSize) {
                         return fetchUsingMemory(page, size, criteria, ids, workspaceId, sortingFieldsSql, visibility,
-                                typeValue, filtersSQL, filterMapping);
+                                filtersSQL, filterMapping);
                     } else {
                         return fetchUsingTempTable(page, size, criteria, ids, workspaceId, sortingFieldsSql,
-                                visibility, typeValue, filtersSQL, filterMapping);
+                                visibility, filtersSQL, filterMapping);
                     }
                 }
             }).subscribeOn(Schedulers.boundedElastic()).block();
@@ -467,19 +464,19 @@ class DatasetServiceImpl implements DatasetService {
             int offset = (page - 1) * size;
 
             long count = repository.findCount(workspaceId, criteria.name(), criteria.withExperimentsOnly(),
-                    criteria.withOptimizationsOnly(), visibility, typeValue, filtersSQL, filterMapping);
+                    criteria.withOptimizationsOnly(), visibility, filtersSQL, filterMapping);
 
             List<Dataset> datasets = enrichDatasetWithAdditionalInformation(
                     repository.find(size, offset, workspaceId, criteria.name(), criteria.withExperimentsOnly(),
                             criteria.withOptimizationsOnly(),
-                            sortingFieldsSql, visibility, typeValue, filtersSQL, filterMapping));
+                            sortingFieldsSql, visibility, filtersSQL, filterMapping));
 
             return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
         });
     }
 
     private Mono<DatasetPage> fetchUsingTempTable(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
-            String workspaceId, String sortingFields, Visibility visibility, String type, String filters,
+            String workspaceId, String sortingFields, Visibility visibility, String filters,
             Map<String, Object> filterMapping) {
 
         String tableName = idGenerator.generateId().toString().replace("-", "_");
@@ -505,10 +502,10 @@ class DatasetServiceImpl implements DatasetService {
             return template.inTransaction(READ_ONLY, handle -> {
                 var repository = handle.attach(DatasetDAO.class);
                 long count = repository.findCountByTempTable(workspaceId, tableName, criteria.name(), visibility,
-                        type, filters, filterMapping);
+                        filters, filterMapping);
                 int offset = (page - 1) * size;
                 List<Dataset> datasets = repository.findByTempTable(workspaceId, tableName, criteria.name(), size,
-                        offset, sortingFields, visibility, type, filters, filterMapping);
+                        offset, sortingFields, visibility, filters, filterMapping);
                 return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
             });
         }).doFinally(signalType -> {
@@ -521,15 +518,15 @@ class DatasetServiceImpl implements DatasetService {
     }
 
     private Mono<DatasetPage> fetchUsingMemory(int page, int size, DatasetCriteria criteria, Set<UUID> ids,
-            String workspaceId, String sortingFields, Visibility visibility, String type, String filters,
+            String workspaceId, String sortingFields, Visibility visibility, String filters,
             Map<String, Object> filterMapping) {
         return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
             var repository = handle.attach(DatasetDAO.class);
-            long count = repository.findCountByIds(workspaceId, ids, criteria.name(), visibility, type, filters,
+            long count = repository.findCountByIds(workspaceId, ids, criteria.name(), visibility, filters,
                     filterMapping);
             int offset = (page - 1) * size;
             List<Dataset> datasets = repository.findByIds(workspaceId, ids, criteria.name(), size, offset,
-                    sortingFields, visibility, type, filters, filterMapping);
+                    sortingFields, visibility, filters, filterMapping);
             return new DatasetPage(datasets, page, datasets.size(), count, sortingFactory.getSortableFields());
         }));
     }

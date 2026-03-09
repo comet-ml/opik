@@ -71,6 +71,7 @@ This test ensures [why].`
 8. **Locator priority**: `getByRole` > `getByTestId` > `getByText` > `getByPlaceholder`
 9. **Never use `networkidle`** or `page.waitForTimeout` for assertions
 10. **Let fixtures handle cleanup** - use `try/finally` only when the test modifies resources
+11. **Add `data-testid` to frontend code when needed** - if no reliable locator exists for an element (no semantic role, no unique text), add a `data-testid` attribute directly to the React component in `apps/opik-frontend/src/`. Use kebab-case `{feature}-{element}` naming (e.g., `data-testid="dataset-items-table"`). Then reference it via `page.getByTestId()` in the page object. This is preferred over fragile CSS selectors.
 
 ### Real Example
 

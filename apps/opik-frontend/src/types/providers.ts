@@ -144,6 +144,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW = "google/gemini-2.5-pro-preview",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06 = "google/gemini-2.5-pro-preview-05-06",
+  GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
@@ -408,19 +409,17 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_4_6_EXACTO = "z-ai/glm-4.6:exacto",
 
   //   <----- gemini
+  GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_3_FLASH = "gemini-3-flash-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
-  GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
-  GEMINI_2_0_FLASH_LITE = "gemini-2.0-flash-lite",
-  GEMINI_1_5_FLASH = "gemini-1.5-flash",
-  GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b",
-  GEMINI_1_5_PRO = "gemini-1.5-pro",
+  GEMINI_2_0_FLASH = "gemini-2.0-flash",
   GEMINI_2_5_PRO = "gemini-2.5-pro",
   GEMINI_2_5_FLASH = "gemini-2.5-flash",
   GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite",
   GEMINI_2_5_FLASH_LITE_PREVIEW_06_17 = "gemini-2.5-flash-lite-preview-06-17",
 
   //   <------ vertex ai
+  VERTEX_AI_GEMINI_3_1_PRO = "vertex_ai/gemini-3.1-pro-preview",
   VERTEX_AI_GEMINI_3_PRO = "vertex_ai/gemini-3-pro-preview",
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17 = "vertex_ai/gemini-2.5-flash-preview-04-17",
   VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_05_06 = "vertex_ai/gemini-2.5-pro-preview-05-06",

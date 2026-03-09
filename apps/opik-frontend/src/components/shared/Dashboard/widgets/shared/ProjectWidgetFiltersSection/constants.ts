@@ -24,6 +24,7 @@ export const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   { id: "tags", label: "Tags", type: COLUMN_TYPE.list, iconType: "tags" },
   { id: "thread_id", label: "Thread ID", type: COLUMN_TYPE.string },
   { id: "error_info", label: "Errors", type: COLUMN_TYPE.errors },
+  { id: "error_type", label: "Error type", type: COLUMN_TYPE.string },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
@@ -52,11 +53,6 @@ export const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     id: "number_of_messages",
     label: "Message count",
     type: COLUMN_TYPE.number,
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
   },
   {
     id: "created_at",
@@ -107,6 +103,7 @@ export const SPAN_FILTER_COLUMNS: ColumnData<Span>[] = [
   },
   { id: "tags", label: "Tags", type: COLUMN_TYPE.list, iconType: "tags" },
   { id: "error_info", label: "Errors", type: COLUMN_TYPE.errors },
+  { id: "error_type", label: "Error type", type: COLUMN_TYPE.string },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",

@@ -10,6 +10,7 @@ from ..api_objects.experiment import helpers as experiment_helpers
 from ..api_objects.dataset import execution_policy as dataset_execution_policy
 from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
+from ..api_objects.dataset import evaluation_suite
 from . import (
     asyncio_support,
     engine,
@@ -133,7 +134,9 @@ def _compute_experiment_scores(
 
 
 def evaluate(
-    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    dataset: Union[
+        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
+    ],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -239,6 +242,10 @@ def evaluate(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
+    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+        # backwards compatibility for transition period
+        dataset = dataset.dataset
+
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
     )
@@ -357,6 +364,7 @@ def evaluate_suite(
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
+        evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
     )
@@ -747,7 +755,9 @@ def _build_prompt_evaluation_task(
 
 
 def evaluate_prompt(
-    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    dataset: Union[
+        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
+    ],
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
@@ -834,6 +844,10 @@ def evaluate_prompt(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
+    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+        # backwards compatibility for transition period
+        dataset = dataset.dataset
+
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
     )
@@ -963,7 +977,9 @@ def evaluate_prompt(
 
 def evaluate_optimization_trial(
     optimization_id: str,
-    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    dataset: Union[
+        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
+    ],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -1068,6 +1084,10 @@ def evaluate_optimization_trial(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
+    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+        # backwards compatibility for transition period
+        dataset = dataset.dataset
+
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
     )

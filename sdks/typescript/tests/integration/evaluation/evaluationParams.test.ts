@@ -6,10 +6,11 @@ import { Contains } from "@/evaluation/metrics/heuristics/Contains";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { cleanupDatasets, createSimpleDataset } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Evaluation Parameters Integration", () => {
   let client: Opik;

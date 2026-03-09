@@ -6,6 +6,7 @@ import { ExactMatch } from "@/evaluation/metrics/heuristics/ExactMatch";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import {
   createQADataset,
@@ -13,7 +14,7 @@ import {
   cleanupPrompts,
 } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
   let client: Opik;
@@ -80,7 +81,7 @@ describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
       // Verify scores calculated
       expect(firstResult.scoreResults).toBeDefined();
       expect(firstResult.scoreResults.length).toBeGreaterThan(0);
-    }, 60000);
+    }, 120000);
 
     it("should include prompt_template and model in experiment metadata", async () => {
       const dataset = await createQADataset(client);

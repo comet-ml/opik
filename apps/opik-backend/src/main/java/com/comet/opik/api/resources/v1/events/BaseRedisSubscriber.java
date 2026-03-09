@@ -7,6 +7,7 @@ import io.opentelemetry.api.metrics.DoubleGauge;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -47,19 +48,21 @@ import java.util.stream.Stream;
 public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private static final String BUSYGROUP = "BUSYGROUP";
+    private static final String NOGROUP = "NOGROUP";
 
     /**
-     * Non-retryable: programming and validation exceptions that won't succeed on retry.
+     * Non-retryable exception types that won't succeed on retry. Checked via {@code instanceof} in
+     * {@link #isRetryableException(Throwable)}, so subclasses are automatically covered.
+     * These are usually programming, validation, client etc. exceptions.
      */
     private static final Set<Class<? extends RuntimeException>> NON_RETRYABLE_EXCEPTIONS = Set.of(
             ArithmeticException.class,
-            ArrayIndexOutOfBoundsException.class,
             ClassCastException.class,
+            ClientErrorException.class,
             IllegalArgumentException.class,
             IllegalStateException.class,
             IndexOutOfBoundsException.class,
             NullPointerException.class,
-            NumberFormatException.class,
             UnsupportedOperationException.class);
 
     /**
@@ -302,10 +305,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
      * Propagates errors except BUSYGROUP and makes start fail in that case.
      */
     private void enforceConsumerGroup() {
+        createConsumerGroup()
+                .block(config.getLongPollingDuration().toJavaDuration());
+    }
+
+    private Mono<Void> createConsumerGroup() {
         var streamCreateGroupArgs = StreamCreateGroupArgs
                 .name(config.getConsumerGroupName())
                 .makeStream();
-        stream.createGroup(streamCreateGroupArgs)
+        return stream.createGroup(streamCreateGroupArgs)
                 .subscribeOn(consumerScheduler)
                 .onErrorResume(throwable -> {
                     if (Objects.toString(throwable.getMessage(), "").contains(BUSYGROUP)) {
@@ -316,8 +324,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     log.error("Failed to create consumer group '{}' for stream '{}'",
                             config.getConsumerGroupName(), config.getStreamName(), throwable);
                     return Mono.error(throwable);
-                })
-                .block(config.getLongPollingDuration().toJavaDuration());
+                });
     }
 
     private Disposable setupStreamListener() {
@@ -377,6 +384,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     claimErrors.add(1);
                     log.error("Error claiming pending messages", throwable);
+                    if (isNoGroupError(throwable)) {
+                        return recoverFromNoGroup();
+                    }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> claimTime.record(System.currentTimeMillis() - startMillis));
@@ -397,9 +407,28 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .onErrorResume(throwable -> {
                     readErrors.add(1);
                     log.error("Error reading from Redis stream", throwable);
+                    if (isNoGroupError(throwable)) {
+                        return recoverFromNoGroup();
+                    }
                     return Mono.just(Map.of());
                 })
                 .doFinally(signalType -> readTime.record(System.currentTimeMillis() - startMillis));
+    }
+
+    private boolean isNoGroupError(Throwable throwable) {
+        return Objects.toString(throwable.getMessage(), "").contains(NOGROUP);
+    }
+
+    private Mono<Map<StreamMessageId, Map<String, M>>> recoverFromNoGroup() {
+        log.warn("Recreating not found consumer group '{}' for stream '{}'",
+                config.getConsumerGroupName(), config.getStreamName());
+        return createConsumerGroup()
+                .onErrorResume(throwable -> {
+                    log.error("Failed to recreate consumer group '{}' for stream '{}'",
+                            config.getConsumerGroupName(), config.getStreamName(), throwable);
+                    return Mono.empty();
+                })
+                .thenReturn(Map.of());
     }
 
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
@@ -520,7 +549,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * Provide a particular implementation for processing the event.
      * <p>
-     * Exception handling: Exceptions in {@link #NON_RETRYABLE_EXCEPTIONS} are immediately removed from the stream.
+     * Exception handling: see {@link #isRetryableException(Throwable)} for the full non-retryable classification.
+     * Non-retryable exceptions are immediately removed from the stream.
      * All other exceptions are retried up to {@code maxRetries} times before being removed.
      *
      * @param message a Redis message
@@ -544,12 +574,15 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     }
 
     /**
-     * Non-retryable exceptions are programming errors or validation failures that won't succeed on retry.
-     * All other exceptions are considered retryable (transient errors like network issues, timeouts, etc.)
+     * Non-retryable exceptions are checked via {@code instanceof} against {@link #NON_RETRYABLE_EXCEPTIONS},
+     * so both exact types and their subclasses are covered.
+     * Non-retryable exceptions are usually programming, validation, client errors that won't succeed on retry.
+     * All other exceptions are considered retryable (transient errors like network issues, timeouts, server errors, etc.)
      * Unknown exceptions default to retryable for safety.
      */
     private boolean isRetryableException(Throwable exception) {
-        return !NON_RETRYABLE_EXCEPTIONS.contains(exception.getClass());
+        return NON_RETRYABLE_EXCEPTIONS.stream()
+                .noneMatch(nonRetryable -> nonRetryable.isInstance(exception));
     }
 
     /**

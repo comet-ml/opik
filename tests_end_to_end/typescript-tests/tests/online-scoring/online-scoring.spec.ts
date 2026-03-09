@@ -92,95 +92,76 @@ test.describe('Online Scoring Tests', () => {
         console.log('Traces created - they should be automatically scored by the rule');
       });
 
-      await test.step('Navigate to traces and verify moderation column appears', async () => {
+      await test.step('Navigate to traces and verify moderation column with scores appears', async () => {
         await projectsPage.goto();
         await projectsPage.clickProject(createProjectApi);
         console.log('Successfully navigated to project traces');
 
-        // The Moderation column might not appear immediately, try refreshing
-        let columnFound = false;
-        const maxAttempts = 5;
+        // Ensure we're on the Traces view
+        const tracesToggle = page.getByRole('radio', { name: 'Traces' });
+        if ((await tracesToggle.getAttribute('aria-checked')) !== 'true') {
+          await tracesToggle.click();
+          await page.waitForTimeout(500);
+        }
+
+        // Retry loop: wait for Moderation column header in the table, then check score value.
+        // Scoring is async and Anthropic models can take longer, so we allow generous retries.
+        const maxAttempts = 15;
+        let moderationColumnIndex = -1;
+        let moderationValue = '';
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            // Wait for the Moderation column to exist in the DOM
-            // The column appears as a cell in the table header, not as a proper columnheader role
-            const moderationColumn = page.getByText('Moderation', { exact: false });
-            await expect(moderationColumn).toBeAttached({ timeout: 5000 });
-            console.log(`Moderation column is attached (attempt ${attempt})!`);
-            columnFound = true;
-            break;
-          } catch (error) {
-            if (attempt < maxAttempts) {
-              console.log(`Moderation column not visible yet (attempt ${attempt}), refreshing page...`);
-              await page.reload();
-              await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+          // Find Moderation column in thead
+          const headerCells = page.locator('table thead th, table thead td');
+          const headerCount = await headerCells.count();
+          moderationColumnIndex = -1;
+
+          for (let i = 0; i < headerCount; i++) {
+            const cellText = await headerCells.nth(i).textContent();
+            if (cellText?.includes('Moderation')) {
+              moderationColumnIndex = i;
+              break;
             }
           }
-        }
 
-        if (!columnFound) {
-          throw new Error(`Moderation column did not appear after ${maxAttempts} attempts and refreshes`);
-        }
-      });
-
-      await test.step('Verify moderation scores are present', async () => {
-        // All traces should have moderation scores of 0 (safe content)
-        // Scoring is asynchronous, so we need to wait for the scores to populate
-
-        // Count rows in the table - each row should have a moderation score
-        const tableRows = page.locator('table tbody tr');
-        const rowCount = await tableRows.count();
-
-        console.log(`Found ${rowCount} rows in traces table`);
-
-        // We expect all 10 traces to be present
-        expect(rowCount).toBeGreaterThanOrEqual(10);
-
-        // Find the column index of the Moderation column
-        const headerCells = page.locator('table thead th, table thead td');
-        const headerCount = await headerCells.count();
-        let moderationColumnIndex = -1;
-
-        for (let i = 0; i < headerCount; i++) {
-          const cellText = await headerCells.nth(i).textContent();
-          if (cellText?.includes('Moderation')) {
-            moderationColumnIndex = i;
-            console.log(`Found Moderation column at index ${i}`);
-            break;
+          if (moderationColumnIndex === -1) {
+            console.log(`Moderation column header not found yet (attempt ${attempt}/${maxAttempts}), refreshing...`);
+            await page.reload();
+            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+            continue;
           }
-        }
 
-        if (moderationColumnIndex === -1) {
-          throw new Error('Could not find Moderation column in table header');
-        }
+          console.log(`Found Moderation column at index ${moderationColumnIndex} (attempt ${attempt})`);
 
-        // Wait for scoring to complete - retry until we see actual scores (not "-")
-        const firstRow = tableRows.first();
-        const cells = firstRow.locator('td');
-        const moderationCell = cells.nth(moderationColumnIndex);
-
-        let moderationValue = '';
-        const maxRetries = 10;
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          // Check if there's a score value (not "-")
+          const firstRow = page.locator('table tbody tr').first();
+          const moderationCell = firstRow.locator('td').nth(moderationColumnIndex);
           moderationValue = (await moderationCell.textContent())?.trim() || '';
-          console.log(`Attempt ${attempt}: First row moderation value: ${moderationValue}`);
+          console.log(`Moderation value: ${moderationValue}`);
 
           if (moderationValue !== '-' && moderationValue !== '') {
             break;
           }
 
-          if (attempt < maxRetries) {
-            console.log(`Scores not populated yet, waiting before retry...`);
-            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
+          if (attempt < maxAttempts) {
+            console.log(`Score not populated yet (attempt ${attempt}/${maxAttempts}), refreshing...`);
             await page.reload();
-            await page.waitForTimeout(POST_RELOAD_TIMEOUT);
+            await page.waitForTimeout(PAGE_REFRESH_TIMEOUT);
           }
         }
 
+        if (moderationColumnIndex === -1) {
+          throw new Error(`Moderation column did not appear after ${maxAttempts} attempts`);
+        }
+
+        const tableRows = page.locator('table tbody tr');
+        const rowCount = await tableRows.count();
+        console.log(`Found ${rowCount} rows in traces table`);
+        expect(rowCount).toBeGreaterThanOrEqual(10);
+
         // The value should be "0" (safe content)
         expect(moderationValue).toBe('0');
-        console.log(`Successfully verified moderation scoring is working - traces have been scored with value: ${moderationValue}`);
+        console.log(`Successfully verified moderation scoring with value: ${moderationValue}`);
       });
 
       await test.step('Cleanup provider', async () => {

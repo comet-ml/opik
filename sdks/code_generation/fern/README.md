@@ -30,4 +30,4 @@ Steps:
    Note that this path contains the version of the schema from which the code in `src/opik/rest_api` for the SDK was generated. Therefore, it might not be the latest version of the schema.
 5. Run `fern generate` from inside `code_generation/fern` folder. This will generate a python code inside the directory called `sdks` near the `fern` one.
 7. Replace content of `src/opik/rest_api` with the python package inside `sdks` (there will be few nested directories, navigate until you find python files)
-8. Run `pre-commit run --all-files` to format code
+8. Run `git diff --name-only | xargs pre-commit run --files` to format only changed files

@@ -146,6 +146,10 @@ class Streamer:
             and self._batch_preprocessor.is_empty()
         )
 
+    def __internal_api__failed_uploads__(self, timeout: Optional[float]) -> int:
+        """Returns the number of failed file uploads. Blocking - waits for all uploads to complete."""
+        return self._file_upload_manager.failed_uploads(timeout=timeout)
+
     def workers_idling(self) -> bool:
         return all([consumer.idling for consumer in self._queue_consumers])
 

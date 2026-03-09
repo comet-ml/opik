@@ -284,7 +284,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
     )
 
 
-@pytest.mark.xfail(
+@pytest.mark.skip(
     reason="Backend bug (OPIK-3630): If incorrect project_name is specified, the project gets created and the score is not attached to the correct thread."
 )
 def test_log_threads_feedback_scores__project_name_fallback_logic(

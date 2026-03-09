@@ -42,7 +42,7 @@ import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -50,6 +50,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import useAppStore from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
@@ -85,12 +86,13 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     type: COLUMN_TYPE.category,
     cell: TagCell as never,
     accessorFn: (row) => capitalizeFirstLetter(row.scope),
+    customMeta: { colored: false },
   },
   {
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -101,7 +103,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
 ];
@@ -117,7 +119,7 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row) => row.feedback_scores ?? [],
     cell: FeedbackScoreListCell as never,
@@ -164,19 +166,25 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "progress",
-  "last_updated_at",
-  "scope",
   "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
   "instructions",
-  COLUMN_FEEDBACK_SCORES_ID,
-  "last_updated_at",
-  "scope",
   "items_count",
+  "progress",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "scope",
+  "last_updated_at",
+  "created_at",
+  "created_by",
+  "reviewers",
 ];
 
 const SELECTED_COLUMNS_KEY = "annotation-queues-selected-columns";
@@ -212,6 +220,9 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const {
+    permissions: { canDeleteAnnotationQueues },
+  } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("queues_search", StringParam, {
     updateType: "replaceIn",
@@ -394,8 +405,12 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           />
         </div>
         <div className="flex items-center gap-2">
-          <AnnotationQueuesActionsPanel queues={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteAnnotationQueues && (
+            <>
+              <AnnotationQueuesActionsPanel queues={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}

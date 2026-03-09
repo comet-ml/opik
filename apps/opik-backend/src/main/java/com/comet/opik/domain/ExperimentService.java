@@ -51,7 +51,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -59,10 +58,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
-import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
-import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -81,6 +77,7 @@ public class ExperimentService {
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull ExperimentResponseBuilder responseBuilder;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull ExperimentGroupEnricher experimentGroupEnricher;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -314,52 +311,7 @@ public class ExperimentService {
 
     private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<List<String>> allGroupValues,
             List<GroupBy> groups, String workspaceId) {
-        Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
-        Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
-
-        Mono<Map<UUID, Dataset>> datasetsMono = loadEntityMap(
-                () -> datasetService.findByIds(datasetIds, workspaceId),
-                this::getDatasetMap);
-
-        Mono<Map<UUID, Project>> projectsMono = loadEntityMap(
-                () -> projectService.findByIds(workspaceId, projectIds),
-                this::getProjectMap);
-
-        return Mono.zip(datasetsMono, projectsMono)
-                .map(tuple -> ExperimentGroupEnrichInfoHolder.builder()
-                        .datasetMap(tuple.getT1())
-                        .projectMap(tuple.getT2())
-                        .build());
-    }
-
-    private <T, R> Mono<Map<UUID, R>> loadEntityMap(
-            Callable<List<T>> serviceCall,
-            Function<List<T>, Map<UUID, R>> mapper) {
-        return Mono.fromCallable(serviceCall)
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(mapper);
-    }
-
-    private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
-            String fieldName) {
-        int nestingIdx = groups.stream()
-                .filter(g -> fieldName.equals(g.field()))
-                .findFirst()
-                .map(groups::indexOf)
-                .orElse(-1);
-
-        if (nestingIdx == -1) {
-            return Set.of();
-        }
-
-        return allGroupValues.stream()
-                .map(groupValues -> groupValues.get(nestingIdx))
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(StringUtils::isNotBlank)
-                .filter(s -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(s))
-                .map(UUID::fromString)
-                .collect(Collectors.toSet());
+        return experimentGroupEnricher.getEnrichInfoHolder(allGroupValues, groups, workspaceId);
     }
 
     @WithSpan
@@ -657,6 +609,7 @@ public class ExperimentService {
                 .switchIfEmpty(Mono.error(newNotFoundException("Experiment not found: '%s'".formatted(id))))
                 .then(experimentDAO.update(id, experimentUpdate))
                 .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
+                .onErrorResume(TagOperations::mapTagLimitError)
                 .onErrorResume(throwable -> {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
                     return Mono.error(throwable);
@@ -669,6 +622,7 @@ public class ExperimentService {
         boolean mergeTags = batchUpdate.mergeTags();
         return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
                 .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
+                .onErrorResume(TagOperations::mapTagLimitError)
                 .onErrorResume(throwable -> {
                     log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
                             throwable);

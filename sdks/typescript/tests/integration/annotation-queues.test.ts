@@ -12,6 +12,7 @@ import {
   getIntegrationTestStatus,
 } from "./api/shouldRunIntegrationTests";
 import { logger } from "@/utils/logger";
+import { generateId } from "@/utils/generateId";
 import { MockInstance } from "vitest";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
@@ -144,7 +145,7 @@ describe.skipIf(!shouldRunApiTests)(
     it("should perform complete thread queue flow: create, add threads, remove threads, delete", async () => {
       const testQueueName = `test-thread-queue-${Date.now()}`;
       const testProjectName = `test-project-threads-${Date.now()}`;
-      const threadId = `thread-${Date.now()}`;
+      const threadId = generateId();
       createdProjectNames.push(testProjectName);
 
       const queue = await client.createThreadsAnnotationQueue({
@@ -190,23 +191,27 @@ describe.skipIf(!shouldRunApiTests)(
         2000
       );
 
-      // GET THREADS: Search for threads using searchThreads
+      // GET THREADS: Wait for thread with threadModelId populated.
+      // Thread creation is async (TraceThreadListener processes TracesCreated events),
+      // so the thread may appear in search before thread_model_id is set via the
+      // trace_threads LEFT JOIN. Wait until the full record is ready.
       const threads = await searchAndWaitForDone(
         async () => {
-          return await client.searchThreads({
+          const results = await client.searchThreads({
             projectName: testProjectName,
           });
+          const match = results.find((t) => t.id === threadId);
+          // Only return results when our thread has threadModelId populated
+          return match?.threadModelId ? results : [];
         },
         1,
         30000,
         2000
       );
 
-      expect(threads.length).toBeGreaterThanOrEqual(1);
-
-      // Find our thread
       const ourThread = threads.find((t) => t.id === threadId);
       expect(ourThread).toBeDefined();
+      expect(ourThread!.threadModelId).toBeDefined();
 
       // ADD THREADS: Add thread to the queue
       await queue.addThreads([ourThread!]);

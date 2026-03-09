@@ -592,5 +592,233 @@ class OpenTelemetryResourceTest {
             assertThat(rootSpanFromDb.metadata().get("thread_id").asLong()).isEqualTo(integerThreadId);
         }
 
+        @Test
+        @DisplayName("test token deduplication when parent and child both have usage (PydanticAI/Logfire pattern)")
+        void testTokenDeduplicationWhenParentAndChildBothHaveUsage() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Parent (agent) span with cumulative usage - this simulates PydanticAI/Logfire pattern
+            // where the agent span holds the sum of all child LLM calls' tokens
+            var parentSpan = Span.newBuilder()
+                    .setName("agent span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 2_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(200))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build())
+                    .build();
+
+            // Child LLM span with its own usage - should be preserved after deduplication
+            var childSpan = Span.newBuilder()
+                    .setName("llm call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(200))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build())
+                    .build();
+
+            var otelSpans = List.of(parentSpan, childSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            // Parent span should have its usage cleared (deduplication)
+            var parentSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(parentSpanFromDb.usage()).isNullOrEmpty();
+
+            // Child LLM span should retain its usage (source of truth)
+            var childSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() != null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(childSpanFromDb.usage()).isNotNull();
+            assertThat(childSpanFromDb.usage().get("prompt_tokens")).isEqualTo(200);
+            assertThat(childSpanFromDb.usage().get("completion_tokens")).isEqualTo(100);
+        }
+
+        @Test
+        @DisplayName("test no token deduplication when only parent has usage (no child usage)")
+        void testNoTokenDeduplicationWhenOnlyParentHasUsage() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Parent span with usage; child has no usage - should NOT be deduplicated
+            var parentSpan = Span.newBuilder()
+                    .setName("llm span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 2_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(150))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(75))
+                            .build())
+                    .build();
+
+            // Child span with no usage
+            var childSpan = Span.newBuilder()
+                    .setName("tool call")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .build();
+
+            var otelSpans = List.of(parentSpan, childSpan);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(2);
+
+            // Parent span should retain its usage because no child spans have usage
+            var parentSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(parentSpanFromDb.usage()).isNotNull();
+            assertThat(parentSpanFromDb.usage().get("prompt_tokens")).isEqualTo(150);
+            assertThat(parentSpanFromDb.usage().get("completion_tokens")).isEqualTo(75);
+
+            // Child span has no usage
+            var childSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() != null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(childSpanFromDb.usage()).isNullOrEmpty();
+        }
+
+        @Test
+        @DisplayName("test token deduplication with multiple children having usage")
+        void testTokenDeduplicationWithMultipleChildrenHavingUsage() {
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var otelTraceId = UUID.randomUUID().toString().getBytes();
+            var parentSpanId = UUID.randomUUID().toString().getBytes();
+
+            // Parent (agent) span with cumulative usage representing the sum of both child calls
+            var parentSpan = Span.newBuilder()
+                    .setName("agent span")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setSpanId(ByteString.copyFrom(parentSpanId))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 3_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(300))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(150))
+                            .build())
+                    .build();
+
+            // First child LLM span
+            var childSpan1 = Span.newBuilder()
+                    .setName("llm call 1")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 2_000) * 1_000_000L)
+                    .setEndTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(50))
+                            .build())
+                    .build();
+
+            // Second child LLM span
+            var childSpan2 = Span.newBuilder()
+                    .setName("llm call 2")
+                    .setTraceId(ByteString.copyFrom(otelTraceId))
+                    .setParentSpanId(ByteString.copyFrom(parentSpanId))
+                    .setSpanId(ByteString.copyFrom(UUID.randomUUID().toString().getBytes()))
+                    .setStartTimeUnixNano((System.currentTimeMillis() - 1_000) * 1_000_000L)
+                    .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.input_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(200))
+                            .build())
+                    .addAttributes(KeyValue.newBuilder()
+                            .setKey("gen_ai.usage.output_tokens")
+                            .setValue(AnyValue.newBuilder().setIntValue(100))
+                            .build())
+                    .build();
+
+            var otelSpans = List.of(parentSpan, childSpan1, childSpan2);
+
+            var minTimestamp = otelSpans.stream().map(Span::getStartTimeUnixNano).min(Long::compareTo).orElseThrow();
+            var minTimestampMs = Duration.ofNanos(minTimestamp).toMillis();
+            var expectedOpikTraceId = OpenTelemetryMapper.convertOtelIdToUUIDv7(otelTraceId, minTimestampMs);
+
+            sendProtobufTraces(otelSpans, "Test Project", workspaceName, okApikey, true, null);
+
+            var generatedSpanPage = spanResourceClient.getByTraceIdAndProject(expectedOpikTraceId,
+                    "Test Project", workspaceName, okApikey);
+            assertThat(generatedSpanPage.size()).isEqualTo(3);
+
+            // Parent (agent) span usage must be cleared to avoid double-counting
+            var parentSpanFromDb = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() == null)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(parentSpanFromDb.usage()).isNullOrEmpty();
+
+            // Both child LLM spans should retain their individual usage figures
+            var childSpans = generatedSpanPage.content().stream()
+                    .filter(span -> span.parentSpanId() != null)
+                    .toList();
+            assertThat(childSpans).hasSize(2);
+            childSpans.forEach(span -> assertThat(span.usage()).isNotNull());
+        }
+
     }
 }

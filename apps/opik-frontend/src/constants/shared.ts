@@ -1,7 +1,6 @@
 import React from "react";
 import {
   CELL_VERTICAL_ALIGNMENT,
-  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_TYPE,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -13,7 +12,6 @@ export const PIP_INSTALL_OPIK_COMMAND = "pip install opik";
 export const INSTALL_OPIK_SECTION_TITLE =
   "1. Install Opik using pip from the command line";
 export const INSTALL_SDK_SECTION_TITLE = "2. Install the SDK";
-export const USER_FEEDBACK_COLUMN_ID = `${COLUMN_FEEDBACK_SCORES_ID}.${USER_FEEDBACK_NAME}`;
 
 export const TRUNCATION_DISABLED_MAX_PAGE_SIZE = 10;
 
@@ -38,7 +36,7 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.duration]: "justify-end",
   [COLUMN_TYPE.string]: "justify-start",
   [COLUMN_TYPE.list]: "justify-start",
-  [COLUMN_TYPE.time]: "justify-start",
+  [COLUMN_TYPE.time]: "justify-end",
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
   [COLUMN_TYPE.category]: "justify-start",

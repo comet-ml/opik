@@ -1,5 +1,5 @@
 import React from "react";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { AnnotationQueue } from "@/types/annotation-queues";
@@ -27,7 +27,7 @@ const OpenSMELinkButton: React.FunctionComponent<OpenSMELinkButtonProps> = ({
         target="_blank"
       >
         <Button size="sm">
-          <SquareArrowOutUpRight className="mr-1.5 size-3.5" />
+          <ExternalLink className="mr-1.5 size-3.5" />
           Annotate
         </Button>
       </Link>

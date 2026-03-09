@@ -1,11 +1,13 @@
 export type { CreatePromptVersionDetail } from "./CreatePromptVersionDetail.js";
 export type { DeletePromptRequest } from "./DeletePromptRequest.js";
+export type { GetPromptByCommitRequest } from "./GetPromptByCommitRequest.js";
 export type { GetPromptByIdRequest } from "./GetPromptByIdRequest.js";
 export type { GetPromptsRequest } from "./GetPromptsRequest.js";
 export type { GetPromptVersionByIdRequest } from "./GetPromptVersionByIdRequest.js";
 export type { GetPromptVersionsRequest } from "./GetPromptVersionsRequest.js";
 export type { PromptUpdatable } from "./PromptUpdatable.js";
 export type { PromptVersionBatchUpdate } from "./PromptVersionBatchUpdate.js";
+export type { PromptVersionCommitsRequestPublic } from "./PromptVersionCommitsRequestPublic.js";
 export type { PromptVersionRetrieveDetail } from "./PromptVersionRetrieveDetail.js";
 export type { PromptWrite } from "./PromptWrite.js";
 export type { RestorePromptVersionRequest } from "./RestorePromptVersionRequest.js";

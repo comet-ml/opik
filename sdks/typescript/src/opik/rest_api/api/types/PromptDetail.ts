@@ -15,4 +15,5 @@ export interface PromptDetail {
     lastUpdatedBy?: string;
     versionCount?: number;
     latestVersion?: OpikApi.PromptVersionDetail;
+    requestedVersion?: OpikApi.PromptVersionDetail;
 }

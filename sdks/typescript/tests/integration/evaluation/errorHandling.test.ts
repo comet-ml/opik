@@ -6,6 +6,7 @@ import { MetricComputationError } from "@/evaluation/metrics/errors";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import {
   createQADataset,
@@ -13,7 +14,7 @@ import {
   createSimpleDataset,
 } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Error Handling Integration", () => {
   let client: Opik;

@@ -433,6 +433,98 @@ class BaseRedisSubscriberUnitTest {
     }
 
     @Nested
+    class NoGroupErrorTests {
+
+        @Test
+        void shouldRecoverOnClaimAndNotDie() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+            var fastConfig = CONFIG.toBuilder()
+                    .claimIntervalRatio(3)
+                    .build();
+            var claimCount = new AtomicInteger();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(fastConfig, redissonClient));
+            // autoClaim fails with NOGROUP on first attempt, then succeeds
+            when(stream.autoClaim(
+                    fastConfig.getConsumerGroupName(),
+                    subscriber.getConsumerId(),
+                    fastConfig.getPendingMessageDuration().toJavaDuration().toMillis(),
+                    TimeUnit.MILLISECONDS,
+                    StreamMessageId.MIN,
+                    fastConfig.getConsumerBatchSize()))
+                    .thenAnswer(invocation -> {
+                        int count = claimCount.incrementAndGet();
+                        if (count == 1) {
+                            return Mono.error(
+                                    new RuntimeException("NOGROUP No such key stream or consumer group"));
+                        }
+                        var result = new AutoClaimResult<>(null, Map.of(), List.of());
+                        return Mono.just(result);
+                    });
+            // readGroup works fine, isolating NOGROUP to claim path only
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(claimCount.get()).isGreaterThan(1);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                        // createGroup called at start + once for NOGROUP recovery on claim
+                        verify(stream, times(2)).createGroup(any(StreamCreateGroupArgs.class));
+                    });
+        }
+
+        @Test
+        void shouldNotDieOnRecreatingGroup() {
+            whenRemoveConsumerReturn();
+            var readCount = new AtomicInteger();
+            var createGroupCount = new AtomicInteger();
+
+            // First createGroup succeeds (startup), second fails (NOGROUP recovery)
+            when(stream.createGroup(any(StreamCreateGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        int count = createGroupCount.incrementAndGet();
+                        if (count == 2) {
+                            return Mono.error(new RuntimeException("Redis connection error"));
+                        }
+                        return Mono.empty();
+                    });
+
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(CONFIG, redissonClient));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> {
+                        int count = readCount.incrementAndGet();
+                        if (count == 1) {
+                            return Mono.error(
+                                    new RuntimeException("NOGROUP No such key stream or consumer group"));
+                        }
+                        return Mono.just(Map.of(new StreamMessageId(System.currentTimeMillis(), 0),
+                                Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                        podamFactory.manufacturePojo(String.class))));
+                    });
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            // Should continue processing even after recovery failure
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(readCount.get()).isGreaterThan(2);
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(2);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                        assertThat(createGroupCount.get()).isEqualTo(2);
+                    });
+        }
+    }
+
+    @Nested
     class LifecycleErrorTests {
 
         @Test

@@ -15,25 +15,15 @@ import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "@/types/dashboard";
+import useViewQueryParam from "@/components/pages-shared/dashboards/ViewSelector/hooks/useViewQueryParam";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const [rawView = VIEW_TYPE.DETAILS, setView] = useQueryParam(
-    "view",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  const view =
-    rawView === VIEW_TYPE.DETAILS || rawView === VIEW_TYPE.DASHBOARDS
-      ? rawView
-      : VIEW_TYPE.DETAILS;
+  const { view, setView } = useViewQueryParam();
 
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
@@ -106,7 +96,11 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
       );
     }
 
-    return <ExperimentsDashboardsTab experimentsIds={experimentsIds} />;
+    if (view === VIEW_TYPE.DASHBOARDS) {
+      return <ExperimentsDashboardsTab experimentsIds={experimentsIds} />;
+    }
+
+    return null;
   };
 
   return (

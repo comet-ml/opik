@@ -920,6 +920,7 @@ class DatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -941,6 +942,8 @@ class DatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -969,6 +972,7 @@ class DatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
             evaluators=evaluators,
             execution_policy=execution_policy,
@@ -2351,6 +2355,7 @@ class AsyncDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
@@ -2372,6 +2377,8 @@ class AsyncDatasetsClient:
         trace_id : typing.Optional[str]
 
         span_id : typing.Optional[str]
+
+        description : typing.Optional[str]
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -2403,6 +2410,7 @@ class AsyncDatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
             evaluators=evaluators,
             execution_policy=execution_policy,

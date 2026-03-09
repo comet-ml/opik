@@ -20,4 +20,5 @@ export interface ExperimentItemCompare {
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemCompareTraceVisibilityMode;
+    description?: string;
 }

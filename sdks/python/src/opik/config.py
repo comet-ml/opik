@@ -111,6 +111,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
+    default_llm: str = "openai/gpt-5-nano"
+    """Default LLM model name used by evaluation model factories when model is not provided."""
+
     api_key: Optional[str] = None
     """Opik API key. This is not required if you are running against open source Opik installation"""
 
@@ -212,6 +215,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
     """
 
+    guardrails_url_override: Optional[str] = None
+    """
+    URL for the guardrails backend service.
+    When set, overrides the default guardrails URL derived from url_override.
+    """
+
     maximal_queue_size: int = 1_000_000
     """
     Specifies the maximum number of messages that can be queued for delivery when a connection error occurs or rate limiting is in effect.
@@ -265,6 +274,18 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the frequency of replay manager thread's operations, such as checking for status of connection to the OPIK server and replaying failed messages if connection restored.
     """
 
+    unauthorized_message_type_retry_interval: float = 10.0
+    """
+    Interval in seconds between retrying unauthorized message types.
+    This is to control the frequency of retrying unauthorized message types.
+    """
+
+    unauthorized_message_type_max_retry_count: Optional[int] = None
+    """
+    Maximum number of retries for unauthorized message types.
+    This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -292,6 +313,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def guardrails_backend_host(self) -> str:
+        if self.guardrails_url_override is not None:
+            return self.guardrails_url_override
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @pydantic.model_validator(mode="after")

@@ -15,6 +15,7 @@ export interface ExperimentWrite {
     metadata?: OpikApi.JsonListStringWrite;
     tags?: string[];
     type?: OpikApi.ExperimentWriteType;
+    evaluationMethod?: OpikApi.ExperimentWriteEvaluationMethod;
     optimizationId?: string;
     status?: OpikApi.ExperimentWriteStatus;
     experimentScores?: OpikApi.ExperimentScoreWrite[];

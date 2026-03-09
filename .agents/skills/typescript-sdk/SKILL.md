@@ -1,6 +1,6 @@
 ---
 name: typescript-sdk
-description: TypeScript SDK patterns for Opik. Use when working in sdks/opik-typescript.
+description: TypeScript SDK patterns for Opik. Use when working in sdks/typescript.
 ---
 
 # TypeScript SDK
@@ -16,6 +16,7 @@ Public API → OpikClient → Domain (Trace/Span) → BatchQueues → REST Clien
 ```
 
 ## Critical Gotchas
+- When changing dependencies or minimum versions, update and verify version references in `README.md` and integration README files in the same PR.
 
 ### Flush Before Exit
 ```typescript

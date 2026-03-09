@@ -1,8 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
-import { AUTH_STATE_FILE } from './global-setup';
 
 dotenv.config();
+
+const AUTH_STATE_FILE = '.auth/user.json';
 
 export default defineConfig({
   testDir: './tests',

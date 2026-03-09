@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic.js";
+import { ExperimentPublicEvaluationMethod } from "./ExperimentPublicEvaluationMethod.js";
 import { ExperimentPublicStatus } from "./ExperimentPublicStatus.js";
 import { ExperimentPublicType } from "./ExperimentPublicType.js";
 import { ExperimentScorePublic } from "./ExperimentScorePublic.js";
@@ -26,6 +27,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     metadata: JsonListStringPublic.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     type: ExperimentPublicType.optional(),
+    evaluationMethod: core.serialization.property("evaluation_method", ExperimentPublicEvaluationMethod.optional()),
     optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -72,6 +74,7 @@ export declare namespace ExperimentPublic {
         metadata?: JsonListStringPublic.Raw | null;
         tags?: string[] | null;
         type?: ExperimentPublicType.Raw | null;
+        evaluation_method?: ExperimentPublicEvaluationMethod.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;

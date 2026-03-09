@@ -28,7 +28,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
   ColumnPinningState,
@@ -101,14 +101,13 @@ export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => (row.created_at ? formatDate(row.created_at) : "-"),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) =>
-      row.last_updated_at ? formatDate(row.last_updated_at) : "-",
+    cell: TimeCell as never,
   },
 ];
 
@@ -145,7 +144,7 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
   },
   {
     id: "last_updated_at",
-    label: "Updated",
+    label: "Last updated",
     type: COLUMN_TYPE.time,
   },
 ];
@@ -158,10 +157,21 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "alert_type",
-  "webhook_url",
   "triggers",
-  "created_by",
   "status",
+  "last_updated_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "alert_type",
+  "triggers",
+  "status",
+  "last_updated_at",
+  "webhook_url",
+  "created_at",
+  "created_by",
 ];
 
 const AlertsPage: React.FunctionComponent = () => {
@@ -249,7 +259,7 @@ const AlertsPage: React.FunctionComponent = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

@@ -65,11 +65,14 @@ const Username = () => {
 
 const CreatedAt = () => {
   const { comment, size } = useUserCommentContext();
-  const formattedDate = formatDate(comment.created_at);
   const timeFromNow = getTimeFromNow(comment.created_at);
+  const tooltip = `${formatDate(comment.created_at, {
+    utc: true,
+    includeSeconds: true,
+  })} UTC`;
 
   return (
-    <TooltipWrapper content={formattedDate}>
+    <TooltipWrapper content={tooltip}>
       <div className={createdAtStyleVariants({ size })}>{timeFromNow}</div>
     </TooltipWrapper>
   );

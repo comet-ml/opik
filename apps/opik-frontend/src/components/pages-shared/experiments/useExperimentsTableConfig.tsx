@@ -47,7 +47,6 @@ import {
   generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
-import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
@@ -55,6 +54,7 @@ export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
   defaultColumns: ColumnData<T>[];
   defaultSelectedColumns: string[];
+  defaultColumnsOrder?: string[];
   groups: Groups;
   sortableBy: string[];
   dynamicScoresColumns: DynamicColumn[];
@@ -74,6 +74,7 @@ export const useExperimentsTableConfig = <
   storageKeyPrefix,
   defaultColumns,
   defaultSelectedColumns,
+  defaultColumnsOrder = [],
   groups,
   sortableBy,
   dynamicScoresColumns,
@@ -97,7 +98,7 @@ export const useExperimentsTableConfig = <
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-columns-order`,
     {
-      defaultValue: [],
+      defaultValue: defaultColumnsOrder,
     },
   );
 
@@ -111,17 +112,6 @@ export const useExperimentsTableConfig = <
     Record<string, number>
   >(`${storageKeyPrefix}-columns-width`, {
     defaultValue: {},
-  });
-
-  const dynamicColumnsIds = useMemo(
-    () => dynamicScoresColumns.map((c) => c.id),
-    [dynamicScoresColumns],
-  );
-
-  useDynamicColumnsCache({
-    dynamicColumnsKey: `${storageKeyPrefix}-dynamic-columns`,
-    dynamicColumnsIds,
-    setSelectedColumns,
   });
 
   /**

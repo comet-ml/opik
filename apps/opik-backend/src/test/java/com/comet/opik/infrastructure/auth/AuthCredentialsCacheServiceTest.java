@@ -61,7 +61,7 @@ public class AuthCredentialsCacheServiceTest {
         assertThat(credentials.isEmpty()).isFalse();
         assertThat(credentials.get().userName()).isEqualTo(userName);
         assertThat(credentials.get().workspaceId()).isEqualTo(workspaceId);
-        assertThat(credentials.get().workspaceName()).isEqualTo(workspaceName); // request workspace name (not stored in workspace metadata)
+        assertThat(credentials.get().workspaceName()).isEqualTo(resolvedWorkspaceName);
         assertThat(credentials.get().quotas()).isEqualTo(ListUtils.emptyIfNull(quotas));
     }
 
@@ -132,13 +132,50 @@ public class AuthCredentialsCacheServiceTest {
         List<String> bothPermissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue(),
                 WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
 
-        // apiKey is coupled with one userName; cache both permissions with same user
         cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue()),
                 userName, workspaceId, workspaceName, null);
         cacheService.cache(apiKey, workspaceName, List.of(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()),
                 userName, workspaceId, workspaceName, null);
 
         resolveAndAssertOnValidCache(apiKey, workspaceName, bothPermissions, userName, workspaceId);
+    }
+
+    @Test
+    void permissionsRequireBothV3AndV2CachePresent() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+        List<String> permissions = List.of(WorkspaceUserPermission.DASHBOARD_VIEW.getValue());
+
+        cacheService.cache(apiKey, workspaceName, permissions, userName, workspaceId, workspaceName, null);
+        resolveAndAssertOnValidCache(apiKey, workspaceName, permissions, userName, workspaceId);
+
+        var resolvedWithDifferentApiKey = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(
+                getRandomId(), workspaceName, permissions);
+        assertThat(resolvedWithDifferentApiKey).isEmpty();
+    }
+
+    @Test
+    void v2CacheWorksWithoutPermissions() {
+        String apiKey = getRandomId();
+        String workspaceName = getRandomId();
+        String userName = getRandomId();
+        String workspaceId = getRandomId();
+        String resolvedWorkspaceName = getRandomId();
+
+        cacheService.cache(apiKey, workspaceName, null, userName, workspaceId, resolvedWorkspaceName, null);
+
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
+        assertThat(resolved).isPresent();
+        assertThat(resolved.get().userName()).isEqualTo(userName);
+        assertThat(resolved.get().workspaceId()).isEqualTo(workspaceId);
+        assertThat(resolved.get().workspaceName()).isEqualTo(resolvedWorkspaceName);
+
+        var resolvedWithEmptyList = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
+                List.of());
+        assertThat(resolvedWithEmptyList).isPresent();
+        assertThat(resolvedWithEmptyList.get().userName()).isEqualTo(userName);
     }
 
     private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions,

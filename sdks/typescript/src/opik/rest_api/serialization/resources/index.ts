@@ -1,3 +1,5 @@
+export * from "./agentConfigs/client/requests/index.js";
+export * as agentConfigs from "./agentConfigs/index.js";
 export * as alerts from "./alerts/index.js";
 export * from "./alerts/types/index.js";
 export * from "./annotationQueues/client/requests/index.js";
@@ -32,6 +34,9 @@ export * from "./projects/types/index.js";
 export * from "./prompts/client/requests/index.js";
 export * as prompts from "./prompts/index.js";
 export * from "./prompts/types/index.js";
+export * from "./runners/client/requests/index.js";
+export * as runners from "./runners/index.js";
+export * from "./runners/types/index.js";
 export * from "./spans/client/requests/index.js";
 export * as spans from "./spans/index.js";
 export * from "./spans/types/index.js";

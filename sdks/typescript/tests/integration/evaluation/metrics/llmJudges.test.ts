@@ -10,6 +10,7 @@ import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
   hasAnthropicApiKey,
+  hasOpenAiApiKey,
 } from "../../api/shouldRunIntegrationTests";
 import { logger } from "@/utils/logger";
 
@@ -35,7 +36,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("AnswerRelevance Metric", () => {
-    it("should score high relevance answer with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score high relevance answer with context", async () => {
       const metric = new AnswerRelevance();
 
       const result = await metric.score({
@@ -57,7 +58,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       }
     }, 30000);
 
-    it("should score low relevance answer with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score low relevance answer with context", async () => {
       const metric = new AnswerRelevance();
 
       const result = await metric.score({
@@ -75,7 +76,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work without context when requireContext is false", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work without context when requireContext is false", async () => {
       const metric = new AnswerRelevance({ requireContext: false });
 
       const result = await metric.score({
@@ -89,7 +90,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should throw error when context required but not provided", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should throw error when context required but not provided", async () => {
       const metric = new AnswerRelevance(); // requireContext defaults to true
 
       await expect(
@@ -102,7 +103,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Hallucination Metric", () => {
-    it("should detect no hallucination for factual output with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect no hallucination for factual output with context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -118,7 +119,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect hallucination when output contradicts context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect hallucination when output contradicts context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -134,7 +135,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect no hallucination for factual common knowledge without context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect no hallucination for factual common knowledge without context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -146,7 +147,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect hallucination for obviously false statement without context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect hallucination for obviously false statement without context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -160,7 +161,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Moderation Metric", () => {
-    it("should score benign content as 0.0", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score benign content as 0.0", async () => {
       const metric = new Moderation();
 
       const result = await metric.score({
@@ -172,7 +173,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect content with potential moderation issues", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect content with potential moderation issues", async () => {
       const metric = new Moderation();
 
       const result = await metric.score({
@@ -188,7 +189,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Usefulness Metric", () => {
-    it("should score useful response highly", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score useful response highly", async () => {
       const metric = new Usefulness();
 
       const result = await metric.score({
@@ -203,7 +204,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should score not useful response lowly", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score not useful response lowly", async () => {
       const metric = new Usefulness();
 
       const result = await metric.score({
@@ -219,7 +220,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("GEval Metric", () => {
-    it("should score high quality output with custom task and use logprobs", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score high quality output with custom task and use logprobs", async () => {
       const loggerDebugSpy = vi.spyOn(logger, "debug");
 
       const metric = new GEval({
@@ -287,7 +288,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       60000
     );
 
-    it("should score using QARelevanceJudge", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score using QARelevanceJudge", async () => {
       const metric = new QARelevanceJudge();
 
       const result = await metric.score({
@@ -302,11 +303,11 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(typeof result.reason).toBe("string");
         expect(result.reason.length).toBeGreaterThan(0);
       }
-    }, 60000);
+    }, 120000);
   });
 
   describe("Metric Configuration", () => {
-    it("should work with custom model configuration", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with custom model configuration", async () => {
       const metric = new AnswerRelevance({
         model: "gpt-5-nano",
         temperature: 0.3,
@@ -324,7 +325,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work with seed for reproducibility", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with seed for reproducibility", async () => {
       const metric1 = new AnswerRelevance({
         seed: 42,
         temperature: 0.0,

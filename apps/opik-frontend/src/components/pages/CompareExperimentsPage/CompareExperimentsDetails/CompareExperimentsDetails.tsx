@@ -21,9 +21,8 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import ViewSelector, {
-  VIEW_TYPE,
-} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import ViewSelector from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { VIEW_TYPE } from "@/types/dashboard";
 import { Separator } from "@/components/ui/separator";
 import ExperimentTagsList from "@/components/pages/CompareExperimentsPage/ExperimentTagsList";
 
@@ -205,14 +204,14 @@ const CompareExperimentsDetails: React.FunctionComponent<
         )}
         <NavigationTag
           id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
+          name={experiment?.dataset_name && `Go to ${experiment.dataset_name}`}
           resource={RESOURCE_TYPE.dataset}
         />
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <NavigationTag
               id={experiment.prompt_versions[0].prompt_id}
-              name={experiment.prompt_versions[0].prompt_name}
+              name={`Go to ${experiment.prompt_versions[0].prompt_name}`}
               resource={RESOURCE_TYPE.prompt}
             />
           )}
@@ -220,7 +219,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <NavigationTag
             resource={RESOURCE_TYPE.traces}
             id={experiment.project_id}
-            name="Traces"
+            name="Go to traces"
             search={experimentTracesSearch}
             tooltipContent="View all traces for this experiment"
           />

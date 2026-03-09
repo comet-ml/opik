@@ -2,4 +2,6 @@
 
 export interface TraceThreadUpdate {
     tags?: string[];
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
 }

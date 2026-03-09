@@ -1,4 +1,7 @@
 import random
+from typing import Any
+
+import pytest
 
 
 from tests.unit.algorithms.evolutionary_optimizer._crossover_test_helpers import (
@@ -79,3 +82,62 @@ class TestDeapCrossover:
         assert "prompt_b" in child1
         assert "prompt_a" in child2
         assert "prompt_b" in child2
+
+    def test_crossover_applies_tool_updates_per_child(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
+            deap_crossover,
+        )
+
+        rng = random.Random(42)
+        ind1 = make_deap_individual({"main": [system_message("p1")]})
+        ind2 = make_deap_individual({"main": [system_message("p2")]})
+        setattr(ind1, "prompts_metadata", {"main": {"tools": [{"name": "t"}]}})
+        setattr(ind2, "prompts_metadata", {"main": {"tools": [{"name": "t"}]}})
+
+        def fake_crossover_messages(
+            messages_1: list[dict[str, Any]],
+            messages_2: list[dict[str, Any]],
+            rng: random.Random,
+        ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            _ = messages_1, messages_2, rng
+            return [system_message("child_1")], [system_message("child_2")]
+
+        def fake_apply_tool_updates_to_metadata(
+            *,
+            optimizer: Any,
+            child_data: dict[str, list[dict[str, Any]]],
+            metadata: dict[str, Any],
+            tool_names: list[str] | None,
+            metric: Any,
+        ) -> dict[str, Any]:
+            _ = optimizer, tool_names, metric
+            updated = dict(metadata)
+            updated["main"] = {"marker": child_data["main"][0]["content"]}
+            return updated
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops._crossover_messages",
+            fake_crossover_messages,
+        )
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops.tool_ops.apply_tool_updates_to_metadata",
+            fake_apply_tool_updates_to_metadata,
+        )
+
+        class DummyOptimizer:
+            _optimize_tools = True
+            _tool_names = None
+            _evaluation_metric = object()
+
+        child1, child2 = deap_crossover(
+            ind1,
+            ind2,
+            optimizer=DummyOptimizer(),
+            verbose=0,
+            rng=rng,
+        )
+
+        assert child1.prompts_metadata["main"]["marker"] == "child_1"
+        assert child2.prompts_metadata["main"]["marker"] == "child_2"

@@ -177,7 +177,7 @@ describe("PromptVersion", () => {
 
     it("should return age for old dates", () => {
       const oneMonthAgo = new Date();
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 45);
 
       const version = new PromptVersion({
         versionId: "version-123",
@@ -272,7 +272,7 @@ describe("PromptVersion", () => {
       const info = version.getVersionInfo();
 
       expect(info).toBe(
-        "[abc123de] 2024-01-15 by user@example.com - Added new feature"
+        "[abc123de] 2024-01-15 by user@example.com - Added new feature",
       );
     });
 
@@ -427,7 +427,7 @@ describe("PromptVersion", () => {
       version1.compareTo(version2);
 
       expect(loggerInfoSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Prompt version comparison:")
+        expect.stringContaining("Prompt version comparison:"),
       );
     });
 
@@ -620,7 +620,7 @@ Please enjoy your extended stay.`;
       // Verify diff markers (- from version2, + from version1)
       expect(diff).toContain("+     Describe the image in detail.");
       expect(diff).toContain(
-        "-     Please describe the image in detail, including colors."
+        "-     Please describe the image in detail, including colors.",
       );
       expect(diff).toContain("+     URL: https://picsum.photos/id/237/200/300");
       expect(diff).toContain("-     URL: https://picsum.photos/id/237/200/500");
@@ -902,7 +902,7 @@ Please enjoy your extended stay.`;
 
       const version = PromptVersion.fromApiResponse(
         "minimal-prompt",
-        apiResponse
+        apiResponse,
       );
 
       expect(version).toBeInstanceOf(PromptVersion);
@@ -926,11 +926,11 @@ Please enjoy your extended stay.`;
       } as OpikApi.PromptVersionDetail;
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow(PromptValidationError);
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow("Invalid API response: missing required field 'template'");
     });
 
@@ -944,11 +944,11 @@ Please enjoy your extended stay.`;
       } as OpikApi.PromptVersionDetail;
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow(PromptValidationError);
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow("Invalid API response: missing required field 'commit'");
     });
 
@@ -962,11 +962,11 @@ Please enjoy your extended stay.`;
       } as OpikApi.PromptVersionDetail;
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow(PromptValidationError);
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow("Invalid API response: missing required field 'promptId'");
     });
 
@@ -980,11 +980,11 @@ Please enjoy your extended stay.`;
       } as OpikApi.PromptVersionDetail;
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow(PromptValidationError);
 
       expect(() =>
-        PromptVersion.fromApiResponse("test-prompt", apiResponse)
+        PromptVersion.fromApiResponse("test-prompt", apiResponse),
       ).toThrow("Invalid API response: missing required field 'id'");
     });
 
@@ -1029,7 +1029,7 @@ Please enjoy your extended stay.`;
 
       const version = PromptVersion.fromApiResponse(
         "jinja-prompt",
-        apiResponse
+        apiResponse,
       );
 
       expect(version.type).toBe(PromptType.JINJA2);

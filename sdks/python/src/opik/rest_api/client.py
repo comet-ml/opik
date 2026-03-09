@@ -3,6 +3,7 @@
 import typing
 
 import httpx
+from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
@@ -26,6 +27,7 @@ from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
 from .redirect.client import AsyncRedirectClient, RedirectClient
+from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
 from .spans.client import AsyncSpansClient, SpansClient
 from .system_usage.client import AsyncSystemUsageClient, SystemUsageClient
@@ -94,6 +96,7 @@ class OpikApi:
         )
         self._raw_client = RawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = SystemUsageClient(client_wrapper=self._client_wrapper)
+        self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
@@ -106,6 +109,7 @@ class OpikApi:
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.runners = RunnersClient(client_wrapper=self._client_wrapper)
         self.manual_evaluation = ManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.ollama = OllamaClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
@@ -233,6 +237,7 @@ class AsyncOpikApi:
         )
         self._raw_client = AsyncRawOpikApi(client_wrapper=self._client_wrapper)
         self.system_usage = AsyncSystemUsageClient(client_wrapper=self._client_wrapper)
+        self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
@@ -245,6 +250,7 @@ class AsyncOpikApi:
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
+        self.runners = AsyncRunnersClient(client_wrapper=self._client_wrapper)
         self.manual_evaluation = AsyncManualEvaluationClient(client_wrapper=self._client_wrapper)
         self.ollama = AsyncOllamaClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)

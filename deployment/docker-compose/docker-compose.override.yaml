@@ -35,6 +35,10 @@ services:
     ports:
       - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}"
 
+  guardrails-backend:
+    ports:
+      - "${OPIK_GUARDRAILS_PORT:-5000}:5000"
+
   opik-ai-backend:
     ports:
       - "${OPIK_AI_BACKEND_PORT:-8081}:8081"

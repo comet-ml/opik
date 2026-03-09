@@ -58,6 +58,11 @@ const useDatasetItemBatchMutation = () => {
       if (context) {
         queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
+      // Inserting items may create the first dataset version (latest_version),
+      // which the POST /changes flow needs as base_version.
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
+      });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

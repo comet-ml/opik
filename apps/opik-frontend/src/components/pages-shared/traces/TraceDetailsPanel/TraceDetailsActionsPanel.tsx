@@ -23,16 +23,10 @@ import {
   COLUMN_CUSTOM_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
-  DropdownOption,
   OnChangeFn,
 } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import {
-  ExperimentItemReference,
-  Span,
-  SPAN_TYPE,
-  Trace,
-} from "@/types/traces";
+import { ExperimentItemReference, Span, Trace } from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -44,7 +38,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SelectItem } from "@/components/ui/select";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
@@ -56,13 +49,12 @@ import SelectBox, {
 import ExpandableSearchInput from "@/components/shared/ExpandableSearchInput/ExpandableSearchInput";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { TREE_FILTER_COLUMNS } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
-import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import NetworkOff from "@/icons/network-off.svg?react";
-import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
@@ -72,6 +64,7 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -123,6 +116,11 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+
+  const {
+    permissions: { canDeleteTraces },
+  } = usePermissions();
+
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
@@ -298,48 +296,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const filtersConfig = useMemo(
     () => ({
       rowsMap: {
-        type: {
-          keyComponentProps: {
-            options: [
-              {
-                value: SPAN_TYPE.general,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
-              },
-              {
-                value: SPAN_TYPE.tool,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
-              },
-              {
-                value: SPAN_TYPE.llm,
-                label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
-              },
-              ...(isGuardrailsEnabled
-                ? [
-                    {
-                      value: SPAN_TYPE.guardrail,
-                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
-                    },
-                  ]
-                : []),
-            ],
-            placeholder: "Select type",
-            renderOption: (option: DropdownOption<SPAN_TYPE>) => {
-              return (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  withoutCheck
-                  wrapperAsChild={true}
-                >
-                  <div className="flex w-full items-center gap-1.5">
-                    <BaseTraceDataTypeIcon type={option.value} />
-                    {option.label}
-                  </div>
-                </SelectItem>
-              );
-            },
-          },
-        },
+        ...getSpanTypeFilterConfig(isGuardrailsEnabled),
         [COLUMN_METADATA_ID]: {
           keyComponent: (
             props: {
@@ -608,25 +565,31 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                 Export as JSON
               </DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => setPopupOpen(true)}
-              variant="destructive"
-            >
-              <Trash className="mr-2 size-4" />
-              Delete trace
-            </DropdownMenuItem>
+            {canDeleteTraces && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setPopupOpen(true)}
+                  variant="destructive"
+                >
+                  <Trash className="mr-2 size-4" />
+                  Delete trace
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <ConfirmDialog
-          open={popupOpen}
-          setOpen={setPopupOpen}
-          onConfirm={handleTraceDelete}
-          title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
-          confirmText="Delete trace"
-          confirmButtonVariant="destructive"
-        />
+        {canDeleteTraces && (
+          <ConfirmDialog
+            open={popupOpen}
+            setOpen={setPopupOpen}
+            onConfirm={handleTraceDelete}
+            title="Delete trace"
+            description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
+            confirmText="Delete trace"
+            confirmButtonVariant="destructive"
+          />
+        )}
       </div>
     </div>
   );

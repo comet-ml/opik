@@ -5,9 +5,11 @@ from __future__ import annotations
 import importlib.metadata
 import logging
 import os
+import warnings
 from typing import Any
 import json
 
+from opik.evaluation.models.litellm import warning_filters
 from rich.logging import RichHandler
 
 from ..constants import (
@@ -105,21 +107,24 @@ def setup_logging(
         "httpx",
         "httpcore",
         "openai",
+        "mcp",
+        "mcp.client",
+        "mcp.client.session",
+        "mcp.client.transport",
+        "mcp.server",
         "dspy",
         "optuna",
         "filelock",
         "asyncio",
     ):
         logging.getLogger(name).setLevel(logging.WARNING)
-
-    # Align Hugging Face/datasets logging style
-    for name in ("datasets", "huggingface_hub"):
-        hf_logger = logging.getLogger(name)
-        for h in list(hf_logger.handlers):
-            hf_logger.removeHandler(h)
-        hf_logger.addHandler(console_handler)
-        hf_logger.setLevel(target_level)
-        hf_logger.propagate = False
+    warning_filters.add_warning_filters()
+    # Silence noisy Pydantic serialization warnings emitted by upstream LiteLLM/OpenAI models.
+    warnings.filterwarnings(
+        "ignore",
+        message=r"(?s)Pydantic serializer warnings:.*PydanticSerializationUnexpectedValue",
+        category=UserWarning,
+    )
 
     _logging_configured = True
     _configured_level = target_level

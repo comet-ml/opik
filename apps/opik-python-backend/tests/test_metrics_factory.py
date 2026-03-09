@@ -382,6 +382,218 @@ def my_metric(dataset_item, llm_output):
         assert "BaseMetric" in str(exc_info.value)
 
 
+class TestJsonPathReferenceKey:
+    """Tests for JSONPath support in reference_key for equals and levenshtein metrics."""
+
+    def test_equals_jsonpath_filter_expression(self):
+        """Test equals metric with a JSONPath filter to extract a value from a JSON array."""
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "$.feedback_scores[?(@.name == 'Useful')].value"},
+            "model",
+        )
+
+        dataset_item = {
+            "feedback_scores": [
+                {"name": "Usefulness", "value": 0.8, "source": "ONLINE_SCORING"},
+                {"name": "Useful", "category_name": "Fail", "value": 0, "source": "UI"},
+                {"name": "Useful-Numerical", "value": 2, "source": "UI"},
+            ]
+        }
+        result = metric_fn(dataset_item, "0")
+        assert result.value == 1.0
+
+    def test_levenshtein_jsonpath_filter_expression(self):
+        """Test levenshtein metric with a JSONPath filter expression."""
+        metric_fn = MetricFactory.build(
+            "levenshtein_ratio",
+            {"reference_key": "$.feedback_scores[?(@.name == 'Useful')].category_name"},
+            "model",
+        )
+
+        dataset_item = {
+            "feedback_scores": [
+                {"name": "Usefulness", "category_name": "Pass", "value": 0.8},
+                {"name": "Useful", "category_name": "Fail", "value": 0},
+            ]
+        }
+        result = metric_fn(dataset_item, "Fail")
+        assert result.value == 1.0
+
+    def test_jsonpath_index_access(self):
+        """Test reference_key with a JSONPath array index."""
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "$.scores[0].value"},
+            "model",
+        )
+
+        dataset_item = {
+            "scores": [
+                {"name": "first", "value": "42"},
+                {"name": "second", "value": "99"},
+            ]
+        }
+        result = metric_fn(dataset_item, "42")
+        assert result.value == 1.0
+
+    def test_jsonpath_no_match_returns_default(self):
+        """Test that a JSONPath with no matches returns the default empty string."""
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "$.feedback_scores[?(@.name == 'NonExistent')].value"},
+            "model",
+        )
+
+        dataset_item = {
+            "feedback_scores": [
+                {"name": "Useful", "value": 0},
+            ]
+        }
+        result = metric_fn(dataset_item, "")
+        assert result.value == 1.0
+
+    def test_jsonpath_no_match_against_nonempty_output(self):
+        """Test that a JSONPath with no matches (default='') doesn't match non-empty output."""
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "$.feedback_scores[?(@.name == 'NonExistent')].value"},
+            "model",
+        )
+
+        dataset_item = {
+            "feedback_scores": [
+                {"name": "Useful", "value": 0},
+            ]
+        }
+        result = metric_fn(dataset_item, "something")
+        assert result.value == 0.0
+
+    def test_plain_key_still_works(self):
+        """Test that plain field names continue to work as before."""
+        metric_fn = MetricFactory.build(
+            "equals",
+            {"reference_key": "answer"},
+            "model",
+        )
+
+        dataset_item = {"answer": "hello"}
+        result = metric_fn(dataset_item, "hello")
+        assert result.value == 1.0
+
+    def test_is_jsonpath_detection(self):
+        """Test the heuristic that distinguishes plain keys from JSONPath expressions."""
+        from opik_backend.studio.metrics import _is_jsonpath
+
+        assert _is_jsonpath("answer") is False
+        assert _is_jsonpath("expected_output") is False
+        assert _is_jsonpath("my-field") is False
+        assert _is_jsonpath("my.field") is False
+
+        assert _is_jsonpath("$.answer") is True
+        assert _is_jsonpath("scores[0].value") is True
+        assert _is_jsonpath("$.scores[?(@.name == 'x')].value") is True
+        assert _is_jsonpath("items..value") is True
+
+
+class TestNumericalSimilarityMetric:
+
+    def test_exact_match(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": 0.7}, "0.7")
+        assert result.value == 1.0
+        assert result.name == "numerical_similarity"
+
+    def test_close_values(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": 0.7}, "0.85")
+        # scale_range=1.0 (no dataset), diff=0.15 -> max(0, 1 - 0.15) = 0.85
+        assert abs(result.value - 0.85) < 1e-6
+
+    def test_far_values_clamps_to_zero(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": 0.0}, "5.0")
+        # scale_range=1.0 (no dataset), diff=5.0 -> max(0, 1 - 5.0) = 0.0
+        assert result.value == 0.0
+
+    def test_non_numeric_output(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": 0.7}, "not a number")
+        assert result.value == 0.0
+        assert "Could not parse" in result.reason
+
+    def test_missing_reference(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "missing"}, "model")
+        result = metric_fn({"score": 0.7}, "0.7")
+        assert result.value == 0.0
+        assert "Missing reference" in result.reason
+
+    def test_non_numeric_reference(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": "not a number"}, "0.7")
+        assert result.value == 0.0
+        assert "not numeric" in result.reason
+
+    def test_with_jsonpath_reference(self):
+        metric_fn = MetricFactory.build(
+            "numerical_similarity",
+            {"reference_key": "$.feedback_scores[?(@.name == 'Useful')].value"},
+            "model",
+        )
+        dataset_item = {
+            "feedback_scores": [
+                {"name": "Useful", "value": 0.7},
+                {"name": "Usefulness", "value": 0.8},
+            ]
+        }
+        result = metric_fn(dataset_item, "0.85")
+        # scale_range=1.0 (no dataset), diff=0.15 -> max(0, 1 - 0.15) = 0.85
+        assert abs(result.value - 0.85) < 1e-6
+
+    def test_integer_values(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        result = metric_fn({"score": 1}, "1")
+        assert result.value == 1.0
+
+    def test_scale_range_inferred_from_dataset(self):
+        dataset_items = [{"score": 0}, {"score": 1}, {"score": 2}, {"score": 3}, {"score": 4}, {"score": 5}]
+        metric_fn = MetricFactory.build(
+            "numerical_similarity", {"reference_key": "score"}, "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        # scale_range = 5 - 0 = 5
+        # ref=4.5, output=4 -> normalized_error = 0.5/5 = 0.1 -> max(0, 1 - 0.1) = 0.9
+        result = metric_fn({"score": 4.5}, "4")
+        assert abs(result.value - 0.9) < 1e-6
+
+    def test_scale_range_max_error_gives_zero(self):
+        dataset_items = [{"score": 0}, {"score": 5}]
+        metric_fn = MetricFactory.build(
+            "numerical_similarity", {"reference_key": "score"}, "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        # scale_range=5, diff=5 -> normalized_error=1.0 -> max(0, 1-1) = 0.0
+        result = metric_fn({"score": 0}, "5")
+        assert result.value == 0.0
+
+    def test_scale_range_fallback_without_dataset(self):
+        metric_fn = MetricFactory.build("numerical_similarity", {"reference_key": "score"}, "model")
+        # No provider -> scale_range=1.0 -> max(0, 1 - 0.5) = 0.5
+        result = metric_fn({"score": 4.5}, "4")
+        assert abs(result.value - 0.5) < 1e-6
+
+    def test_scale_range_single_value_no_range(self):
+        dataset_items = [{"score": 3}, {"score": 3}, {"score": 3}]
+        metric_fn = MetricFactory.build(
+            "numerical_similarity", {"reference_key": "score"}, "model",
+            dataset_items_provider=lambda: dataset_items,
+        )
+        # All same value -> range=0 -> falls back to scale_range=1.0
+        # diff=1 -> max(0, 1 - 1.0) = 0.0
+        result = metric_fn({"score": 3}, "4")
+        assert result.value == 0.0
+
+
 class TestGEvalTemplateInterpolation:
     """Tests for GEval metric template interpolation with dataset item fields."""
 

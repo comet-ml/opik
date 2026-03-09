@@ -98,12 +98,12 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_ID_ID];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [];
 
 const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
     id: COLUMN_ID_ID,
-    label: "ID (Dataset item)",
+    label: "Dataset item ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
     size: 165,

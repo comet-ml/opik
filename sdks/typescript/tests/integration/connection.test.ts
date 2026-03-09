@@ -41,37 +41,44 @@ describe.skipIf(!shouldRunApiTests)("Connection Integration Tests", () => {
   });
 
   it("should connect successfully using explicit parameters (overriding env)", async () => {
-    // Temporarily unset OPIK_API_KEY to ensure we're using explicit config
-    const tempApiKey = process.env.OPIK_API_KEY;
+    // Step 1: Get the resolved config through the public API
+    const referenceClient = new Opik();
+
+    // Step 2: Clear ALL env vars so only explicit config can provide values
+    const savedEnv = {
+      OPIK_API_KEY: process.env.OPIK_API_KEY,
+      OPIK_URL_OVERRIDE: process.env.OPIK_URL_OVERRIDE,
+      OPIK_WORKSPACE: process.env.OPIK_WORKSPACE,
+    };
     delete process.env.OPIK_API_KEY;
+    delete process.env.OPIK_URL_OVERRIDE;
+    delete process.env.OPIK_WORKSPACE;
 
     try {
-      // Use explicit parameters to override environment variables
+      // Step 3: Pass resolved values as explicit config
       const explicitConfig = {
-        apiKey: originalEnv.apiKey,
-        apiUrl: originalEnv.urlOverride,
-        workspaceName: originalEnv.workspace,
+        apiKey: referenceClient.config.apiKey,
+        apiUrl: referenceClient.config.apiUrl,
+        workspaceName: referenceClient.config.workspaceName,
         projectName: "connection-test-project",
       };
 
       const client = new Opik(explicitConfig);
 
-      // Verify client is configured with explicit values
+      // Step 4: Verify explicit values are used (not defaults, not env)
       expect(client).toBeDefined();
       expect(client.config.apiUrl).toBe(explicitConfig.apiUrl);
       expect(client.config.apiKey).toBe(explicitConfig.apiKey);
       expect(client.config.workspaceName).toBe(explicitConfig.workspaceName);
       expect(client.config.projectName).toBe(explicitConfig.projectName);
 
-      // Test actual connection by making an API call
       const response = await client.api.isAlive();
       expect(response).toBeDefined();
-
       await client.flush();
     } finally {
-      // Restore original env variable
-      if (tempApiKey) {
-        process.env.OPIK_API_KEY = tempApiKey;
+      // Step 5: Restore env vars
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value !== undefined) process.env[key] = value;
       }
     }
   });

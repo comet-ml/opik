@@ -15,6 +15,14 @@ export const ExperimentUpdate: core.serialization.ObjectSchema<
     name: core.serialization.string().optional(),
     metadata: JsonNode.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    tagsToAdd: core.serialization.property(
+        "tags_to_add",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
+    tagsToRemove: core.serialization.property(
+        "tags_to_remove",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
     type: ExperimentUpdateType.optional(),
     status: ExperimentUpdateStatus.optional(),
     experimentScores: core.serialization.property(
@@ -28,6 +36,8 @@ export declare namespace ExperimentUpdate {
         name?: string | null;
         metadata?: JsonNode.Raw | null;
         tags?: string[] | null;
+        tags_to_add?: string[] | null;
+        tags_to_remove?: string[] | null;
         type?: ExperimentUpdateType.Raw | null;
         status?: ExperimentUpdateStatus.Raw | null;
         experiment_scores?: ExperimentScore.Raw[] | null;

@@ -25,7 +25,21 @@ class TraceUpdate(UniversalBaseModel):
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
     metadata: typing.Optional[JsonListString] = None
-    tags: typing.Optional[typing.List[str]] = None
+    tags: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags
+    """
+
+    tags_to_add: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to add
+    """
+
+    tags_to_remove: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to remove
+    """
+
     error_info: typing.Optional[ErrorInfo] = None
     thread_id: typing.Optional[str] = None
     ttft: typing.Optional[float] = None

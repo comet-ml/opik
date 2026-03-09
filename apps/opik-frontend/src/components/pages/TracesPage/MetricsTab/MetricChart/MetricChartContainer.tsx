@@ -25,6 +25,7 @@ import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 import { BreakdownConfig } from "@/types/dashboard";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 import { BREAKDOWN_GROUP_NAMES } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
@@ -53,6 +54,8 @@ interface MetricContainerChartProps {
   filterLineCallback?: (lineName: string) => boolean;
   chartOnly?: boolean;
   breakdown?: BreakdownConfig;
+  getLabelAction?: (label: string) => LegendLabelAction | undefined;
+  isAggregateTotal?: boolean;
 }
 
 const customColorMap = {
@@ -91,6 +94,8 @@ const MetricContainerChart = ({
   filterLineCallback,
   chartOnly = false,
   breakdown,
+  getLabelAction,
+  isAggregateTotal = false,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -166,6 +171,21 @@ const MetricContainerChart = ({
 
   const config = useChartConfig(lines, labelsMap, customColorMap);
 
+  const labelActions = useMemo(() => {
+    if (!getLabelAction) return undefined;
+
+    const actions: Record<string, LegendLabelAction> = {};
+    for (const line of lines) {
+      const configEntry = config[line];
+      const displayLabel = (configEntry?.label as string) ?? line;
+      const action = getLabelAction(displayLabel);
+      if (action) {
+        actions[displayLabel] = action;
+      }
+    }
+    return Object.keys(actions).length > 0 ? actions : undefined;
+  }, [getLabelAction, lines, config]);
+
   const CHART = METRIC_CHART_TYPE[chartType];
 
   const chartContent = noData ? (
@@ -182,6 +202,8 @@ const MetricContainerChart = ({
       chartId={chartId}
       isPending={isPending}
       data={data}
+      labelActions={labelActions}
+      isAggregateTotal={isAggregateTotal}
     />
   );
 

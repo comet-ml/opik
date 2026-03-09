@@ -1,8 +1,8 @@
-import { LLMProviderImplementation } from "../../types";
+import { LLMMessageFormatImplementation } from "../../types";
 import { detectOpenAIFormat } from "./detector";
 import { mapOpenAIMessages } from "./mapper";
 
-export const openaiProvider: LLMProviderImplementation = {
+export const openaiFormat: LLMMessageFormatImplementation = {
   name: "openai",
   detector: detectOpenAIFormat,
   mapper: mapOpenAIMessages,

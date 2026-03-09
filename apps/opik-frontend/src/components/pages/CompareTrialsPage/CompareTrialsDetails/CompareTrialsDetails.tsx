@@ -10,6 +10,7 @@ import { generateDistinctColorMap } from "@/components/pages-shared/experiments/
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
@@ -22,6 +23,10 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   experiments,
   experimentsIds,
 }) => {
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const { getColor } = useWorkspaceColorMap();
 
@@ -102,11 +107,15 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
             resource={RESOURCE_TYPE.trial}
           />
         )}
-        <NavigationTag
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
-          resource={RESOURCE_TYPE.dataset}
-        />
+        {canViewDatasets && (
+          <NavigationTag
+            id={experiment?.dataset_id}
+            name={
+              experiment?.dataset_name && `Go to ${experiment.dataset_name}`
+            }
+            resource={RESOURCE_TYPE.dataset}
+          />
+        )}
         {scores.map((score) => (
           <FeedbackScoreTag
             key={score.name + score.value}

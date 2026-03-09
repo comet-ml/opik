@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { EditorView } from "@codemirror/view";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import useAppStore from "@/store/AppStore";
@@ -251,7 +251,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                 >
                   <Button variant="link" size="sm" className="px-1">
                     Prompt library
-                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                    <ExternalLink className="ml-1.5 mt-1 size-3.5 shrink-0" />
                   </Button>
                 </Link>
               </Description>
@@ -291,7 +291,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                   >
                     <Button variant="link" size="sm" className="px-1">
                       Prompt library
-                      <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                      <ExternalLink className="ml-1.5 mt-1 size-3.5 shrink-0" />
                     </Button>
                   </Link>
                 </Description>

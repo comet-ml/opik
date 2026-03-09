@@ -1,362 +1,39 @@
-"""
-HotpotQA Multi-Hop Benchmark (GEPA-style).
+"""HotpotQA multi-hop benchmark using shared benchmark agent components.
 
-This example demonstrates a multi-hop retrieval pipeline with multiple
-optimizable prompts:
-1) Query → 2) Summarize → 3) Refine query → 4) Summarize → 5) Answer
+This script is a thin runnable example that reuses the centralized benchmark
+agent implementation from `benchmarks/packages/hotpot/agent.py`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
 import os
 import random
 from typing import Any
 
-from pydantic import BaseModel
-
-import opik
-from opik import opik_context
-
-from benchmarks.metrics.hotpot import hotpot_f1
-from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer, OptimizableAgent
-from opik_optimizer.core.llm_calls import call_model
+from benchmarks.packages.hotpot.metrics import hotpot_f1
+from opik_optimizer import HierarchicalReflectiveOptimizer
 from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils.logging import setup_logging
-from opik_optimizer.utils.tools.wikipedia import search_wikipedia
+from benchmarks.packages.hotpot.agent import build_hotpot_agent
+from benchmarks.packages.hotpot.prompts import build_hotpot_prompts
+from benchmarks.packages.hotpot.agent import bm25_wikipedia_search
 
 PROJECT_HEADER = "Hotpot QA Multihop Optimization"
 SEED = 42
 MODEL_NAME = "openai/gpt-4.1-mini"
 MODEL_PARAMS = {"temperature": 1.0}
 NUM_PASSAGES = 5
+TRAIN_COUNT = 150
+VALIDATION_COUNT = 300
+TEST_COUNT = 300
 
 # Disable tqdm progress bars (used by bm25s)
 os.environ["TQDM_DISABLE"] = "1"
 
-# Configure logging and environment
 setup_logging()
 logger = logging.getLogger(__name__)
 random.seed(SEED)
-
-
-# ---------------------------------------------------------------------------
-# Search helpers
-# ---------------------------------------------------------------------------
-
-
-def wikipedia_search(query: str, n: int = 5) -> list[str]:
-    """
-    Search Wikipedia and return top n passage texts.
-
-    Args:
-        query: Search query
-        n: Number of passages to return
-
-    Returns:
-        List of passage texts
-    """
-    disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
-    if disable_flag in ("1", "true", "yes", "on"):
-        return []
-
-    if len(query) > 256:
-        query = query[:256] + "..."
-
-    try:
-        results = search_wikipedia(
-            query,
-            search_type="bm25",
-            k=n,
-            bm25_hf_repo="Comet/wikipedia-2017-bm25",
-        )
-    except Exception:
-        logger.exception("BM25 search failed, falling back to Wikipedia API")
-        results = search_wikipedia(query, search_type="api", k=n)
-
-    return (
-        results[:n]
-        if len(results) >= n
-        else results + ["" for _ in range(n - len(results))]
-    )
-
-
-def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
-    """
-    BM25-based Wikipedia search for fair comparison.
-
-    Uses the production Comet/wikipedia-2017-bm25 index.
-    Falls back to API search if BM25 index is unavailable.
-    """
-    disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
-    if disable_flag in ("1", "true", "yes", "on"):
-        return []
-
-    try:
-        results = search_wikipedia(
-            query,
-            search_type="bm25",
-            k=n,
-            bm25_hf_repo="Comet/wikipedia-2017-bm25",
-        )
-        return results
-    except Exception as exc:
-        logger.warning("BM25 search failed (fallback to API): %s", exc)
-        return wikipedia_search(query, n)
-
-
-def get_search_fn() -> Callable[[str, int], list[str]]:
-    # Use BM25 by default for fair comparison with GEPA paper.
-    return bm25_wikipedia_search
-
-
-# ---------------------------------------------------------------------------
-# Structured output models
-# ---------------------------------------------------------------------------
-
-
-class SummaryObject(BaseModel):
-    summary: str
-    gaps: list[str]
-
-
-class SummaryUpdate(BaseModel):
-    summary: str
-
-
-# ---------------------------------------------------------------------------
-# Agent implementation
-# ---------------------------------------------------------------------------
-
-
-class HotpotMultiHopAgent(OptimizableAgent):
-    def __init__(
-        self,
-        search_fn: Callable[[str, int], list[str]],
-        model: str = MODEL_NAME,
-        model_parameters: dict | None = None,
-        num_passages_per_hop: int = NUM_PASSAGES,
-    ):
-        self.search_fn = opik.track(name="wikipedia_search", type="tool")(search_fn)
-        self.model = model
-        self.model_parameters = model_parameters or {}
-        self.num_passages = num_passages_per_hop
-        self._tools_for_display = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_wikipedia",
-                    "description": (
-                        "Search Wikipedia for information about a topic. "
-                        "Returns relevant article abstracts."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": (
-                                    "The search query - a topic, person, place, "
-                                    "or concept to look up."
-                                ),
-                            },
-                            "n": {
-                                "type": "integer",
-                                "description": "Number of passages to return.",
-                            },
-                        },
-                        "required": ["query"],
-                    },
-                },
-            }
-        ]
-
-    def invoke(
-        self,
-        messages: list[dict[str, str]] | None = None,
-        seed: int | None = None,
-        allow_tool_use: bool = True,
-    ) -> str:
-        raise NotImplementedError(
-            "invoke_agent is not implemented for HotpotMultiHopAgent"
-        )
-
-    def create_agent_graph(self):
-        return {
-            "format": "mermaid",
-            "data": "graph TD; Q1[create_query_1]-->S1[summarize_1]; S1-->Q2[create_query_2]; Q2-->S2[summarize_2]; S2-->FA[final_answer];",
-        }
-
-    def get_tools_for_display(self) -> list[dict[str, Any]] | None:
-        return self._tools_for_display
-
-    @opik.track(name="agent invocation")
-    def invoke_agent(
-        self,
-        prompts: dict[str, ChatPrompt],
-        dataset_item: dict[str, Any],
-        seed: int | None = None,
-        allow_tool_use: bool = True,
-    ) -> str:
-        del seed, allow_tool_use
-        opik_context.update_current_trace(
-            metadata={"_opik_graph_definition": self.create_agent_graph()}
-        )
-        call_metadata = {
-            "opik": {
-                "current_span_data": opik_context.get_current_span_data(),
-                "tags": ["streaming-test"],
-                "suppress_call_log": True,
-            }
-        }
-
-        messages = prompts["create_query_1"].get_messages(dataset_item)
-        search_query_1 = call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-        )
-        search_query_1 = str(search_query_1 or "").strip()
-
-        search_query_1_result = self.search_fn(search_query_1, self.num_passages)
-
-        messages = prompts["summarize_1"].get_messages(
-            {
-                "question": dataset_item["question"],
-                "passages_1": "\n\n".join(search_query_1_result),
-            }
-        )
-        response = call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            response_model=SummaryObject,
-            metadata=call_metadata,
-        )
-        search_query_1_summary = response.summary
-        gaps_1 = response.gaps
-
-        messages = prompts["create_query_2"].get_messages(
-            {
-                "question": dataset_item["question"],
-                "summary_1": search_query_1_summary,
-                "gaps_1": "\n\n".join(gaps_1),
-            }
-        )
-        search_query_2 = call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-        )
-        search_query_prompt = str(search_query_2 or "").strip()
-        search_query_2_result = self.search_fn(search_query_prompt, self.num_passages)
-
-        messages = prompts["summarize_2"].get_messages(
-            {
-                "question": dataset_item["question"],
-                "summary_1": search_query_1_summary,
-                "passages_2": "\n\n".join(search_query_2_result),
-            }
-        )
-        search_query_2_summary = call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            response_model=SummaryUpdate,
-            metadata=call_metadata,
-        )
-        search_query_2_summary_text = search_query_2_summary.summary
-
-        messages = prompts["final_answer"].get_messages(
-            {
-                "question": dataset_item["question"],
-                "summary_2": search_query_2_summary_text,
-            }
-        )
-        final_answer = call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-        )
-        return str(final_answer or "").strip()
-
-
-# ---------------------------------------------------------------------------
-# Prompt definitions + metric
-# ---------------------------------------------------------------------------
-
-
-def build_initial_prompts() -> dict[str, ChatPrompt]:
-    return {
-        "create_query_1": ChatPrompt(
-            system=(
-                "Generate a Wikipedia search query to answer the question. "
-                "Identify key entities, relations, and disambiguating details."
-            ),
-            user="{question}",
-        ),
-        "summarize_1": ChatPrompt(
-            system=(
-                "Summarize the retrieved passages focusing on facts relevant to the question. "
-                "Identify what information is still missing or unclear."
-            ),
-            user=(
-                "Question: {question}\n\n"
-                "Retrieved passages from first search:\n{passages_1}\n\n"
-                "Provide:\n"
-                "1. Summary: Key facts from passages\n"
-                "2. Gaps: What's still missing to answer the question"
-            ),
-        ),
-        "create_query_2": ChatPrompt(
-            system=(
-                "Generate a refined Wikipedia search query targeting the identified gaps. "
-                "Use different terms/angles than the first query."
-            ),
-            user=(
-                "Question: {question}\n\n"
-                "First summary: {summary_1}\n\n"
-                "Identified gaps: {gaps_1}\n\n"
-                "Generate a second search query to fill these gaps."
-            ),
-        ),
-        "summarize_2": ChatPrompt(
-            system=(
-                "Update the summary with new information from the second search. "
-                "Synthesize information from both searches."
-            ),
-            user=(
-                "Question: {question}\n\n"
-                "First summary: {summary_1}\n\n"
-                "New passages from second search:\n{passages_2}\n\n"
-                "Provide an updated comprehensive summary."
-            ),
-        ),
-        "final_answer": ChatPrompt(
-            system=(
-                "Answer the question based on the accumulated evidence. "
-                "Be concise and factual. Keep answers as short as possible, ideally a single word or phrase."
-            ),
-            user=(
-                "Question: {question}\n\n"
-                "Evidence from searches:\n{summary_2}\n\n"
-                "Provide a direct answer to the question."
-            ),
-        ),
-    }
-
-
-def hotpot_multihop_metric(dataset_item: dict, llm_output: str) -> float:
-    return hotpot_f1(dataset_item, llm_output)
-
-
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
 
 
 def print_header() -> None:
@@ -364,9 +41,7 @@ def print_header() -> None:
     print(PROJECT_HEADER)
     print("=" * 80)
     print()
-    print(
-        "This benchmark implements the compound AI system approach used in GEPA paper:"
-    )
+    print("This benchmark uses the centralized Hotpot multi-hop benchmark agent.")
     print("- Multi-hop retrieval pipeline")
     print("- Multiple optimizable prompts")
     print("- Wikipedia search integration")
@@ -375,9 +50,13 @@ def print_header() -> None:
 
 def load_datasets() -> tuple[Any, Any, Any]:
     print("Loading datasets...")
-    train = hotpot(count=150, split="train", dataset_name="hotpot_train")
-    val = hotpot(count=300, split="validation", dataset_name="hotpot_validation")
-    test = hotpot(count=300, split="test", dataset_name="hotpot_test")
+    train = hotpot(count=TRAIN_COUNT, split="train", dataset_name="hotpot_train")
+    val = hotpot(
+        count=VALIDATION_COUNT,
+        split="validation",
+        dataset_name="hotpot_validation",
+    )
+    test = hotpot(count=TEST_COUNT, split="test", dataset_name="hotpot_test")
     print(f"  - Train: {len(train.get_items())} samples")
     print(f"  - Validation: {len(val.get_items())} samples")
     print(f"  - Test: {len(test.get_items())} samples")
@@ -387,8 +66,8 @@ def load_datasets() -> tuple[Any, Any, Any]:
 
 def run_optimization(
     *,
-    agent: HotpotMultiHopAgent,
-    initial_prompts: dict[str, ChatPrompt],
+    agent: Any,
+    initial_prompts: dict[str, Any],
     train_dataset: Any,
     validation_dataset: Any,
 ) -> Any:
@@ -402,7 +81,7 @@ def run_optimization(
         prompt=initial_prompts,
         dataset=train_dataset,
         validation_dataset=validation_dataset,
-        metric=hotpot_multihop_metric,
+        metric=hotpot_f1,
         agent=agent,
         max_trials=50,
     )
@@ -412,21 +91,21 @@ def main() -> None:
     print_header()
     train_dataset, validation_dataset, test_dataset = load_datasets()
 
-    search_fn = get_search_fn()
-    print(f"Search function: {search_fn.__name__}")
+    print(f"Search function: {bm25_wikipedia_search.__name__}")
     print()
     try:
-        search_fn("warmup", 1)
+        bm25_wikipedia_search("warmup", 1)
     except Exception:
-        pass
+        logger.exception("Wikipedia warmup failed")
+        raise
 
-    agent = HotpotMultiHopAgent(
-        search_fn=search_fn,
-        model=MODEL_NAME,
+    agent = build_hotpot_agent(
+        model_name=MODEL_NAME,
         model_parameters=MODEL_PARAMS,
-        num_passages_per_hop=NUM_PASSAGES,
     )
-    initial_prompts = build_initial_prompts()
+    # Keep passage count configurable in script context.
+    agent.num_passages = NUM_PASSAGES
+    initial_prompts = build_hotpot_prompts()
 
     print("=" * 80)
     print("OPTIMIZATION")
@@ -435,8 +114,8 @@ def main() -> None:
     for name in initial_prompts:
         print(f"  - {name}")
     print()
-    print("Training on hotpot_train (150 samples)...")
-    print("Validation on hotpot_validation (300 samples)...")
+    print(f"Training on hotpot_train ({TRAIN_COUNT} samples)...")
+    print(f"Validation on hotpot_validation ({VALIDATION_COUNT} samples)...")
     print()
 
     opt_result = run_optimization(
@@ -446,14 +125,25 @@ def main() -> None:
         validation_dataset=validation_dataset,
     )
     print(f"Optimization best score: {opt_result.score:.4f}")
+    print(f"Optimization rounds: {len(getattr(opt_result, 'history', []) or [])}")
 
     print("=" * 80)
     print("TESTING")
     print("=" * 80)
     print("Evaluating optimized prompts on test set...")
-    print()
 
-    _ = test_dataset
+    score = HierarchicalReflectiveOptimizer(
+        model=MODEL_NAME,
+        model_parameters=MODEL_PARAMS,
+        seed=SEED,
+    ).evaluate_prompt(
+        prompt=opt_result.prompt,
+        dataset=test_dataset,
+        metric=hotpot_f1,
+        n_threads=4,
+        agent=agent,
+    )
+    print(f"Test score (hotpot_f1): {score:.4f}")
 
 
 if __name__ == "__main__":

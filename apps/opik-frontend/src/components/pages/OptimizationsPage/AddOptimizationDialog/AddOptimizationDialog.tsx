@@ -11,7 +11,14 @@ import { SheetTitle } from "@/components/ui/sheet";
 import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/components/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
+import { DISABLED_DATASETS_TOOLTIP } from "@/constants/permissions";
 
 export enum OPTIMIZATION_ALGORITHMS {
   fewShotOptimizer = "FewShotBayesianOptimizer",
@@ -273,6 +280,10 @@ const AddOptimizationDialog: React.FunctionComponent<
     OPTIMIZATION_ALGORITHMS.metaPromptOptimizer,
   );
 
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const section1 = "pip install opik-optimizer";
 
   // Get the hardcoded code template for the selected algorithm and inject dynamic values
@@ -289,6 +300,7 @@ const AddOptimizationDialog: React.FunctionComponent<
     },
     {
       placeholderData: keepPreviousData,
+      enabled: canViewDatasets,
     },
   );
 
@@ -361,19 +373,31 @@ const AddOptimizationDialog: React.FunctionComponent<
             <div className="comet-body-s text-foreground-secondary">
               1. Select dataset
             </div>
-            <LoadableSelectBox
-              options={options}
-              value={datasetName}
-              placeholder="Select a dataset"
-              onChange={setDatasetName}
-              onLoadMore={
-                total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
-                  ? loadMoreHandler
-                  : undefined
-              }
-              isLoading={isLoading}
-              optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <LoadableSelectBox
+                    options={options}
+                    value={datasetName}
+                    placeholder="Select a dataset"
+                    onChange={setDatasetName}
+                    onLoadMore={
+                      total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore
+                        ? loadMoreHandler
+                        : undefined
+                    }
+                    isLoading={isLoading}
+                    disabled={!canViewDatasets}
+                    optionsCount={DEFAULT_LOADED_DATASET_ITEMS}
+                  />
+                </div>
+              </TooltipTrigger>
+              {!canViewDatasets && (
+                <TooltipContent side="top">
+                  {DISABLED_DATASETS_TOOLTIP}
+                </TooltipContent>
+              )}
+            </Tooltip>
             <div className="comet-body-s mt-4 text-foreground-secondary">
               {INSTALL_SDK_SECTION_TITLE}
             </div>

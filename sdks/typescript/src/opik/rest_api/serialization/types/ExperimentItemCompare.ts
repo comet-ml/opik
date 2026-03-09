@@ -35,6 +35,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         "trace_visibility_mode",
         ExperimentItemCompareTraceVisibilityMode.optional(),
     ),
+    description: core.serialization.string().optional(),
 });
 
 export declare namespace ExperimentItemCompare {
@@ -56,5 +57,6 @@ export declare namespace ExperimentItemCompare {
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
+        description?: string | null;
     }
 }

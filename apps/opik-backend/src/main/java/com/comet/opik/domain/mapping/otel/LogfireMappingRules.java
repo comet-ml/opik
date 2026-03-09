@@ -23,6 +23,9 @@ public final class LogfireMappingRules {
                     .rule("logfire.span_type").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
                     .build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("logfire.metrics").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
+                    .build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
@@ -40,7 +43,9 @@ public final class LogfireMappingRules {
                     .rule("tool_responses").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("usage").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.USAGE)
-                    .spanType(SpanType.llm).build());
+                    .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("final_result").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

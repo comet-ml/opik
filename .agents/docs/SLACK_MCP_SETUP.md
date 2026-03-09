@@ -90,7 +90,7 @@ SLACK_MCP_XOXP_TOKEN=xoxp-your-user-oauth-token-here
    - `true` or `1`: Enable for all channels and DMs
    - Channel IDs (comma-separated): Enable only for specific channels (e.g., `XXXXXXXX,YYYYYYYY`)
    - `!XXXXXXXX`: Enable for all channels except the specified one
-   - **For the code review command**: Use `true` to enable posting to `#opik-code-review`
+  - **For the code review command**: Use `true` to enable posting to `#code-review`
 
 3. **`envFile`**: Points to `${workspaceFolder}/.env.local` where your `SLACK_MCP_XOXP_TOKEN` is stored securely.
 
@@ -191,7 +191,7 @@ If you see "missing_scope" errors in the MCP logs:
 ### Permission Errors
 
 1. Ensure the user token has `chat:write` scope in **User Token Scopes**
-2. Verify you have access to the `#opik-code-review` channel
+2. Verify you have access to the `#code-review` channel
 3. Check that you're a member of the channel
 4. If using Docker, ensure Docker has network access to reach Slack API
 

@@ -21,7 +21,7 @@ import {
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { ProjectWithStatistic } from "@/types/projects";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { convertColumnDataToColumn } from "@/lib/table";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { get } from "lodash";
@@ -48,12 +48,13 @@ export const SHARED_COLUMNS = [
     label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row: ProjectWithStatistic) =>
-      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+      row.last_updated_trace_at ?? row.last_updated_at,
+    cell: TimeCell as never,
     sortable: true,
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row: ProjectWithStatistic) => get(row, "feedback_scores", []),
     cell: FeedbackScoreListCell as never,

@@ -21,6 +21,7 @@ type UseQueryParamAndLocalStorageStateParams<T> = {
   queryParamConfig: QueryParamConfig<T>;
   queryOptions?: QueryParamOptions;
   syncQueryWithLocalStorageOnInit?: boolean;
+  syncLocalStorageAcrossTabs?: boolean;
 };
 
 const useQueryParamAndLocalStorageState = <T>({
@@ -30,11 +31,13 @@ const useQueryParamAndLocalStorageState = <T>({
   queryParamConfig,
   queryOptions = QUERY_OPTIONS,
   syncQueryWithLocalStorageOnInit = false,
+  syncLocalStorageAcrossTabs = true,
 }: UseQueryParamAndLocalStorageStateParams<T>) => {
   const [localStorageValue, setLocalStorageValue] = useLocalStorageState<T>(
     localStorageKey,
     {
       defaultValue,
+      storageSync: syncLocalStorageAcrossTabs,
     },
   );
 
@@ -44,13 +47,17 @@ const useQueryParamAndLocalStorageState = <T>({
     queryOptions,
   );
 
-  // update query param when local storage is initialized on hook mount
+  // sync localStorage → URL on mount, only when URL has no value
   useEffect(() => {
-    if (syncQueryWithLocalStorageOnInit && !isUndefined(localStorageValue)) {
+    if (
+      syncQueryWithLocalStorageOnInit &&
+      !isUndefined(localStorageValue) &&
+      isUndefined(queryValue)
+    ) {
       setQueryValue(localStorageValue);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncQueryWithLocalStorageOnInit, localStorageValue]);
+  }, [syncQueryWithLocalStorageOnInit]);
 
   const combinedValue = useMemo(
     () => (queryValue as T) ?? localStorageValue,

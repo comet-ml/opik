@@ -5,6 +5,48 @@ from __future__ import annotations
 from typing import Any
 
 import rich.text
+from ..api_objects import types as api_types
+
+
+def _has_non_empty_message_content(content: Any) -> bool:
+    """Return True when message content has a non-empty payload."""
+    if isinstance(content, str):
+        return bool(content.strip())
+    if not isinstance(content, list):
+        return False
+    if not content:
+        return False
+    for part in content:
+        if isinstance(part, api_types.TextContentPart):
+            if part.text.strip():
+                return True
+            continue
+        if isinstance(part, api_types.ImageContentPart):
+            if part.image_url.url.strip():
+                return True
+            continue
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type == "text":
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                return True
+        elif part_type == "image_url":
+            image_url = part.get("image_url", {})
+            if isinstance(image_url, dict):
+                url = image_url.get("url")
+                if isinstance(url, str) and url.strip():
+                    return True
+        else:
+            for value in part.values():
+                if isinstance(value, str) and value.strip():
+                    return True
+                if isinstance(value, dict):
+                    for nested in value.values():
+                        if isinstance(nested, str) and nested.strip():
+                            return True
+    return False
 
 
 def _extract_url_from_part(part: dict[str, Any], field_name: str) -> str:
@@ -170,3 +212,70 @@ def content_to_string(content: str | list[dict[str, Any]]) -> str:
             parts.append(_format_url_for_string(url, "video_url", "data:video"))
 
     return "\n".join(parts) if parts else "(empty content)"
+
+
+def preserve_multimodal_message_structure(
+    *,
+    original_messages: list[dict[str, Any]],
+    generated_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Preserve original multimodal content-part layout while applying generated text.
+
+    Current primary consumer: FewShotBayesianOptimizer prompt-template synthesis.
+    Other optimizers should call this only when they receive full rewritten message
+    arrays from an LLM and must keep original non-text parts stable.
+
+    For aligned message indices where role matches and original content is multimodal
+    (list of parts), this keeps non-text parts from the original message and replaces
+    only the text part with generated text. If generated text is empty, original text
+    is retained.
+    """
+    preserved: list[dict[str, Any]] = []
+    for index, generated in enumerate(generated_messages):
+        generated_role = generated.get("role")
+        generated_content = generated.get("content")
+        has_original_match = (
+            index < len(original_messages)
+            and original_messages[index].get("role") == generated_role
+        )
+        if not _has_non_empty_message_content(generated_content):
+            if has_original_match:
+                preserved.append(
+                    {
+                        "role": generated_role,
+                        "content": original_messages[index].get("content", ""),
+                    }
+                )
+            # If no matching original message exists, drop empty generated message.
+            continue
+
+        if has_original_match and isinstance(
+            original_messages[index].get("content"), list
+        ):
+            original_content = original_messages[index]["content"]
+            original_text = api_types.extract_text_from_content(original_content)
+            generated_content_raw = generated.get("content", "")
+            if isinstance(generated_content_raw, str) or isinstance(
+                generated_content_raw, list
+            ):
+                generated_text = api_types.extract_text_from_content(
+                    generated_content_raw
+                )
+            else:
+                generated_text = str(generated_content_raw)
+            if not generated_text.strip():
+                generated_text = original_text
+
+            preserved.append(
+                {
+                    "role": generated_role,
+                    "content": api_types.rebuild_content_with_new_text(
+                        original_content, generated_text
+                    ),
+                }
+            )
+            continue
+
+        preserved.append(generated)
+    return preserved

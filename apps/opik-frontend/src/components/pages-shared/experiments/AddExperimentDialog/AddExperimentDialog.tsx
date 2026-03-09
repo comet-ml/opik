@@ -15,7 +15,7 @@ import ApiKeyCard from "@/components/pages-shared/onboarding/ApiKeyCard/ApiKeyCa
 import GoogleColabCard from "@/components/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { buildDocsUrl } from "@/lib/utils";
-import { SquareArrowOutUpRight } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
@@ -421,7 +421,7 @@ eval_results = evaluate(
           className="flex items-center"
         >
           Learn about custom metrics
-          <SquareArrowOutUpRight className="ml-1 size-4" />
+          <ExternalLink className="ml-1 size-4" />
         </a>
       </Button>
     </div>
