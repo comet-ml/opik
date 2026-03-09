@@ -19,21 +19,62 @@ Design
 * **In-memory deduplication** – pending buffers use ``set``/``dict`` so
   duplicate calls within a batch are collapsed before hitting SQLite.
 
+Crash trade-off
+---------------
+Writes within a batch are buffered in memory. If the process is killed
+between automatic flushes, up to ``batch_size - 1`` file completions may be
+absent from the manifest on the next run. Those files will be re-imported
+(idempotent for datasets/prompts; may create a duplicate trace — see the
+project import docs). ``__del__`` provides a best-effort flush on normal
+process exit. Use ``batch_size=1`` for per-file durability at the cost of
+more disk transactions.
+
 Lifecycle
 ---------
-* No manifest → fresh import, file created lazily on ``start()``.
+* No manifest → fresh import; ``MigrationManifest`` should only be
+  constructed when a real import is about to start (not during ``--dry-run``).
 * ``status = in_progress`` → interrupted; resume skips completed files.
 * ``status = completed`` → nothing re-imported unless ``--force`` resets.
 * ``--force`` → ``reset()`` wipes all tables and starts fresh.
 """
 
+import logging
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Set
 
+LOGGER = logging.getLogger(__name__)
+
 MANIFEST_FILENAME = "migration_manifest.db"
-DEFAULT_BATCH_SIZE = 50
+
+
+# Number of pending write operations that triggers an automatic flush to disk.
+# Valid range: 1–10000 entries per SQLite transaction commit.
+# Override with the OPIK_MIGRATION_BATCH_SIZE environment variable.
+def _resolve_batch_size() -> int:
+    raw = os.getenv("OPIK_MIGRATION_BATCH_SIZE", "")
+    if raw:
+        try:
+            val = int(raw)
+            if 1 <= val <= 10000:
+                return val
+            LOGGER.warning(
+                "OPIK_MIGRATION_BATCH_SIZE=%r is outside the valid range 1–10000; "
+                "using default of 50.",
+                raw,
+            )
+        except ValueError:
+            LOGGER.warning(
+                "OPIK_MIGRATION_BATCH_SIZE=%r is not a valid integer; "
+                "using default of 50.",
+                raw,
+            )
+    return 50
+
+
+DEFAULT_BATCH_SIZE: int = _resolve_batch_size()
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS status (

@@ -61,28 +61,30 @@ def _import_by_type(
 
         # ------------------------------------------------------------------
         # Manifest lifecycle management
+        # MigrationManifest is only constructed for real (non-dry-run) imports
+        # so that --dry-run never creates the manifest DB on disk.
         # ------------------------------------------------------------------
-        manifest = MigrationManifest(base_path)
-
-        if force:
-            if MigrationManifest.exists(base_path) and not dry_run:
-                manifest.reset()
-                console.print(
-                    "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
-                )
-        elif not dry_run:
-            if manifest.is_completed:
-                console.print(
-                    "[green]Import already completed. Use --force to re-import.[/green]"
-                )
-                return
-            elif manifest.is_in_progress:
-                console.print(
-                    f"[blue]Resuming interrupted import: "
-                    f"{manifest.completed_count()} file(s) already completed[/blue]"
-                )
+        manifest: Optional[MigrationManifest] = None
 
         if not dry_run:
+            manifest = MigrationManifest(base_path)
+            if force:
+                if MigrationManifest.exists(base_path):
+                    manifest.reset()
+                    console.print(
+                        "[yellow]--force: discarding existing manifest, starting fresh[/yellow]"
+                    )
+            else:
+                if manifest.is_completed:
+                    console.print(
+                        "[green]Import already completed. Use --force to re-import.[/green]"
+                    )
+                    return
+                elif manifest.is_in_progress:
+                    console.print(
+                        f"[blue]Resuming interrupted import: "
+                        f"{manifest.completed_count()} file(s) already completed[/blue]"
+                    )
             manifest.start()
 
         # ------------------------------------------------------------------
@@ -158,6 +160,7 @@ def _import_by_type(
             # ------------------------------------------------------------------
             # Mark manifest complete (only on full success, not dry-run)
             # ------------------------------------------------------------------
+            assert manifest is not None  # guaranteed: manifest is set when not dry_run
             manifest.complete()
 
         # Display summary
