@@ -163,7 +163,8 @@ class EvaluationAdapter:
 
         previous_best = self._state.best_trial
         self._state.trials.append(trial)
-        if self._state.best_trial is None or trial.score > self._state.best_trial.score:
+        is_full_eval = experiment_type is None
+        if is_full_eval and (self._state.best_trial is None or trial.score > self._state.best_trial.score):
             self._state.best_trial = trial
         self._event_emitter.on_trial_completed(trial)
 
