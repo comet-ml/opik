@@ -60,7 +60,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const checkNullablePermission = useCallback(
-    (permissionName: ManagementPermissionsNames, defaultToFalse?: boolean) => {
+    (permissionName: ManagementPermissionsNames, requireExplicit?: boolean) => {
       if (isWorkspaceOwner) return true;
 
       const permissionValue = getUserPermissionValue(
@@ -68,7 +68,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
         permissionName,
       );
 
-      if (defaultToFalse) {
+      if (requireExplicit) {
         return permissionValue === true;
       }
 
