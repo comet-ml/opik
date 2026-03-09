@@ -98,7 +98,6 @@ class GepaOptimizer:
             batch_sampler=sampler,
             config_descriptions=context.config_descriptions,
         )
-        adapter._gate_tolerance = cfg.gate_tolerance
         adapter._cache_max_entries = cfg.max_candidates
         self.adapter = adapter
 

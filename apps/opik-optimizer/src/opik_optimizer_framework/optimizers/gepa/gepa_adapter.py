@@ -159,7 +159,6 @@ class FrameworkGEPAAdapter:
 
         self._cached_full_eval_scores: dict[str, dict[str, float]] = {}
         self._cache_max_entries: int = 10
-        self._gate_tolerance: float = 0.0
 
     # -- Delegation to CandidateTracker ----------------------------------------
 
@@ -415,9 +414,7 @@ class FrameworkGEPAAdapter:
             for inst in batch:
                 item_id = str(inst.get("id", ""))
                 if item_id in cached:
-                    per_item.setdefault(item_id, {})["score"] = (
-                        cached[item_id] - self._gate_tolerance
-                    )
+                    per_item.setdefault(item_id, {})["score"] = cached[item_id]
 
         return self._build_evaluation_batch(
             batch, per_item, trial, effective_capture_traces,

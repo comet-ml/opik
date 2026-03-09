@@ -45,12 +45,6 @@ class GepaConfig:
     score_threshold: float = 1.0
     """Stop optimization early when the best trial's pass_rate reaches this value."""
 
-    gate_tolerance: float = 0.1
-    """Per-item tolerance subtracted from cached parent scores during the
-    minibatch acceptance gate. Absorbs LLM-judge noise so that mutations
-    that are "roughly as good" on the minibatch still proceed to full eval.
-    0.0 = strict (original behaviour), 0.1 = 10% tolerance per item."""
-
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> GepaConfig:
         """Build config from optimizer_parameters, using defaults for missing keys."""
