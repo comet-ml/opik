@@ -100,9 +100,9 @@ Imports specific data types from local files to the specified workspace.
 
 ### Resumable imports
 
-Every import automatically maintains a `migration_manifest.db` file in the
-`--path` directory. This manifest tracks which files have been imported and the
-ID mappings needed to link experiments back to their traces.
+Every import automatically maintains a `migration_manifest.db` SQLite database
+in the `--path` directory. It tracks which files have been imported and the ID
+mappings needed to link experiments back to their traces.
 
 If an import is interrupted (e.g. network error, Ctrl-C), simply re-run the
 same command — it will resume from where it left off without creating
@@ -451,7 +451,7 @@ opik import my-workspace experiment "evaluation" --path ./experiment_data
 1. **Import was interrupted and re-running creates duplicates**
    - This should not happen — the import automatically detects and resumes from the `migration_manifest.db` in your `--path` directory
    - If you do not see the "Resuming interrupted import" message, check that you are pointing to the same `--path` as the original run
-   - If the manifest is corrupt, use `--force` to start fresh (this will re-import everything)
+   - If the manifest database is unreadable, delete `migration_manifest.db` and use `--force` to start fresh (this will re-import everything)
 
 2. **"Import already completed. Use --force to re-import."**
    - The manifest records that a previous run finished successfully
