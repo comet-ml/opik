@@ -8,7 +8,8 @@ import Loader from "@/components/shared/Loader/Loader";
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
 import useWorkspaceConfigMutation from "@/api/workspaces/useWorkspaceConfigMutation";
 import { formatIso8601Duration } from "@/lib/date";
-
+import useAppStore from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   WorkspacePreference,
   WORKSPACE_PREFERENCE_TYPE,
@@ -25,7 +26,6 @@ import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
 import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
 import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
-import useAppStore from "@/store/AppStore";
 
 const WorkspacePreferencesTab: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -41,6 +41,10 @@ const WorkspacePreferencesTab: React.FC = () => {
       updateType: "replaceIn",
     },
   );
+
+  const {
+    permissions: { canConfigureWorkspaceSettings },
+  } = usePermissions();
 
   const threadTimeoutValue =
     workspaceConfig?.timeout_to_mark_thread_as_inactive ??
@@ -135,19 +139,24 @@ const WorkspacePreferencesTab: React.FC = () => {
   );
 
   const columns = useMemo(() => {
-    return [
-      ...convertColumnDataToColumn<WorkspacePreference, WorkspacePreference>(
-        WORKSPACE_PREFERENCES_DEFAULT_COLUMNS,
-        {},
-      ),
-      generateActionsColumDef({
-        cell: WorkspacePreferencesActionsCell,
-        customMeta: {
-          onEdit: handleEdit,
-        },
-      }),
-    ];
-  }, [handleEdit]);
+    const baseColumns = convertColumnDataToColumn<
+      WorkspacePreference,
+      WorkspacePreference
+    >(WORKSPACE_PREFERENCES_DEFAULT_COLUMNS, {});
+
+    if (canConfigureWorkspaceSettings) {
+      return [
+        ...baseColumns,
+        generateActionsColumDef({
+          cell: WorkspacePreferencesActionsCell,
+          customMeta: {
+            onEdit: handleEdit,
+          },
+        }),
+      ];
+    }
+    return baseColumns;
+  }, [canConfigureWorkspaceSettings, handleEdit]);
 
   return (
     <>
@@ -160,22 +169,24 @@ const WorkspacePreferencesTab: React.FC = () => {
           columnPinning={WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING}
         />
       )}
-
-      <EditThreadTimeoutDialog
-        {...getPreferencesDialogConfig(
-          WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
-        )}
-        defaultValue={threadTimeoutValue}
-        onSubmit={handleThreadTimeoutSubmit}
-      />
-
-      <EditTruncationToggleDialog
-        {...getPreferencesDialogConfig(
-          WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
-        )}
-        currentValue={truncationToggleValue}
-        onConfirm={handleTruncationToggleSubmit}
-      />
+      {canConfigureWorkspaceSettings && (
+        <>
+          <EditThreadTimeoutDialog
+            {...getPreferencesDialogConfig(
+              WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
+            )}
+            defaultValue={threadTimeoutValue}
+            onSubmit={handleThreadTimeoutSubmit}
+          />
+          <EditTruncationToggleDialog
+            {...getPreferencesDialogConfig(
+              WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
+            )}
+            currentValue={truncationToggleValue}
+            onConfirm={handleTruncationToggleSubmit}
+          />
+        </>
+      )}
     </>
   );
 };
