@@ -11,14 +11,11 @@ if TYPE_CHECKING:
 class FailureAwareBatchSampler:
     """Batch sampler that balances failed and passed items in minibatches.
 
-    After the first full evaluation, items are split into *failed* (at least
-    one assertion did not pass) and *passed* (all assertions passed).  Failed
-    items are ranked by the number of failing assertions — items with more
-    failing assertions get the highest priority.
-
-    The minibatch is then filled ~50/50: failed items first (worst-first),
-    then randomly-sampled passed items to anchor working behaviours and
-    prevent over-correction.
+    After the first full evaluation, items are split into *failed* and *passed*.
+    Failed items are split into a "top" tier (worst ``top_failed_fraction`` by
+    assertion failure count) and the rest.  The minibatch draws randomly from
+    the top tier first, then the rest of failed, then passed items (~50/50
+    failed/passed split).
 
     Before any evaluation data exists, sampling is uniform random.
     """
@@ -27,10 +24,12 @@ class FailureAwareBatchSampler:
         self,
         minibatch_size: int,
         min_failed_per_batch: int = 1,
+        top_failed_fraction: float = 0.5,
         rng: random.Random | None = None,
     ) -> None:
         self.minibatch_size = minibatch_size
         self.min_failed_per_batch = min_failed_per_batch
+        self.top_failed_fraction = top_failed_fraction
         self.rng = rng if rng is not None else random.Random(0)
 
         self._item_scores: dict[str, float] = {}
@@ -105,7 +104,19 @@ class FailureAwareBatchSampler:
             else:
                 passed_ids.append(idx)
 
-        self.rng.shuffle(failed_ids)
+        # Sort by number of failing assertions (worst first), then split
+        # into top tier and rest. Sample randomly within each tier.
+        failed_ids.sort(
+            key=lambda idx: len(self._item_failed_assertions.get(
+                self._idx_to_item_id.get(idx, ""), []
+            )),
+            reverse=True,
+        )
+        top_k = max(1, int(len(failed_ids) * self.top_failed_fraction))
+        top_failed = failed_ids[:top_k]
+        rest_failed = failed_ids[top_k:]
+        self.rng.shuffle(top_failed)
+        self.rng.shuffle(rest_failed)
 
         selected: list[int] = []
         remaining = n
@@ -113,8 +124,13 @@ class FailureAwareBatchSampler:
         n_failed_target = max(self.min_failed_per_batch, remaining // 2)
         n_failed = min(n_failed_target, len(failed_ids), remaining)
         if n_failed > 0:
-            selected.extend(failed_ids[:n_failed])
-            remaining -= n_failed
+            # Draw from top tier first, then rest
+            from_top = min(n_failed, len(top_failed))
+            selected.extend(top_failed[:from_top])
+            from_rest = min(n_failed - from_top, len(rest_failed))
+            if from_rest > 0:
+                selected.extend(rest_failed[:from_rest])
+            remaining -= len(selected)
 
         if remaining > 0 and passed_ids:
             n_passed = min(remaining, len(passed_ids))

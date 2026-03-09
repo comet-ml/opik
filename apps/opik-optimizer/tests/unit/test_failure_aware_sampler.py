@@ -158,6 +158,40 @@ class TestBalancedSampling:
         assert len(ids) == 3
         assert 0 in ids
 
+    def test_top_tier_prioritized(self):
+        sampler = FailureAwareBatchSampler(
+            minibatch_size=2,
+            min_failed_per_batch=2,
+            top_failed_fraction=0.5,
+            rng=random.Random(42),
+        )
+        loader = _make_loader(10)
+        sampler._ensure_mapping(loader)
+
+        # item-3 has 3 failures, item-1 has 2 — these are top 50%
+        # item-0 has 1, item-2 has 1 — bottom 50%
+        feedback = _make_assertion_feedback(
+            {
+                "item-0": ["a1"],
+                "item-1": ["a1", "a2"],
+                "item-2": ["a1"],
+                "item-3": ["a1", "a2", "a3"],
+            },
+            all_items=10,
+        )
+        sampler.update_scores(feedback)
+        sampler.update_assertion_failures(feedback)
+
+        top_indices = {1, 3}  # 2+ failures = top 50%
+        top_count = 0
+        for _ in range(30):
+            ids = sampler.next_minibatch_ids(loader, FakeState())
+            assert len(ids) == 2
+            if all(idx in top_indices for idx in ids):
+                top_count += 1
+        # Top-tier items should dominate (batch size == top tier size)
+        assert top_count > 15
+
     def test_failed_items_shuffled_across_calls(self):
         sampler = FailureAwareBatchSampler(
             minibatch_size=3,

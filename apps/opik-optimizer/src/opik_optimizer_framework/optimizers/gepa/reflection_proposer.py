@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_TEMPLATE_VAR_RE = re.compile(r"\{(\w+)\}")
 
 GENERALIZATION_REFLECTION_TEMPLATE = """\
 I have a system that uses the following parameter to guide its behavior:
@@ -19,12 +22,14 @@ Examples are sorted by priority — the ones with the most failures come first:
 <side_info>
 ```
 
-Your task is to write an improved version of this parameter. Preserve working \
-rules and make targeted additions or tweaks to fix the FAILED assertions.
+Your task is to write an improved version of this parameter. You MUST keep \
+the existing parameter as your starting point and make surgical edits — \
+do NOT rewrite from scratch.
 
-STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what behaviors \
-are missing. Read the PASSED assertions — the current parameter already \
-produces these. Preserve the rules that drive successes.
+STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what specific \
+behaviors are missing or wrong. Read the PASSED assertions — the current \
+parameter already produces these. Prefer keeping rules that drive successes, \
+but you may tighten or rephrase them if needed to fix failures.
 
 STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History" \
 section, the current rules for that assertion already failed before. \
@@ -33,13 +38,17 @@ example phrases or lookup instructions directly, or try a structurally \
 different approach.
 
 STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify \
-a specific rule. Every rule must describe an observable action (what to say, \
-include, or avoid) — vague guidance does not reliably work. Rules must \
-generalize to any input in this domain; do NOT reference specific test inputs.
+ONE specific rule. Every rule must describe an observable, verifiable action — \
+not abstract guidance. Rules must generalize to any input in this domain; \
+do NOT reference specific test inputs.
 
-STEP 4 — STRUCTURE: Use markdown formatting. Group related rules under \
-## headers. Merge overlapping rules. Remove redundant ones. Keep the \
-parameter concise — prefer tightening existing rules over appending new ones.
+STEP 4 — MINIMAL EDIT: Start from the original parameter text and apply \
+the fixes from Step 3. Do NOT rewrite or reorganize parts that are already \
+working. Add new rules near related existing ones. If the parameter is \
+already scoring well, make small, precise changes only.
+
+STEP 5 — STRUCTURE: Use markdown formatting. Group related rules under \
+## headers. Merge overlapping rules. Keep the parameter concise.
 
 IMPORTANT:
 - Output ONLY the parameter text. Do NOT include any metadata such as \
@@ -47,7 +56,8 @@ IMPORTANT:
 context for you, not part of the parameter.
 - Preserve ALL template variables exactly as they appear in the original \
 parameter (e.g. {{var}}, {var}, <var>, {% var %}). These are runtime \
-placeholders filled by the system — do NOT rename, remove, or reformat them.
+placeholders filled by the system — do NOT rename, remove, or reformat them. \
+If the original has {var}, your output MUST also contain {var}.
 
 Provide the new parameter within ``` blocks."""
 
@@ -160,6 +170,27 @@ class ReflectionProposer:
 
         return header
 
+    @staticmethod
+    def _extract_template_vars(text: str) -> set[str]:
+        return set(_TEMPLATE_VAR_RE.findall(text))
+
+    def _validate_template_vars(
+        self, original: str, proposed: str, name: str,
+    ) -> str | None:
+        """Return proposed text if template vars are preserved, else None."""
+        original_vars = self._extract_template_vars(original)
+        if not original_vars:
+            return proposed
+        proposed_vars = self._extract_template_vars(proposed)
+        missing = original_vars - proposed_vars
+        if missing:
+            logger.warning(
+                "Reflection for '%s' dropped template variables %s — rejecting proposal",
+                name, missing,
+            )
+            return None
+        return proposed
+
     def propose(
         self,
         candidate: dict[str, str],
@@ -201,13 +232,21 @@ class ReflectionProposer:
             )
             new_text = result["new_instruction"]
             new_text = self._strip_header(new_text, name)
-            new_texts[name] = new_text
 
-            log_entry["proposed_text"] = new_text
+            validated = self._validate_template_vars(candidate[name], new_text, name)
+            if validated is None:
+                log_entry["proposed_text"] = new_text
+                log_entry["rejected"] = "missing_template_vars"
+                self._reflection_log.append(log_entry)
+                continue
+
+            new_texts[name] = validated
+
+            log_entry["proposed_text"] = validated
             self._reflection_log.append(log_entry)
             logger.info(
                 "Reflection for '%s': proposed %d chars (was %d)",
-                name, len(new_text), len(candidate[name]),
+                name, len(validated), len(candidate[name]),
             )
 
         return new_texts
