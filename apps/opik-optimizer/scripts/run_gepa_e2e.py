@@ -365,20 +365,13 @@ def main():
     optimization_id = optimization.id
     logger.info("Optimization created: %s", optimization_id)
 
-    optimizer_parameters = {
-        "max_candidates": 5,
-        "reflection_minibatch_size": 7,
-        "candidate_selection_strategy": "pareto",
-        "seed": 42,
-    }
-
     context = OptimizationContext(
         optimization_id=optimization_id,
         dataset_name=SUITE_NAME,
         model=MODEL,
         metric_type=OBJECTIVE_NAME,
         optimizer_type=optimizer_type,
-        optimizer_parameters=optimizer_parameters,
+        optimizer_parameters={},
         optimizable_keys=["system_prompt", "user_message"],
         config_descriptions={
             "system_prompt": "Main customer-facing support agent system prompt",

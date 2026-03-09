@@ -151,11 +151,7 @@ def main():
         model=MODEL,
         metric_type=OBJECTIVE_NAME,
         optimizer_type=optimizer_type,
-        optimizer_parameters={
-            "max_candidates": 10,
-            "reflection_minibatch_size": 4,
-            "seed": 42,
-        },
+        optimizer_parameters={},
         optimizable_keys=["system_prompt", "user_message"],
         config_descriptions={
             "system_prompt": "Main customer-facing support agent system prompt",
