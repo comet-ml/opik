@@ -6083,8 +6083,18 @@ class TracesResourceTest {
 
                         List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
 
-                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, scores,
-                                TraceThreadStatus.ACTIVE);
+                        var expectedFeedbackScores = scores.stream()
+                                .map(s -> FeedbackScore.builder()
+                                        .name(s.name())
+                                        .categoryName(s.categoryName())
+                                        .value(s.value())
+                                        .reason(s.reason())
+                                        .source(s.source())
+                                        .build())
+                                .toList();
+
+                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE, expectedFeedbackScores);
 
                         // Verify scores are preserved after new traces are added
                         TraceAssertions.assertThreads(expectedThreads, actualThreads.content());
@@ -6161,9 +6171,19 @@ class TracesResourceTest {
 
                         List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
 
+                        var expectedFeedbackScores = mixedScores.stream()
+                                .map(s -> FeedbackScore.builder()
+                                        .name(s.name())
+                                        .categoryName(s.categoryName())
+                                        .value(s.value())
+                                        .reason(s.reason())
+                                        .source(s.source())
+                                        .build())
+                                .toList();
+
                         // Expect all scores to be preserved - scores should NOT be deleted when new traces are added
-                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, mixedScores,
-                                TraceThreadStatus.ACTIVE);
+                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE, expectedFeedbackScores);
 
                         // Verify all scores are preserved (UI, SDK, and ONLINE_SCORING)
                         TraceAssertions.assertThreads(expectedThreads, actualThreads.content());
