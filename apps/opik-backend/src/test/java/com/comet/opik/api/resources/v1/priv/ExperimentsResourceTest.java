@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DeleteIdsHolder;
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
@@ -68,6 +69,7 @@ import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -172,6 +174,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.averagingLong;
 import static java.util.stream.Collectors.groupingBy;
@@ -289,6 +292,48 @@ class ExperimentsResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissions {
+
+        @Test
+        @DisplayName("Find experiments passes required permissions to auth endpoint")
+        void findExperimentsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.findExperiments(1, 10, null, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get experiment by id passes required permissions to auth endpoint")
+        void getExperimentByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+            var id = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.getExperiment(id, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
+        }
     }
 
     @Nested
@@ -5725,6 +5770,247 @@ class ExperimentsResourceTest {
 
             fetchAndAssertResponse(userExperimentId, experiment, names, otherNames, apiKey, workspaceName);
         }
+
+        @Test
+        @DisplayName("when eval suite experiment has no feedback scores and no experiment_scores, then return empty")
+        void getFeedbackScoreNames__evalSuiteNoScores__thenReturnEmpty() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .experimentScores(null)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(
+                    List.of(experiment.id()), null, apiKey, workspaceName);
+            assertThat(actualEntity.scores()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("when eval suite experiment has experiment_scores but no feedback scores, then return experiment_scores only")
+        void getFeedbackScoreNames__evalSuiteWithExperimentScores__thenReturnExperimentScoresOnly() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experimentScores = List.of(
+                    ExperimentScore.builder().name("accuracy").value(new BigDecimal("0.95")).build(),
+                    ExperimentScore.builder().name("latency").value(new BigDecimal("120.5")).build());
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .experimentScores(experimentScores)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(
+                    List.of(experiment.id()), null, apiKey, workspaceName);
+            assertThat(actualEntity.scores())
+                    .allMatch(score -> "experiment_scores".equals(score.type()));
+            assertThat(actualEntity.scores())
+                    .extracting(FeedbackScoreNames.ScoreName::name)
+                    .containsExactlyInAnyOrder("accuracy", "latency");
+        }
+
+        @Test
+        @DisplayName("when mixed experiment types, then return feedback scores from regular and experiment_scores from both")
+        void getFeedbackScoreNames__mixedExperimentTypes__thenReturnCorrectScoreNames() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create regular experiment with feedback scores
+            var regularExperiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(regularExperiment, apiKey, workspaceName);
+
+            var regularTrace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(regularTrace), apiKey, workspaceName);
+
+            var regularItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(regularExperiment.id())
+                    .traceId(regularTrace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(regularItem), apiKey, workspaceName);
+
+            var feedbackScore = FeedbackScoreBatchItem.builder()
+                    .id(regularTrace.id())
+                    .projectName(regularTrace.projectName())
+                    .name("hallucination")
+                    .value(BigDecimal.ONE)
+                    .source(ScoreSource.SDK)
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(feedbackScore)).build(),
+                    apiKey, workspaceName);
+
+            // Create eval suite experiment with no feedback scores
+            var evalSuiteExperiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .experimentScores(null)
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(evalSuiteExperiment, apiKey, workspaceName);
+
+            var evalTrace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(evalTrace), apiKey, workspaceName);
+
+            var evalItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(evalSuiteExperiment.id())
+                    .traceId(evalTrace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(evalItem), apiKey, workspaceName);
+
+            // Query both experiment IDs
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(
+                    List.of(regularExperiment.id(), evalSuiteExperiment.id()), null, apiKey, workspaceName);
+            var feedbackScoreNames = actualEntity.scores().stream()
+                    .filter(score -> "feedback_scores".equals(score.type()))
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList();
+            assertThat(feedbackScoreNames).containsExactly("hallucination");
+        }
+
+        @Test
+        @DisplayName("when scores have mixed categories, then all score names returned without exclude param")
+        void getFeedbackScoreNames__mixedCategories__thenAllReturned() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("regular_score")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build(),
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("suite_assertion_1")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build(),
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("suite_assertion_2")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ZERO)
+                            .source(ScoreSource.SDK)
+                            .build());
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(
+                    List.of(experiment.id()), null, apiKey, workspaceName);
+            var feedbackNames = actualEntity.scores().stream()
+                    .filter(score -> "feedback_scores".equals(score.type()))
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList();
+            assertThat(feedbackNames).containsExactlyInAnyOrder(
+                    "regular_score", "suite_assertion_1", "suite_assertion_2");
+        }
+
+        @Test
+        @DisplayName("when exclude_category_name is provided, then exclude scores with that category")
+        void getFeedbackScoreNames__excludeCategoryName__thenExcludeMatchingScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+
+            var scores = List.of(
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("regular_score")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build(),
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("suite_assertion_1")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ONE)
+                            .source(ScoreSource.SDK)
+                            .build(),
+                    FeedbackScoreBatchItem.builder()
+                            .id(trace.id())
+                            .projectName(trace.projectName())
+                            .name("suite_assertion_2")
+                            .categoryName("suite_assertion")
+                            .value(BigDecimal.ZERO)
+                            .source(ScoreSource.SDK)
+                            .build());
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(
+                    List.of(experiment.id()), "suite_assertion", apiKey, workspaceName);
+            var feedbackNames = actualEntity.scores().stream()
+                    .filter(score -> "feedback_scores".equals(score.type()))
+                    .map(FeedbackScoreNames.ScoreName::name)
+                    .toList();
+            assertThat(feedbackNames).containsExactly("regular_score");
+        }
     }
 
     private void fetchAndAssertResponse(
@@ -6877,6 +7163,54 @@ class ExperimentsResourceTest {
                     .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with scores, then dataset_version_id is preserved")
+        void updateExperiment_whenExperimentScoresUpdated_thenDatasetVersionIdPreserved() {
+            // given - create a dataset with items so a version exists
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    TEST_WORKSPACE, API_KEY);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("test-version-id-preserved-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .datasetName(dataset.name())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            var originalDatasetVersionId = createdExperiment.datasetVersionId();
+            assertThat(originalDatasetVersionId).isNotNull();
+
+            // when - update experiment with scores (this triggers the UPDATE INSERT-SELECT path)
+            var experimentScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build());
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(experimentScores).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // then - dataset_version_id must still be present and unchanged
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.datasetVersionId())
+                    .isNotNull()
+                    .isEqualTo(originalDatasetVersionId);
+            assertThat(updatedExperiment.experimentScores())
+                    .hasSize(1)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactly(tuple("accuracy", new BigDecimal("0.95")));
         }
     }
 

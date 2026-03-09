@@ -11,6 +11,8 @@ from .types import (
     AgentBlueprintWrite,
     AgentBlueprintWriteType,
     AgentConfigEnv,
+    AgentConfigValueHistory,
+    AgentConfigValueHistoryType,
     AgentConfigValuePublic,
     AgentConfigValuePublicType,
     AgentConfigValueWrite,
@@ -631,7 +633,12 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
+from .prompts import (
+    CreatePromptVersionDetailAction,
+    CreatePromptVersionDetailTemplateStructure,
+    PromptWriteTemplateStructure,
+    PromptWriteType,
+)
 from .runners import LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
@@ -649,6 +656,8 @@ __all__ = [
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
     "AgentConfigEnv",
+    "AgentConfigValueHistory",
+    "AgentConfigValueHistoryType",
     "AgentConfigValuePublic",
     "AgentConfigValuePublicType",
     "AgentConfigValueWrite",
@@ -811,6 +820,7 @@ __all__ = [
     "CompletionTokensDetails",
     "ConflictError",
     "CountValueStatPublic",
+    "CreatePromptVersionDetailAction",
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",

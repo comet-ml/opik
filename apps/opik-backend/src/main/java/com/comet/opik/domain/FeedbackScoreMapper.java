@@ -127,7 +127,7 @@ public interface FeedbackScoreMapper {
                     .reason(getIfNotEmpty(tuple.get(1)))
                     .categoryName(getIfNotEmpty(tuple.get(2)))
                     .source(ScoreSource.fromString((String) tuple.get(3)))
-                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant());
+                    .lastUpdatedAt(Instant.parse(tuple.get(4).toString()));
 
             // span_type is the 6th element (index 5), span_id is the 7th element (index 6)
             // only present for span feedback scores

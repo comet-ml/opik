@@ -6,6 +6,7 @@ import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.LocalRunnerJobMetadata;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
@@ -164,6 +165,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     private static final String FIELD_TRACE_ID = "trace_id";
     private static final String FIELD_TIMEOUT = "timeout";
     private static final String FIELD_MASK_ID = "mask_id";
+    private static final String FIELD_METADATA = "metadata";
 
     private final @NonNull RedissonClient redisClient;
     private final @NonNull LocalRunnerConfig runnerConfig;
@@ -383,6 +385,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
         if (request.maskId() != null) {
             jobFields.put(FIELD_MASK_ID, request.maskId().toString());
+        }
+        if (request.metadata() != null) {
+            jobFields.put(FIELD_METADATA, JsonUtils.writeValueAsString(request.metadata()));
         }
 
         int timeout = resolveAgentTimeout(runnerId, request.agentName());
@@ -956,6 +961,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 .project(fields.get(FIELD_PROJECT))
                 .traceId(parseUUID(fields.get(FIELD_TRACE_ID)))
                 .maskId(parseUUID(fields.get(FIELD_MASK_ID)))
+                .metadata(parseMetadata(fields.get(FIELD_METADATA)))
                 .timeout(parseIntValue(fields.get(FIELD_TIMEOUT)))
                 .createdAt(parseInstant(fields.get(FIELD_CREATED_AT)))
                 .startedAt(parseInstant(fields.get(FIELD_STARTED_AT)))
@@ -993,6 +999,13 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             return null;
         }
         return UUID.fromString(value);
+    }
+
+    private LocalRunnerJobMetadata parseMetadata(String value) {
+        if (value == null) {
+            return null;
+        }
+        return JsonUtils.readValue(value, LocalRunnerJobMetadata.class);
     }
 
     private LocalRunnerJobStatus parseJobStatus(String value) {

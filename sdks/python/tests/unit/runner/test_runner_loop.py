@@ -95,6 +95,35 @@ class TestMainLoop:
             executed_job = mock_execute.call_args[0][0]
             assert executed_job.id == "j-1"
 
+    def test_run__job_with_mask_id__propagated_to_executor(
+        self, mock_api, shutdown_event, loop
+    ):
+        job = LocalRunnerJob(
+            id="j-mask",
+            agent_name="test",
+            inputs={"q": "hi"},
+            mask_id="mask-456",
+        )
+        call_count = 0
+
+        def next_job_side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return job
+            shutdown_event.set()
+            return None
+
+        mock_api.runners.next_job.side_effect = next_job_side_effect
+
+        with patch.object(job_executor.JobExecutor, "execute") as mock_execute:
+            loop.run()
+            time.sleep(0.1)
+
+            assert mock_execute.called
+            executed_job = mock_execute.call_args[0][0]
+            assert executed_job.mask_id == "mask-456"
+
     def test_run__poll_error__backs_off(self, mock_api, shutdown_event):
         loop = runner_loop.RunnerLoop(
             mock_api,

@@ -60,13 +60,17 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const checkNullablePermission = useCallback(
-    (permissionName: ManagementPermissionsNames) => {
+    (permissionName: ManagementPermissionsNames, requireExplicit?: boolean) => {
       if (isWorkspaceOwner) return true;
 
       const permissionValue = getUserPermissionValue(
         workspacePermissions,
         permissionName,
       );
+
+      if (requireExplicit) {
+        return permissionValue === true;
+      }
 
       // should default to true if the permission is not found
       return permissionValue !== false;
@@ -127,6 +131,29 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUpdateUserRole = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.USER_ROLE_UPDATE,
+        true,
+      ),
+    [checkNullablePermission],
+  );
+
+  const canConfigureWorkspaceSettings = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.WORKSPACE_SETTINGS_CONFIGURE,
+      ),
+    [checkNullablePermission],
+  );
+
+  const canUpdateAIProviders = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.AI_PROVIDER_UPDATE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -139,6 +166,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeletePrompts,
     canDeleteDatasets,
     canDeleteOptimizationRuns,
+    canUpdateUserRole,
+    canConfigureWorkspaceSettings,
+    canUpdateAIProviders,
     isPending: isEnabled && isPending,
   };
 };

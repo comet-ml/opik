@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .agent_blueprint_history_type import AgentBlueprintHistoryType
+from .agent_config_value_history import AgentConfigValueHistory
 
 
 class AgentBlueprintHistory(UniversalBaseModel):
@@ -17,6 +18,7 @@ class AgentBlueprintHistory(UniversalBaseModel):
     created_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
+    values: typing.List[AgentConfigValueHistory]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

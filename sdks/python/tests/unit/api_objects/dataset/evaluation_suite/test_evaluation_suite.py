@@ -87,23 +87,18 @@ class TestEvaluatorValidation:
         )
         assert "item-level evaluators" in str(exc_info.value)
 
-    def test_add_item__with_llm_judge_evaluator__succeeds(self):
-        """Test that LLMJudge evaluators are accepted in add_item."""
+    def test_add_item__with_assertions__succeeds(self):
+        """Test that assertions shorthand is accepted in add_item."""
         mock_dataset = _create_mock_dataset()
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,
         )
 
-        llm_judge = suite_evaluators.LLMJudge(
-            assertions=["Response is polite"],
-            track=False,
-        )
-
         # Should not raise
         suite.add_item(
             data={"input": "test"},
-            evaluators=[llm_judge],
+            assertions=["Response is polite"],
         )
 
     def test_add_item__with_no_evaluators__succeeds(self):
@@ -130,6 +125,72 @@ class TestEvaluatorValidation:
         assert "Evaluation suites only support LLMJudge evaluators" in str(
             exc_info.value
         )
+
+    def test_add_item__with_assertions_shorthand__creates_evaluator_items(self):
+        """Test that assertions shorthand builds LLMJudge and creates evaluator items."""
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        suite.add_item(
+            data={"input": "test"},
+            assertions=["Response is polite", "Response is helpful"],
+        )
+
+        mock_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted_items = (
+            mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args[0][0]
+        )
+        assert len(inserted_items) == 1
+        item = inserted_items[0]
+        assert item.evaluators is not None
+        assert len(item.evaluators) == 1
+        assert item.evaluators[0].type == "llm_judge"
+
+    def test_add_item__with_both_assertions_and_evaluators__raises_value_error(self):
+        """Test that providing both assertions and evaluators raises ValueError."""
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        llm_judge = suite_evaluators.LLMJudge(
+            assertions=["Response is polite"],
+            track=False,
+        )
+
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            suite.add_item(
+                data={"input": "test"},
+                evaluators=[llm_judge],
+                assertions=["Response is helpful"],
+            )
+
+    def test_resolve_evaluators__with_assertions__returns_llm_judge(self):
+        """Test that resolve_evaluators builds LLMJudge from assertions."""
+        result = validators.resolve_evaluators(
+            assertions=["Response is polite"],
+            evaluators=None,
+            context="test",
+        )
+
+        assert result is not None
+        assert len(result) == 1
+        assert isinstance(result[0], suite_evaluators.LLMJudge)
+        assert result[0].assertions == ["Response is polite"]
+
+    def test_resolve_evaluators__with_neither__returns_none(self):
+        """Test that resolve_evaluators returns None when neither is provided."""
+        result = validators.resolve_evaluators(
+            assertions=None,
+            evaluators=None,
+            context="test",
+        )
+
+        assert result is None
 
 
 def _make_test_result(

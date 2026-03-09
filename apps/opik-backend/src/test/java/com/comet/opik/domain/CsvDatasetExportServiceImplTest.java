@@ -12,12 +12,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
+import org.redisson.api.stream.StreamAddParams;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -80,10 +82,7 @@ class CsvDatasetExportServiceImplTest {
 
         // Mock: lock service executes the action
         when(lockService.executeWithLock(any(LockService.Lock.class), any(Mono.class)))
-                .thenAnswer(invocation -> {
-                    Mono<DatasetExportJob> action = invocation.getArgument(1);
-                    return action;
-                });
+                .thenAnswer(invocation -> invocation.getArgument(1));
 
         // Mock: config returns default TTL
         when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
@@ -100,6 +99,8 @@ class CsvDatasetExportServiceImplTest {
         StreamMessageId mockMessageId = new StreamMessageId(UUID.randomUUID().getMostSignificantBits());
         when(mockStream.add(any(StreamAddArgs.class))).thenReturn(Mono.just(mockMessageId));
         when(exportConfig.getStreamName()).thenReturn("dataset-export-events");
+        when(exportConfig.getStreamMaxLen()).thenReturn(10000);
+        when(exportConfig.getStreamTrimLimit()).thenReturn(100);
 
         // When
         Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
@@ -120,8 +121,14 @@ class CsvDatasetExportServiceImplTest {
         verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
         verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()));
 
-        // Verify stream.add was called with correct message
-        verify(mockStream, times(1)).add(any(StreamAddArgs.class));
+        // Verify stream.add was called with correct params
+        ArgumentCaptor<StreamAddParams<String, DatasetExportMessage>> captor = ArgumentCaptor
+                .forClass(StreamAddParams.class);
+        verify(mockStream, times(1)).add(captor.capture());
+        var streamAddParams = captor.getValue();
+        assertThat(streamAddParams.getMaxLen()).isEqualTo(10000);
+        assertThat(streamAddParams.getLimit()).isEqualTo(100);
+        assertThat(streamAddParams.isTrimStrict()).isFalse();
     }
 
     @ParameterizedTest

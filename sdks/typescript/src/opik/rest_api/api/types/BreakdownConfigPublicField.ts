@@ -6,6 +6,7 @@ export const BreakdownConfigPublicField = {
     Metadata: "metadata",
     Name: "name",
     ErrorInfo: "error_info",
+    ErrorType: "error_type",
     Model: "model",
     Provider: "provider",
     Type: "type",

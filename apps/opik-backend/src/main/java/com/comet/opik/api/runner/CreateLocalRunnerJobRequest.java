@@ -17,5 +17,6 @@ public record CreateLocalRunnerJobRequest(
         JsonNode inputs,
         String project,
         UUID runnerId,
-        UUID maskId) {
+        UUID maskId,
+        LocalRunnerJobMetadata metadata) {
 }
