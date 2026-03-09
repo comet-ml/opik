@@ -54,6 +54,7 @@ import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import Loader from "@/components/shared/Loader/Loader";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
   generateActionsColumDef,
@@ -526,7 +527,11 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     selectedRows.length < totalCount;
 
   if (isPending) {
-    return null;
+    return (
+      <div className="flex items-center justify-center pt-12">
+        <Loader />
+      </div>
+    );
   }
 
   return (
