@@ -106,24 +106,16 @@ const useNavigationBlocker = ({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          {showSaveAndLeave && (
-            <>
-              <Button variant="destructive" onClick={handleConfirmNavigation}>
-                {confirmText}
-              </Button>
-              <div className="flex-auto"></div>
-            </>
-          )}
           <Button variant="outline" onClick={handleCancelNavigation}>
             {cancelText}
           </Button>
-          {showSaveAndLeave ? (
+          {showSaveAndLeave && <div className="flex-auto"></div>}
+          <Button variant="destructive" onClick={handleConfirmNavigation}>
+            {confirmText}
+          </Button>
+          {showSaveAndLeave && (
             <Button variant="default" onClick={handleSaveAndLeave}>
               {saveAndLeaveText}
-            </Button>
-          ) : (
-            <Button variant="destructive" onClick={handleConfirmNavigation}>
-              {confirmText}
             </Button>
           )}
         </DialogFooter>

@@ -123,12 +123,11 @@ const DashboardSaveActions: React.FunctionComponent<
 
   const { DialogComponent: NavigationBlockerDialog } = useNavigationBlocker({
     condition: hasUnsavedChanges,
-    title: "You have unsaved changes",
     description: isTemplate
-      ? "You're viewing a template. Save as a new dashboard to keep your changes."
-      : "If you leave now, your changes will be lost. Are you sure you want to continue?",
-    confirmText: "Discard and leave",
-    cancelText: "Stay on page",
+      ? "You have unsaved changes in this template. Save as a new dashboard to keep them before leaving?"
+      : "You have unsaved changes in this dashboard. Save them before leaving?",
+    confirmText: "Discard changes",
+    cancelText: "Cancel",
     onSaveAndLeave: handleSaveAndLeave,
     saveAndLeaveText: isTemplate ? "Save as new dashboard" : "Save and leave",
   });
