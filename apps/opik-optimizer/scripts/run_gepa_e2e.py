@@ -74,6 +74,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response attempts to address the store hours question",
+            "Response does not fabricate specific store hours since none are provided in the context",
         ])],
     )
 
@@ -84,6 +85,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response addresses the refund request",
+            "Response references the customer's order number from the context",
         ])],
     )
 
@@ -94,6 +96,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response addresses the international shipping question",
+            "Response specifically acknowledges Germany rather than giving a generic international shipping answer",
         ])],
     )
 
@@ -104,6 +107,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response explains how to track the order",
+            "Response references the customer's order number from the context",
         ])],
     )
 
@@ -114,6 +118,7 @@ def _build_suite(client):
         },
         evaluators=[LLMJudge(assertions=[
             "Response lists or describes available payment methods",
+            "Response welcomes the customer and acknowledges this is their first purchase",
         ])],
     )
 
@@ -139,7 +144,7 @@ def _build_suite(client):
             "context": "Customer has been subscribed for 6 months, pays $29.99/month",
         },
         evaluators=[LLMJudge(assertions=[
-            "Response provides clear cancellation guidance rather than only trying to retain the customer",
+            "Response provides specific step-by-step cancellation instructions rather than only trying to retain the customer",
             "Response acknowledges the cost concern without being dismissive",
         ])],
     )
@@ -150,7 +155,7 @@ def _build_suite(client):
             "context": "Tracking shows USPS delivered to front door 2 days ago",
         },
         evaluators=[LLMJudge(assertions=[
-            "Response suggests at least two concrete troubleshooting steps",
+            "Response suggests at least three concrete troubleshooting steps",
             "Response offers to open an investigation or send a replacement if the issue is not resolved",
         ])],
     )
@@ -163,6 +168,7 @@ def _build_suite(client):
         evaluators=[LLMJudge(assertions=[
             "Response apologizes for the error",
             "Response explains the exchange or return process step by step",
+            "Response references the specific order number from the context",
         ])],
     )
 

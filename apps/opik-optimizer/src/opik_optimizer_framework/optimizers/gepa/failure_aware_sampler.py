@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-from collections import Counter
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -14,9 +13,8 @@ class FailureAwareBatchSampler:
 
     After the first full evaluation, items are split into *failed* (at least
     one assertion did not pass) and *passed* (all assertions passed).  Failed
-    items are ranked by the number of failing assertions weighted by how
-    frequently each assertion fails across the whole dataset — assertions
-    that fail on many items get the highest priority.
+    items are ranked by the number of failing assertions — items with more
+    failing assertions get the highest priority.
 
     The minibatch is then filled ~50/50: failed items first (worst-first),
     then randomly-sampled passed items to anchor working behaviours and
@@ -43,7 +41,6 @@ class FailureAwareBatchSampler:
 
         self._item_failure_streaks: dict[str, int] = {}
         self._item_failed_assertions: dict[str, list[str]] = {}
-        self._global_assertion_failures: Counter[str] = Counter()
 
     def _ensure_mapping(self, loader: DataLoader) -> None:
         if self._idx_to_item_id:
@@ -62,8 +59,6 @@ class FailureAwareBatchSampler:
             self._has_full_eval_data = True
 
     def update_assertion_failures(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
-        self._global_assertion_failures.clear()
-
         for item_id, data in per_item_feedback.items():
             failed_names: set[str] = set()
             for run in data.get("runs", []):
@@ -75,7 +70,6 @@ class FailureAwareBatchSampler:
             if failed_names:
                 self._item_failure_streaks[item_id] = self._item_failure_streaks.get(item_id, 0) + 1
                 self._item_failed_assertions[item_id] = sorted(failed_names)
-                self._global_assertion_failures.update(failed_names)
             else:
                 self._item_failure_streaks.pop(item_id, None)
                 self._item_failed_assertions.pop(item_id, None)

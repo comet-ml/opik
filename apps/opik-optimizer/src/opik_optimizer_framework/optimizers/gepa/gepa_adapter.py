@@ -158,6 +158,7 @@ class FrameworkGEPAAdapter:
         self.best_full_eval_trial_score: float = 0.0
 
         self._cached_full_eval_scores: dict[str, dict[str, float]] = {}
+        self._cache_max_entries: int = 10
         self._gate_tolerance: float = 0.0
 
     # -- Delegation to CandidateTracker ----------------------------------------
@@ -400,6 +401,9 @@ class FrameworkGEPAAdapter:
             self._cached_full_eval_scores[key] = {
                 item_id: data["score"] for item_id, data in per_item.items()
             }
+            if len(self._cached_full_eval_scores) > self._cache_max_entries:
+                oldest_key = next(iter(self._cached_full_eval_scores))
+                del self._cached_full_eval_scores[oldest_key]
 
         use_cached_scores = (
             not is_full_eval

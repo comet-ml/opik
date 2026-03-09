@@ -99,6 +99,7 @@ class GepaOptimizer:
             config_descriptions=context.config_descriptions,
         )
         adapter._gate_tolerance = cfg.gate_tolerance
+        adapter._cache_max_entries = cfg.max_candidates
         self.adapter = adapter
 
         if baseline_trial is not None:
