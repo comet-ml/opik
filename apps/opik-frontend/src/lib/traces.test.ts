@@ -468,4 +468,74 @@ describe("prettifyMessage", () => {
       prettified: true,
     });
   });
+
+  it("handles OpenClaw input by stripping untrusted metadata blocks", () => {
+    const message = {
+      prompt:
+        'Conversation info (untrusted metadata):\n```json\n{\n  "message_id": "54",\n  "sender": "JF"\n}\n```\n\nSender (untrusted metadata):\n```json\n{\n  "label": "JF",\n  "id": "123"\n}\n```\n\nWhat is the weather?',
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "What is the weather?",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenClaw output by extracting the output string", () => {
+    const message = {
+      output: "The weather is sunny today.",
+      lastAssistant: {
+        role: "assistant",
+        content: [{ type: "text", text: "The weather is sunny today." }],
+        model: "gpt-5.1-codex",
+      },
+    };
+    const result = prettifyMessage(message, { type: "output" });
+    expect(result).toEqual({
+      message: "The weather is sunny today.",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenClaw input with no metadata blocks", () => {
+    const message = {
+      prompt: "Just a plain question",
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Just a plain question",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenClaw input by stripping leading timestamp", () => {
+    const message = {
+      prompt: "[Fri 2026-03-06 11:35 GMT+1] Hi",
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Hi",
+      prettified: true,
+    });
+  });
+
+  it("handles OpenClaw input with metadata blocks and timestamp", () => {
+    const message = {
+      prompt:
+        'Conversation info (untrusted metadata):\n```json\n{\n  "id": "1"\n}\n```\n\n[Fri 2026-03-06 12:08 GMT+1] Hi OpenClaw!!! How are you doing today?',
+      systemPrompt: "You are a personal assistant.",
+      imagesCount: 0,
+    };
+    const result = prettifyMessage(message, { type: "input" });
+    expect(result).toEqual({
+      message: "Hi OpenClaw!!! How are you doing today?",
+      prettified: true,
+    });
+  });
 });

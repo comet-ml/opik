@@ -41,7 +41,7 @@ class TestJobExecutorWithTypedModels:
 
         call_kwargs = api.runners.report_job_result.call_args[1]
         assert call_kwargs["status"] == "completed"
-        assert call_kwargs["result"] == "echo: hi"
+        assert call_kwargs["result"] == {"result": "echo: hi"}
 
     def test_execute__typed_job_with_timeout__respects_timeout(self, tmp_path):
         script = tmp_path / "agent.py"

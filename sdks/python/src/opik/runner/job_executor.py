@@ -67,7 +67,9 @@ class JobExecutor:
         )
         os.close(fd)
 
-        proc = self._spawn_process(agent, job_id, inputs, trace_id, result_file)
+        proc = self._spawn_process(
+            agent, job_id, inputs, trace_id, result_file, job.mask_id
+        )
         if proc is None:
             return
 
@@ -121,6 +123,7 @@ class JobExecutor:
         inputs: Dict[str, Any],
         trace_id: str,
         result_file: str,
+        mask_id: Optional[str],
     ) -> Optional[subprocess.Popen[bytes]]:
         env = {
             **os.environ,
@@ -128,6 +131,8 @@ class JobExecutor:
             "OPIK_RESULT_FILE": result_file,
             "OPIK_TRACE_ID": trace_id,
         }
+        if mask_id:
+            env["OPIK_MASK_ID"] = mask_id
 
         try:
             return subprocess.Popen(
@@ -209,11 +214,11 @@ class JobExecutor:
             _cleanup_result_file(result_file)
 
 
-def _read_result(result_file: str, job_id: str) -> Optional[Any]:
+def _read_result(result_file: str, job_id: str) -> Optional[Dict[str, Any]]:
     try:
         with open(result_file, "r") as f:
             data = json.load(f)
-        return data.get("result")
+        return data  # LocalRunnerJob.result expect a dict, not a bare value.
     except FileNotFoundError:
         LOGGER.warning("Result file missing for job %s: %s", job_id, result_file)
         return None

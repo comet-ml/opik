@@ -4,12 +4,17 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.redisson.Redisson;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
@@ -207,10 +212,24 @@ class BaseRedisSubscriberTest {
     @Nested
     class FailureTests {
 
-        @Test
-        void shouldAckAndRemoveNonRetryableFailures() {
+        static Stream<Arguments> nonRetryableExceptions() {
+            return Stream.of(
+                    Arguments.of("NullPointerException",
+                            new NullPointerException("Non-retryable")),
+                    Arguments.of("NumberFormatException (subclass of IllegalArgumentException)",
+                            new NumberFormatException("Non-retryable")),
+                    Arguments.of("ClientErrorException (4xx)",
+                            new ClientErrorException("Unauthorized", 401)),
+                    Arguments.of("NotFoundException (subclass of ClientErrorException)",
+                            new NotFoundException()));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("nonRetryableExceptions")
+        void shouldAckAndRemoveNonRetryableFailures(String description, RuntimeException exception) {
             var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
-            var subscriber = trackSubscriber(TestRedisSubscriber.failingNoRetriesSubscriber(config, redissonClient));
+            var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
+                    config, redissonClient, exception));
             subscriber.start();
 
             publishMessagesToStream(messages);

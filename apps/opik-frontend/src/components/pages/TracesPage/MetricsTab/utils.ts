@@ -21,21 +21,25 @@ export const INTERVAL_DESCRIPTIONS = {
     [INTERVAL_TYPE.HOURLY]: "Hourly totals",
     [INTERVAL_TYPE.DAILY]: "Daily totals",
     [INTERVAL_TYPE.WEEKLY]: "Weekly totals",
+    [INTERVAL_TYPE.TOTAL]: "Whole period totals",
   },
   AVERAGES: {
     [INTERVAL_TYPE.HOURLY]: "Hourly averages",
     [INTERVAL_TYPE.DAILY]: "Daily averages",
     [INTERVAL_TYPE.WEEKLY]: "Weekly averages",
+    [INTERVAL_TYPE.TOTAL]: "Whole period averages",
   },
   QUANTILES: {
     [INTERVAL_TYPE.HOURLY]: "Hourly quantiles in seconds",
     [INTERVAL_TYPE.DAILY]: "Daily quantiles in seconds",
     [INTERVAL_TYPE.WEEKLY]: "Weekly quantiles in seconds",
+    [INTERVAL_TYPE.TOTAL]: "Whole period quantiles in seconds",
   },
   COST: {
     [INTERVAL_TYPE.HOURLY]: "Total hourly cost in USD",
     [INTERVAL_TYPE.DAILY]: "Total daily cost in USD",
     [INTERVAL_TYPE.WEEKLY]: "Total weekly cost in USD",
+    [INTERVAL_TYPE.TOTAL]: "Total cost in USD",
   },
 } as const;
 

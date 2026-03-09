@@ -21,6 +21,7 @@ import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 import {
   DEFAULT_CHART_TICK,
   DEFAULT_CHART_GRID_PROPS,
@@ -46,6 +47,7 @@ interface LineChartProps {
   showArea?: boolean;
   connectNulls?: boolean;
   className?: string;
+  labelActions?: Record<string, LegendLabelAction>;
 }
 
 const LineChart: React.FunctionComponent<LineChartProps> = ({
@@ -61,6 +63,7 @@ const LineChart: React.FunctionComponent<LineChartProps> = ({
   showArea = true,
   connectNulls = true,
   className = "h-[var(--chart-height)] w-full",
+  labelActions,
 }) => {
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
@@ -147,6 +150,7 @@ const LineChart: React.FunctionComponent<LineChartProps> = ({
               <ChartHorizontalLegend
                 setActiveLine={setActiveLine}
                 chartId={chartId}
+                labelActions={labelActions}
               />
             }
           />
