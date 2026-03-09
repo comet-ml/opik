@@ -16,6 +16,8 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DashboardUpdate(
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Size(min = 1, max = 120, message = "name must be between 1 and 120 characters") String name,
+        @Nullable DashboardType type,
+        @Nullable DashboardScope scope,
         @Nullable @Size(max = 1000, message = "description cannot exceed 1000 characters") String description,
         JsonNode config) {
 }

@@ -64,6 +64,7 @@ public interface Field {
     String COMMIT_QUERY_PARAM = "commit";
     String TEMPLATE_QUERY_PARAM = "template";
     String CHANGE_DESCRIPTION_QUERY_PARAM = "change_description";
+    String SCOPE_QUERY_PARAM = "scope";
 
     @JsonValue
     String getQueryParamField();

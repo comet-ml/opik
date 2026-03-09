@@ -85,6 +85,11 @@ public class DashboardResourceClient {
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             String sorting, int expectedStatus) {
+        return find(apiKey, workspaceName, page, size, name, sorting, null, expectedStatus);
+    }
+
+    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
+            String sorting, String filters, int expectedStatus) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -95,6 +100,10 @@ public class DashboardResourceClient {
 
         if (sorting != null) {
             target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
+        }
+
+        if (filters != null) {
+            target = target.queryParam("filters", URLEncoder.encode(filters, StandardCharsets.UTF_8));
         }
 
         try (var response = target.request()
