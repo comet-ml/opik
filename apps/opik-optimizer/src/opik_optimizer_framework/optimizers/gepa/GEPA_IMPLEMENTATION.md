@@ -74,16 +74,19 @@ GEPA's default `EpochShuffledBatchSampler` selects minibatch items uniformly. Wi
 ### Algorithm
 
 1. **Before any full eval** — no failure data exists, sample uniformly at random.
-2. **After a full eval** — the adapter calls `sampler.update_scores(per_item_feedback)`, providing per-item scores.
+2. **After a full eval** — the adapter calls `sampler.update_assertion_failures(per_item)`, providing per-item assertion results.
 3. **On each minibatch selection**, items are categorized:
-   - **Failed**: score < `failure_threshold` in the last full eval
+   - **Failed**: has any failing assertions in the last full eval
    - **Passed**: everything else
-4. **Slot filling**:
+4. **Top-tier priority sampling**: Failed items are sorted by assertion failure count (worst first) and split into two tiers:
+   - **Top tier**: the worst `top_failed_fraction` (default 50%) of failed items
+   - **Rest**: remaining failed items
+   - Both tiers are shuffled randomly within themselves
+5. **Slot filling**:
    - Target `remaining // 2` failed slots (at least `min_failed_per_batch`)
-   - Fill failed slots with worst-scoring items first
+   - Draw from the top tier first, then the rest of failed items
    - Fill remaining slots with randomly sampled passed items
-   - If not enough passed items, fill randomly from all remaining
-5. If a category is exhausted, its slots spill into the next category.
+   - If not enough items in any category, spill into the next
 
 ### Why 50/50
 
@@ -178,7 +181,7 @@ The `EvaluationAdapter` caches evaluation results keyed by `SHA256(JSON(config) 
 
 ## Reflection Prompt
 
-The reflection prompt is a custom 4-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE` in `reflection_proposer.py`. It replaces GEPA's default to provide structured reasoning and prevent overfitting. The template is task-agnostic — it uses neutral language ("parameter", "system") and avoids domain-specific examples.
+The reflection prompt is a custom 5-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE` in `reflection_proposer.py`. It replaces GEPA's default to provide structured reasoning and prevent overfitting. The template is task-agnostic — it uses neutral language ("parameter", "system") and avoids domain-specific examples. It explicitly instructs the LLM to make surgical edits to the existing parameter rather than rewriting from scratch.
 
 ### Template structure
 
@@ -203,15 +206,17 @@ The header is stripped from the LLM's output so it doesn't leak into the propose
 - Whether it's a user-facing prompt or an internal subagent prompt
 - How parameters relate to each other
 
-### The 4 steps
+### The 5 steps
 
-**STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current parameter already produces these. Preserve the rules that drive successes.
+**STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current parameter already produces these. Prefer keeping rules that drive successes, but may tighten or rephrase them if needed to fix failures.
 
 **STEP 2 — CHECK FAILURE HISTORY**: If any example has a "Failure History" section, the current rules for that assertion already failed before. Do NOT add another generic rule of the same kind. Instead embed concrete example phrases or lookup instructions directly, or try a structurally different approach.
 
-**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify a specific rule. Every rule must describe an observable action (what to say, include, or avoid) — vague guidance does not reliably work. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
+**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify ONE specific rule. Every rule must describe an observable, verifiable action — not abstract guidance. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
 
-**STEP 4 — STRUCTURE**: Group related rules under short descriptive headers. Merge overlapping rules. Remove redundant ones. Keep the parameter concise — prefer tightening existing rules over appending new ones.
+**STEP 4 — MINIMAL EDIT**: Start from the original parameter text and apply the fixes from Step 3. Do NOT rewrite or reorganize parts that are already working. Add new rules near related existing ones. If the parameter is already scoring well, make small, precise changes only.
+
+**STEP 5 — STRUCTURE**: Use markdown formatting. Group related rules under `##` headers. Merge overlapping rules. Keep the parameter concise.
 
 ## Reflective Dataset Construction
 
@@ -274,8 +279,15 @@ The adapter delegates to `ReflectionProposer.propose()`, which overrides GEPA's 
 2. Prepend the header to the current parameter text as `current_instruction`
 3. Call GEPA's `InstructionProposalSignature.prompt_renderer()` to render the full prompt (substituting `<curr_param>` and `<side_info>`)
 4. Call `InstructionProposalSignature.run(lm, input_dict)` to get the new parameter text
-5. Strip the header from the result so it doesn't leak into the proposed text
-6. Log the full reflection call (current instruction, feedback, rendered prompt, proposed text) in `_reflection_log`
+5. Strip the header from the result via `_strip_header()` so it doesn't leak into the proposed text
+6. **Validate template variables** — if the original parameter contains `{var}` placeholders, check that the proposal preserves all of them. Missing variables → reject the proposal (logged with `rejected: "missing_template_vars"`)
+7. Log the full reflection call (current instruction, feedback, rendered prompt, proposed text) in `_reflection_log`
+
+### Template variable validation
+
+Prompt templates often contain `{variable}` placeholders that are filled at runtime (e.g., `{question}`, `{context}`). The reflection LLM sometimes drops or renames these placeholders, producing a prompt that would fail at evaluation time.
+
+`_validate_template_vars()` extracts all `{word}` patterns from the original and proposed text using the regex `\{(\w+)\}`. If any original variables are missing from the proposal, the proposal is rejected and the component keeps its current text. This is a post-processing safety net — the reflection template also instructs the LLM to preserve template variables.
 
 The reflection LLM is resolved via `_get_lm_callable()`: string model names are wrapped in a litellm completion call; callables are used directly.
 
@@ -306,18 +318,18 @@ The first evaluation sets `_full_dataset_size = len(batch)`. Subsequent evals wi
 
 ## Configuration Parameters
 
-All passed via `context.optimizer_parameters`:
+All passed via `context.optimizer_parameters` and parsed into `GepaConfig`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `seed` | `42` | Random seed for GEPA and the batch sampler |
 | `reflection_minibatch_size` | `4` (min 4) | Items per minibatch for reflection |
-| `candidate_selection_strategy` | `"pareto"` | How GEPA selects candidates (`"pareto"` or `"epsilon_greedy"`) |
+| `candidate_selection_strategy` | `"current_best"` | How GEPA selects candidates (`"current_best"`, `"pareto"`, or `"epsilon_greedy"`) |
 | `max_candidates` | `5` | Maximum candidates to explore |
-| `max_metric_calls` | `max_candidates * len(dataset) * 5` | Budget for total evaluations |
+| `max_metric_calls_multiplier` | `5` | Budget multiplier: `max_candidates * len(dataset) * multiplier` |
+| `max_metric_calls` | (computed) | Override: passed directly in `optimizer_parameters` to bypass the formula |
 | `score_threshold` | `1.0` | Stop when best full-eval score reaches this |
 | `min_failed_per_batch` | `1` | Minimum guaranteed failed items per minibatch |
-| `failure_threshold` | `1.0` | Items scoring below this are "failed" |
 
 ## Example Experiment Table
 

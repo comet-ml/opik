@@ -63,16 +63,13 @@ new_text = result["new_instruction"]
 
 ### Step 6: Strip the header
 
-The LLM sometimes echoes the header in its output. Strip it so it doesn't leak:
+The LLM sometimes echoes the header in its output. `_strip_header(text, name)` removes leading lines that match known header patterns: `Parameter:`, `Description:`, `Other parameters`, sibling bullet items, bare parameter names, and echoed description text.
 
-```python
-if new_text.startswith(header + "\n"):
-    new_text = new_text[len(header) + 1:]
-elif new_text.startswith(f"Parameter: {name}\n"):
-    new_text = new_text[len(f"Parameter: {name}\n"):]
-```
+### Step 7: Validate template variables
 
-### Step 7: Log
+If the original parameter contains `{var}` placeholders, `_validate_template_vars()` checks that the proposal preserves all of them. Missing variables → the proposal is rejected and the component keeps its current text.
+
+### Step 8: Log
 
 The full reflection call is logged to `_reflection_log` for debugging:
 - `component`: parameter name
@@ -80,6 +77,7 @@ The full reflection call is logged to `_reflection_log` for debugging:
 - `dataset_with_feedback`: the structured records
 - `rendered_prompt`: what the LLM actually received
 - `proposed_text`: the stripped output
+- `rejected` (if applicable): reason for rejection (e.g., `"missing_template_vars"`)
 
 ---
 
@@ -100,13 +98,19 @@ Examples are sorted by priority — the ones with the most failures come first:
 <side_info>
 ```
 
-Your task is to write an improved version of this parameter. Preserve working
-rules and make targeted additions or tweaks to fix the FAILED assertions.
+Your task is to write an improved version of this parameter. You MUST keep
+the existing parameter as your starting point and make surgical edits —
+do NOT rewrite from scratch.
 
-STEP 1 — DIAGNOSE: [identify missing behaviors from FAILED, preserve PASSED]
+STEP 1 — DIAGNOSE: [identify missing behaviors from FAILED, prefer keeping PASSED rules]
 STEP 2 — CHECK FAILURE HISTORY: [avoid repeating failed approaches]
-STEP 3 — WRITE TARGETED FIXES: [observable actions, not vague guidance]
-STEP 4 — STRUCTURE: [group rules, merge overlaps, keep concise]
+STEP 3 — WRITE TARGETED FIXES: [observable, verifiable actions — not abstract guidance]
+STEP 4 — MINIMAL EDIT: [start from original, apply fixes, don't reorganize working parts]
+STEP 5 — STRUCTURE: [markdown formatting, group under ## headers, merge overlaps]
+
+IMPORTANT:
+- Output ONLY the parameter text. No metadata lines.
+- Preserve ALL template variables exactly (e.g. {var}).
 
 Provide the new parameter within ``` blocks.
 ```
@@ -204,12 +208,14 @@ PASSED assertions (preserve these):
 
 ```
 
-Your task is to write an improved version of this parameter. Preserve working
-rules and make targeted additions or tweaks to fix the FAILED assertions.
+Your task is to write an improved version of this parameter. You MUST keep
+the existing parameter as your starting point and make surgical edits —
+do NOT rewrite from scratch.
 
-STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what behaviors
-are missing. Read the PASSED assertions — the current parameter already
-produces these. Preserve the rules that drive successes.
+STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what specific
+behaviors are missing or wrong. Read the PASSED assertions — the current
+parameter already produces these. Prefer keeping rules that drive successes,
+but you may tighten or rephrase them if needed to fix failures.
 
 STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History"
 section, the current rules for that assertion already failed before.
@@ -218,13 +224,26 @@ example phrases or lookup instructions directly, or try a structurally
 different approach.
 
 STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify
-a specific rule. Every rule must describe an observable action (what to say,
-include, or avoid) — vague guidance does not reliably work. Rules must
-generalize to any input in this domain; do NOT reference specific test inputs.
+ONE specific rule. Every rule must describe an observable, verifiable action —
+not abstract guidance. Rules must generalize to any input in this domain;
+do NOT reference specific test inputs.
 
-STEP 4 — STRUCTURE: Group related rules under short descriptive headers.
-Merge overlapping rules. Remove redundant ones. Keep the parameter concise
-— prefer tightening existing rules over appending new ones.
+STEP 4 — MINIMAL EDIT: Start from the original parameter text and apply
+the fixes from Step 3. Do NOT rewrite or reorganize parts that are already
+working. Add new rules near related existing ones. If the parameter is
+already scoring well, make small, precise changes only.
+
+STEP 5 — STRUCTURE: Use markdown formatting. Group related rules under
+## headers. Merge overlapping rules. Keep the parameter concise.
+
+IMPORTANT:
+- Output ONLY the parameter text. Do NOT include any metadata such as
+"Parameter:", "Description:", or "Other parameters" lines — those are
+context for you, not part of the parameter.
+- Preserve ALL template variables exactly as they appear in the original
+parameter (e.g. {{var}}, {var}, <var>, {% var %}). These are runtime
+placeholders filled by the system — do NOT rename, remove, or reformat them.
+If the original has {var}, your output MUST also contain {var}.
 
 Provide the new parameter within ``` blocks.
 ````
