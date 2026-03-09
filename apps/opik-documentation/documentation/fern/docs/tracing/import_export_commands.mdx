@@ -100,7 +100,7 @@ Imports specific data types from local files to the specified workspace.
 
 ### Resumable imports
 
-Every import automatically maintains a `migration_manifest.json` file in the
+Every import automatically maintains a `migration_manifest.db` file in the
 `--path` directory. This manifest tracks which files have been imported and the
 ID mappings needed to link experiments back to their traces.
 
@@ -161,7 +161,7 @@ The exported data is stored in JSON files with the following structure:
 
 ```
 OUTPUT_DIR/
-├── migration_manifest.json          # Created automatically during import to track progress
+├── migration_manifest.db          # Created automatically during import to track progress
 └── WORKSPACE/
     ├── datasets/
     │   ├── dataset_DATASET_NAME_1.json
@@ -329,7 +329,7 @@ trace-123,my-trace,2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,thread-456,span-789
 
 Migration is a two-step process because the source and destination typically
 have different API keys. Export with your source credentials, then import with
-your destination credentials. The `migration_manifest.json` created during
+your destination credentials. The `migration_manifest.db` created during
 import travels with the exported data and makes the import safe to interrupt
 and resume.
 
@@ -449,7 +449,7 @@ opik import my-workspace experiment "evaluation" --path ./experiment_data
 ### Common Issues
 
 1. **Import was interrupted and re-running creates duplicates**
-   - This should not happen — the import automatically detects and resumes from the `migration_manifest.json` in your `--path` directory
+   - This should not happen — the import automatically detects and resumes from the `migration_manifest.db` in your `--path` directory
    - If you do not see the "Resuming interrupted import" message, check that you are pointing to the same `--path` as the original run
    - If the manifest is corrupt, use `--force` to start fresh (this will re-import everything)
 

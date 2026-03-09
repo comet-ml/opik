@@ -1,6 +1,6 @@
 """Tests for the migration manifest used by opik import for resumable migrations."""
 
-import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -52,18 +52,31 @@ class TestMigrationManifestLifecycle:
         assert not MigrationManifest.exists(tmp_base)
 
     def test_exists_returns_true_after_start(self, tmp_base: Path) -> None:
+        # The DB file is created when the manifest is opened, but we check
+        # that exists() reflects the on-disk file correctly.
         MigrationManifest(tmp_base).start()
         assert MigrationManifest.exists(tmp_base)
 
     def test_start_is_idempotent_preserves_started_at(self, tmp_base: Path) -> None:
         manifest = MigrationManifest(tmp_base)
         manifest.start()
-        data = json.loads((tmp_base / MANIFEST_FILENAME).read_text())
-        first_started_at = data["import"]["started_at"]
 
-        manifest.start()
-        data2 = json.loads((tmp_base / MANIFEST_FILENAME).read_text())
-        assert data2["import"]["started_at"] == first_started_at
+        # Read started_at directly from the SQLite DB.
+        conn = sqlite3.connect(str(tmp_base / MANIFEST_FILENAME))
+        first_started_at = conn.execute(
+            "SELECT value FROM status WHERE key = 'started_at'"
+        ).fetchone()[0]
+        conn.close()
+
+        manifest.start()  # second call must not overwrite started_at
+
+        conn = sqlite3.connect(str(tmp_base / MANIFEST_FILENAME))
+        second_started_at = conn.execute(
+            "SELECT value FROM status WHERE key = 'started_at'"
+        ).fetchone()[0]
+        conn.close()
+
+        assert second_started_at == first_started_at
 
 
 class TestFileTracking:
@@ -140,28 +153,61 @@ class TestTraceIdMapping:
         assert "src-2" not in manifest.get_trace_id_map()
 
 
-class TestAtomicWrite:
-    def test_no_tmp_file_left_after_save(self, tmp_base: Path) -> None:
-        manifest = MigrationManifest(tmp_base)
-        manifest.start()
-        tmp_file = tmp_base / (MANIFEST_FILENAME.replace(".json", ".tmp"))
-        assert not tmp_file.exists()
-
-    def test_manifest_is_valid_json_after_write(self, tmp_base: Path) -> None:
+class TestDatabaseIntegrity:
+    def test_manifest_file_is_valid_sqlite(self, tmp_base: Path) -> None:
         manifest = MigrationManifest(tmp_base)
         manifest.start()
         manifest.add_trace_mapping("a", "b")
         manifest.save()
-        data = json.loads((tmp_base / MANIFEST_FILENAME).read_text())
-        assert data["import"]["id_map"]["traces"] == {"a": "b"}
+
+        # Verify the file is a readable SQLite database with the expected tables.
+        conn = sqlite3.connect(str(tmp_base / MANIFEST_FILENAME))
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        conn.close()
+
+        assert {"status", "completed_files", "failed_files", "trace_id_map"} <= tables
+
+    def test_no_tmp_file_left_after_save(self, tmp_base: Path) -> None:
+        manifest = MigrationManifest(tmp_base)
+        manifest.start()
+        # SQLite WAL mode leaves a -wal and -shm file while the connection is
+        # open, but never a .tmp artefact like the old JSON approach.
+        assert not (tmp_base / "migration_manifest.tmp").exists()
+
+    def test_duplicate_completed_writes_are_idempotent(self, tmp_base: Path) -> None:
+        """INSERT OR IGNORE means re-flushing the same path never duplicates rows."""
+        manifest = MigrationManifest(tmp_base, batch_size=1)
+        f = tmp_base / "projects" / "p" / "trace_x.json"
+        f.parent.mkdir(parents=True)
+        f.touch()
+        manifest.mark_file_completed(f)  # flushes (batch_size=1)
+        manifest.mark_file_completed(f)  # flushes again — must not create duplicate
+        assert manifest.completed_count() == 1
+
+    def test_duplicate_trace_mappings_last_write_wins(self, tmp_base: Path) -> None:
+        """INSERT OR REPLACE means updating a mapping overwrites the old value."""
+        manifest = MigrationManifest(tmp_base)
+        manifest.add_trace_mapping("src-1", "dest-old")
+        manifest.add_trace_mapping("src-1", "dest-new")  # same src, new dest
+        manifest.save()
+        assert manifest.get_trace_id_map()["src-1"] == "dest-new"
 
 
 class TestResumeScenario:
     """Simulate a real interrupted + resumed migration."""
 
     def test_resume_skips_completed_files(self, tmp_base: Path) -> None:
-        """After an interrupted run the second run skips already-done files."""
-        # Simulate first run that completes 2 of 3 trace files
+        """After an interrupted run the second run skips already-flushed files.
+
+        batch_size=1 so every mark_file_completed is immediately durable —
+        this models the boundary between two process invocations where only
+        flushed data survives.
+        """
         trace_files = []
         for i in range(3):
             p = tmp_base / "projects" / "proj" / f"trace_{i:03d}.json"
@@ -169,15 +215,15 @@ class TestResumeScenario:
             p.touch()
             trace_files.append(p)
 
-        m1 = MigrationManifest(tmp_base)
+        m1 = MigrationManifest(tmp_base, batch_size=1)
         m1.start()
-        m1.add_trace_mapping(f"src-{0}", f"dest-{0}")
+        m1.add_trace_mapping("src-0", "dest-0")
         m1.mark_file_completed(trace_files[0])
-        m1.add_trace_mapping(f"src-{1}", f"dest-{1}")
+        m1.add_trace_mapping("src-1", "dest-1")
         m1.mark_file_completed(trace_files[1])
-        # Process crashes before trace_files[2] is imported — no complete() call
+        # Process crashes before trace_files[2] — no complete() call.
 
-        # Second run loads the same manifest
+        # Second run loads the same manifest.
         m2 = MigrationManifest(tmp_base)
         assert m2.is_in_progress  # correctly detects interrupted state
         assert m2.completed_count() == 2
@@ -185,7 +231,7 @@ class TestResumeScenario:
         assert m2.is_file_completed(trace_files[1])
         assert not m2.is_file_completed(trace_files[2])  # must still be processed
 
-        # The trace_id_map from the first run is available for experiment linking
+        # The trace_id_map from the first run is available for experiment linking.
         id_map = m2.get_trace_id_map()
         assert id_map["src-0"] == "dest-0"
         assert id_map["src-1"] == "dest-1"

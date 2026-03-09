@@ -209,7 +209,7 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
     This command allows you to import previously exported data back into an Opik workspace.
     Supported data types include projects, datasets, experiments, and prompts.
 
-    A migration_manifest.json file is automatically maintained in the import directory.
+    A migration_manifest.db file is automatically maintained in the import directory.
     If an import is interrupted, re-running the same command will resume from where it
     left off without creating duplicates. Use --force to discard the manifest and restart.
 

@@ -1,63 +1,108 @@
 """Migration manifest for tracking import state and enabling resumable migrations.
 
-The manifest file (migration_manifest.json) lives at the root of the export
-directory and is automatically detected when running ``opik import``.
+Uses a SQLite database (``migration_manifest.db``) for atomic, efficient,
+crash-safe persistence.
 
-Lifecycle:
-  - If no manifest exists, a fresh one is created and import proceeds normally.
-  - If a manifest with status ``in_progress`` is found, the import resumes from
-    where it left off, skipping files already in ``completed_files``.
-  - If a manifest with status ``completed`` is found, nothing is re-imported
-    unless ``--force`` is given.
-  - ``--force`` resets the manifest and starts from scratch.
+Design
+------
+* **WAL mode** – SQLite's Write-Ahead Log allows safe, concurrent reads
+  during writes and recovers cleanly from process crashes.
+* **``synchronous=NORMAL``** – with WAL this is safe against process crashes
+  (data survives) while being significantly faster than ``FULL``.
+* **Batched writes** – ``mark_file_completed``, ``mark_file_failed``, and
+  ``add_trace_mapping`` buffer changes in memory and commit every
+  ``batch_size`` operations (default 50) in a single transaction.
+  Lifecycle calls (``start``, ``complete``, ``reset``) always flush
+  immediately so that import state is never stale on disk.
+* **Idempotent writes** – ``INSERT OR IGNORE`` / ``INSERT OR REPLACE``
+  mean re-running after a crash produces no duplicates in the DB.
+* **In-memory deduplication** – pending buffers use ``set``/``dict`` so
+  duplicate calls within a batch are collapsed before hitting SQLite.
 
-The manifest also persists the trace ID mapping (source ID -> destination ID)
-so that experiment cross-references can be resolved correctly when an import is
-resumed across separate invocations (e.g. the user Ctrl-C'd halfway through).
+Lifecycle
+---------
+* No manifest → fresh import, file created lazily on ``start()``.
+* ``status = in_progress`` → interrupted; resume skips completed files.
+* ``status = completed`` → nothing re-imported unless ``--force`` resets.
+* ``--force`` → ``reset()`` wipes all tables and starts fresh.
 """
 
-import json
-import os
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Set
 
-MANIFEST_FILENAME = "migration_manifest.json"
-SCHEMA_VERSION = 1
-DEFAULT_BATCH_SIZE = 10
+MANIFEST_FILENAME = "migration_manifest.db"
+DEFAULT_BATCH_SIZE = 50
+
+_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS status (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS completed_files (
+    path TEXT PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS failed_files (
+    path  TEXT PRIMARY KEY,
+    error TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trace_id_map (
+    src_id  TEXT PRIMARY KEY,
+    dest_id TEXT NOT NULL
+);
+"""
 
 
 class MigrationManifest:
-    """Tracks import progress so interrupted migrations can be resumed safely."""
+    """Tracks import progress so interrupted migrations can be resumed safely.
+
+    Parameters
+    ----------
+    base_path:
+        Root directory of the export tree.  The ``migration_manifest.db``
+        file is created here.
+    batch_size:
+        Number of pending write operations that triggers an automatic flush
+        to disk.  Larger values mean fewer disk transactions (faster) but
+        more work potentially lost if the process is killed between flushes.
+        Defaults to ``DEFAULT_BATCH_SIZE`` (50).
+    """
 
     def __init__(self, base_path: Path, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         self.base_path = base_path
         self.manifest_file = base_path / MANIFEST_FILENAME
         self._batch_size = batch_size
-        self._pending = 0
-        self._data = self._load_or_create()
+
+        # In-memory write buffers — flushed in one transaction per batch.
+        # Using set/dict collapses duplicates before they reach SQLite.
+        self._pending_completed: Set[str] = set()
+        self._pending_failed: Dict[str, str] = {}  # path -> error
+        self._pending_trace_map: Dict[str, str] = {}  # src_id -> dest_id
+
+        self._conn = self._open()
 
     # ------------------------------------------------------------------
     # Construction helpers
     # ------------------------------------------------------------------
 
-    def _load_or_create(self) -> dict:
-        if self.manifest_file.exists():
-            with open(self.manifest_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {
-            "schema_version": SCHEMA_VERSION,
-            "import": {
-                "status": "not_started",
-                "started_at": None,
-                "completed_at": None,
-                "id_map": {
-                    "traces": {},
-                },
-                "completed_files": [],
-                "failed_files": {},
-            },
-        }
+    def _open(self) -> sqlite3.Connection:
+        self.base_path.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(
+            str(self.manifest_file),
+            # autocommit mode — we manage every transaction explicitly with
+            # "with conn:" so there are no implicit BEGIN surprises.
+            isolation_level=None,
+            check_same_thread=True,
+        )
+        # WAL: persistent per-file setting, safe to set on every open.
+        conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL sync: per-connection setting, must be applied each open.
+        conn.execute("PRAGMA synchronous=NORMAL")
+        # Create tables if they don't exist yet.
+        # executescript always commits first; fine here since we just opened.
+        conn.executescript(_SCHEMA_SQL)
+        return conn
 
     @classmethod
     def exists(cls, base_path: Path) -> bool:
@@ -69,7 +114,10 @@ class MigrationManifest:
 
     @property
     def status(self) -> str:
-        return self._data["import"]["status"]
+        row = self._conn.execute(
+            "SELECT value FROM status WHERE key = 'status'"
+        ).fetchone()
+        return row[0] if row else "not_started"
 
     @property
     def is_in_progress(self) -> bool:
@@ -81,34 +129,40 @@ class MigrationManifest:
 
     def start(self) -> None:
         """Mark the import as in-progress (idempotent on resume)."""
-        self._data["import"]["status"] = "in_progress"
-        if not self._data["import"]["started_at"]:
-            self._data["import"]["started_at"] = datetime.now(timezone.utc).isoformat()
-        self._save()
+        self._flush()
+        with self._conn:
+            # Preserve the original started_at across resume calls.
+            self._conn.execute(
+                "INSERT OR IGNORE INTO status(key, value) VALUES ('started_at', ?)",
+                (datetime.now(timezone.utc).isoformat(),),
+            )
+            self._conn.execute(
+                "INSERT OR REPLACE INTO status(key, value) VALUES ('status', 'in_progress')",
+            )
 
     def complete(self) -> None:
-        """Mark the import as fully completed, flushing any pending batched writes."""
-        self._pending = 0
-        self._data["import"]["status"] = "completed"
-        self._data["import"]["completed_at"] = datetime.now(timezone.utc).isoformat()
-        self._save()
+        """Mark the import as fully completed, flushing any buffered writes."""
+        self._flush()
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO status(key, value) VALUES ('status', 'completed')",
+            )
+            self._conn.execute(
+                "INSERT OR REPLACE INTO status(key, value) VALUES ('completed_at', ?)",
+                (datetime.now(timezone.utc).isoformat(),),
+            )
 
     def reset(self) -> None:
-        """Discard all tracked state and start fresh (used by --force)."""
-        self._data = {
-            "schema_version": SCHEMA_VERSION,
-            "import": {
-                "status": "not_started",
-                "started_at": None,
-                "completed_at": None,
-                "id_map": {
-                    "traces": {},
-                },
-                "completed_files": [],
-                "failed_files": {},
-            },
-        }
-        self._save()
+        """Discard all tracked state and start fresh (used by ``--force``)."""
+        # Drop buffered writes — they belong to the old run.
+        self._pending_completed.clear()
+        self._pending_failed.clear()
+        self._pending_trace_map.clear()
+        with self._conn:
+            self._conn.execute("DELETE FROM status")
+            self._conn.execute("DELETE FROM completed_files")
+            self._conn.execute("DELETE FROM failed_files")
+            self._conn.execute("DELETE FROM trace_id_map")
 
     # ------------------------------------------------------------------
     # File-level tracking
@@ -119,64 +173,132 @@ class MigrationManifest:
         return str(file_path.relative_to(self.base_path))
 
     def is_file_completed(self, file_path: Path) -> bool:
-        return self.relative_path(file_path) in self._data["import"]["completed_files"]
+        rel = self.relative_path(file_path)
+        # Check the in-memory buffer first (O(1)); avoids a DB round-trip for
+        # files that were completed in the current batch but not yet flushed.
+        if rel in self._pending_completed:
+            return True
+        row = self._conn.execute(
+            "SELECT 1 FROM completed_files WHERE path = ?", (rel,)
+        ).fetchone()
+        return row is not None
 
     def mark_file_completed(self, file_path: Path) -> None:
         rel = self.relative_path(file_path)
-        if rel not in self._data["import"]["completed_files"]:
-            self._data["import"]["completed_files"].append(rel)
-        self._data["import"]["failed_files"].pop(rel, None)
-        self._save_batched()
+        self._pending_completed.add(rel)
+        # Completion supersedes any earlier failure recorded in the buffer.
+        self._pending_failed.pop(rel, None)
+        self._maybe_flush()
 
     def mark_file_failed(self, file_path: Path, error: str) -> None:
         rel = self.relative_path(file_path)
-        self._data["import"]["failed_files"][rel] = error
-        self._save_batched()
+        self._pending_failed[rel] = error
+        self._maybe_flush()
 
     # ------------------------------------------------------------------
     # Trace ID mapping (src_id -> dest_id)
-    # Needed so experiment cross-references survive resume across sessions.
+    # Persisted so experiment cross-references survive resume across sessions.
     # ------------------------------------------------------------------
 
     def add_trace_mapping(self, src_id: str, dest_id: str) -> None:
-        self._data["import"]["id_map"]["traces"][src_id] = dest_id
+        self._pending_trace_map[src_id] = dest_id
+        self._maybe_flush()
 
     def get_trace_id_map(self) -> Dict[str, str]:
-        """Return a full copy of the persisted trace ID map."""
-        return dict(self._data["import"]["id_map"]["traces"])
+        """Return the full trace ID mapping including any unflushed entries."""
+        self._flush()
+        rows = self._conn.execute("SELECT src_id, dest_id FROM trace_id_map").fetchall()
+        return {src: dest for src, dest in rows}
+
+    # ------------------------------------------------------------------
+    # Public flush
+    # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Flush any pending changes to disk immediately."""
-        self._pending = 0
-        self._save()
+        """Flush any buffered writes to disk immediately."""
+        self._flush()
 
     # ------------------------------------------------------------------
     # Stats
     # ------------------------------------------------------------------
 
     def completed_count(self) -> int:
-        return len(self._data["import"]["completed_files"])
+        self._flush()
+        row = self._conn.execute("SELECT COUNT(*) FROM completed_files").fetchone()
+        return row[0] if row else 0
 
     def failed_count(self) -> int:
-        return len(self._data["import"]["failed_files"])
+        self._flush()
+        row = self._conn.execute("SELECT COUNT(*) FROM failed_files").fetchone()
+        return row[0] if row else 0
 
     def get_failed_files(self) -> Dict[str, str]:
-        return dict(self._data["import"]["failed_files"])
+        self._flush()
+        rows = self._conn.execute("SELECT path, error FROM failed_files").fetchall()
+        return {path: error for path, error in rows}
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Flush pending writes and release the DB connection."""
+        try:
+            self._flush()
+        finally:
+            self._conn.close()
+
+    def __del__(self) -> None:
+        """Best-effort flush when the object is garbage-collected."""
+        try:
+            self._flush()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _save_batched(self) -> None:
-        """Accumulate changes and flush to disk every ``_batch_size`` calls."""
-        self._pending += 1
-        if self._pending >= self._batch_size:
-            self._pending = 0
-            self._save()
+    @property
+    def _pending_count(self) -> int:
+        return (
+            len(self._pending_completed)
+            + len(self._pending_failed)
+            + len(self._pending_trace_map)
+        )
 
-    def _save(self) -> None:
-        """Atomically write the manifest (write to .tmp then os.replace)."""
-        tmp_path = self.manifest_file.with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2)
-        os.replace(tmp_path, self.manifest_file)
+    def _maybe_flush(self) -> None:
+        if self._pending_count >= self._batch_size:
+            self._flush()
+
+    def _flush(self) -> None:
+        """Commit all buffered writes in a single atomic transaction."""
+        if self._pending_count == 0:
+            return
+
+        with self._conn:
+            if self._pending_completed:
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO completed_files(path) VALUES (?)",
+                    [(p,) for p in self._pending_completed],
+                )
+                # Remove from failed_files if a previous run recorded a failure.
+                self._conn.executemany(
+                    "DELETE FROM failed_files WHERE path = ?",
+                    [(p,) for p in self._pending_completed],
+                )
+                self._pending_completed.clear()
+
+            if self._pending_failed:
+                self._conn.executemany(
+                    "INSERT OR REPLACE INTO failed_files(path, error) VALUES (?, ?)",
+                    list(self._pending_failed.items()),
+                )
+                self._pending_failed.clear()
+
+            if self._pending_trace_map:
+                self._conn.executemany(
+                    "INSERT OR REPLACE INTO trace_id_map(src_id, dest_id) VALUES (?, ?)",
+                    list(self._pending_trace_map.items()),
+                )
+                self._pending_trace_map.clear()
