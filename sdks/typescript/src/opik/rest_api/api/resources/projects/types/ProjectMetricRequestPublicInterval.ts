@@ -4,6 +4,7 @@ export const ProjectMetricRequestPublicInterval = {
     Hourly: "HOURLY",
     Daily: "DAILY",
     Weekly: "WEEKLY",
+    Total: "TOTAL",
 } as const;
 export type ProjectMetricRequestPublicInterval =
     (typeof ProjectMetricRequestPublicInterval)[keyof typeof ProjectMetricRequestPublicInterval];
