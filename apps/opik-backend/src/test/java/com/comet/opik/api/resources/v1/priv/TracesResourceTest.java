@@ -6090,6 +6090,8 @@ class TracesResourceTest {
                                         .value(s.value())
                                         .reason(s.reason())
                                         .source(s.source())
+                                        .createdBy(USER)
+                                        .lastUpdatedBy(USER)
                                         .build())
                                 .toList();
 
@@ -6178,6 +6180,8 @@ class TracesResourceTest {
                                         .value(s.value())
                                         .reason(s.reason())
                                         .source(s.source())
+                                        .createdBy(USER)
+                                        .lastUpdatedBy(USER)
                                         .build())
                                 .toList();
 
