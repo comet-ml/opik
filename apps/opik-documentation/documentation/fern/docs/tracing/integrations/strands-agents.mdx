@@ -155,7 +155,7 @@ results = agent("Hi, where can I eat in San Francisco?")
 ```
 
 <Warning>
-  Strands Agents does not configure OTLP by default. You must call `StrandsTelemetry().setup_otlp_exporter()` before creating your agent, otherwise traces will stay in-process and never be exported to Opik.
+  Strands Agents does not configure OTLP by default. Configure an OTLP exporter (for example via `StrandsTelemetry().setup_otlp_exporter()`) before you start operations that send traces, otherwise traces may remain in-process and not be exported.
 </Warning>
 
 
