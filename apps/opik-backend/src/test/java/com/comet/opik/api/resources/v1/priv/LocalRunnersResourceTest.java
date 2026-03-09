@@ -397,26 +397,23 @@ class LocalRunnersResourceTest {
         void paginatesCorrectly() {
             String sharedWorkspace = randomUUID().toString();
             String sharedWorkspaceId = randomUUID().toString();
-
-            String listApiKey = randomUUID().toString();
-            mockTargetWorkspace(listApiKey, sharedWorkspace, sharedWorkspaceId, randomUUID().toString());
+            String userName = randomUUID().toString();
+            String apiKey = randomUUID().toString();
+            mockTargetWorkspace(apiKey, sharedWorkspace, sharedWorkspaceId, userName);
 
             for (int i = 0; i < 3; i++) {
-                String userApiKey = randomUUID().toString();
-                String userName = randomUUID().toString();
-                mockTargetWorkspace(userApiKey, sharedWorkspace, sharedWorkspaceId, userName);
                 LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                         .runnerName("paginate-runner-" + i)
                         .build();
-                UUID rid = runnersClient.connect(req, userApiKey, sharedWorkspace);
-                runnersClient.heartbeat(rid, userApiKey, sharedWorkspace);
+                UUID rid = runnersClient.connect(req, apiKey, sharedWorkspace);
+                runnersClient.heartbeat(rid, apiKey, sharedWorkspace);
             }
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(0, 2, listApiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(0, 2, apiKey, sharedWorkspace);
             assertThat(page0.content()).hasSize(2);
             assertThat(page0.total()).isEqualTo(3);
 
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(1, 2, listApiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(1, 2, apiKey, sharedWorkspace);
             assertThat(page1.content()).hasSize(1);
         }
     }
