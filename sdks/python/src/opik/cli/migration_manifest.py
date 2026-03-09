@@ -24,14 +24,17 @@ from typing import Dict
 
 MANIFEST_FILENAME = "migration_manifest.json"
 SCHEMA_VERSION = 1
+DEFAULT_BATCH_SIZE = 10
 
 
 class MigrationManifest:
     """Tracks import progress so interrupted migrations can be resumed safely."""
 
-    def __init__(self, base_path: Path) -> None:
+    def __init__(self, base_path: Path, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         self.base_path = base_path
         self.manifest_file = base_path / MANIFEST_FILENAME
+        self._batch_size = batch_size
+        self._pending = 0
         self._data = self._load_or_create()
 
     # ------------------------------------------------------------------
@@ -84,7 +87,8 @@ class MigrationManifest:
         self._save()
 
     def complete(self) -> None:
-        """Mark the import as fully completed."""
+        """Mark the import as fully completed, flushing any pending batched writes."""
+        self._pending = 0
         self._data["import"]["status"] = "completed"
         self._data["import"]["completed_at"] = datetime.now(timezone.utc).isoformat()
         self._save()
@@ -122,12 +126,12 @@ class MigrationManifest:
         if rel not in self._data["import"]["completed_files"]:
             self._data["import"]["completed_files"].append(rel)
         self._data["import"]["failed_files"].pop(rel, None)
-        self._save()
+        self._save_batched()
 
     def mark_file_failed(self, file_path: Path, error: str) -> None:
         rel = self.relative_path(file_path)
         self._data["import"]["failed_files"][rel] = error
-        self._save()
+        self._save_batched()
 
     # ------------------------------------------------------------------
     # Trace ID mapping (src_id -> dest_id)
@@ -142,7 +146,8 @@ class MigrationManifest:
         return dict(self._data["import"]["id_map"]["traces"])
 
     def save(self) -> None:
-        """Flush manifest to disk (use after a batch of add_trace_mapping calls)."""
+        """Flush any pending changes to disk immediately."""
+        self._pending = 0
         self._save()
 
     # ------------------------------------------------------------------
@@ -161,6 +166,13 @@ class MigrationManifest:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _save_batched(self) -> None:
+        """Accumulate changes and flush to disk every ``_batch_size`` calls."""
+        self._pending += 1
+        if self._pending >= self._batch_size:
+            self._pending = 0
+            self._save()
 
     def _save(self) -> None:
         """Atomically write the manifest (write to .tmp then os.replace)."""
