@@ -157,6 +157,9 @@ class FrameworkGEPAAdapter:
         self._full_dataset_size: int | None = None
         self.best_full_eval_trial_score: float = 0.0
 
+        self._cached_full_eval_scores: dict[str, dict[str, float]] = {}
+        self._gate_tolerance: float = 0.0
+
     # -- Delegation to CandidateTracker ----------------------------------------
 
     def register_baseline(
@@ -392,6 +395,25 @@ class FrameworkGEPAAdapter:
         if self._batch_sampler is not None and is_full_eval:
             self._batch_sampler.update_scores(per_item)
             self._batch_sampler.update_assertion_failures(per_item)
+
+        if is_full_eval and per_item:
+            self._cached_full_eval_scores[key] = {
+                item_id: data["score"] for item_id, data in per_item.items()
+            }
+
+        use_cached_scores = (
+            not is_full_eval
+            and is_known
+            and key in self._cached_full_eval_scores
+        )
+        if use_cached_scores:
+            cached = self._cached_full_eval_scores[key]
+            for inst in batch:
+                item_id = str(inst.get("id", ""))
+                if item_id in cached:
+                    per_item.setdefault(item_id, {})["score"] = (
+                        cached[item_id] - self._gate_tolerance
+                    )
 
         return self._build_evaluation_batch(
             batch, per_item, trial, effective_capture_traces,

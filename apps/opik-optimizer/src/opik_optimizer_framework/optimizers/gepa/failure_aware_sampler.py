@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections import Counter
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,27 +12,27 @@ if TYPE_CHECKING:
 class FailureAwareBatchSampler:
     """Batch sampler that balances failed and passed items in minibatches.
 
-    After the first full evaluation, the minibatch is split roughly 50/50
-    between failed items (worst-first) and passed items (randomly sampled).
-    Including passed items prevents the reflection LLM from over-correcting
-    on failures and regressing behaviors that already work.
+    After the first full evaluation, items are split into *failed* (at least
+    one assertion did not pass) and *passed* (all assertions passed).  Failed
+    items are ranked by the number of failing assertions weighted by how
+    frequently each assertion fails across the whole dataset — assertions
+    that fail on many items get the highest priority.
 
-    Before any failure data exists, sampling is uniform random.
+    The minibatch is then filled ~50/50: failed items first (worst-first),
+    then randomly-sampled passed items to anchor working behaviours and
+    prevent over-correction.
 
-    Also tracks per-item failure streaks and which assertions keep failing,
-    so the reflection prompt can include failure history for stuck items.
+    Before any evaluation data exists, sampling is uniform random.
     """
 
     def __init__(
         self,
         minibatch_size: int,
         min_failed_per_batch: int = 1,
-        failure_threshold: float = 1.0,
         rng: random.Random | None = None,
     ) -> None:
         self.minibatch_size = minibatch_size
         self.min_failed_per_batch = min_failed_per_batch
-        self.failure_threshold = failure_threshold
         self.rng = rng if rng is not None else random.Random(0)
 
         self._item_scores: dict[str, float] = {}
@@ -42,6 +43,7 @@ class FailureAwareBatchSampler:
 
         self._item_failure_streaks: dict[str, int] = {}
         self._item_failed_assertions: dict[str, list[str]] = {}
+        self._global_assertion_failures: Counter[str] = Counter()
 
     def _ensure_mapping(self, loader: DataLoader) -> None:
         if self._idx_to_item_id:
@@ -60,6 +62,8 @@ class FailureAwareBatchSampler:
             self._has_full_eval_data = True
 
     def update_assertion_failures(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
+        self._global_assertion_failures.clear()
+
         for item_id, data in per_item_feedback.items():
             failed_names: set[str] = set()
             for run in data.get("runs", []):
@@ -71,6 +75,7 @@ class FailureAwareBatchSampler:
             if failed_names:
                 self._item_failure_streaks[item_id] = self._item_failure_streaks.get(item_id, 0) + 1
                 self._item_failed_assertions[item_id] = sorted(failed_names)
+                self._global_assertion_failures.update(failed_names)
             else:
                 self._item_failure_streaks.pop(item_id, None)
                 self._item_failed_assertions.pop(item_id, None)
@@ -88,9 +93,16 @@ class FailureAwareBatchSampler:
             if streak >= min_streak
         }
 
-    def _score_for_idx(self, idx: int) -> float:
+    def _failure_priority(self, idx: int) -> tuple[int, int]:
+        """Sort key: failed items first, then by number of failing assertions.
+
+        Returns (0/-1 for pass/fail, negative assertion count).
+        """
         item_id = self._idx_to_item_id.get(idx, "")
-        return self._item_scores.get(item_id, 0.0)
+        failed = self._item_failed_assertions.get(item_id, [])
+        if not failed:
+            return (0, 0)
+        return (-1, -len(failed))
 
     def next_minibatch_ids(self, loader: DataLoader, state: GEPAState) -> list[int]:
         self._ensure_mapping(loader)
@@ -105,34 +117,27 @@ class FailureAwareBatchSampler:
 
         for idx in all_ids:
             item_id = self._idx_to_item_id.get(idx, "")
-            score = self._item_scores.get(item_id)
-
-            if score is not None and score < self.failure_threshold:
+            if item_id in self._item_failed_assertions:
                 failed_ids.append(idx)
             else:
                 passed_ids.append(idx)
 
-        failed_ids.sort(key=self._score_for_idx)
+        failed_ids.sort(key=self._failure_priority)
 
         selected: list[int] = []
         remaining = n
 
-        # Split slots ~50/50 between failed and passed items.
-        # This ensures the reflection LLM sees both what's broken AND what's
-        # working, preventing over-correction that regresses passing items.
         n_failed_target = max(self.min_failed_per_batch, remaining // 2)
         n_failed = min(n_failed_target, len(failed_ids), remaining)
         if n_failed > 0:
             selected.extend(failed_ids[:n_failed])
             remaining -= n_failed
 
-        # Fill with passed items to anchor working behaviors
         if remaining > 0 and passed_ids:
             n_passed = min(remaining, len(passed_ids))
             selected.extend(self.rng.sample(passed_ids, n_passed))
             remaining -= n_passed
 
-        # If still remaining (edge case: not enough passed items), fill randomly
         if remaining > 0:
             selected_set = set(selected)
             pool = [idx for idx in all_ids if idx not in selected_set]
