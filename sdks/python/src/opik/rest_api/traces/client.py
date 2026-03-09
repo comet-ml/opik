@@ -885,7 +885,11 @@ class TracesClient:
         return _response.data
 
     def find_feedback_score_names2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -893,6 +897,8 @@ class TracesClient:
         Parameters
         ----------
         project_id : typing.Optional[str]
+
+        exclude_category_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -908,7 +914,9 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.find_feedback_score_names2()
         """
-        _response = self._raw_client.find_feedback_score_names2(project_id=project_id, request_options=request_options)
+        _response = self._raw_client.find_feedback_score_names2(
+            project_id=project_id, exclude_category_name=exclude_category_name, request_options=request_options
+        )
         return _response.data
 
     def find_trace_threads_feedback_score_names(
@@ -2531,7 +2539,11 @@ class AsyncTracesClient:
         return _response.data
 
     async def find_feedback_score_names2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_name: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
         Find Feedback Score names
@@ -2539,6 +2551,8 @@ class AsyncTracesClient:
         Parameters
         ----------
         project_id : typing.Optional[str]
+
+        exclude_category_name : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2558,7 +2572,7 @@ class AsyncTracesClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names2(
-            project_id=project_id, request_options=request_options
+            project_id=project_id, exclude_category_name=exclude_category_name, request_options=request_options
         )
         return _response.data
 
