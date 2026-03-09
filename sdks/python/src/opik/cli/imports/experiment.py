@@ -696,10 +696,10 @@ def recreate_experiments(
         try:
             # Skip experiment files already completed in a previous run
             if manifest and not dry_run and manifest.is_file_completed(experiment_file):
-                if debug:
-                    console.print(
-                        f"[blue]Skipping {experiment_file.name} (already imported in a previous run)[/blue]"
-                    )
+                debug_print(
+                    f"Skipping {experiment_file.name} (already imported in a previous run)",
+                    debug,
+                )
                 successful += 1
                 continue
 
@@ -790,11 +790,10 @@ def _import_traces_from_projects_directory(
                 # Skip trace files already imported in a previous run.
                 # Their ID mappings are already in trace_id_map (seeded from manifest).
                 if manifest and not dry_run and manifest.is_file_completed(trace_file):
-                    if debug:
-                        debug_print(
-                            f"Skipping {trace_file.name} (already imported in a previous run)",
-                            debug,
-                        )
+                    debug_print(
+                        f"Skipping {trace_file.name} (already imported in a previous run)",
+                        debug,
+                    )
                     traces_imported += 1
                     continue
 

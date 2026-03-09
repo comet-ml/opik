@@ -404,6 +404,12 @@ def import_project(
         # Import a specific project
         opik import my-workspace project "my-project"
     \b
+        # Import projects containing "test" in the name
+        opik import my-workspace project "test"
+    \b
+        # Import projects with debug output
+        opik import my-workspace project "my-project" --debug
+    \b
         # Import from a custom path
         opik import my-workspace project "my-project" --path ./custom-exports/
     \b

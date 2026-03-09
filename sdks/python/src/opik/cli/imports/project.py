@@ -67,10 +67,10 @@ def import_projects_from_directory(
                 if name_pattern and not matches_name_pattern(
                     project_name, name_pattern
                 ):
-                    if debug:
-                        console.print(
-                            f"[blue]Skipping project {project_name} (doesn't match pattern)[/blue]"
-                        )
+                    debug_print(
+                        f"Skipping project {project_name} (doesn't match pattern)",
+                        debug,
+                    )
                     skipped_count += 1
                     continue
 
@@ -79,8 +79,7 @@ def import_projects_from_directory(
                     imported_count += 1
                     continue
 
-                if debug:
-                    console.print(f"[blue]Importing project: {project_name}[/blue]")
+                debug_print(f"Importing project: {project_name}", debug)
 
                 # Per-project span ID map (only needed during this import session,
                 # not persisted — span IDs are not referenced across files).
@@ -174,6 +173,7 @@ def import_projects_from_directory(
                                     original_parent_span_id
                                 ]
 
+                            # Create span with parent_span_id if available
                             # Clean usage data to avoid double-prefixing of original_usage keys
                             usage_data = clean_usage_for_import(span_info.get("usage"))
 
@@ -235,10 +235,10 @@ def import_projects_from_directory(
 
                     experiment_files = list(project_dir.glob("experiment_*.json"))
                     if experiment_files:
-                        if debug:
-                            console.print(
-                                f"[blue]Found {len(experiment_files)} experiment files in project {project_name}[/blue]"
-                            )
+                        debug_print(
+                            f"Found {len(experiment_files)} experiment files in project {project_name}",
+                            debug,
+                        )
 
                         experiments_recreated = recreate_experiments(
                             client,
@@ -252,9 +252,10 @@ def import_projects_from_directory(
                             manifest=manifest,
                         )
 
-                        if debug and experiments_recreated > 0:
-                            console.print(
-                                f"[green]Recreated {experiments_recreated} experiments for project {project_name}[/green]"
+                        if experiments_recreated > 0:
+                            debug_print(
+                                f"Recreated {experiments_recreated} experiments for project {project_name}",
+                                debug,
                             )
 
                 total_traces_imported += traces_imported
@@ -262,10 +263,10 @@ def import_projects_from_directory(
 
                 if traces_imported > 0:
                     imported_count += 1
-                    if debug:
-                        console.print(
-                            f"[green]Imported project: {project_name} with {traces_imported} traces[/green]"
-                        )
+                    debug_print(
+                        f"Imported project: {project_name} with {traces_imported} traces",
+                        debug,
+                    )
 
             except Exception as e:
                 console.print(
