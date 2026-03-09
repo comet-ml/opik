@@ -256,7 +256,7 @@ experimentDenormalization:
   # Default: 300ms
   # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
   jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 120s
+  # Default: 1m
   # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
   aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
   # Default: 10

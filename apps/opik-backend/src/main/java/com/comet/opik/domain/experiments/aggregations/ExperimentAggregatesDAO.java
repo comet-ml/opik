@@ -114,7 +114,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     };
 
     private static final String EMPTY_ARRAY_STR = "[]";
-    private static final UUID ZERO_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -844,7 +843,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '00000000-0000-0000-0000-000000000000' <endif>
+            <if(project_deleted)> AND project_id = :zero_uuid <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -870,7 +869,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             <if(project_id)> AND project_id = :project_id <endif>
-            <if(project_deleted)> AND project_id = '00000000-0000-0000-0000-000000000000' <endif>
+            <if(project_deleted)> AND project_id = :zero_uuid <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2116,7 +2115,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private TraceAggregations createEmptyTraceAggregations(UUID experimentId) {
         return TraceAggregations.builder()
                 .experimentId(experimentId)
-                .projectId(ZERO_UUID)
+                .projectId(ExperimentGroupMappers.ZERO_UUID)
                 .durationPercentiles(Map.of())
                 .traceCount(0L)
                 .build();
@@ -2164,6 +2163,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .bind("workspace_id", workspaceId);
 
             bindGroupCriteria(statement, criteria, filterQueryBuilder);
+            if (Boolean.TRUE.equals(criteria.projectDeleted())) {
+                statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID.toString());
+            }
 
             int groupsCount = criteria.groups().size();
 
