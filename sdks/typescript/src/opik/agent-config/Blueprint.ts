@@ -69,6 +69,7 @@ export class Blueprint {
 
     for (const v of this._rawValues) {
       if (v.type !== "prompt" && v.type !== "prompt_commit") continue;
+      if (!v.value) continue;
 
       const promptDetail = await this._opik.api.prompts.getPromptByCommit(
         v.value

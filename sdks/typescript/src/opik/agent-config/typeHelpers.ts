@@ -49,9 +49,10 @@ export function serializeValue(value: SupportedValue): string {
 }
 
 export function deserializeValue(
-  value: string,
+  value: string | null | undefined,
   backendType: OpikApi.AgentConfigValuePublicType
-): string | number | boolean {
+): string | number | boolean | null {
+  if (value === null || value === undefined) return null;
   switch (backendType) {
     case "boolean":
       return value.toLowerCase() === "true";
