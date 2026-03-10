@@ -13,11 +13,9 @@ from ..rest_api.client import OpikApi
 from ..rest_api.types.local_runner_job import LocalRunnerJob
 from ..rest_api.types.local_runner_log_entry import LocalRunnerLogEntry
 from .agents_registry import AgentInfo
+from .constants import LOG_BATCH_SIZE, LOG_FLUSH_INTERVAL_SECONDS
 
 LOGGER = logging.getLogger(__name__)
-
-LOG_BATCH_SIZE = 50
-LOG_FLUSH_INTERVAL_SECONDS = 0.5
 
 
 @dataclasses.dataclass
@@ -35,6 +33,15 @@ class JobProcess:
 
 
 class JobExecutor:
+    """Spawns agent subprocesses, streams their logs, and reports results.
+
+    Each call to execute() resolves the agent, spawns a subprocess, blocks
+    until it finishes (or times out), and reports the outcome to the API.
+    Thread-safe: multiple pool threads can call execute() concurrently on
+    the same instance since per-job state is stack-local and shared dicts
+    are protected by a lock.
+    """
+
     def __init__(
         self,
         api: OpikApi,
@@ -52,6 +59,7 @@ class JobExecutor:
         job: LocalRunnerJob,
         agents: Dict[str, AgentInfo],
     ) -> None:
+        """Resolve the agent, spawn its subprocess, and block until completion."""
         job_id = job.id or ""
         agent_name = job.agent_name or ""
         inputs = job.inputs or {}
@@ -125,6 +133,7 @@ class JobExecutor:
         result_file: str,
         mask_id: Optional[str],
     ) -> Optional[subprocess.Popen[bytes]]:
+        """Launch the agent executable as a subprocess with piped I/O."""
         env = {
             **os.environ,
             "OPIK_AGENT": agent.name,
@@ -160,6 +169,7 @@ class JobExecutor:
         trace_id: str,
         result_file: str,
     ) -> None:
+        """Block on proc.wait(), stream logs in parallel, then report the result."""
         job_id = job.id or ""
 
         stdout_thread = threading.Thread(
