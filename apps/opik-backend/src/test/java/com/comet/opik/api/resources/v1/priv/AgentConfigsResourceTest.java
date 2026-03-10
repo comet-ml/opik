@@ -276,23 +276,6 @@ class AgentConfigsResourceTest {
                             new ErrorMessage(List.of("blueprint.values[0].key must not be blank")),
                             ErrorMessage.class),
 
-                    // Value value validation
-                    arguments(
-                            AgentConfigCreate.builder()
-                                    .projectId(projectId)
-                                    .blueprint(validBlueprint.toBuilder()
-                                            .values(List.of(
-                                                    AgentConfigValue.builder()
-                                                            .key("test")
-                                                            .value(null)
-                                                            .type(ValueType.STRING)
-                                                            .build()))
-                                            .build())
-                                    .build(),
-                            422,
-                            new ErrorMessage(List.of("blueprint.values[0].value must not be null")),
-                            ErrorMessage.class),
-
                     // Value type validation
                     arguments(
                             AgentConfigCreate.builder()
@@ -343,6 +326,54 @@ class AgentConfigsResourceTest {
                             422,
                             new ErrorMessage(List.of("blueprint. Duplicate configuration keys are not allowed")),
                             ErrorMessage.class));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Success: should create and retrieve config value for each value type")
+        void createAgentConfig__perValueType(ValueType valueType, String value) {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var configValue = AgentConfigValue.builder()
+                    .key("field")
+                    .value(value)
+                    .type(valueType)
+                    .build();
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .values(List.of(configValue))
+                    .build();
+
+            var blueprintId = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(retrieved).isNotNull();
+            assertThat(retrieved.id()).isEqualTo(blueprintId);
+            assertThat(retrieved.values()).hasSize(1);
+
+            var retrievedValue = retrieved.values().getFirst();
+            assertThat(retrievedValue)
+                    .usingRecursiveComparison()
+                    .ignoringFields("id", "projectId", "validFromBlueprintId", "validToBlueprintId")
+                    .isEqualTo(configValue);
+            assertThat(retrievedValue.value()).isEqualTo(value);
+        }
+
+        Stream<Arguments> createAgentConfig__perValueType() {
+            return Stream.of(
+                    arguments(ValueType.STRING, "gpt-4"),
+                    arguments(ValueType.INTEGER, "42"),
+                    arguments(ValueType.FLOAT, "0.7"),
+                    arguments(ValueType.BOOLEAN, "true"),
+                    arguments(ValueType.PROMPT, UUID.randomUUID().toString()),
+                    arguments(ValueType.PROMPT_COMMIT, UUID.randomUUID().toString()),
+                    arguments(ValueType.STRING, null));
         }
     }
 
