@@ -15,8 +15,13 @@ def run(api_key: Optional[str], workspace: Optional[str]) -> None:
     api_key = api_key or settings.api_key
     workspace = workspace or settings.workspace
 
+    assert api_key is not None, "API key is required"
+    assert workspace is not None, "Workspace is required"
+
     try:
-        permissions = get_user_permissions(api_key, workspace, settings.url_override)
+        permissions = get_user_permissions(
+            api_key, workspace=workspace, url=settings.url_override
+        )
         rich_representation.print_user_permissions(permissions)
     except ConnectionError as e:
         err_msg = f"Failed to fetch user permissions:\n{e}"
