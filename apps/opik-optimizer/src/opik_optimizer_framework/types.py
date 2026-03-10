@@ -25,6 +25,15 @@ class TrialResult:
     experiment_name: str | None
     config: CandidateConfig
     parent_candidate_ids: list[str] = field(default_factory=list)
+    internal_optimization_score: float | None = field(default=None, repr=False)
+
+    @property
+    def optimization_score(self) -> float:
+        """Internal blended score used by the algorithm for candidate ranking.
+
+        Falls back to ``score`` (pass_rate) when blended scoring is not used.
+        """
+        return self.internal_optimization_score if self.internal_optimization_score is not None else self.score
 
 
 @dataclass(frozen=True)

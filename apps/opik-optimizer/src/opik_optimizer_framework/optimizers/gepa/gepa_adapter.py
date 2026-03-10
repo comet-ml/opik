@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from gepa.core.adapter import EvaluationBatch
+    from opik.evaluation.metrics.score_result import ScoreResult
     from opik_optimizer_framework.evaluation_adapter import EvaluationAdapter
     from opik_optimizer_framework.types import TrialResult
     from .failure_aware_sampler import FailureAwareBatchSampler
@@ -33,46 +34,101 @@ if TYPE_CHECKING:
 
 DatasetItem = dict[str, Any]
 
+AssertionDetail = dict[str, Any]  # {"name": str, "value": float, "reason": str}
+RunFeedback = dict[str, Any]  # {"output": str, "score": float, "assertions": list[AssertionDetail]}
+ItemFeedback = dict[str, Any]  # {"runs": list[RunFeedback], "score": float}
 
-def _extract_per_item_feedback(raw_result: Any) -> dict[str, dict[str, Any]]:
+
+def _item_score(passed: bool, assertion_values: list[float], num_items: int) -> float:
+    """Compute a per-item score in [0, 1] aligned with pass_rate.
+
+    Uses the item's pass/fail status from ``build_suite_result`` (which
+    respects execution_policy and pass_threshold) as the source of truth.
+
+    Returns 1.0 for passing items, or ``ε × assertion_frac`` for failing
+    items, where ``ε = 1 / (num_items + 1)``.
+
+    The gap between a passing item (1.0) and any failing item (< ε < 1)
+    ensures GEPA's ``mean(per_item_scores)`` ranks candidates the same way
+    as the framework's pass_rate. The assertion fraction within failing
+    items provides gradient for GEPA's subsample acceptance gate.
+
+    Previous approach (mean of assertion values) caused GEPA to prefer
+    "uniformly decent" candidates over ones with higher pass_rate.
+    """
+    if passed:
+        return 1.0
+    if not assertion_values:
+        return 1.0
+    epsilon = 1.0 / (num_items + 1) if num_items > 0 else 0.0
+    assertion_frac = sum(1 for v in assertion_values if v == 1.0) / len(assertion_values)
+    return epsilon * assertion_frac
+
+
+def _extract_per_item_feedback(raw_result: Any) -> dict[str, ItemFeedback]:
     """Extract per-item feedback from the raw EvaluationResult.
+
+    Uses ``build_suite_result`` to determine item pass/fail (respecting
+    execution_policy and pass_threshold), then computes GEPA-aligned scores.
 
     When multiple runs exist for the same item (runs_per_item > 1), all runs
     are preserved so the reflection LLM can see what varies across attempts.
 
     Returns a dict keyed by dataset_item_id with:
       - runs: list of dicts, each with output, score, assertions
-      - score: mean score across all runs (for GEPA's numeric optimization)
+      - score: item-level score for GEPA's numeric optimization
     """
-    feedback: dict[str, dict[str, Any]] = {}
+    feedback: dict[str, ItemFeedback] = {}
     if raw_result is None or not hasattr(raw_result, "test_results"):
         return feedback
 
-    for test_result in raw_result.test_results:
-        item_id = str(test_result.test_case.dataset_item_id)
-        task_output = getattr(test_result.test_case, "task_output", {}) or {}
-        output_text = str(task_output.get("output", ""))
+    from opik.api_objects.dataset.evaluation_suite.suite_result_constructor import (
+        build_suite_result,
+    )
 
-        assertions = []
-        scores = []
+    try:
+        suite_result = build_suite_result(raw_result)
+    except Exception:
+        logger.warning("Failed to build suite result for feedback", exc_info=True)
+        return feedback
+
+    num_items: int = len(suite_result.item_results)
+
+    # First pass: collect runs per item (for reflection dataset)
+    for test_result in raw_result.test_results:
+        item_id: str = str(test_result.test_case.dataset_item_id)
+        task_output: dict[str, Any] = getattr(test_result.test_case, "task_output", {}) or {}
+        output_text: str = str(task_output.get("output", ""))
+
+        assertions: list[AssertionDetail] = []
+        sr: ScoreResult
         for sr in test_result.score_results:
-            value = float(getattr(sr, "value", 0.0))
-            scores.append(value)
             assertions.append({
-                "name": getattr(sr, "name", ""),
-                "value": value,
-                "reason": getattr(sr, "reason", None) or "",
+                "name": sr.name,
+                "value": float(sr.value),
+                "reason": sr.reason or "",
             })
 
-        run_score = sum(scores) / len(scores) if scores else 0.0
-        run = {"output": output_text, "score": run_score, "assertions": assertions}
+        run: RunFeedback = {"output": output_text, "score": 0.0, "assertions": assertions}
 
         if item_id not in feedback:
-            feedback[item_id] = {"runs": [run], "score": run_score}
+            feedback[item_id] = {"runs": [run], "score": 0.0}
         else:
             feedback[item_id]["runs"].append(run)
-            all_scores = [r["score"] for r in feedback[item_id]["runs"]]
-            feedback[item_id]["score"] = sum(all_scores) / len(all_scores)
+
+    # Second pass: compute item scores using suite_result as source of truth
+    for item_id, item_feedback in feedback.items():
+        item_result = suite_result.item_results.get(item_id)
+        passed: bool = item_result.passed if item_result is not None else False
+
+        all_assertion_values: list[float] = [
+            a["value"] for run in item_feedback["runs"] for a in run["assertions"]
+        ]
+
+        item_feedback["score"] = _item_score(passed, all_assertion_values, num_items)
+
+        for run in item_feedback["runs"]:
+            run["score"] = item_feedback["score"]
 
     return feedback
 

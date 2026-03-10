@@ -123,19 +123,20 @@ def run_experiment_with_details(
         evaluator_model=evaluator_model,
     )
 
-    score, display_score = _extract_score(result, scoring_config or ScoringConfig())
+    optimization_score, pass_rate = _extract_score(result, scoring_config or ScoringConfig())
 
-    _log_experiment_score(client, result.experiment_id, metric_type, display_score)
+    _log_experiment_score(client, result.experiment_id, metric_type, pass_rate)
 
     trial = TrialResult(
         candidate_id=candidate.candidate_id,
         step_index=candidate.step_index,
-        score=score,
-        metric_scores={metric_type: score},
+        score=pass_rate,
+        metric_scores={metric_type: pass_rate},
         experiment_id=getattr(result, "experiment_id", None),
         experiment_name=getattr(result, "experiment_name", None),
         config=candidate.config,
         parent_candidate_ids=candidate.parent_candidate_ids,
+        internal_optimization_score=optimization_score,
     )
     return trial, result
 
