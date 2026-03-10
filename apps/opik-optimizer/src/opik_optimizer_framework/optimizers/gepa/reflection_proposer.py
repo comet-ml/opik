@@ -9,66 +9,62 @@ logger = logging.getLogger(__name__)
 
 _TEMPLATE_VAR_RE = re.compile(r"\{(\w+)\}")
 
-GENERALIZATION_REFLECTION_TEMPLATE = """\
-I have a system that uses the following parameter to guide its behavior:
-```
-<curr_param>
-```
-
-The following are examples of inputs along with the system's outputs and \
-feedback showing which assertions PASSED and which FAILED. \
-Examples are sorted by priority — the ones with the most failures come first:
-```
-<side_info>
-```
-
-Your task is to write an improved version of this parameter that fixes \
-the FAILED assertions while preserving PASSED ones. Use the existing \
-parameter as your starting point.
-
-STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what specific \
-behaviors are missing or wrong. Read the PASSED assertions — the current \
-parameter already produces these. Prefer keeping rules that drive successes, \
-but you may tighten or rephrase them if needed to fix failures.
-
-STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History" \
-section, the current approach for those assertions has ALREADY FAILED in \
-previous iterations. You MUST take a substantially different approach — \
-do NOT add another rule of the same kind or make minor wording tweaks. \
-Instead, try one of these escalation strategies: \
-(a) restructure the parameter's organization so the failing behavior gets \
-more prominent placement and emphasis; \
-(b) add explicit step-by-step procedures with concrete example phrases; \
-(c) add conditional logic ("When X, always do Y before Z"); \
-(d) rewrite the section governing the failing behavior from scratch.
-
-STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify \
-rules as needed. You may change multiple related rules together if the \
-failure requires coordinated changes. Every rule must describe an \
-observable, verifiable action — not abstract guidance. Rules must \
-generalize to any input in this domain; do NOT reference specific test inputs.
-
-STEP 4 — APPLY CHANGES: How aggressively you edit depends on the failures. \
-If most assertions pass and there is no Failure History, make focused, \
-precise edits. But if there are persistent failures (Failure History), \
-you SHOULD restructure, reorganize, or rewrite the affected sections — \
-minor edits have already proven insufficient. Do not be afraid to change \
-the structure, reorder sections, or rewrite paragraphs when the current \
-formulation is clearly not working.
-
-STEP 5 — STRUCTURE: Use markdown formatting. Group related rules under \
-## headers. Merge overlapping rules. Keep the parameter concise.
-
-IMPORTANT:
-- Output ONLY the parameter text. Do NOT include any metadata such as \
-"Parameter:", "Description:", or "Other parameters" lines — those are \
-context for you, not part of the parameter.
-- Preserve ALL template variables exactly as they appear in the original \
-parameter (e.g. {{var}}, {var}, <var>, {% var %}). These are runtime \
-placeholders filled by the system — do NOT rename, remove, or reformat them. \
-If the original has {var}, your output MUST also contain {var}.
-
-Provide the new parameter within ``` blocks."""
+GENERALIZATION_REFLECTION_TEMPLATE = (
+    "I have a system that uses the following parameter to guide its behavior:\n"
+    "```\n"
+    "<curr_param>\n"
+    "```\n"
+    "\n"
+    "The following are examples of inputs along with the system's outputs and "
+    "feedback showing which assertions PASSED and which FAILED. "
+    "Examples are sorted by priority — the ones with the most failures come first:\n"
+    "```\n"
+    "<side_info>\n"
+    "```\n"
+    "\n"
+    "Your task is to write an improved version of this parameter that fixes "
+    "the FAILED assertions while preserving PASSED ones. "
+    "Use the existing parameter as your starting point.\n"
+    "\n"
+    "STEP 1 — DIAGNOSE:\n"
+    "Read the FAILED assertions and identify what specific behaviors are missing or wrong. "
+    "Read the PASSED assertions — the current parameter already produces these. "
+    "Prefer keeping rules that drive successes, but you may tighten or rephrase them "
+    "if needed to fix failures.\n"
+    "\n"
+    "STEP 2 — CHECK FAILURE HISTORY:\n"
+    "If any example has a \"Failure History\" section, the listed assertions have been "
+    "persistently failing across many previous attempts to fix them "
+    "(the failure count out of total evaluations is shown). "
+    "The existing rules for these assertions are not working — "
+    "do NOT refine or rephrase them. Instead, try a fundamentally different approach:\n"
+    "(a) restructure the parameter so the failing behavior gets more prominent placement;\n"
+    "(b) add explicit step-by-step procedures with concrete example phrases;\n"
+    "(c) add conditional logic (\"When X, always do Y before Z\");\n"
+    "(d) rewrite the section governing the failing behavior from scratch.\n"
+    "\n"
+    "STEP 3 — WRITE FIXES:\n"
+    "For each failing assertion, add or modify rules as needed. "
+    "You may change multiple related rules together if the failure requires "
+    "coordinated changes. Every rule must describe an observable, verifiable action — "
+    "not abstract guidance. Rules must generalize to any input in this domain; "
+    "do NOT reference specific test inputs.\n"
+    "\n"
+    "STEP 4 — STRUCTURE:\n"
+    "Use markdown formatting. Group related rules under ## headers. "
+    "Merge overlapping rules. Keep the parameter concise.\n"
+    "\n"
+    "IMPORTANT:\n"
+    "- Output ONLY the parameter text. Do NOT include any metadata such as "
+    "\"Parameter:\", \"Description:\", or \"Other parameters\" lines — "
+    "those are context for you, not part of the parameter.\n"
+    "- Preserve ALL template variables exactly as they appear in the original "
+    "parameter (e.g. {{var}}, {var}, <var>, {% var %}). These are runtime "
+    "placeholders filled by the system — do NOT rename, remove, or reformat them. "
+    "If the original has {var}, your output MUST also contain {var}.\n"
+    "\n"
+    "Provide the new parameter within ``` blocks."
+)
 
 
 class ReflectionProposer:

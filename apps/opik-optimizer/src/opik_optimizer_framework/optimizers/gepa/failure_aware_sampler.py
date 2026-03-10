@@ -40,6 +40,8 @@ class FailureAwareBatchSampler:
 
         self._item_failure_streaks: dict[str, int] = {}
         self._item_failed_assertions: dict[str, list[str]] = {}
+        self._assertion_total_failures: dict[str, int] = {}
+        self._assertion_total_evals: dict[str, int] = {}
 
     def _ensure_mapping(self, loader: DataLoader) -> None:
         if self._idx_to_item_id:
@@ -59,12 +61,20 @@ class FailureAwareBatchSampler:
 
     def update_assertion_failures(self, per_item_feedback: dict[str, dict[str, Any]]) -> None:
         for item_id, data in per_item_feedback.items():
+            all_names: set[str] = set()
             failed_names: set[str] = set()
             for run in data.get("runs", []):
                 for assertion in run.get("assertions", []):
-                    if assertion.get("value", 1.0) < 1.0:
-                        failed_names.add(assertion.get("name", ""))
-            failed_names.discard("")
+                    name = assertion.get("name", "")
+                    if name:
+                        all_names.add(name)
+                    if assertion.get("value", 1.0) < 1.0 and name:
+                        failed_names.add(name)
+
+            for name in all_names:
+                self._assertion_total_evals[name] = self._assertion_total_evals.get(name, 0) + 1
+            for name in failed_names:
+                self._assertion_total_failures[name] = self._assertion_total_failures.get(name, 0) + 1
 
             if failed_names:
                 self._item_failure_streaks[item_id] = self._item_failure_streaks.get(item_id, 0) + 1
@@ -78,6 +88,12 @@ class FailureAwareBatchSampler:
 
     def get_failed_assertions(self, item_id: str) -> list[str]:
         return self._item_failed_assertions.get(item_id, [])
+
+    def get_assertion_total_failures(self, assertion_name: str) -> int:
+        return self._assertion_total_failures.get(assertion_name, 0)
+
+    def get_assertion_total_evals(self, assertion_name: str) -> int:
+        return self._assertion_total_evals.get(assertion_name, 0)
 
     def get_stuck_items(self, min_streak: int = 3) -> dict[str, int]:
         return {

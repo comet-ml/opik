@@ -109,6 +109,18 @@ class ReflectiveDatasetBuilder:
                         f"Consistent failures: {', '.join(sorted(consistent))}"
                     )
 
+                assertion_fail_counts: dict[str, int] = {}
+                for failed_set in per_run_failed_names:
+                    for name in failed_set:
+                        assertion_fail_counts[name] = assertion_fail_counts.get(name, 0) + 1
+                if assertion_fail_counts:
+                    rate_lines = ["Blocking assertions (failed in at least one run):"]
+                    for name, fail_count in sorted(assertion_fail_counts.items(), key=lambda x: -x[1]):
+                        rate_lines.append(
+                            f"- \"{name}\": failed {fail_count}/{total_runs} runs"
+                        )
+                    summary_parts.append("\n".join(rate_lines))
+
                 records.append({
                     "Inputs": inputs,
                     "Runs": "\n\n".join(run_sections),
@@ -116,17 +128,26 @@ class ReflectiveDatasetBuilder:
                     "_max_failed": max_failed,
                 })
 
+        _PERSISTENT_FAILURE_THRESHOLD = 10
+
         if self._batch_sampler is not None:
             for record, traj in zip(records, trajectories):
                 item_id = str(traj.get("input", {}).get("id", ""))
-                streak = self._batch_sampler.get_failure_streak(item_id)
-                if streak >= 1:
-                    stuck = self._batch_sampler.get_failed_assertions(item_id)
-                    if stuck:
+                current_failed = self._batch_sampler.get_failed_assertions(item_id)
+                if current_failed:
+                    assertion_details = []
+                    for name in current_failed:
+                        failures = self._batch_sampler.get_assertion_total_failures(name)
+                        evals = self._batch_sampler.get_assertion_total_evals(name)
+                        if failures >= _PERSISTENT_FAILURE_THRESHOLD:
+                            assertion_details.append(
+                                f"\"{name}\" (failed {failures} out of {evals} evaluations)"
+                            )
+                    if assertion_details:
                         record["Failure History"] = (
-                            f"This item has failed {streak} consecutive iteration(s). "
-                            f"Still-failing assertions: {', '.join(stuck)}. "
-                            f"The current rules for these assertions are not working."
+                            f"These assertions have been persistently failing "
+                            f"and failed again in this evaluation: "
+                            f"{', '.join(assertion_details)}."
                         )
 
         records.sort(key=lambda r: r["_max_failed"], reverse=True)
