@@ -57,8 +57,9 @@ const TextDiff: React.FunctionComponent<CodeDiffProps> = ({
   return (
     <div
       className={cn(
-        "flex w-fit",
-        mode === "lines" ? "flex-col gap-[3px]" : "flex-wrap",
+        mode === "lines"
+          ? "flex w-fit flex-col gap-[3px]"
+          : "whitespace-pre-wrap break-words",
       )}
     >
       {changes.map((change, index) => (

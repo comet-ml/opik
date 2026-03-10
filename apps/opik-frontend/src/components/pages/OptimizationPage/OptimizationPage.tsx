@@ -16,7 +16,7 @@ import OptimizationKPICards from "./OptimizationKPICards";
 import { OPTIMIZATION_VIEW_TYPE } from "./OptimizationViewSelector";
 
 enum OPTIMIZATION_TAB {
-  REPORT = "report",
+  OVERVIEW = "overview",
   TRIALS = "trials",
 }
 
@@ -63,7 +63,7 @@ const OptimizationPage: React.FC = () => {
   const [view, setView] = useState<OPTIMIZATION_VIEW_TYPE>(
     OPTIMIZATION_VIEW_TYPE.LOGS,
   );
-  const [activeTab, setActiveTab] = useState<string>(OPTIMIZATION_TAB.REPORT);
+  const [activeTab, setActiveTab] = useState<string>(OPTIMIZATION_TAB.OVERVIEW);
 
   const bestExperiment = useMemo(() => {
     if (!bestCandidate || !experiments.length) return undefined;
@@ -143,15 +143,15 @@ const OptimizationPage: React.FC = () => {
         className="flex min-h-0 flex-1 flex-col"
       >
         <TabsList variant="underline" className="shrink-0">
-          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.REPORT}>
-            Report
+          <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.OVERVIEW}>
+            Overview
           </TabsTrigger>
           <TabsTrigger variant="underline" value={OPTIMIZATION_TAB.TRIALS}>
             Trials
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={OPTIMIZATION_TAB.REPORT} className="mt-0 pt-4">
+        <TabsContent value={OPTIMIZATION_TAB.OVERVIEW} className="mt-0 pt-4">
           <div className="shrink-0 pb-4">
             <OptimizationKPICards
               experiments={experiments}
@@ -179,7 +179,7 @@ const OptimizationPage: React.FC = () => {
             <div className="shrink-0 pb-4">
               <TrialConfigurationSection
                 experiments={[bestExperiment]}
-                title="Best configuration"
+                title="Best trial configuration"
                 referenceExperiment={baselineExperiment}
                 studioConfig={optimization?.studio_config}
               />

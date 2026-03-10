@@ -1,11 +1,16 @@
 import React, { useMemo } from "react";
-import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
+import isObject from "lodash/isObject";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 
 import { Experiment } from "@/types/datasets";
-import { detectConfigValueType } from "@/lib/configuration-renderer";
+import {
+  detectConfigValueType,
+  flattenConfig,
+  EXCLUDED_CONFIG_KEYS,
+  shouldSkipRedundantKey,
+} from "@/lib/configuration-renderer";
 import DiffSection from "./DiffSection";
 
 type ConfigurationDiffContentProps = {
@@ -37,53 +42,32 @@ const ConfigurationDiffContent: React.FunctionComponent<
     const baseConfig = getConfiguration(baselineExperiment?.metadata) ?? {};
     const currConfig = getConfiguration(currentExperiment?.metadata) ?? {};
 
-    const EXCLUDED_KEYS = ["prompt", "examples"];
-
-    const prompts: { key: string; baseline: unknown; current: unknown }[] = [];
-    const flatBase: Record<string, unknown> = {};
-    const flatCurr: Record<string, unknown> = {};
-
-    // When a structured "prompt" key exists (messages array), skip
-    // individual keys like system_prompt / user_message that duplicate it.
     const basePrompt = get(baseConfig, "prompt", null);
     const currPrompt = get(currConfig, "prompt", null);
     const hasStructuredPrompt = !!(basePrompt || currPrompt);
 
-    const REDUNDANT_WHEN_STRUCTURED = [
-      "system_prompt",
-      "user_prompt",
-      "user_message",
-    ];
+    const skipKey = (key: string) =>
+      EXCLUDED_CONFIG_KEYS.includes(key) ||
+      shouldSkipRedundantKey(key, hasStructuredPrompt);
+    const baseFlat = flattenConfig(baseConfig, skipKey);
+    const currFlat = flattenConfig(currConfig, skipKey);
 
-    const shouldSkipKey = (key: string) =>
-      hasStructuredPrompt && REDUNDANT_WHEN_STRUCTURED.includes(key);
-
-    const collectFlatFiltered = (
-      obj: Record<string, unknown>,
-      target: Record<string, unknown>,
-      prefix: string,
-    ) => {
-      for (const [key, value] of Object.entries(obj)) {
-        if (!prefix && EXCLUDED_KEYS.includes(key)) continue;
-        if (!prefix && shouldSkipKey(key)) continue;
-        const path = prefix ? `${prefix}.${key}` : key;
-        const type = detectConfigValueType(key, value);
-
-        if (type === "prompt" || type === "tools") {
-          // handled separately
-        } else if (
-          type === "json_object" &&
-          isObject(value) &&
-          !isArray(value)
-        ) {
-          collectFlatFiltered(value as Record<string, unknown>, target, path);
-        } else {
-          target[path] = value;
-        }
+    const flatBase: Record<string, unknown> = {};
+    for (const entry of baseFlat) {
+      if (entry.type !== "prompt" && entry.type !== "tools") {
+        flatBase[entry.key] = entry.value;
       }
-    };
+    }
+    const flatCurr: Record<string, unknown> = {};
+    for (const entry of currFlat) {
+      if (entry.type !== "prompt" && entry.type !== "tools") {
+        flatCurr[entry.key] = entry.value;
+      }
+    }
 
-    const collectPromptsFiltered = (
+    const prompts: { key: string; baseline: unknown; current: unknown }[] = [];
+
+    const collectPrompts = (
       base: Record<string, unknown>,
       curr: Record<string, unknown>,
       prefix: string,
@@ -91,8 +75,9 @@ const ConfigurationDiffContent: React.FunctionComponent<
       const allKeys = uniq([...Object.keys(base), ...Object.keys(curr)]);
 
       for (const key of allKeys) {
-        if (!prefix && EXCLUDED_KEYS.includes(key)) continue;
-        if (!prefix && shouldSkipKey(key)) continue;
+        if (!prefix && EXCLUDED_CONFIG_KEYS.includes(key)) continue;
+        if (!prefix && shouldSkipRedundantKey(key, hasStructuredPrompt))
+          continue;
         const path = prefix ? `${prefix}.${key}` : key;
         const bVal = base[key];
         const cVal = curr[key];
@@ -112,7 +97,7 @@ const ConfigurationDiffContent: React.FunctionComponent<
           !isArray(bVal) &&
           !isArray(cVal)
         ) {
-          collectPromptsFiltered(
+          collectPrompts(
             (bVal as Record<string, unknown>) ?? {},
             (cVal as Record<string, unknown>) ?? {},
             path,
@@ -121,11 +106,8 @@ const ConfigurationDiffContent: React.FunctionComponent<
       }
     };
 
-    collectFlatFiltered(baseConfig, flatBase, "");
-    collectFlatFiltered(currConfig, flatCurr, "");
-    collectPromptsFiltered(baseConfig, currConfig, "");
+    collectPrompts(baseConfig, currConfig, "");
 
-    // Handle top-level "prompt" key
     if (
       hasStructuredPrompt &&
       JSON.stringify(basePrompt) !== JSON.stringify(currPrompt)

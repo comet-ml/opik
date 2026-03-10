@@ -16,7 +16,11 @@ const OptimizationCompareRedirect = () => {
 
   if (!optimizationId) {
     return (
-      <Navigate to="/$workspaceName/optimizations" params={{ workspaceName }} />
+      <Navigate
+        to="/$workspaceName/optimizations"
+        params={{ workspaceName }}
+        replace
+      />
     );
   }
 

@@ -93,7 +93,11 @@ const MessagesDiff: React.FC<{
             </div>
             <div className="comet-code whitespace-pre-wrap break-words text-sm">
               {hasChanged ? (
-                <TextDiff content1={baseContent} content2={currContent} />
+                <TextDiff
+                  content1={baseContent}
+                  content2={currContent}
+                  mode="words"
+                />
               ) : (
                 <span className="text-muted-foreground">{currContent}</span>
               )}
@@ -155,14 +159,14 @@ const PromptDiff: React.FunctionComponent<PromptDiffProps> = ({
         ? current
         : JSON.stringify(current, null, 2) ?? "";
 
-    return <TextDiff content1={baseText} content2={currText} />;
+    return <TextDiff content1={baseText} content2={currText} mode="words" />;
   }
 
   if (baselineExtracted.type !== currentExtracted.type) {
     const baseText = JSON.stringify(baseline, null, 2) ?? "";
     const currText = JSON.stringify(current, null, 2) ?? "";
 
-    return <TextDiff content1={baseText} content2={currText} />;
+    return <TextDiff content1={baseText} content2={currText} mode="words" />;
   }
 
   if (

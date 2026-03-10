@@ -10,27 +10,31 @@ import { Experiment } from "@/types/datasets";
 import { OptimizationStudioConfig } from "@/types/optimizations";
 import { Tag } from "@/components/ui/tag";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { detectConfigValueType } from "@/lib/configuration-renderer";
+import {
+  detectConfigValueType,
+  flattenConfig,
+  EXCLUDED_CONFIG_KEYS,
+  shouldSkipRedundantKey,
+} from "@/lib/configuration-renderer";
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import ConfigurationDiffContent from "@/components/pages-shared/experiments/ConfigurationDiffContent/ConfigurationDiffContent";
 
 const PROMPT_MAX_LENGTH = 200;
 
-const EXCLUDED_CONFIG_KEYS = ["prompt", "examples"];
+const CONFIG_VIEW_MODE = {
+  CONFIG: "config",
+  DIFF_BASELINE: "diff-baseline",
+  DIFF_PARENT: "diff-parent",
+} as const;
 
-const REDUNDANT_WHEN_STRUCTURED = [
-  "system_prompt",
-  "user_prompt",
-  "user_message",
-];
-
-type ConfigViewMode = "config" | "diff";
+type ConfigViewMode = (typeof CONFIG_VIEW_MODE)[keyof typeof CONFIG_VIEW_MODE];
 
 type TrialConfigurationSectionProps = {
   experiments: Experiment[];
   title?: string;
   referenceExperiment?: Experiment | null;
+  parentExperiment?: Experiment | null;
   studioConfig?: OptimizationStudioConfig;
 };
 
@@ -209,9 +213,12 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
   experiments,
   title = "Configuration",
   referenceExperiment,
+  parentExperiment,
   studioConfig,
 }) => {
-  const [viewMode, setViewMode] = useState<ConfigViewMode>("config");
+  const [viewMode, setViewMode] = useState<ConfigViewMode>(
+    CONFIG_VIEW_MODE.CONFIG,
+  );
 
   const experiment = experiments[0];
   const configuration = useMemo(() => {
@@ -232,40 +239,14 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
     return null;
   }, [experiment, studioConfig]);
 
-  type ConfigEntryItem = {
-    key: string;
-    value: unknown;
-    type: ReturnType<typeof detectConfigValueType>;
-  };
-
   const entries = useMemo(() => {
     if (!configuration) return [];
 
-    const result: ConfigEntryItem[] = [];
-
-    // When a structured "prompt" key exists, skip individual keys
-    // like system_prompt / user_message that duplicate its content.
     const hasStructuredPrompt = "prompt" in configuration;
-    const shouldSkipKey = (key: string) =>
-      hasStructuredPrompt && REDUNDANT_WHEN_STRUCTURED.includes(key);
-
-    const collectEntries = (obj: Record<string, unknown>, prefix: string) => {
-      for (const [key, value] of Object.entries(obj)) {
-        if (!prefix && EXCLUDED_CONFIG_KEYS.includes(key)) continue;
-        if (!prefix && shouldSkipKey(key)) continue;
-
-        const path = prefix ? `${prefix}.${key}` : key;
-        const type = detectConfigValueType(key, value);
-
-        if (type === "json_object" && isObject(value) && !isArray(value)) {
-          collectEntries(value as Record<string, unknown>, path);
-        } else {
-          result.push({ key: path, value, type });
-        }
-      }
-    };
-
-    collectEntries(configuration, "");
+    const skipKey = (key: string) =>
+      EXCLUDED_CONFIG_KEYS.includes(key) ||
+      shouldSkipRedundantKey(key, hasStructuredPrompt);
+    const result = flattenConfig(configuration, skipKey);
 
     // If no prompt was found (old format without structured "prompt" key),
     // try the top-level "prompt" as a fallback.
@@ -286,7 +267,14 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
 
   if (!configuration) return null;
 
-  const hasDiffSupport = !!referenceExperiment;
+  const hasDiffBaseline = !!referenceExperiment;
+  const hasDiffParent = !!parentExperiment;
+  const hasDiffSupport = hasDiffBaseline || hasDiffParent;
+
+  const diffExperiment =
+    viewMode === CONFIG_VIEW_MODE.DIFF_PARENT
+      ? parentExperiment
+      : referenceExperiment;
 
   return (
     <div className="rounded-lg border bg-muted/20 p-6">
@@ -302,21 +290,31 @@ const TrialConfigurationSection: React.FC<TrialConfigurationSectionProps> = ({
             variant="default"
             size="sm"
           >
-            <ToggleGroupItem value="config">
+            <ToggleGroupItem value={CONFIG_VIEW_MODE.CONFIG}>
               <List className="mr-1 size-3.5" />
               Config
             </ToggleGroupItem>
-            <ToggleGroupItem value="diff">
-              <GitCompareArrows className="mr-1 size-3.5" />
-              Diff
-            </ToggleGroupItem>
+            {hasDiffBaseline && (
+              <ToggleGroupItem value={CONFIG_VIEW_MODE.DIFF_BASELINE}>
+                <GitCompareArrows className="mr-1 size-3.5" />
+                Diff vs. baseline
+              </ToggleGroupItem>
+            )}
+            {hasDiffParent && (
+              <ToggleGroupItem value={CONFIG_VIEW_MODE.DIFF_PARENT}>
+                <GitCompareArrows className="mr-1 size-3.5" />
+                Diff vs. parent
+              </ToggleGroupItem>
+            )}
           </ToggleGroup>
         )}
       </div>
 
-      {viewMode === "diff" && hasDiffSupport ? (
+      {(viewMode === CONFIG_VIEW_MODE.DIFF_BASELINE ||
+        viewMode === CONFIG_VIEW_MODE.DIFF_PARENT) &&
+      diffExperiment ? (
         <ConfigurationDiffContent
-          baselineExperiment={referenceExperiment}
+          baselineExperiment={diffExperiment}
           currentExperiment={experiment}
         />
       ) : (
