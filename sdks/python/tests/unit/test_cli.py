@@ -113,7 +113,7 @@ class TestSmokeTestCommand:
         assert result.exit_code != 0
         assert "Error" in result.output or "Missing" in result.output
 
-    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
@@ -197,7 +197,7 @@ class TestSmokeTestCommand:
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
-    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
