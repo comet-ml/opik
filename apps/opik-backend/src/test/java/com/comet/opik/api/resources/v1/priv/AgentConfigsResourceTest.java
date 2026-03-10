@@ -46,6 +46,8 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import org.apache.commons.lang3.RandomStringUtils;
+
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -128,6 +130,9 @@ class AgentConfigsResourceTest {
     @DisplayName("Create Optimizer Config:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateAgentConfig {
+
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
 
         @Test
         @DisplayName("Success: should create optimizer config with blueprint")
@@ -336,7 +341,7 @@ class AgentConfigsResourceTest {
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
             var configValue = AgentConfigValue.builder()
-                    .key("field")
+                    .key(RandomStringUtils.insecure().nextAlphanumeric(10))
                     .value(value)
                     .type(valueType)
                     .build();
@@ -360,20 +365,23 @@ class AgentConfigsResourceTest {
             var retrievedValue = retrieved.values().getFirst();
             assertThat(retrievedValue)
                     .usingRecursiveComparison()
-                    .ignoringFields("id", "projectId", "validFromBlueprintId", "validToBlueprintId")
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
                     .isEqualTo(configValue);
             assertThat(retrievedValue.value()).isEqualTo(value);
         }
 
         Stream<Arguments> createAgentConfig__perValueType() {
             return Stream.of(
-                    arguments(ValueType.STRING, "gpt-4"),
-                    arguments(ValueType.INTEGER, "42"),
-                    arguments(ValueType.FLOAT, "0.7"),
-                    arguments(ValueType.BOOLEAN, "true"),
+                    arguments(ValueType.STRING, RandomStringUtils.insecure().nextAlphanumeric(10)),
+                    arguments(ValueType.INTEGER, RandomStringUtils.insecure().nextAlphanumeric(10)),
+                    arguments(ValueType.FLOAT, RandomStringUtils.insecure().nextAlphanumeric(10)),
+                    arguments(ValueType.BOOLEAN, RandomStringUtils.insecure().nextAlphanumeric(10)),
                     arguments(ValueType.PROMPT, UUID.randomUUID().toString()),
                     arguments(ValueType.PROMPT_COMMIT, UUID.randomUUID().toString()),
-                    arguments(ValueType.STRING, null));
+                    arguments(ValueType.STRING, null),
+                    arguments(ValueType.INTEGER, null),
+                    arguments(ValueType.FLOAT, null),
+                    arguments(ValueType.BOOLEAN, null));
         }
     }
 
