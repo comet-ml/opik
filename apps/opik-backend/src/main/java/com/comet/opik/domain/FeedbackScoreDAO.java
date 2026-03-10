@@ -52,13 +52,13 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
-    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @Nullable String excludeCategoryName);
 
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames);
+            @Nullable String excludeCategoryName);
 
     Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames);
+            @Nullable String excludeCategoryName);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -173,8 +173,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(experiment_ids)>
             AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
             <endif>
-            <if(exclude_category_names)>
-            AND category_name NOT IN :exclude_category_names
+            <if(exclude_category_name)>
+            AND category_name != :exclude_category_name
             <endif>
             UNION DISTINCT
             SELECT DISTINCT
@@ -189,8 +189,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(experiment_ids)>
             AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
             <endif>
-            <if(exclude_category_names)>
-            AND category_name NOT IN :exclude_category_names
+            <if(exclude_category_name)>
+            AND category_name != :exclude_category_name
             <endif>
             <if(experiment_ids)>
             UNION DISTINCT
@@ -263,8 +263,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'span'
-                <if(exclude_category_names)>
-                AND category_name NOT IN :exclude_category_names
+                <if(exclude_category_name)>
+                AND category_name != :exclude_category_name
                 <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
@@ -287,8 +287,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'span'
-                <if(exclude_category_names)>
-                AND category_name NOT IN :exclude_category_names
+                <if(exclude_category_name)>
+                AND category_name != :exclude_category_name
                 <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
@@ -506,7 +506,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames) {
+    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @Nullable String excludeCategoryName) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_trace_feedback_score_names",
@@ -515,13 +515,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
             bindTemplateParam(projectIds, null, template);
-            bindExcludeCategoryNames(template, excludeCategoryNames);
+            bindExcludeCategoryName(template, excludeCategoryName);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
             bindStatementParam(projectIds, null, statement, EntityType.TRACE);
-            bindExcludeCategoryNames(statement, excludeCategoryNames);
+            bindExcludeCategoryName(statement, excludeCategoryName);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -532,17 +532,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @Override
     @WithSpan
     public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames) {
+            @Nullable String excludeCategoryName) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
                     workspaceId, experimentIds.size());
             bindTemplateParam(null, experimentIds, template);
-            bindExcludeCategoryNames(template, excludeCategoryNames);
+            bindExcludeCategoryName(template, excludeCategoryName);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
-            bindExcludeCategoryNames(statement, excludeCategoryNames);
+            bindExcludeCategoryName(statement, excludeCategoryName);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()
@@ -641,7 +641,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @Override
     @WithSpan
     public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames) {
+            @Nullable String excludeCategoryName) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(SELECT_SPAN_FEEDBACK_SCORE_NAMES, "get_span_feedback_score_names",
@@ -650,7 +650,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             if (type != null) {
                 template.add("type", type.name());
             }
-            bindExcludeCategoryNames(template, excludeCategoryNames);
+            bindExcludeCategoryName(template, excludeCategoryName);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -659,7 +659,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             if (type != null) {
                 statement.bind("type", type.name());
             }
-            bindExcludeCategoryNames(statement, excludeCategoryNames);
+            bindExcludeCategoryName(statement, excludeCategoryName);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -690,15 +690,15 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
     }
 
-    private void bindExcludeCategoryNames(ST template, @NonNull Set<String> excludeCategoryNames) {
-        if (CollectionUtils.isNotEmpty(excludeCategoryNames)) {
-            template.add("exclude_category_names", excludeCategoryNames);
+    private void bindExcludeCategoryName(ST template, @Nullable String excludeCategoryName) {
+        if (StringUtils.isNotBlank(excludeCategoryName)) {
+            template.add("exclude_category_name", excludeCategoryName);
         }
     }
 
-    private void bindExcludeCategoryNames(Statement statement, @NonNull Set<String> excludeCategoryNames) {
-        if (CollectionUtils.isNotEmpty(excludeCategoryNames)) {
-            statement.bind("exclude_category_names", excludeCategoryNames);
+    private void bindExcludeCategoryName(Statement statement, @Nullable String excludeCategoryName) {
+        if (StringUtils.isNotBlank(excludeCategoryName)) {
+            statement.bind("exclude_category_name", excludeCategoryName);
         }
     }
 

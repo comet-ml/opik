@@ -5898,8 +5898,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when no exclude param provided, then suite_assertion scores are excluded by default")
-        void getFeedbackScoreNames__noExcludeParam__thenSuiteAssertionExcludedByDefault() {
+        @DisplayName("when scores have mixed categories, then all score names returned without exclude param")
+        void getFeedbackScoreNames__mixedCategories__thenAllReturned() {
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
@@ -5951,12 +5951,13 @@ class ExperimentsResourceTest {
                     .filter(score -> "feedback_scores".equals(score.type()))
                     .map(FeedbackScoreNames.ScoreName::name)
                     .toList();
-            assertThat(feedbackNames).containsExactly("regular_score");
+            assertThat(feedbackNames).containsExactlyInAnyOrder(
+                    "regular_score", "suite_assertion_1", "suite_assertion_2");
         }
 
         @Test
-        @DisplayName("when exclude_category_names is provided, then exclude scores with those categories")
-        void getFeedbackScoreNames__excludeCategoryNames__thenExcludeMatchingScores() {
+        @DisplayName("when exclude_category_name is provided, then exclude scores with that category")
+        void getFeedbackScoreNames__excludeCategoryName__thenExcludeMatchingScores() {
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
@@ -6003,7 +6004,7 @@ class ExperimentsResourceTest {
             createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
 
             var actualEntity = experimentResourceClient.getFeedbackScoreNames(
-                    List.of(experiment.id()), Set.of("suite_assertion"), apiKey, workspaceName);
+                    List.of(experiment.id()), "suite_assertion", apiKey, workspaceName);
             var feedbackNames = actualEntity.scores().stream()
                     .filter(score -> "feedback_scores".equals(score.type()))
                     .map(FeedbackScoreNames.ScoreName::name)

@@ -51,13 +51,13 @@ public interface FeedbackScoreService {
     Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score);
     Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score);
 
-    Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames);
+    Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId, @Nullable String excludeCategoryName);
 
     Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames);
+            @Nullable String excludeCategoryName);
 
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames);
+            @Nullable String excludeCategoryName);
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -187,7 +187,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId,
-            @NonNull Set<String> excludeCategoryNames) {
+            @Nullable String excludeCategoryName) {
         if (projectId == null) {
             // Allow only for private access
             boolean isPublic = Optional.ofNullable(requestContext.get().getVisibility())
@@ -203,7 +203,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             projectService.get(projectId);
         }
 
-        return dao.getTraceFeedbackScoreNames(projectId, excludeCategoryNames)
+        return dao.getTraceFeedbackScoreNames(projectId, excludeCategoryName)
                 .map(names -> names.stream()
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())
@@ -212,10 +212,10 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames) {
+            @Nullable String excludeCategoryName) {
         // Will throw an error in case we try to get private project with public visibility
         projectService.get(projectId);
-        return dao.getSpanFeedbackScoreNames(projectId, type, excludeCategoryNames)
+        return dao.getSpanFeedbackScoreNames(projectId, type, excludeCategoryName)
                 .map(names -> names.stream()
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())
@@ -224,8 +224,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
 
     @Override
     public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames) {
-        return dao.getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryNames)
+            @Nullable String excludeCategoryName) {
+        return dao.getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryName)
                 .map(scores -> scores.stream()
                         .map(score -> FeedbackScoreNames.ScoreName.builder()
                                 .name(score.name())
