@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
-import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -48,6 +47,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -1231,8 +1231,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: no blueprint update when prompt version created with action=NO_ACTION")
-        void createPromptVersion__whenActionIsNoAction__thenBlueprintNotUpdated() throws InterruptedException {
+        @DisplayName("Success: no blueprint update when project is excluded via excludeBlueprintUpdateForProjects")
+        void createPromptVersion__whenProjectExcluded__thenBlueprintNotUpdated() throws InterruptedException {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1260,7 +1260,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
-                    PromptVersionAction.NO_ACTION);
+                    Set.of(projectId));
 
             Thread.sleep(2000);
 
