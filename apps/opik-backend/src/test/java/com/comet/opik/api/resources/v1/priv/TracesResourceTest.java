@@ -6016,7 +6016,7 @@ class TracesResourceTest {
     @Nested
     @DisplayName("Thread Reopening and Manual Score Deletion")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadReopeningManualScoreDeletion {
+    class ThreadReopeningScorePreservation {
 
         @Test
         @DisplayName("When thread is scored and new traces are added, then scores are preserved")

@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ThreadTimestamps;
-import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -111,24 +110,6 @@ public class TraceThreadListener {
         log.info("Processing trace threads for workspace: '{}', projectId: '{}', threadIds: '[{}]'",
                 event.workspaceId(), projectId, threadInfo.keySet());
         return traceThreadService.processTraceThreads(threadInfo, projectId);
-    }
-
-    /**
-     * Handles the ThreadsReopened event when new traces are added to an existing thread.
-     * This is triggered in two scenarios:
-     * 1. When new traces are added to an existing thread (thread is "reopened" for activity)
-     * 2. When the explicit PUT /threads/open API endpoint is called
-     *
-     * Note: Thread feedback scores are intentionally preserved when new messages are logged.
-     * The scoredAt field is reset to null (in TraceThreadService) so that online scoring
-     * re-runs after the cooling period expires, but existing user feedback scores remain intact.
-     *
-     * @param event the ThreadsReopened event containing the thread model IDs and project ID
-     */
-    @Subscribe
-    public void onThreadsReopened(@NonNull ThreadsReopened event) {
-        log.info("Received ThreadsReopened event for workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
-                event.workspaceId(), event.projectId(), event.threadModelIds());
     }
 
 }
