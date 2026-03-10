@@ -43,6 +43,7 @@ chartMigration:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []
 
 caCerts:
   # -- (list) Additional Certificate Authority Certificates to trust.
