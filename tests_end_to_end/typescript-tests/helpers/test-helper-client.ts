@@ -434,6 +434,27 @@ export class TestHelperClient {
     }
   }
 
+  async createTracesClientAndGetUrl(
+    projectName: string,
+    tracesNumber: number,
+    prefix: string = 'test-trace-'
+  ): Promise<{ tracesCreated: number; projectUrl: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-traces-and-get-url', {
+        project_name: projectName,
+        traces_number: tracesNumber,
+        prefix,
+      });
+
+      return {
+        tracesCreated: response.data.traces_created,
+        projectUrl: response.data.project_url,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create traces and get terminal URL');
+    }
+  }
+
   async createTracesWithSpansClient(
     projectName: string,
     traceConfig: TraceConfig,

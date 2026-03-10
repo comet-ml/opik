@@ -15,6 +15,7 @@ export type TracingFixtures = {
   createTraceWithSpanAttachment: { attachmentName: string; spanName: string };
   createThreadsDecorator: ThreadConfig[];
   createThreadsClient: ThreadConfig[];
+  createTracesClientWithUrl: string;
 };
 
 // Trace configuration matching Python fixtures
@@ -246,6 +247,21 @@ export const test = base.extend<BaseFixtures & TracingFixtures>({
       defaultThreadConfigs
     );
     await use(threadConfigs);
+
+    try {
+      await helperClient.deleteProject(projectName);
+    } catch (error) {
+      console.warn(`Failed to cleanup project ${projectName}:`, error);
+    }
+  },
+
+  createTracesClientWithUrl: async ({ helperClient, projectName }, use) => {
+    await helperClient.createProject(projectName);
+    await helperClient.waitForProjectVisible(projectName, 10);
+
+    const result = await helperClient.createTracesClientAndGetUrl(projectName, 5, 'test-trace-');
+    await helperClient.waitForTracesVisible(projectName, result.tracesCreated, 30);
+    await use(result.projectUrl);
 
     try {
       await helperClient.deleteProject(projectName);

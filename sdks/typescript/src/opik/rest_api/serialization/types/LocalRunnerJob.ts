@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { JsonNode } from "./JsonNode.js";
+import { LocalRunnerJobMetadata } from "./LocalRunnerJobMetadata.js";
 import { LocalRunnerJobStatus } from "./LocalRunnerJobStatus.js";
 
 export const LocalRunnerJob: core.serialization.ObjectSchema<serializers.LocalRunnerJob.Raw, OpikApi.LocalRunnerJob> =
@@ -18,6 +19,7 @@ export const LocalRunnerJob: core.serialization.ObjectSchema<serializers.LocalRu
         project: core.serialization.string().optional(),
         traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
         maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
+        metadata: LocalRunnerJobMetadata.optional(),
         timeout: core.serialization.number().optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         startedAt: core.serialization.property("started_at", core.serialization.date().optional()),
@@ -36,6 +38,7 @@ export declare namespace LocalRunnerJob {
         project?: string | null;
         trace_id?: string | null;
         mask_id?: string | null;
+        metadata?: LocalRunnerJobMetadata.Raw | null;
         timeout?: number | null;
         created_at?: string | null;
         started_at?: string | null;

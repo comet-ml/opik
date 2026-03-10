@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_node import JsonNode
+from .local_runner_job_metadata import LocalRunnerJobMetadata
 from .local_runner_job_status import LocalRunnerJobStatus
 
 
@@ -20,6 +21,7 @@ class LocalRunnerJob(UniversalBaseModel):
     project: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
     mask_id: typing.Optional[str] = None
+    metadata: typing.Optional[LocalRunnerJobMetadata] = None
     timeout: typing.Optional[int] = None
     created_at: typing.Optional[dt.datetime] = None
     started_at: typing.Optional[dt.datetime] = None
