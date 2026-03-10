@@ -98,14 +98,16 @@ Examples are sorted by priority — the ones with the most failures come first:
 <side_info>
 ```
 
-Your task is to write an improved version of this parameter. You MUST keep
-the existing parameter as your starting point and make surgical edits —
-do NOT rewrite from scratch.
+Your task is to write an improved version of this parameter that fixes
+the FAILED assertions while preserving PASSED ones. Use the existing
+parameter as your starting point.
 
 STEP 1 — DIAGNOSE: [identify missing behaviors from FAILED, prefer keeping PASSED rules]
-STEP 2 — CHECK FAILURE HISTORY: [avoid repeating failed approaches]
-STEP 3 — WRITE TARGETED FIXES: [observable, verifiable actions — not abstract guidance]
-STEP 4 — MINIMAL EDIT: [start from original, apply fixes, don't reorganize working parts]
+STEP 2 — CHECK FAILURE HISTORY: [MUST take substantially different approach — escalate via
+         restructuring, step-by-step procedures, conditional logic, or section rewrite]
+STEP 3 — WRITE TARGETED FIXES: [observable, verifiable actions — may change multiple related rules]
+STEP 4 — APPLY CHANGES: [graduated: precise edits if mostly passing, restructure/rewrite
+         affected sections if Failure History present]
 STEP 5 — STRUCTURE: [markdown formatting, group under ## headers, merge overlaps]
 
 IMPORTANT:
@@ -208,9 +210,9 @@ PASSED assertions (preserve these):
 
 ```
 
-Your task is to write an improved version of this parameter. You MUST keep
-the existing parameter as your starting point and make surgical edits —
-do NOT rewrite from scratch.
+Your task is to write an improved version of this parameter that fixes
+the FAILED assertions while preserving PASSED ones. Use the existing
+parameter as your starting point.
 
 STEP 1 — DIAGNOSE: Read the FAILED assertions and identify what specific
 behaviors are missing or wrong. Read the PASSED assertions — the current
@@ -218,20 +220,29 @@ parameter already produces these. Prefer keeping rules that drive successes,
 but you may tighten or rephrase them if needed to fix failures.
 
 STEP 2 — CHECK FAILURE HISTORY: If any example has a "Failure History"
-section, the current rules for that assertion already failed before.
-Do NOT add another generic rule of the same kind. Instead embed concrete
-example phrases or lookup instructions directly, or try a structurally
-different approach.
+section, the current approach for those assertions has ALREADY FAILED in
+previous iterations. You MUST take a substantially different approach —
+do NOT add another rule of the same kind or make minor wording tweaks.
+Instead, try one of these escalation strategies:
+(a) restructure the parameter's organization so the failing behavior gets
+more prominent placement and emphasis;
+(b) add explicit step-by-step procedures with concrete example phrases;
+(c) add conditional logic ("When X, always do Y before Z");
+(d) rewrite the section governing the failing behavior from scratch.
 
 STEP 3 — WRITE TARGETED FIXES: For each failing assertion, add or modify
-ONE specific rule. Every rule must describe an observable, verifiable action —
-not abstract guidance. Rules must generalize to any input in this domain;
-do NOT reference specific test inputs.
+rules as needed. You may change multiple related rules together if the
+failure requires coordinated changes. Every rule must describe an
+observable, verifiable action — not abstract guidance. Rules must
+generalize to any input in this domain; do NOT reference specific test inputs.
 
-STEP 4 — MINIMAL EDIT: Start from the original parameter text and apply
-the fixes from Step 3. Do NOT rewrite or reorganize parts that are already
-working. Add new rules near related existing ones. If the parameter is
-already scoring well, make small, precise changes only.
+STEP 4 — APPLY CHANGES: How aggressively you edit depends on the failures.
+If most assertions pass and there is no Failure History, make focused,
+precise edits. But if there are persistent failures (Failure History),
+you SHOULD restructure, reorganize, or rewrite the affected sections —
+minor edits have already proven insufficient. Do not be afraid to change
+the structure, reorder sections, or rewrite paragraphs when the current
+formulation is clearly not working.
 
 STEP 5 — STRUCTURE: Use markdown formatting. Group related rules under
 ## headers. Merge overlapping rules. Keep the parameter concise.
