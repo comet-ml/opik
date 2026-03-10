@@ -33,21 +33,29 @@ class TestExtractScorePassRate:
     def test_empty_results(self):
         result = MagicMock()
         result.test_results = []
-        assert _extract_score(result, PASS_RATE) == 0.0
+        score, display = _extract_score(result, PASS_RATE)
+        assert score == 0.0
+        assert display == 0.0
 
     def test_no_test_results_attr(self):
         result = MagicMock(spec=[])
-        assert _extract_score(result, PASS_RATE) == 0.0
+        score, display = _extract_score(result, PASS_RATE)
+        assert score == 0.0
+        assert display == 0.0
 
     def test_single_item_passing(self):
         result = MagicMock()
         result.test_results = [_make_test_result("item-1", [1.0])]
-        assert _extract_score(result, PASS_RATE) == 1.0
+        score, display = _extract_score(result, PASS_RATE)
+        assert score == 1.0
+        assert display == 1.0
 
     def test_single_item_failing(self):
         result = MagicMock()
         result.test_results = [_make_test_result("item-1", [0.8])]
-        assert _extract_score(result, PASS_RATE) == 0.0
+        score, display = _extract_score(result, PASS_RATE)
+        assert score == 0.0
+        assert display == 0.0
 
     def test_two_items_one_passes_one_fails(self):
         result = MagicMock()
@@ -55,7 +63,9 @@ class TestExtractScorePassRate:
             _make_test_result("item-1", [1.0]),
             _make_test_result("item-2", [0.5]),
         ]
-        assert _extract_score(result, PASS_RATE) == 0.5
+        score, display = _extract_score(result, PASS_RATE)
+        assert score == 0.5
+        assert display == 0.5
 
     def test_multiple_runs_per_item(self):
         result = MagicMock()
@@ -64,7 +74,8 @@ class TestExtractScorePassRate:
             _make_test_result("item-1", [0.0], trial_id="t-2"),
             _make_test_result("item-2", [1.0], trial_id="t-1"),
         ]
-        assert _extract_score(result, PASS_RATE) == 1.0
+        score, _ = _extract_score(result, PASS_RATE)
+        assert score == 1.0
 
     def test_no_score_results_counts_as_pass(self):
         tr = MagicMock()
@@ -76,17 +87,20 @@ class TestExtractScorePassRate:
 
         result = MagicMock()
         result.test_results = [tr]
-        assert _extract_score(result, PASS_RATE) == 1.0
+        score, _ = _extract_score(result, PASS_RATE)
+        assert score == 1.0
 
     def test_boolean_true_passes(self):
         result = MagicMock()
         result.test_results = [_make_test_result("item-1", [True])]
-        assert _extract_score(result, PASS_RATE) == 1.0
+        score, _ = _extract_score(result, PASS_RATE)
+        assert score == 1.0
 
     def test_boolean_false_fails(self):
         result = MagicMock()
         result.test_results = [_make_test_result("item-1", [False])]
-        assert _extract_score(result, PASS_RATE) == 0.0
+        score, _ = _extract_score(result, PASS_RATE)
+        assert score == 0.0
 
     def test_mixed_items(self):
         result = MagicMock()
@@ -96,67 +110,66 @@ class TestExtractScorePassRate:
             _make_test_result("item-3", [1.0]),
             _make_test_result("item-4", [0.0]),
         ]
-        assert _extract_score(result, PASS_RATE) == pytest.approx(0.5)
+        score, _ = _extract_score(result, PASS_RATE)
+        assert score == pytest.approx(0.5)
 
 
 class TestExtractScoreBlended:
     """Tests for strategy='blended' (assertion-level tiebreaker)."""
 
     def test_same_pass_rate_different_assertion_progress(self):
-        # Both have pass_rate=0.5 (1/2 items), but different assertion rates
         result_a = MagicMock()
         result_a.test_results = [
-            _make_test_result("item-1", [1.0, 1.0]),  # passes
-            _make_test_result("item-2", [0.0, 0.0]),  # fails, 0/2 assertions
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [0.0, 0.0]),
         ]
         result_b = MagicMock()
         result_b.test_results = [
-            _make_test_result("item-1", [1.0, 1.0]),  # passes
-            _make_test_result("item-2", [1.0, 0.0]),  # fails, 1/2 assertions
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [1.0, 0.0]),
         ]
         cfg = ScoringConfig()
-        score_a = _extract_score(result_a, cfg)
-        score_b = _extract_score(result_b, cfg)
+        score_a, _ = _extract_score(result_a, cfg)
+        score_b, _ = _extract_score(result_b, cfg)
         assert score_b > score_a
 
     def test_pass_rate_always_dominates(self):
-        # 1/2 items pass with perfect assertion rate vs 2/2 items pass with min assertions
         result_lower_pass_rate = MagicMock()
         result_lower_pass_rate.test_results = [
-            _make_test_result("item-1", [1.0, 1.0]),  # passes
-            _make_test_result("item-2", [1.0, 0.0]),  # fails (best possible for failing item)
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [1.0, 0.0]),
         ]
         result_higher_pass_rate = MagicMock()
         result_higher_pass_rate.test_results = [
-            _make_test_result("item-1", [1.0]),  # passes
-            _make_test_result("item-2", [1.0]),  # passes
+            _make_test_result("item-1", [1.0]),
+            _make_test_result("item-2", [1.0]),
         ]
         cfg = ScoringConfig()
-        assert _extract_score(result_higher_pass_rate, cfg) > _extract_score(result_lower_pass_rate, cfg)
+        score_low, _ = _extract_score(result_lower_pass_rate, cfg)
+        score_high, _ = _extract_score(result_higher_pass_rate, cfg)
+        assert score_high > score_low
 
     def test_auto_epsilon_value(self):
-        # 2 items: epsilon = 1/(2+1) = 1/3
-        # pass_rate = 0.5, assertion_rate = 3/4
-        # blended = 1.0 * 0.5 + (1/3) * 0.75
         result = MagicMock()
         result.test_results = [
-            _make_test_result("item-1", [1.0, 1.0]),  # passes, 2/2
-            _make_test_result("item-2", [1.0, 0.0]),  # fails, 1/2
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [1.0, 0.0]),
         ]
         cfg = ScoringConfig()
         expected = 1.0 * 0.5 + (1 / 3) * (3 / 4)
-        assert _extract_score(result, cfg) == pytest.approx(expected)
+        score, _ = _extract_score(result, cfg)
+        assert score == pytest.approx(expected)
 
     def test_explicit_weights(self):
         result = MagicMock()
         result.test_results = [
-            _make_test_result("item-1", [1.0, 1.0]),  # passes
-            _make_test_result("item-2", [1.0, 0.0]),  # fails
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [1.0, 0.0]),
         ]
-        # pass_rate = 0.5, assertion_rate = 3/4
         cfg = ScoringConfig(pass_rate_weight=2.0, assertion_rate_weight=0.5)
         expected = 2.0 * 0.5 + 0.5 * (3 / 4)
-        assert _extract_score(result, cfg) == pytest.approx(expected)
+        score, _ = _extract_score(result, cfg)
+        assert score == pytest.approx(expected)
 
     def test_all_passing_score_exceeds_one(self):
         result = MagicMock()
@@ -165,22 +178,19 @@ class TestExtractScoreBlended:
             _make_test_result("item-2", [1.0]),
         ]
         cfg = ScoringConfig()
-        # pass_rate=1.0, assertion_rate=1.0, epsilon=1/3
-        # blended = 1.0 + 1/3 * 1.0 = 1.333...
-        score = _extract_score(result, cfg)
+        score, _ = _extract_score(result, cfg)
         assert score > 1.0
         assert score == pytest.approx(1.0 + 1 / 3)
 
     def test_single_item_epsilon(self):
-        # 1 item: epsilon = 1/(1+1) = 0.5
         result = MagicMock()
         result.test_results = [
-            _make_test_result("item-1", [1.0, 0.0]),  # fails
+            _make_test_result("item-1", [1.0, 0.0]),
         ]
         cfg = ScoringConfig()
-        # pass_rate=0.0, assertion_rate=1/2
         expected = 0.0 + 0.5 * 0.5
-        assert _extract_score(result, cfg) == pytest.approx(expected)
+        score, _ = _extract_score(result, cfg)
+        assert score == pytest.approx(expected)
 
     def test_zero_assertions_defaults_to_one(self):
         tr = MagicMock()
@@ -193,11 +203,34 @@ class TestExtractScoreBlended:
         result = MagicMock()
         result.test_results = [tr]
         cfg = ScoringConfig()
-        # pass_rate=1.0 (no assertions = pass), assertion_rate=1.0 (default)
-        # epsilon=1/(1+1)=0.5, blended = 1.0 + 0.5 * 1.0 = 1.5
-        assert _extract_score(result, cfg) == pytest.approx(1.5)
+        score, _ = _extract_score(result, cfg)
+        assert score == pytest.approx(1.5)
 
     def test_empty_results_returns_zero(self):
         result = MagicMock()
         result.test_results = []
-        assert _extract_score(result, ScoringConfig()) == 0.0
+        score, display = _extract_score(result, ScoringConfig())
+        assert score == 0.0
+        assert display == 0.0
+
+    def test_display_score_is_raw_pass_rate(self):
+        result = MagicMock()
+        result.test_results = [
+            _make_test_result("item-1", [1.0, 1.0]),
+            _make_test_result("item-2", [1.0, 0.0]),
+        ]
+        cfg = ScoringConfig()
+        score, display = _extract_score(result, cfg)
+        assert display == pytest.approx(0.5)
+        assert score > display
+
+    def test_all_passing_display_score_is_one(self):
+        result = MagicMock()
+        result.test_results = [
+            _make_test_result("item-1", [1.0]),
+            _make_test_result("item-2", [1.0]),
+        ]
+        cfg = ScoringConfig()
+        score, display = _extract_score(result, cfg)
+        assert display == 1.0
+        assert score > 1.0
