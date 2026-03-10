@@ -182,6 +182,9 @@ PASSED assertions (preserve these):
 ## Summary
 0/3 runs passed. Consistent failures: Response sincerely apologizes for the
 repeated failures in service
+Blocking assertions (failed in at least one run):
+- "Response sincerely apologizes for the repeated failures in service": failed 3/3 runs
+- "Response does not make promises the agent cannot guarantee": failed 1/3 runs
 
 ## Failure History
 This item has failed 2 consecutive iteration(s).

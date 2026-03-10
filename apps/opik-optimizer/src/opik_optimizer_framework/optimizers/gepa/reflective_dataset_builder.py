@@ -83,24 +83,21 @@ class ReflectiveDatasetBuilder:
                     "_max_failed": max_failed,
                 })
             else:
-                run_sections = []
                 max_failed = 0
+                worst_run_idx = 0
                 per_run_failed_names: list[set[str]] = []
                 num_passed_runs = 0
 
                 for run_idx, run in enumerate(runs):
                     assertions = run.get("assertions", [])
                     num_failed = sum(1 for a in assertions if a["value"] < 1.0)
-                    max_failed = max(max_failed, num_failed)
+                    if num_failed > max_failed:
+                        max_failed = num_failed
+                        worst_run_idx = run_idx
                     failed_names = {a["name"] for a in assertions if a["value"] < 1.0}
                     per_run_failed_names.append(failed_names)
                     if num_failed == 0:
                         num_passed_runs += 1
-
-                    section = f"[Run {run_idx + 1}/{total_runs}]\n"
-                    section += f"Output: {run.get('output', '')}\n"
-                    section += self._build_run_feedback(assertions)
-                    run_sections.append(section)
 
                 consistent = set.intersection(*per_run_failed_names) if per_run_failed_names else set()
                 summary_parts = [f"{num_passed_runs}/{total_runs} runs passed."]
@@ -121,34 +118,49 @@ class ReflectiveDatasetBuilder:
                         )
                     summary_parts.append("\n".join(rate_lines))
 
+                worst_run = runs[worst_run_idx]
+                worst_assertions = worst_run.get("assertions", [])
+                worst_section = (
+                    f"Worst run ({worst_run_idx + 1}/{total_runs}):\n"
+                    f"Output: {worst_run.get('output', '')}\n"
+                    f"{self._build_run_feedback(worst_assertions)}"
+                )
+
                 records.append({
                     "Inputs": inputs,
-                    "Runs": "\n\n".join(run_sections),
                     "Summary": " ".join(summary_parts),
+                    "Worst Run": worst_section,
                     "_max_failed": max_failed,
                 })
 
         _PERSISTENT_FAILURE_THRESHOLD = 10
 
         if self._batch_sampler is not None:
-            for record, traj in zip(records, trajectories):
+            for i, (record, traj) in enumerate(zip(records, trajectories)):
                 item_id = str(traj.get("input", {}).get("id", ""))
                 current_failed = self._batch_sampler.get_failed_assertions(item_id)
-                if current_failed:
-                    assertion_details = []
-                    for name in current_failed:
-                        failures = self._batch_sampler.get_assertion_total_failures(name)
-                        evals = self._batch_sampler.get_assertion_total_evals(name)
-                        if failures >= _PERSISTENT_FAILURE_THRESHOLD:
-                            assertion_details.append(
-                                f"\"{name}\" (failed {failures} out of {evals} evaluations)"
-                            )
-                    if assertion_details:
-                        record["Failure History"] = (
-                            f"These assertions have been persistently failing "
-                            f"and failed again in this evaluation: "
-                            f"{', '.join(assertion_details)}."
+                if not current_failed:
+                    continue
+                assertion_details = []
+                for name in current_failed:
+                    failures = self._batch_sampler.get_assertion_total_failures(name)
+                    evals = self._batch_sampler.get_assertion_total_evals(name)
+                    if failures >= _PERSISTENT_FAILURE_THRESHOLD:
+                        assertion_details.append(
+                            f"\"{name}\" (failed {failures} out of {evals} evaluations)"
                         )
+                if not assertion_details:
+                    continue
+                failure_history = (
+                    f"These assertions have been persistently failing "
+                    f"and failed again in this evaluation: "
+                    f"{', '.join(assertion_details)}."
+                )
+                reordered: dict[str, Any] = {}
+                reordered["Inputs"] = record.pop("Inputs")
+                reordered["Failure History"] = failure_history
+                reordered.update(record)
+                records[i] = reordered
 
         records.sort(key=lambda r: r["_max_failed"], reverse=True)
         for r in records:
