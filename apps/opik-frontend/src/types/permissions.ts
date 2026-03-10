@@ -12,6 +12,7 @@ export interface Permissions {
   canConfigureWorkspaceSettings: boolean;
   canUpdateAIProviders: boolean;
   canCreateProjects: boolean;
+  canWriteComments: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -34,6 +35,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canConfigureWorkspaceSettings: true,
     canUpdateAIProviders: true,
     canCreateProjects: true,
+    canWriteComments: true,
   },
   isPending: false,
 };

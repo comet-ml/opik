@@ -159,6 +159,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canWriteComments = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.COMMENT_WRITE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -175,6 +180,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
     canCreateProjects,
+    canWriteComments,
     isPending: isEnabled && isPending,
   };
 };
