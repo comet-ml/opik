@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.31](https://img.shields.io/badge/Version-1.10.31-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.31](https://img.shields.io/badge/AppVersion-1.10.31-informational?style=flat-square)
+![Version: 1.10.32](https://img.shields.io/badge/Version-1.10.32-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.32](https://img.shields.io/badge/AppVersion-1.10.32-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -522,6 +522,7 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` |  |
 | zookeeper.commonLabels."app.kubernetes.io/name" | string | `"zookeeper-opik"` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
