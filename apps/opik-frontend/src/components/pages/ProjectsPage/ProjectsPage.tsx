@@ -388,11 +388,21 @@ const ProjectsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      generateActionsColumDef({
-        cell: ProjectRowActionsCell,
-      }),
+      ...(canDeleteProjects || canCreateProjects
+        ? [
+            generateActionsColumDef({
+              cell: ProjectRowActionsCell,
+            }),
+          ]
+        : []),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef, canDeleteProjects]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    columnsDef,
+    canDeleteProjects,
+    canCreateProjects,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({

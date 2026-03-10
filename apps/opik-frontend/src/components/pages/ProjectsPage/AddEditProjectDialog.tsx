@@ -126,7 +126,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   ]);
 
   return (
-    <Dialog open={open && (isEdit || canCreateProjects)} onOpenChange={setOpen}>
+    <Dialog open={open && canCreateProjects} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
