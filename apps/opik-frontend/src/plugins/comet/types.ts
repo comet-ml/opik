@@ -65,6 +65,7 @@ export enum ManagementPermissionsNames {
   DASHBOARD_VIEW = "dashboard_view",
   DATASET_VIEW = "dataset_view",
   PROJECT_DELETE = "project_delete",
+  ANNOTATION_QUEUE_CREATE = "annotation_queue_create",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_DELETE = "trace_delete",
   PROMPT_DELETE = "prompt_delete",
