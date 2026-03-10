@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -10,6 +11,7 @@ import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.IdsHolder;
 import com.comet.opik.api.filter.ExperimentFilter;
 import com.comet.opik.api.grouping.GroupBy;
@@ -19,6 +21,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.net.HttpHeaders;
+import jakarta.annotation.Nullable;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
@@ -73,6 +76,7 @@ public class ExperimentResourceClient {
                 .totalEstimatedCost(null)
                 .totalEstimatedCostAvg(null)
                 .type(ExperimentType.REGULAR)
+                .evaluationMethod(EvaluationMethod.DATASET)
                 .optimizationId(null)
                 .usage(null)
                 .projectId(null)
@@ -416,6 +420,26 @@ public class ExperimentResourceClient {
             String workspaceName, int expectedStatus) {
         try (Response response = updateExperiment(experimentId, experimentUpdate, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds,
+            @Nullable String excludeCategoryName, String apiKey, String workspaceName) {
+        var ids = JsonUtils.writeValueAsString(experimentIds);
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .path("names")
+                .queryParam("experiment_ids", ids);
+        if (excludeCategoryName != null) {
+            webTarget = webTarget.queryParam("exclude_category_name", excludeCategoryName);
+        }
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(FeedbackScoreNames.class);
         }
     }
 
