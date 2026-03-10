@@ -95,6 +95,14 @@ def python_value_to_backend_value(value: typing.Any, py_type: typing.Any) -> str
     raise TypeError(f"Unsupported type: {py_type}")
 
 
+def python_value_to_metadata_value(
+    value: typing.Any, py_type: typing.Any
+) -> typing.Any:
+    if is_prompt_type(py_type) or is_prompt_version_type(py_type):
+        return python_value_to_backend_value(value, py_type)
+    return value
+
+
 def backend_value_to_python_value(
     value: typing.Any,
     backend_type: str,

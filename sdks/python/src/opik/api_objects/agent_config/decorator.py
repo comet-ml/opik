@@ -368,7 +368,9 @@ def _inject_trace_metadata(
         # Skip injection entirely if we still have nothing to record.
         if value is not _MISSING:
             field_info: typing.Dict[str, typing.Any] = {
-                "value": value,
+                "value": type_helpers.python_value_to_metadata_value(
+                    value, config_field.py_type
+                ),
                 "type": type_helpers.python_type_to_backend_type(config_field.py_type),
                 **(
                     {"description": config_field.description}
