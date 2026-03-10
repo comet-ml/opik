@@ -417,6 +417,48 @@ class TestConfigDecoratorTraceMetadata:
             assert max_tokens_entry["value"] == 2000
             assert max_tokens_entry["type"] == "integer"
 
+    def test_prompt_field_access_inside_trace__injects_commit_not_object(
+        self, mock_backend
+    ):
+        fake_prompt = mock.Mock(spec=Prompt)
+        fake_prompt.commit = "abc12345"
+
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.system_prompt", type="prompt", value="abc12345")]
+        )
+
+        version_detail = mock.Mock()
+        version_detail.template_structure = "text"
+        prompt_detail = mock.Mock()
+        prompt_detail.name = "my-prompt"
+        prompt_detail.requested_version = version_detail
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
+            prompt_detail
+        )
+
+        with mock.patch(
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
+            return_value=fake_prompt,
+        ):
+            with mock.patch(
+                "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+            ) as mock_update:
+
+                @agent_config_decorator
+                @dataclasses.dataclass
+                class MyConfig:
+                    system_prompt: Prompt = dataclasses.field(default=None)
+
+                instance = MyConfig()
+                _ = instance.system_prompt
+
+                mock_update.assert_called()
+                field_entry = mock_update.call_args[1]["metadata"][
+                    "agent_configuration"
+                ]["values"]["MyConfig.system_prompt"]
+                assert field_entry["value"] == "abc12345"
+                assert field_entry["type"] == "prompt"
+
     def test_field_access_outside_trace__no_injection(self, mock_backend):
         from opik import exceptions as opik_exceptions
 
