@@ -73,6 +73,7 @@ def run_optimization(
         optimizer_type=context.optimizer_type,
         optimizable_keys=context.optimizable_keys,
         evaluator_model=context.evaluator_model,
+        scoring_config=context.scoring_config,
     )
 
     optimizer = create_optimizer(context.optimizer_type)

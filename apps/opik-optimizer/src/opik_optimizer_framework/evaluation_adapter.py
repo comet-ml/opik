@@ -12,6 +12,7 @@ from opik_optimizer_framework.experiment_executor import run_experiment_with_det
 from opik_optimizer_framework.types import (
     CandidateConfig,
     OptimizationState,
+    ScoringConfig,
     TrialResult,
 )
 
@@ -35,6 +36,7 @@ class EvaluationAdapter:
         optimizer_type: str | None = None,
         optimizable_keys: list[str] | None = None,
         evaluator_model: str | None = None,
+        scoring_config: ScoringConfig | None = None,
     ) -> None:
         self._client = client
         self._dataset_name = dataset_name
@@ -45,6 +47,7 @@ class EvaluationAdapter:
         self._optimizer_type = optimizer_type
         self._optimizable_keys = optimizable_keys or []
         self._evaluator_model = evaluator_model
+        self._scoring_config = scoring_config
         self._trial_count = 0
         self._candidate_step_index: dict[str, int] = {}
         self._last_emitted_step = -1
@@ -155,6 +158,7 @@ class EvaluationAdapter:
                 optimizer_type=self._optimizer_type,
                 optimizable_keys=self._optimizable_keys,
                 evaluator_model=self._evaluator_model,
+                scoring_config=self._scoring_config,
             )
 
             if trial is not None:

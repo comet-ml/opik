@@ -3,6 +3,7 @@ from opik_optimizer_framework.types import (
     OptimizationContext,
     OptimizationResult,
     OptimizationState,
+    ScoringConfig,
     TrialResult,
 )
 
@@ -11,5 +12,6 @@ __all__ = [
     "OptimizationContext",
     "OptimizationResult",
     "OptimizationState",
+    "ScoringConfig",
     "TrialResult",
 ]

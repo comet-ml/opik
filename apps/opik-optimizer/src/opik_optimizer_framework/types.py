@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 
 CandidateConfig = dict[str, Any]
@@ -36,6 +36,13 @@ class SplitResult:
 
 
 @dataclass
+class ScoringConfig:
+    strategy: Literal["blended", "pass_rate"] = "blended"
+    pass_rate_weight: float = 1.0
+    assertion_rate_weight: float | None = None  # None = auto: 1/(num_items+1)
+
+
+@dataclass
 class OptimizationContext:
     optimization_id: str
     dataset_name: str
@@ -48,6 +55,7 @@ class OptimizationContext:
     config_descriptions: dict[str, str] = field(default_factory=dict)
     split_strategy: str = "80_20"
     evaluator_model: str | None = None
+    scoring_config: ScoringConfig = field(default_factory=ScoringConfig)
 
 
 
