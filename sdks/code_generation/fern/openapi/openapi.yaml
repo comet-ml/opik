@@ -2800,6 +2800,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude_category_name
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -5326,6 +5330,10 @@ paths:
           - tool
           - llm
           - guardrail
+      - name: exclude_category_name
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -5932,6 +5940,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: exclude_category_name
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Feedback Scores resource
@@ -14100,6 +14112,23 @@ components:
         mask_id:
           type: string
           format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
+    LocalRunnerJobMetadata:
+      type: object
+      properties:
+        dataset_id:
+          type: string
+          format: uuid
+        dataset_version_id:
+          type: string
+          format: uuid
+        dataset_item_version_id:
+          type: string
+          format: uuid
+        dataset_item_id:
+          type: string
+          format: uuid
     LocalRunnerPairResponse:
       type: object
       properties:
@@ -14144,6 +14173,8 @@ components:
         mask_id:
           type: string
           format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
         timeout:
           type: integer
           format: int32

@@ -309,6 +309,7 @@ export * from "./LlmAsJudgeOutputSchemaWriteType.js";
 export * from "./LocalRunner.js";
 export * from "./LocalRunnerHeartbeatResponse.js";
 export * from "./LocalRunnerJob.js";
+export * from "./LocalRunnerJobMetadata.js";
 export * from "./LocalRunnerJobPage.js";
 export * from "./LocalRunnerJobStatus.js";
 export * from "./LocalRunnerLogEntry.js";
