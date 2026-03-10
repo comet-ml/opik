@@ -168,14 +168,20 @@ class EvaluationAdapter:
         if trial is not None and trial.candidate_id not in self._candidate_step_index:
             self._candidate_step_index[trial.candidate_id] = step_index
 
-        previous_best = self._state.best_trial
-        self._state.trials.append(trial)
         is_full_eval = experiment_type is None
-        if is_full_eval and (self._state.best_trial is None or trial.optimization_score > self._state.best_trial.optimization_score):
-            self._state.best_trial = trial
-        self._event_emitter.on_trial_completed(trial)
+        is_cache_hit = cached is not None
 
-        if self._state.best_trial is trial and self._state.best_trial is not previous_best:
-            self._event_emitter.on_best_candidate_changed(trial)
+        # Only record full evaluations (and non-cached) as visible trials.
+        # Subsample/minibatch evals are internal to the optimizer and would
+        # clutter the UI — especially when minibatch size equals dataset size.
+        if is_full_eval and not is_cache_hit:
+            previous_best = self._state.best_trial
+            self._state.trials.append(trial)
+            if self._state.best_trial is None or trial.optimization_score > self._state.best_trial.optimization_score:
+                self._state.best_trial = trial
+            self._event_emitter.on_trial_completed(trial)
+
+            if self._state.best_trial is trial and self._state.best_trial is not previous_best:
+                self._event_emitter.on_best_candidate_changed(trial)
 
         return trial, raw_result
