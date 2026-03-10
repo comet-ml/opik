@@ -9,6 +9,7 @@ from opik.api_objects.prompt import Prompt, ChatPrompt
 from opik.api_objects.prompt.types import PromptType
 from rich.console import Console
 
+from ..migration_manifest import MigrationManifest
 from .utils import matches_name_pattern
 
 console = Console()
@@ -20,6 +21,7 @@ def import_prompts_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
+    manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
     """Import prompts from a directory.
 
@@ -38,6 +40,15 @@ def import_prompts_from_directory(
         error_count = 0
         for prompt_file in prompt_files:
             try:
+                # Skip files already completed in a previous run
+                if manifest and not dry_run and manifest.is_file_completed(prompt_file):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping {prompt_file.name} (already imported in a previous run)[/blue]"
+                        )
+                    skipped_count += 1
+                    continue
+
                 with open(prompt_file, "r", encoding="utf-8") as f:
                     prompt_data = json.load(f)
 
@@ -152,10 +163,16 @@ def import_prompts_from_directory(
 
                     imported_count += 1
 
+                    # Mark this file as completed in the manifest
+                    if manifest:
+                        manifest.mark_file_completed(prompt_file)
+
                 except Exception as e:
                     console.print(
                         f"[red]Error creating prompt {prompt_name}: {e}[/red]"
                     )
+                    if manifest:
+                        manifest.mark_file_failed(prompt_file, str(e))
                     error_count += 1
                     continue
 
@@ -163,6 +180,8 @@ def import_prompts_from_directory(
                 console.print(
                     f"[red]Error importing prompt from {prompt_file}: {e}[/red]"
                 )
+                if manifest:
+                    manifest.mark_file_failed(prompt_file, str(e))
                 error_count += 1
                 continue
 
