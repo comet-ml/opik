@@ -886,13 +886,10 @@ class TestMakeReflectiveDataset:
         assert len(records) == 1
         record = records[0]
         assert record["Inputs"]["question"] == "Q1"
-        assert "Runs" in record
-        assert "[Run 1/2]" in record["Runs"]
-        assert "[Run 2/2]" in record["Runs"]
-        assert "run1-output" in record["Runs"]
-        assert "run2-output" in record["Runs"]
-        assert "FAILED" in record["Runs"]
-        assert "PASSED" in record["Runs"]
+        assert "Worst Run" in record
+        assert "Worst run (2/2)" in record["Worst Run"]
+        assert "run2-output" in record["Worst Run"]
+        assert "FAILED" in record["Worst Run"]
         assert "Summary" in record
         assert "1/2 runs passed" in record["Summary"]
         assert "Consistent failures" not in record["Summary"]
@@ -1002,7 +999,7 @@ class TestMakeReflectiveDataset:
         record = result[SYSTEM_PROMPT_KEY][0]
         assert "Generated Outputs" in record
         assert "Feedback" in record
-        assert "Runs" not in record
+        assert "Worst Run" not in record
         assert "Summary" not in record
         assert record["Generated Outputs"] == "hello"
 
@@ -1044,10 +1041,9 @@ class TestMakeReflectiveDataset:
             components_to_update=[SYSTEM_PROMPT_KEY],
         )
 
-        runs_text = result[SYSTEM_PROMPT_KEY][0]["Runs"]
-        assert "- Assertion: Response addresses concern" in runs_text
-        assert "  Reason: The response is too generic" in runs_text
-        assert "- Response is relevant" in runs_text
+        worst_run_text = result[SYSTEM_PROMPT_KEY][0]["Worst Run"]
+        assert "- Assertion: Response addresses concern" in worst_run_text
+        assert "  Reason: The response is too generic" in worst_run_text
 
     def test_failed_assertion_without_reason(self):
         adapter = _build_adapter(MagicMock())
