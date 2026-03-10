@@ -25,8 +25,6 @@ def list_user_permissions(api_key: str, workspace: str, url: str) -> Dict[str, A
             response = client.get(url=url_helpers.get_user_permissions_url(url))
     except httpx.RequestError as e:
         raise ConnectionError(f"Network error: {str(e)}")
-    except Exception as e:
-        raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
     if response.status_code != 200:
         raise ConnectionError(f"HTTP error {response.status_code} - {response.text}")

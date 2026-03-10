@@ -118,7 +118,14 @@ def healthcheck(
                 click.echo("Traceback:", err=True)
                 click.echo(traceback.format_exc(), err=True)
 
-    if check_permissions:
+    if check_permissions is not None:
+        # Validate that the workspace is not empty
+        if check_permissions == "":
+            click.echo("---------------------------------------------------------")
+            raise click.BadParameter(
+                "--check-permissions requires a non-empty workspace name",
+                param_hint="--check-permissions",
+            )
         api_key = ctx.obj.get("api_key") if ctx.obj else None
         check_user_permissions.run(api_key=api_key, workspace=check_permissions)
 
