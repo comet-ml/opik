@@ -1,6 +1,5 @@
 """Smoke test functionality for Opik CLI."""
 
-import os
 import random
 import string
 import tempfile
@@ -175,7 +174,6 @@ def run_smoke_test(
         rich_representation.print_header("Starting Opik smoke test...")
 
         # Create Opik client
-        os.environ["OPIK_PROJECT_NAME"] = project_name
         client = opik.Opik(
             project_name=project_name,
             workspace=workspace,
