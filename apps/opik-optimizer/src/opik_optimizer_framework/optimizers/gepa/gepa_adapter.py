@@ -59,7 +59,7 @@ def _item_score(passed: bool, assertion_values: list[float], num_items: int) -> 
     if passed:
         return 1.0
     if not assertion_values:
-        return 1.0
+        return 0.0
     epsilon = 1.0 / (num_items + 1) if num_items > 0 else 0.0
     assertion_frac = sum(1 for v in assertion_values if v == 1.0) / len(assertion_values)
     return epsilon * assertion_frac

@@ -174,7 +174,7 @@ class EvaluationAdapter:
         # Only record full evaluations (and non-cached) as visible trials.
         # Subsample/minibatch evals are internal to the optimizer and would
         # clutter the UI — especially when minibatch size equals dataset size.
-        if is_full_eval and not is_cache_hit:
+        if is_full_eval and not is_cache_hit and trial is not None:
             previous_best = self._state.best_trial
             self._state.trials.append(trial)
             if self._state.best_trial is None or trial.optimization_score > self._state.best_trial.optimization_score:
