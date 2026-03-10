@@ -49,6 +49,10 @@ class GepaConfig:
     """Minimum cumulative assertion failures before showing Failure History to
     the reflection LLM. Lower values surface persistent failures earlier."""
 
+    early_stopping_patience: int = 10
+    """Stop optimization if the last N full evaluations show no pass_rate
+    improvement. Set to 0 to disable early stopping."""
+
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> GepaConfig:
         """Build config from optimizer_parameters, using defaults for missing keys."""

@@ -110,7 +110,25 @@ class GepaOptimizer:
         def _trial_score_stopper(_state):
             return adapter.best_full_eval_trial_score >= cfg.score_threshold
 
-        stop_callbacks = [_trial_score_stopper]
+        def _plateau_stopper(_state):
+            if cfg.early_stopping_patience <= 0:
+                return False
+            history = adapter._full_eval_score_history
+            if len(history) < cfg.early_stopping_patience + 1:
+                return False
+            best_before_window = max(history[: -cfg.early_stopping_patience])
+            best_in_window = max(history[-cfg.early_stopping_patience :])
+            if best_in_window <= best_before_window:
+                logger.info(
+                    "Early stopping: no pass_rate improvement in last %d full evaluations "
+                    "(best=%.4f)",
+                    cfg.early_stopping_patience,
+                    best_before_window,
+                )
+                return True
+            return False
+
+        stop_callbacks = [_trial_score_stopper, _plateau_stopper]
 
         result = _gepa.optimize(
             seed_candidate=seed_candidate,

@@ -215,6 +215,7 @@ class FrameworkGEPAAdapter:
         self._last_per_item_feedback: dict[str, dict[str, Any]] = {}
         self._full_dataset_size: int | None = None
         self.best_full_eval_trial_score: float = 0.0
+        self._full_eval_score_history: list[float] = []
 
         self._cached_full_eval_scores: dict[str, dict[str, float]] = {}
         self._cache_max_entries: int = 10
@@ -445,8 +446,10 @@ class FrameworkGEPAAdapter:
 
         if trial is not None:
             self._tracker.record_trial(key, trial, parent_candidate_ids, effective_capture_traces)
-            if is_full_eval and trial.score > self.best_full_eval_trial_score:
-                self.best_full_eval_trial_score = trial.score
+            if is_full_eval:
+                self._full_eval_score_history.append(trial.score)
+                if trial.score > self.best_full_eval_trial_score:
+                    self.best_full_eval_trial_score = trial.score
 
         per_item = _extract_per_item_feedback(raw_result)
         self._last_per_item_feedback = per_item
