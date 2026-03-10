@@ -31,7 +31,7 @@ class GepaConfig:
     ``"epsilon_greedy"`` — best with prob 1-ε, random with prob ε.
     """
 
-    max_candidates: int = 5
+    max_candidates: int = 25
     """Maximum number of candidates in the pool before GEPA stops generating new ones."""
 
     max_metric_calls_multiplier: int = 5

@@ -34,6 +34,7 @@ class EvaluationAdapter:
         event_emitter: EventEmitter,
         optimizer_type: str | None = None,
         optimizable_keys: list[str] | None = None,
+        evaluator_model: str | None = None,
     ) -> None:
         self._client = client
         self._dataset_name = dataset_name
@@ -43,6 +44,7 @@ class EvaluationAdapter:
         self._event_emitter = event_emitter
         self._optimizer_type = optimizer_type
         self._optimizable_keys = optimizable_keys or []
+        self._evaluator_model = evaluator_model
         self._trial_count = 0
         self._candidate_step_index: dict[str, int] = {}
         self._last_emitted_step = -1
@@ -152,6 +154,7 @@ class EvaluationAdapter:
                 experiment_type=experiment_type,
                 optimizer_type=self._optimizer_type,
                 optimizable_keys=self._optimizable_keys,
+                evaluator_model=self._evaluator_model,
             )
 
             if trial is not None:

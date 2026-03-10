@@ -164,6 +164,7 @@ def main():
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },
         split_strategy="no_split",
+        evaluator_model=MODEL,
     )
 
     # Run optimization directly so we can capture the adapter's reflection log
@@ -181,6 +182,7 @@ def main():
         event_emitter=event_emitter,
         optimizer_type=optimizer_type,
         optimizable_keys=context.optimizable_keys,
+        evaluator_model=context.evaluator_model,
     )
 
     baseline_trial = eval_adapter.evaluate(

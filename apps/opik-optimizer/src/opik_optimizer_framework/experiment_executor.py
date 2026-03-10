@@ -26,6 +26,7 @@ def run_experiment(
     optimizer_type: str | None = None,
     optimizable_keys: list[str] | None = None,
     task_threads: int = 4,
+    evaluator_model: str | None = None,
 ) -> TrialResult:
     """Execute an experiment, returning only the TrialResult."""
     trial, _ = run_experiment_with_details(
@@ -42,6 +43,7 @@ def run_experiment(
         optimizer_type=optimizer_type,
         optimizable_keys=optimizable_keys,
         task_threads=task_threads,
+        evaluator_model=evaluator_model,
     )
     return trial
 
@@ -60,6 +62,7 @@ def run_experiment_with_details(
     optimizer_type: str | None = None,
     optimizable_keys: list[str] | None = None,
     task_threads: int = 4,
+    evaluator_model: str | None = None,
 ) -> tuple[TrialResult, Any]:
     """Execute an experiment and return both the TrialResult and the raw EvaluationResult.
 
@@ -114,6 +117,7 @@ def run_experiment_with_details(
         experiment_config=experiment_config,
         task_threads=task_threads,
         experiment_type=experiment_type,
+        evaluator_model=evaluator_model,
     )
 
     score = _extract_score(result)

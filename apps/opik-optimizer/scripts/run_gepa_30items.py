@@ -416,6 +416,7 @@ def main():
             "model": MODEL,
             "model_parameters": {"temperature": 0.7, "max_tokens": 512},
         },
+        evaluator_model=MODEL,
     )
 
     logger.info("Starting optimization (model=%s)", MODEL)
