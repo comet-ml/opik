@@ -109,8 +109,14 @@ class RunnerLoop:
                     slot.release()
                     continue
 
-                agents = agents_registry.load_agents()
-                pool.submit(self._safe_execute, executor, job, agents, slot)
+                submitted = False
+                try:
+                    agents = agents_registry.load_agents()
+                    pool.submit(self._safe_execute, executor, job, agents, slot)
+                    submitted = True
+                finally:
+                    if not submitted:
+                        slot.release()
         except KeyboardInterrupt:
             self._shutdown_event.set()
 
