@@ -6016,11 +6016,11 @@ class TracesResourceTest {
     @Nested
     @DisplayName("Thread Reopening and Manual Score Deletion")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ThreadReopeningManualScoreDeletion {
+    class ThreadReopeningScorePreservation {
 
         @Test
-        @DisplayName("When thread is closed, manually scored, and reopened, then manual scores are deleted")
-        void whenThreadIsClosedManuallyScored_andReopened_thenManualScoresAreDeleted() {
+        @DisplayName("When thread is scored and new traces are added, then scores are preserved")
+        void whenThreadIsScored_andNewTracesAdded_thenScoresArePreserved() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -6046,13 +6046,8 @@ class TracesResourceTest {
             // Wait for thread processing
             Mono.delay(Duration.ofMillis(500)).block();
 
-            // Close the thread
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Wait for thread to be closed
-
-            // Add manual scores to the closed thread
-            List<FeedbackScoreBatchItemThread> manualScores = PodamFactoryUtils
+            // Add scores to the thread
+            List<FeedbackScoreBatchItemThread> scores = PodamFactoryUtils
                     .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
                     .map(item -> item.toBuilder()
@@ -6062,14 +6057,14 @@ class TracesResourceTest {
                             .build())
                     .collect(Collectors.toList());
 
-            manualScores.set(0, manualScores.get(0)
+            scores.set(0, scores.get(0)
                     .toBuilder()
                     .source(ScoreSource.SDK)
                     .build());
 
-            traceResourceClient.threadFeedbackScores(manualScores, apiKey, workspaceName);
+            traceResourceClient.threadFeedbackScores(scores, apiKey, workspaceName);
 
-            // Create new traces to reopen the thread
+            // Create new traces (new messages) for the thread
             List<Trace> newTraces = IntStream.range(0, 2)
                     .mapToObj(i -> createTrace().toBuilder()
                             .projectName(projectName)
@@ -6079,7 +6074,7 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
 
-            // Wait for thread to be reopened and manual scores to be deleted
+            // Wait for thread processing and verify scores are preserved
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
@@ -6088,17 +6083,29 @@ class TracesResourceTest {
 
                         List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
 
-                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
-                                TraceThreadStatus.ACTIVE);
+                        var expectedFeedbackScores = scores.stream()
+                                .map(s -> FeedbackScore.builder()
+                                        .name(s.name())
+                                        .categoryName(s.categoryName())
+                                        .value(s.value())
+                                        .reason(s.reason())
+                                        .source(s.source())
+                                        .createdBy(USER)
+                                        .lastUpdatedBy(USER)
+                                        .build())
+                                .toList();
 
-                        // Verify manual scores have been deleted
-                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
+                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE, expectedFeedbackScores);
+
+                        // Verify scores are preserved after new traces are added
+                        TraceAssertions.assertThreads(expectedThreads, actualThreads.content());
                     });
         }
 
         @Test
-        @DisplayName("When thread is closed with mixed scores and reopened, then all scores are deleted")
-        void whenThreadIsClosedWithMixedScores_andReopened_thenAllScoresAreDeleted() {
+        @DisplayName("When thread has mixed scores and new traces are added, then all scores are preserved")
+        void whenThreadHasMixedScores_andNewTracesAdded_thenAllScoresArePreserved() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
@@ -6124,12 +6131,7 @@ class TracesResourceTest {
             // Wait for thread processing
             Mono.delay(Duration.ofMillis(500)).block();
 
-            // Close the thread
-            traceResourceClient.closeTraceThread(threadId, projectId, null, apiKey, workspaceName);
-
-            // Wait for thread to be closed
-
-            // Add mixed scores to the closed thread (manual, SDK, and online scoring)
+            // Add mixed scores to the thread (UI, SDK, and online scoring)
             List<FeedbackScoreBatchItemThread> mixedScores = PodamFactoryUtils
                     .manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
                     .stream()
@@ -6152,7 +6154,7 @@ class TracesResourceTest {
 
             traceResourceClient.threadFeedbackScores(mixedScores, apiKey, workspaceName);
 
-            // Create new traces to reopen the thread
+            // Create new traces (new messages) for the thread
             List<Trace> newTraces = IntStream.range(0, 2)
                     .mapToObj(i -> createTrace().toBuilder()
                             .projectName(projectName)
@@ -6162,22 +6164,33 @@ class TracesResourceTest {
 
             traceResourceClient.batchCreateTraces(newTraces, apiKey, workspaceName);
 
-            // Wait for thread to be reopened and ALL scores to be deleted
+            // Wait for thread processing and verify all scores are preserved
             Awaitility.await()
                     .atMost(10, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-
                         var actualThreads = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
                                 null, null, null);
 
                         List<Trace> allTraces = Stream.concat(initialTraces.stream(), newTraces.stream()).toList();
 
-                        // Expect no scores - all scores (UI, SDK, ONLINE_SCORING) should be deleted
-                        var expectedReopenedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
-                                TraceThreadStatus.ACTIVE);
+                        var expectedFeedbackScores = mixedScores.stream()
+                                .map(s -> FeedbackScore.builder()
+                                        .name(s.name())
+                                        .categoryName(s.categoryName())
+                                        .value(s.value())
+                                        .reason(s.reason())
+                                        .source(s.source())
+                                        .createdBy(USER)
+                                        .lastUpdatedBy(USER)
+                                        .build())
+                                .toList();
 
-                        // Verify all scores have been deleted (manual, SDK, and online scoring)
-                        TraceAssertions.assertThreads(expectedReopenedThreads, actualThreads.content());
+                        // Expect all scores to be preserved - scores should NOT be deleted when new traces are added
+                        var expectedThreads = getExpectedThreads(allTraces, projectId, threadId, List.of(),
+                                TraceThreadStatus.ACTIVE, expectedFeedbackScores);
+
+                        // Verify all scores are preserved (UI, SDK, and ONLINE_SCORING)
+                        TraceAssertions.assertThreads(expectedThreads, actualThreads.content());
                     });
         }
     }
