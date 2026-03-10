@@ -7,6 +7,7 @@ from typing import Dict, Optional
 import opik
 from rich.console import Console
 
+from ..migration_manifest import MigrationManifest
 from .utils import matches_name_pattern
 
 console = Console()
@@ -18,6 +19,7 @@ def import_datasets_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
+    manifest: Optional[MigrationManifest] = None,
 ) -> Dict[str, int]:
     """Import datasets from a directory.
 
@@ -36,6 +38,19 @@ def import_datasets_from_directory(
         error_count = 0
         for dataset_file in dataset_files:
             try:
+                # Skip files already completed in a previous run
+                if (
+                    manifest
+                    and not dry_run
+                    and manifest.is_file_completed(dataset_file)
+                ):
+                    if debug:
+                        console.print(
+                            f"[blue]Skipping {dataset_file.name} (already imported in a previous run)[/blue]"
+                        )
+                    skipped_count += 1
+                    continue
+
                 with open(dataset_file, "r", encoding="utf-8") as f:
                     dataset_data = json.load(f)
 
@@ -125,10 +140,16 @@ def import_datasets_from_directory(
                         f"[green]Imported dataset: {dataset_name} with {len(items)} items[/green]"
                     )
 
+                # Mark this file as completed in the manifest
+                if manifest:
+                    manifest.mark_file_completed(dataset_file)
+
             except Exception as e:
                 console.print(
                     f"[red]Error importing dataset from {dataset_file.name}: {e}[/red]"
                 )
+                if manifest:
+                    manifest.mark_file_failed(dataset_file, str(e))
                 error_count += 1
                 continue
 
