@@ -15,8 +15,10 @@ def run(api_key: Optional[str], workspace: Optional[str]) -> None:
     api_key = api_key or settings.api_key
     workspace = workspace or settings.workspace
 
-    assert api_key is not None, "API key is required"
-    assert workspace is not None, "Workspace is required"
+    if api_key is None:
+        raise ValueError("API key is required")
+    if workspace is None:
+        raise ValueError("Workspace is required")
 
     try:
         permissions = get_user_permissions(

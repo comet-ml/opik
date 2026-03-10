@@ -93,11 +93,7 @@ def healthcheck(
             project_name = "smoke-test-project"
 
         # Validate that workspace is not empty
-        if smoke_test == "":
-            raise click.BadParameter(
-                "--smoke-test requires a non-empty workspace name",
-                param_hint="--smoke-test",
-            )
+        _check_workspace(smoke_test, "--smoke-test")
 
         # Get API key and debug flag from context
         api_key = ctx.obj.get("api_key") if ctx.obj else None
@@ -120,13 +116,17 @@ def healthcheck(
 
     if check_permissions is not None:
         # Validate that the workspace is not empty
-        if check_permissions == "":
-            click.echo("---------------------------------------------------------")
-            raise click.BadParameter(
-                "--check-permissions requires a non-empty workspace name",
-                param_hint="--check-permissions",
-            )
+        _check_workspace(check_permissions, "--check-permissions")
+
         api_key = ctx.obj.get("api_key") if ctx.obj else None
         check_user_permissions.run(api_key=api_key, workspace=check_permissions)
 
     rich_representation.print_header("healthcheck completed")
+
+
+def _check_workspace(workspace: str, param_hint: str) -> None:
+    if workspace == "":
+        click.echo("---------------------------------------------------------")
+        raise click.BadParameter(
+            f"{param_hint} requires a non-empty workspace name", param_hint=param_hint
+        )

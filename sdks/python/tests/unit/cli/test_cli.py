@@ -437,12 +437,12 @@ class TestCheckPermissionsCommand:
 
     @patch("opik.cli.healthcheck.cli.standard_check.run")
     @patch("opik.cli.healthcheck.check_user_permissions.config.OpikConfig")
-    def test_check_permissions__missing_api_key__raises_assertion_error(
+    def test_check_permissions__missing_api_key__raises_value_error(
         self,
         mock_opik_config,
         mock_standard_run,
     ):
-        """Test that missing api_key (not in CLI context and not in config) raises AssertionError."""
+        """Test that missing api_key (not in CLI context and not in config) raises ValueError."""
         mock_config = MagicMock()
         mock_config.api_key = None
         mock_config.workspace = None
@@ -456,5 +456,5 @@ class TestCheckPermissionsCommand:
         )
 
         assert result.exit_code != 0
-        assert isinstance(result.exception, AssertionError)
+        assert isinstance(result.exception, ValueError)
         assert "API key is required" in str(result.exception)
