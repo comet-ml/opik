@@ -5,18 +5,20 @@ import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -86,12 +88,12 @@ public class DashboardResourceClient {
     }
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
-            String sorting, int expectedStatus) {
+            List<SortingField> sorting, int expectedStatus) {
         return find(apiKey, workspaceName, page, size, name, sorting, null, expectedStatus);
     }
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
-            String sorting, String filters, int expectedStatus) {
+            List<SortingField> sorting, List<DashboardFilter> filters, int expectedStatus) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -100,12 +102,12 @@ public class DashboardResourceClient {
             target = target.queryParam("name", name);
         }
 
-        if (sorting != null) {
-            target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
+        if (CollectionUtils.isNotEmpty(sorting)) {
+            target = target.queryParam("sorting", TestUtils.toURLEncodedQueryParam(sorting));
         }
 
-        if (filters != null) {
-            target = target.queryParam("filters", URLEncoder.encode(filters, StandardCharsets.UTF_8));
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
         }
 
         try (var response = target.request()

@@ -11,7 +11,7 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum DashboardType {
 
-    MULTI_PROJECT("multi-project"),
+    MULTI_PROJECT("multi_project"),
     EXPERIMENTS("experiments");
 
     @JsonValue
