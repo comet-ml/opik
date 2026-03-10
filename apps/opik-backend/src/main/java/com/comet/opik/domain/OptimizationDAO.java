@@ -125,7 +125,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     optimization_id,
                     experiment_scores,
                     metadata AS experiment_metadata,
-                    created_at AS experiment_created_at
+                    created_at AS experiment_created_at,
+                    type AS experiment_type
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND optimization_id IN (SELECT id FROM optimization_final)
@@ -279,6 +280,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                         toString(ef.id)
                     ) AS candidate_id
                 FROM experiments_final ef
+                WHERE ef.experiment_type NOT IN ('mini-batch', 'mutation')
             ), objective_scores_per_experiment AS (
                 SELECT
                     ef.optimization_id,
