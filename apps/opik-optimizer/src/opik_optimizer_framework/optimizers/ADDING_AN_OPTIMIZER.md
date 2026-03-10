@@ -105,10 +105,10 @@ is set by the adapter based on the evaluation context (full trial, mini-batch, o
 
 Shared state that accumulates trial results:
 
-- `state.trials` — list of all `TrialResult` objects
-- `state.best_trial` — the trial with the highest score so far
+- `state.trials` — list of `TrialResult` objects for full evaluations (subsample/minibatch evals and cache hits are excluded)
+- `state.best_trial` — the full-eval trial with the highest `optimization_score` so far
 
-Trials are automatically added by `EvaluationAdapter.evaluate()` — you don't need to manage this manually.
+Trials are automatically added by `EvaluationAdapter.evaluate()` — you don't need to manage this manually. Only full evaluations (`experiment_type=None`) that are not cache hits are recorded.
 
 ### Progress Reporting
 

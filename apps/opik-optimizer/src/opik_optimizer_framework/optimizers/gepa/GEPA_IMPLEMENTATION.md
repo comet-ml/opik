@@ -230,17 +230,28 @@ The header is stripped from the LLM's output so it doesn't leak into the propose
 {
     "item-id-1": {
         "runs": [
-            {"output": "...", "score": 0.5, "assertions": [
+            {"output": "...", "score": 0.83, "assertions": [
                 {"name": "is_polite", "value": 1.0, "reason": ""},
                 {"name": "mentions_deadline", "value": 0.0, "reason": "No deadline mentioned"}
             ]},
         ],
-        "score": 0.5  # mean across all runs
+        "score": 0.83  # pass_rate-aligned item score (see below)
     },
 }
 ```
 
 When `runs_per_item > 1`, all runs are preserved so the reflection LLM can see what varies across attempts.
+
+### Per-item scoring (`_item_score`)
+
+Item scores are aligned with the framework's pass_rate to ensure GEPA ranks candidates consistently:
+
+- **Passing items** (as determined by `build_suite_result`, respecting `execution_policy.pass_threshold`): score = **1.0**
+- **Failing items**: score = **ε × assertion_frac**, where `ε = 1/(num_items+1)` and `assertion_frac` is the fraction of assertions that passed across all runs
+
+The gap between any passing item (1.0) and any failing item (< ε < 1) guarantees that `mean(per_item_scores)` ranks candidates the same way as pass_rate. The assertion fraction within failing items provides gradient for GEPA's subsample acceptance gate, so it can distinguish "almost passing" from "completely failing" items.
+
+Previous approach (mean of assertion values per item) caused GEPA to prefer "uniformly decent" candidates over ones with higher pass_rate.
 
 ### Record building
 
@@ -291,6 +302,25 @@ Prompt templates often contain `{variable}` placeholders that are filled at runt
 
 The reflection LLM is resolved via `_get_lm_callable()`: string model names are wrapped in a litellm completion call; callables are used directly.
 
+## Scoring Contract
+
+`TrialResult` carries two scores:
+
+| Field | Contains | Used by |
+|-------|----------|---------|
+| `score` | Raw pass_rate (items passed / total) | UI, API, `OptimizationResult`, stop condition |
+| `internal_optimization_score` | Blended score: `pass_rate + ε × assertion_rate` | Algorithm-internal candidate ranking only |
+
+The `optimization_score` property returns `internal_optimization_score` if set, falling back to `score`. This is used by the `EvaluationAdapter` to update `best_trial` and by GEPA to compare candidates.
+
+The stop condition (`_trial_score_stopper`) compares `best_full_eval_trial_score` (which tracks `trial.score`, i.e. pass_rate) against `score_threshold`, keeping user-facing thresholds aligned with user-facing scores.
+
+## Trial Visibility
+
+Only full evaluations that are not cache hits are recorded in `state.trials` and emitted as UI events. Subsample evaluations (minibatch, mutation) are returned to the optimizer for internal use but excluded from the trial list. This prevents the UI from showing intermediate exploration steps as if they were real trials — especially important when minibatch size equals dataset size (small datasets or `no_split` strategy), where every eval looks like a full eval by batch size.
+
+**Known limitation**: When minibatch size equals dataset size, the adapter cannot distinguish subsample from full eval by batch size alone. In this case, new mutation evals on the full dataset are treated as full evals (`experiment_type=None`). Cache hits (parent re-evaluations) are still filtered out.
+
 ## Experiment Metadata
 
 Each evaluation produces a trial with metadata for the UI:
@@ -328,7 +358,7 @@ All passed via `context.optimizer_parameters` and parsed into `GepaConfig`:
 | `max_candidates` | `5` | Maximum candidates to explore |
 | `max_metric_calls_multiplier` | `5` | Budget multiplier: `max_candidates * len(dataset) * multiplier` |
 | `max_metric_calls` | (computed) | Override: passed directly in `optimizer_parameters` to bypass the formula |
-| `score_threshold` | `1.0` | Stop when best full-eval score reaches this |
+| `score_threshold` | `1.0` | Stop when best full-eval pass_rate reaches this |
 | `min_failed_per_batch` | `1` | Minimum guaranteed failed items per minibatch |
 
 ## Example Experiment Table
