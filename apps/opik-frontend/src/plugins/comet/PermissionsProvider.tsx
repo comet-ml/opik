@@ -19,6 +19,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canUpdateUserRole,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
+    canWriteComments,
     isPending,
   } = useUserPermission();
 
@@ -37,6 +38,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canUpdateUserRole,
         canConfigureWorkspaceSettings,
         canUpdateAIProviders,
+        canWriteComments,
       },
       isPending,
     }),
@@ -53,6 +55,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canUpdateUserRole,
       canConfigureWorkspaceSettings,
       canUpdateAIProviders,
+      canWriteComments,
       isPending,
     ],
   );

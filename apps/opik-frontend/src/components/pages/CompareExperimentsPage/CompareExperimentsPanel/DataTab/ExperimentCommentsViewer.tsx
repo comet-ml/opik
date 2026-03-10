@@ -1,15 +1,11 @@
 import React from "react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useTraceCommentsBatchDeleteMutation from "@/api/traces/useTraceCommentsBatchDeleteMutation";
 import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
 import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
-import { orderBy } from "lodash";
 import { CommentItems } from "@/types/comment";
-import UserCommentForm from "@/components/pages-shared/traces/UserComment/UserCommentForm";
-import UserComment from "@/components/pages-shared/traces/UserComment/UserComment";
 import { MessageSquareMore } from "lucide-react";
-import { useLoggedInUserName } from "@/store/AppStore";
 import ExpandableSection from "@/components/shared/ExpandableSection/ExpandableSection";
+import CommentsSection from "@/components/pages-shared/traces/UserComment/CommentsSection";
 
 export type ExperimentCommentsViewerProps = {
   comments?: CommentItems;
@@ -22,8 +18,6 @@ const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
   traceId,
   sectionIdx,
 }) => {
-  const userName = useLoggedInUserName();
-
   const traceDeleteMutation = useTraceCommentsBatchDeleteMutation();
   const createTraceMutation = useCreateTraceCommentMutation();
   const updateTraceMutation = useUpdateTraceCommentMutation();
@@ -58,49 +52,15 @@ const ExperimentCommentsViewer: React.FC<ExperimentCommentsViewerProps> = ({
       sectionIdx={sectionIdx}
       count={comments.length}
     >
-      <UserCommentForm
-        onSubmit={(data) => onSubmit(data.commentText)}
-        className="px-3"
-        actions={
-          <TooltipWrapper content="Submit" hotkeys={["⌘", "⏎"]}>
-            <UserCommentForm.SubmitButton />
-          </TooltipWrapper>
-        }
-      >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." />
-      </UserCommentForm>
-      <div className="mt-2 pb-3">
-        {comments?.length ? (
-          orderBy(comments, "created_at", "desc").map((comment) => (
-            <UserComment
-              key={comment.id}
-              comment={comment}
-              avatar={<UserComment.Avatar />}
-              actions={
-                <UserComment.Menu>
-                  <UserComment.MenuEditItem />
-                  <UserComment.MenuDeleteItem onDelete={onDelete} />
-                </UserComment.Menu>
-              }
-              userName={userName}
-              header={
-                <>
-                  <UserComment.Username />
-                  <UserComment.CreatedAt />
-                </>
-              }
-              className="px-3 py-2 hover:bg-soft-background"
-            >
-              <UserComment.Text />
-              <UserComment.Form onSubmit={onEditSubmit} />
-            </UserComment>
-          ))
-        ) : (
-          <div className="comet-body-s py-3 text-center text-muted-slate">
-            No comments yet
-          </div>
-        )}
-      </div>
+      <CommentsSection
+        comments={comments}
+        onSubmit={onSubmit}
+        onEditSubmit={onEditSubmit}
+        onDelete={onDelete}
+        formClassName="px-3"
+        listClassName="mt-2 pb-3"
+        commentClassName="px-3 py-2 hover:bg-soft-background"
+      />
     </ExpandableSection>
   );
 };

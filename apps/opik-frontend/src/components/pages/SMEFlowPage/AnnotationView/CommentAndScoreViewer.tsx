@@ -11,6 +11,7 @@ import {
   SME_ACTION,
   SME_HOTKEYS,
 } from "@/components/pages/SMEFlowPage/hotkeys";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const isFromEditableElement = (keyboardEvent: KeyboardEvent): boolean => {
   const target = keyboardEvent.target as HTMLElement;
@@ -33,6 +34,10 @@ const CommentAndScoreViewer: React.FC = () => {
     updateFeedbackScore,
     deleteFeedbackScore,
   } = useSMEFlow();
+
+  const {
+    permissions: { canWriteComments },
+  } = usePermissions();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const feedbackScoresRef = useRef<HTMLDivElement>(null);
@@ -79,26 +84,30 @@ const CommentAndScoreViewer: React.FC = () => {
 
   return (
     <div className="pl-4">
-      <div className="flex items-center justify-between gap-1 pb-2">
-        <span className="comet-body-s-accented truncate">Comment</span>
-        <TooltipWrapper
-          content={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].description}
-          hotkeys={[SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display]}
-        >
-          <HotkeyDisplay
-            hotkey={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display}
-            variant="outline"
-            size="sm"
-            className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+      {canWriteComments && (
+        <>
+          <div className="flex items-center justify-between gap-1 pb-2">
+            <span className="comet-body-s-accented truncate">Comment</span>
+            <TooltipWrapper
+              content={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].description}
+              hotkeys={[SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display]}
+            >
+              <HotkeyDisplay
+                hotkey={SME_HOTKEYS[SME_ACTION.FOCUS_COMMENT].display}
+                variant="outline"
+                size="sm"
+                className="size-6 border border-gray-300 bg-white p-0 font-mono text-xs shadow-sm"
+              />
+            </TooltipWrapper>
+          </div>
+          <UserCommentForm.StandaloneTextareaField
+            ref={textareaRef}
+            placeholder="Add a comment..."
+            value={currentAnnotationState.comment?.text || ""}
+            onValueChange={updateComment}
           />
-        </TooltipWrapper>
-      </div>
-      <UserCommentForm.StandaloneTextareaField
-        ref={textareaRef}
-        placeholder="Add a comment..."
-        value={currentAnnotationState.comment?.text || ""}
-        onValueChange={updateComment}
-      />
+        </>
+      )}
       {hasFeedbackDefinitions && (
         <div ref={feedbackScoresRef} className="relative mt-6">
           <FeedbackScoresEditor

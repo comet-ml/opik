@@ -73,6 +73,7 @@ export enum ManagementPermissionsNames {
   USER_ROLE_UPDATE = "user_role_update",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
   AI_PROVIDER_UPDATE = "ai_provider_update",
+  COMMENT_WRITE = "comment_write",
 }
 
 export interface UserPermission {
