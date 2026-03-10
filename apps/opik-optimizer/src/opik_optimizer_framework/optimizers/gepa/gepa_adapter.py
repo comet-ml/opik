@@ -456,6 +456,8 @@ class FrameworkGEPAAdapter:
 
         if self._batch_sampler is not None and is_full_eval:
             self._batch_sampler.update_scores(per_item)
+
+        if self._batch_sampler is not None and per_item:
             self._batch_sampler.update_assertion_failures(per_item)
 
         if is_full_eval and per_item:
