@@ -99,9 +99,9 @@ The passed items act as **behavioral anchors**. The reflection LLM sees both wha
 
 Default `reflection_minibatch_size` is **6**. The 50/50 split needs at least 4 items to be meaningful (2 failed + 2 passed); 6 gives the reflection LLM enough signal per iteration without excessive cost.
 
-### Failure streak tracking
+### Cumulative failure tracking
 
-The sampler also tracks per-item **failure streaks** — how many consecutive full evaluations an item has failed, and which specific assertions keep failing. This data is used by the reflection prompt to annotate stuck items with "Failure History" context, encouraging the reflection LLM to try structurally different approaches rather than repeating the same fix.
+The sampler tracks **cumulative assertion failures** across the entire optimization — how many times each assertion has failed in total, and which items currently have failing assertions. This data is used by `ReflectiveDatasetBuilder` to annotate items with "Failure History" context when an assertion exceeds the `persistent_failure_threshold` (default 7), encouraging the reflection LLM to try structurally different approaches rather than repeating the same fix.
 
 ### Problematic items summary
 
@@ -181,7 +181,7 @@ The `EvaluationAdapter` caches evaluation results keyed by `SHA256(JSON(config) 
 
 ## Reflection Prompt
 
-The reflection prompt is a custom 5-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE` in `reflection_proposer.py`. It replaces GEPA's default to provide structured reasoning and prevent overfitting. The template is task-agnostic — it uses neutral language ("parameter", "system") and avoids domain-specific examples. It explicitly instructs the LLM to make surgical edits to the existing parameter rather than rewriting from scratch.
+The reflection prompt is a custom 4-step template stored in `GENERALIZATION_REFLECTION_TEMPLATE` in `reflection_proposer.py`. It replaces GEPA's default to provide structured reasoning and prevent overfitting. The template is task-agnostic — it uses neutral language ("parameter", "system") and avoids domain-specific examples. It explicitly instructs the LLM to update existing rules before adding new ones, and to never copy specific names or details from the feedback examples.
 
 ### Template structure
 
@@ -206,17 +206,15 @@ The header is stripped from the LLM's output so it doesn't leak into the propose
 - Whether it's a user-facing prompt or an internal subagent prompt
 - How parameters relate to each other
 
-### The 5 steps
+### The 4 steps
 
 **STEP 1 — DIAGNOSE**: Read FAILED assertions and identify what behaviors are missing. Read PASSED assertions — the current parameter already produces these. Prefer keeping rules that drive successes, but may tighten or rephrase them if needed to fix failures.
 
-**STEP 2 — CHECK FAILURE HISTORY**: If any example has a "Failure History" section, the current rules for that assertion already failed before. Do NOT add another generic rule of the same kind. Instead embed concrete example phrases or lookup instructions directly, or try a structurally different approach.
+**STEP 2 — CHECK FAILURE HISTORY**: If any example has a "Failure History" section, the listed assertions have been persistently failing across many previous attempts. Do NOT refine or rephrase existing rules — try a fundamentally different approach: restructure the parameter, add step-by-step procedures, add conditional logic, or rewrite the section from scratch. More specific rules are allowed for persistent failures, but still avoid copying non-generalizable specifics from the feedback examples.
 
-**STEP 3 — WRITE TARGETED FIXES**: For each failing assertion, add or modify ONE specific rule. Every rule must describe an observable, verifiable action — not abstract guidance. Rules must generalize to any input in this domain; do NOT reference specific test inputs.
+**STEP 3 — WRITE FIXES**: For each failing assertion, first check whether an existing rule can be updated before adding a new one. Multiple related rules may be changed together. Every rule must describe an observable, verifiable action — not abstract guidance. Rules must generalize to any input. NEVER copy specific names, details, or scenarios from the feedback examples — they are just samples and will change at runtime. Abstract them into general categories.
 
-**STEP 4 — MINIMAL EDIT**: Start from the original parameter text and apply the fixes from Step 3. Do NOT rewrite or reorganize parts that are already working. Add new rules near related existing ones. If the parameter is already scoring well, make small, precise changes only.
-
-**STEP 5 — STRUCTURE**: Use markdown formatting. Group related rules under `##` headers. Merge overlapping rules. Keep the parameter concise.
+**STEP 4 — STRUCTURE**: Use markdown formatting. Group rules by behavior pattern under `##` headers, not by scenario type. Merge overlapping rules. Keep the parameter concise.
 
 ## Reflective Dataset Construction
 
@@ -240,7 +238,7 @@ The header is stripped from the LLM's output so it doesn't leak into the propose
 }
 ```
 
-When `runs_per_item > 1`, all runs are preserved so the reflection LLM can see what varies across attempts.
+When `runs_per_item > 1`, only the worst run is shown to keep the prompt focused on the most problematic output.
 
 ### Per-item scoring (`_item_score`)
 
@@ -264,15 +262,14 @@ For each item in the minibatch trajectories:
 
 **Multiple runs** — consolidates into one record with:
 - `Inputs`: same as above
-- `Runs`: each run as `[Run 1/N]` with output and feedback
-- `Summary`: e.g., "2/3 runs passed. Consistent failures: mentions_deadline"
+- `Summary`: e.g., "2/3 runs passed. Consistent failures: mentions_deadline" plus blocking assertion rates
+- `Worst Run`: output and assertion details from the single worst run only
 
 ### Failure history annotation
 
-For items with `failure_streak >= 1`, a `Failure History` field is appended:
-> "This item has failed N consecutive iteration(s). Still-failing assertions: ... The current rules for these assertions are not working."
+The `FailureAwareBatchSampler` tracks cumulative assertion failures across the entire optimization. When an assertion has failed >= `persistent_failure_threshold` times total (default 7, configurable via `GepaConfig`) AND failed again in the current evaluation, a `Failure History` section is inserted showing which assertions are persistently failing and their failure count out of total evaluations (e.g., "failed 12 out of 15 evaluations").
 
-This warns the reflection LLM to try a structurally different approach.
+Failure History is placed right after Inputs (before any run data) via dict key reordering, so it's the first thing the reflection LLM sees after the input context. This warns the reflection LLM to try a structurally different approach.
 
 ### Sorting
 
@@ -355,11 +352,12 @@ All passed via `context.optimizer_parameters` and parsed into `GepaConfig`:
 | `seed` | `42` | Random seed for GEPA and the batch sampler |
 | `reflection_minibatch_size` | `6` | Items per minibatch for reflection |
 | `candidate_selection_strategy` | `"current_best"` | How GEPA selects candidates (`"current_best"`, `"pareto"`, or `"epsilon_greedy"`) |
-| `max_candidates` | `5` | Maximum candidates to explore |
+| `max_candidates` | `25` | Maximum candidates in the pool before GEPA stops |
 | `max_metric_calls_multiplier` | `5` | Budget multiplier: `max_candidates * len(dataset) * multiplier` |
 | `max_metric_calls` | (computed) | Override: passed directly in `optimizer_parameters` to bypass the formula |
 | `score_threshold` | `1.0` | Stop when best full-eval pass_rate reaches this |
 | `min_failed_per_batch` | `1` | Minimum guaranteed failed items per minibatch |
+| `persistent_failure_threshold` | `7` | Minimum cumulative assertion failures before showing Failure History to the reflection LLM |
 
 ## Example Experiment Table
 

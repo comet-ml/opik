@@ -47,7 +47,7 @@ This becomes the `<curr_param>` placeholder value in the template.
 
 **Failure History annotation** (applied to both single-run and multi-run items):
 
-The `FailureAwareBatchSampler` tracks cumulative assertion failures across the entire optimization. When an assertion has failed >= 10 times total (`_PERSISTENT_FAILURE_THRESHOLD`) AND failed again in the current evaluation, a Failure History section is inserted showing:
+The `FailureAwareBatchSampler` tracks cumulative assertion failures across the entire optimization. When an assertion has failed >= `persistent_failure_threshold` times (default 7, configurable via `GepaConfig`) AND failed again in the current evaluation, a Failure History section is inserted showing:
 - Which assertions are persistently failing
 - The failure count out of total evaluations (e.g., "failed 12 out of 15 evaluations")
 
@@ -119,10 +119,12 @@ parameter as your starting point.
 STEP 1 — DIAGNOSE: [identify missing behaviors from FAILED, prefer keeping PASSED rules]
 STEP 2 — CHECK FAILURE HISTORY: [persistent failures need fundamentally different approach —
          escalate via restructuring, step-by-step procedures, conditional logic,
-         or section rewrite; may use more specific rules than normal]
+         or section rewrite; may use more specific rules than normal,
+         but still avoid non-generalizable specifics]
 STEP 3 — WRITE FIXES: [update existing rules before adding new ones;
-         observable, verifiable actions — generalize to any input,
-         abstract specific examples into general categories]
+         observable, verifiable actions — generalize to any input;
+         NEVER copy specific names/details/scenarios from feedback,
+         abstract into general categories]
 STEP 4 — STRUCTURE: [markdown formatting, group by behavior pattern under ## headers,
          merge overlaps]
 
@@ -236,15 +238,17 @@ placement;
 (c) add conditional logic ("When X, always do Y before Z");
 (d) rewrite the section governing the failing behavior from scratch.
 For persistent failures, you may use more specific and detailed rules than you
-normally would.
+normally would, but still avoid copying non-generalizable specifics from the
+feedback examples.
 
 STEP 3 — WRITE FIXES:
 For each failing assertion, first check whether an existing rule can be updated
 to cover the failing behavior before adding a new one. You may change multiple
 related rules together if the failure requires coordinated changes. Every rule
 must describe an observable, verifiable action — not abstract guidance. Rules
-must generalize to any input; do NOT reference specific examples from the
-feedback above — try abstracting them into general categories when possible.
+must generalize to any input. NEVER copy specific names, details, or scenarios
+from the feedback examples into the parameter — they are just samples and will
+change at runtime. Abstract them into general categories.
 
 STEP 4 — STRUCTURE:
 Use markdown formatting. Group rules by behavior pattern under ## headers, not
