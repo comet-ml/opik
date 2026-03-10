@@ -129,12 +129,12 @@ def _build_suite(client):
 
     suite.add_item(
         data={
-            "question": "Is the XYZ Wireless Headphones compatible with iPhone 15?",
-            "context": "Product SKU: WH-2024-BLK",
+            "question": "I just bought your bluetooth speaker and it keeps disconnecting from my phone every few minutes. Is this a known issue?",
+            "context": "Product: BT-Speaker-500, purchased 3 days ago, customer using Samsung Galaxy S24",
         },
         evaluators=[LLMJudge(assertions=[
-            "Response does not confidently claim compatibility or incompatibility without evidence",
-            "Response suggests how the customer can verify compatibility",
+            "Response provides concrete troubleshooting steps the customer can try immediately",
+            "Response offers further support options if troubleshooting does not resolve the issue",
         ])],
     )
 
