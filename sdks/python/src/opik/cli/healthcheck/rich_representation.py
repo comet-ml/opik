@@ -135,7 +135,7 @@ def print_user_permissions(user_permissions: Dict[str, Any]) -> None:
     table.add_column("Available", style=DEFAULT_VALUE_COLOR)
 
     for permission in permissions:
-        value = bool(permission["permission_value"])
+        value = permission["permission_value"] == "true"
         table.add_row(permission["permission_name"], str(value))
 
     console.print(table)
