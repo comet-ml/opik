@@ -401,6 +401,7 @@ from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteTy
 from .local_runner import LocalRunner
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
+from .local_runner_job_metadata import LocalRunnerJobMetadata
 from .local_runner_job_page import LocalRunnerJobPage
 from .local_runner_job_status import LocalRunnerJobStatus
 from .local_runner_log_entry import LocalRunnerLogEntry
@@ -972,6 +973,7 @@ __all__ = [
     "LocalRunner",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
+    "LocalRunnerJobMetadata",
     "LocalRunnerJobPage",
     "LocalRunnerJobStatus",
     "LocalRunnerLogEntry",
