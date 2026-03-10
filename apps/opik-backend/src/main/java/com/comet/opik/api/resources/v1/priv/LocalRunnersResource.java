@@ -103,7 +103,7 @@ public class LocalRunnersResource {
     }
 
     @GET
-    @Operation(operationId = "listRunners", summary = "List local runners", description = "List all local runners in the current workspace", responses = {
+    @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Runners list", content = @Content(schema = @Schema(implementation = LocalRunner.LocalRunnerPage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response listRunners(
