@@ -47,7 +47,7 @@ def agent_config_decorator(
     cls: typing.Optional[type] = None,
     *,
     name: typing.Optional[str] = None,
-    project: typing.Optional[str] = None,
+    project_name: typing.Optional[str] = None,
     workspace: typing.Optional[str] = None,
     env: typing.Optional[str] = None,
     mask_id: typing.Optional[str] = None,
@@ -72,7 +72,7 @@ def agent_config_decorator(
     Args:
         cls: The class being decorated (set automatically).
         name: Prefix used for backend field keys. Defaults to the class name.
-        project: Opik project name. Defaults to the client's default project.
+        project_name: Opik project name. Defaults to the client's default project.
         workspace: Opik workspace. Reserved for future use.
         env: Pin this config instance to a specific environment blueprint.
         mask_id: ID of a mask blueprint to overlay on every attribute read.
@@ -104,7 +104,7 @@ def agent_config_decorator(
 
             client = opik_client.get_client_cached()
 
-            resolved_project = project or client.project_name
+            resolved_project = project_name or client.project_name
             agent_config = config.AgentConfig(
                 project_name=resolved_project,
                 rest_client_=client.rest_client,

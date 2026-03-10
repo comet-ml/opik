@@ -43,7 +43,7 @@ def test_agent_config_decorator__all_primitive_and_collection_types__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class AllTypesConfig:
         temperature: float = 0.7
         max_tokens: Optional[int] = None
@@ -70,7 +70,7 @@ def test_agent_config_decorator__backend_overrides_local_defaults__happyflow(
     project_name: str,
 ):
     # First instantiation creates the blueprint with temperature=0.3
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class MyConfig:
         temperature: float = 0.3
         model: str = "gpt-3.5"
@@ -83,7 +83,7 @@ def test_agent_config_decorator__backend_overrides_local_defaults__happyflow(
     _registry.clear()
 
     # Second instantiation with different local defaults — backend values must win
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class MyConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         model: str = "gpt-4"
@@ -216,7 +216,7 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class BaseConfig:
         temperature: float = 0.5
 
@@ -234,7 +234,7 @@ def test_agent_config__mask_id_pin__does_not_update_backend__happyflow(
 
     _registry.clear()
 
-    @opik.agent_config(project=project_name, mask_id=mask_id)
+    @opik.agent_config(project_name=project_name, mask_id=mask_id)
     class BaseConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         name: str = "placeholder"
@@ -250,7 +250,7 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class EnvConfig:
         temperature: float = 0.4
 
@@ -266,7 +266,7 @@ def test_agent_config__env_pin__does_not_update_backend__happyflow(
 
     _registry.clear()
 
-    @opik.agent_config(project=project_name, env="staging")
+    @opik.agent_config(project_name=project_name, env="staging")
     class EnvConfig:  # type: ignore[no-redef]
         temperature: float = 0.99
         name: str = "placeholder"
@@ -286,7 +286,7 @@ def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyfl
     """Backend is source of truth: re-instantiating with a different constructor arg
     should return the value from the first registration, not the new arg."""
 
-    @opik.agent_config(project=project_name, env="prod")
+    @opik.agent_config(project_name=project_name, env="prod")
     class MyAgentConfig:
         my_param: int
         name: str
@@ -300,7 +300,7 @@ def test_agent_config__env_pin__second_instantiation_uses_backend_value__happyfl
     _registry.clear()
 
     # Second instantiation: backend is now source of truth, "Bob" should be ignored
-    @opik.agent_config(project=project_name, env="prod")
+    @opik.agent_config(project_name=project_name, env="prod")
     class MyAgentConfig:  # type: ignore[no-redef]
         my_param: int
         name: str
@@ -344,7 +344,7 @@ def test_agent_config_decorator__annotated_descriptions__sent_to_backend(
     opik_client: opik.Opik,
     project_name: str,
 ):
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     class AnnotatedConfig:
         model: Annotated[str, "The LLM model identifier"] = "gpt-4o"
         temperature: Annotated[float, "Sampling temperature"] = 0.7
@@ -386,7 +386,7 @@ def test_agent_config_decorator__prompt_tracks_latest_version__prompt_version_st
     )
 
     # Register a config that holds both field types pinned to v1
-    @opik.agent_config(project=project_name)
+    @opik.agent_config(project_name=project_name)
     @dataclasses.dataclass
     class PromptConfig:
         system_prompt: Prompt = dataclasses.field(default_factory=lambda: prompt_v1)
