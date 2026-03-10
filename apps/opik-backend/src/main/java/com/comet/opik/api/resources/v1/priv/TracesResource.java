@@ -495,14 +495,18 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
+    public Response findFeedbackScoreNames(
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
+
+        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getTraceFeedbackScoreNames(projectId)
+                .getTraceFeedbackScoreNames(projectId, resolvedExcludeCategories)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",
@@ -1055,5 +1059,14 @@ public class TracesResource {
         log.info("Deleted thread comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
+
+    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
+        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
+            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
+        }
+        return DEFAULT_EXCLUDE_CATEGORY_NAMES;
     }
 }

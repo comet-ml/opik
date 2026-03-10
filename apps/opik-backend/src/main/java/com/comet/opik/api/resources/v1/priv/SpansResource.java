@@ -72,6 +72,7 @@ import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
@@ -397,18 +398,21 @@ public class SpansResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
-            @QueryParam("type") SpanType type) {
+            @QueryParam("type") SpanType type,
+            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
 
         if (projectId == null) {
             throw new BadRequestException("project_id must be provided");
         }
+
+        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getSpanFeedbackScoreNames(projectId, type)
+                .getSpanFeedbackScoreNames(projectId, type, resolvedExcludeCategories)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",
@@ -548,5 +552,14 @@ public class SpansResource {
         log.info("Deleted span comments with ids '{}' on workspaceId '{}'", batchDelete.ids(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
+
+    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
+        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
+            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
+        }
+        return DEFAULT_EXCLUDE_CATEGORY_NAMES;
     }
 }

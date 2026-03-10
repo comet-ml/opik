@@ -225,15 +225,15 @@ spec:
               mountPath: /etc/pki/ca-trust/extracted/java/cacerts
           {{- end }}
           {{- if eq $key "frontend" }}
-          - name: {{ include "opik.name" $ }}-frontend-nginx
-            mountPath: /etc/nginx/templates/default.conf.template
-            subPath: default.conf.template
-            readOnly: true
+            - name: {{ include "opik.name" $ }}-frontend-nginx
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
           {{-   if $.Values.component.frontend.logFormats }}
-          - name: {{ include "opik.name" $ }}-frontend-nginx
-            mountPath: /etc/nginx/templates/10-log-formats.conf.template
-            subPath: 10-log-formats.conf.template
-            readOnly: true
+            - name: {{ include "opik.name" $ }}-frontend-nginx
+              mountPath: /etc/nginx/templates/10-log-formats.conf.template
+              subPath: 10-log-formats.conf.template
+              readOnly: true
           {{-   end }}
           {{- end }}
           {{- with $value.volumeMounts }}
@@ -269,14 +269,15 @@ spec:
         {{- end }}
       {{- end }}
       {{- if eq $key "frontend" }}
-      - name: {{ include "opik.name" $ }}-frontend-nginx
-        configMap:
-          name: {{ include "opik.name" $ }}-frontend-nginx
+        - name: {{ include "opik.name" $ }}-frontend-nginx
+          configMap:
+            name: {{ include "opik.name" $ }}-frontend-nginx
       {{- end }}
       {{- with $value.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with (default $.Values.nodeSelector $value.nodeSelector) }}
+      {{- $ns := ternary $value.nodeSelector $.Values.nodeSelector (hasKey $value "nodeSelector") }}
+      {{- with $ns }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -284,8 +285,14 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with (default $.Values.tolerations $value.tolerations) }}
+      {{- $tol := ternary $value.tolerations $.Values.tolerations (hasKey $value "tolerations") }}
+      {{- with $tol }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- $tsc := ternary $value.topologySpreadConstraints $.Values.topologySpreadConstraints (hasKey $value "topologySpreadConstraints") }}
+      {{- with $tsc }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}

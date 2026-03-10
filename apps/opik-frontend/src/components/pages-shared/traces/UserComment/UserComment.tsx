@@ -20,6 +20,7 @@ import {
 } from "./styles";
 import { isUndefined } from "lodash";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type UserCommentContextType = {
   size?: "default" | "sm";
@@ -85,12 +86,16 @@ const Menu: React.FC<MenuProps> = ({ children }) => {
   const [open, setOpen] = useState(false);
   const { isEditMode, userName, comment } = useUserCommentContext();
 
+  const {
+    permissions: { canWriteComments },
+  } = usePermissions();
+
   const isUserOwner =
     isUndefined(userName) ||
     isUndefined(comment.created_by) ||
     userName === comment.created_by;
 
-  if (!isUserOwner) return;
+  if (!isUserOwner || !canWriteComments) return;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
