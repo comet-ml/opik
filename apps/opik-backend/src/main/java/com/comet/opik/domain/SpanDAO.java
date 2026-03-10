@@ -792,7 +792,18 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH comments_final AS (
+            WITH <if(span_id_prefilter)>span_id_prefilter AS (
+                SELECT DISTINCT id FROM spans
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+                <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>comments_final AS (
               SELECT
                    entity_id,
                    groupArray(tuple(
@@ -817,6 +828,7 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
                 <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
@@ -841,6 +853,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
@@ -861,6 +874,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
             ), feedback_scores_with_ranking AS (
@@ -2156,6 +2170,10 @@ class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId);
 
+            if (shouldUseSpanIdPrefilter(criteria)) {
+                template.add("span_id_prefilter", true);
+            }
+
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
@@ -2189,6 +2207,15 @@ class SpanDAO {
             template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
 
             bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
+
+            boolean sortHasFeedbackScores = Optional
+                    .ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
+                    .map(s -> s.contains("feedback_scores"))
+                    .orElse(false);
+
+            if (shouldUseSpanIdPrefilter(spanSearchCriteria) && !sortHasFeedbackScores) {
+                template.add("span_id_prefilter", true);
+            }
 
             var finalTemplate = template;
             Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
@@ -2314,6 +2341,25 @@ class SpanDAO {
         Optional.ofNullable(spanSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", SPAN_SEARCH_CLAUSE));
         return template;
+    }
+
+    private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria) {
+        boolean hasFeedbackScoreDependency = Optional.ofNullable(criteria.filters())
+                .map(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
+                        .isPresent()
+                        || filterQueryBuilder
+                                .toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
+                                .isPresent())
+                .orElse(false);
+
+        boolean hasNarrowingFilters = criteria.traceId() != null
+                || criteria.type() != null
+                || criteria.searchText() != null
+                || Optional.ofNullable(criteria.filters())
+                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN))
+                        .isPresent();
+
+        return !hasFeedbackScoreDependency && hasNarrowingFilters;
     }
 
     private void bindSearchCriteria(Statement statement, SpanSearchCriteria spanSearchCriteria) {
