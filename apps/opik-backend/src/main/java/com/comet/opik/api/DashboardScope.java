@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.db.HasValue;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
@@ -9,7 +10,7 @@ import java.util.Arrays;
 
 @Getter
 @RequiredArgsConstructor
-public enum DashboardScope {
+public enum DashboardScope implements HasValue {
 
     WORKSPACE("workspace"),
     INSIGHTS("insights");

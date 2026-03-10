@@ -2,10 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.DashboardUpdate;
-import com.comet.opik.infrastructure.db.DashboardScopeArgumentFactory;
-import com.comet.opik.infrastructure.db.DashboardScopeColumnMapper;
-import com.comet.opik.infrastructure.db.DashboardTypeArgumentFactory;
-import com.comet.opik.infrastructure.db.DashboardTypeColumnMapper;
+import com.comet.opik.infrastructure.db.DashboardScopeMapper;
+import com.comet.opik.infrastructure.db.DashboardTypeMapper;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.JsonNodeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -30,11 +28,11 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
-@RegisterArgumentFactory(DashboardTypeArgumentFactory.class)
-@RegisterArgumentFactory(DashboardScopeArgumentFactory.class)
+@RegisterArgumentFactory(DashboardTypeMapper.class)
+@RegisterArgumentFactory(DashboardScopeMapper.class)
 @RegisterColumnMapper(JsonNodeColumnMapper.class)
-@RegisterColumnMapper(DashboardTypeColumnMapper.class)
-@RegisterColumnMapper(DashboardScopeColumnMapper.class)
+@RegisterColumnMapper(DashboardTypeMapper.class)
+@RegisterColumnMapper(DashboardScopeMapper.class)
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
