@@ -649,7 +649,8 @@ class LocalRunnerServiceImplTest {
             UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.getRunner(WORKSPACE_ID, OTHER_USER, runnerId))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -658,7 +659,8 @@ class LocalRunnerServiceImplTest {
 
             assertThatThrownBy(() -> runnerService.registerAgents(runnerId, WORKSPACE_ID, OTHER_USER,
                     Map.of(AGENT_NAME, LocalRunner.Agent.builder().build())))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -666,7 +668,8 @@ class LocalRunnerServiceImplTest {
             UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.heartbeat(runnerId, WORKSPACE_ID, OTHER_USER))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -679,7 +682,8 @@ class LocalRunnerServiceImplTest {
                     .build();
 
             assertThatThrownBy(() -> runnerService.createJob(WORKSPACE_ID, OTHER_USER, req))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -687,7 +691,8 @@ class LocalRunnerServiceImplTest {
             UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.nextJob(runnerId, WORKSPACE_ID, OTHER_USER))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -695,7 +700,8 @@ class LocalRunnerServiceImplTest {
             UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.listJobs(runnerId, null, WORKSPACE_ID, OTHER_USER, 0, 10))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("Runner not found");
         }
 
         @Test
@@ -704,7 +710,8 @@ class LocalRunnerServiceImplTest {
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJob(jobId, WORKSPACE_ID, OTHER_USER))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("not found");
         }
 
         @Test
@@ -713,7 +720,8 @@ class LocalRunnerServiceImplTest {
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJobLogs(jobId, 0, WORKSPACE_ID, OTHER_USER))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("not found");
         }
 
         @Test
@@ -723,7 +731,8 @@ class LocalRunnerServiceImplTest {
 
             assertThatThrownBy(() -> runnerService.appendLogs(jobId, WORKSPACE_ID, OTHER_USER,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("hack").build())))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("not found");
         }
 
         @Test
@@ -734,7 +743,8 @@ class LocalRunnerServiceImplTest {
 
             assertThatThrownBy(() -> runnerService.reportResult(jobId, WORKSPACE_ID, OTHER_USER,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).build()))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("not found");
         }
 
         @Test
@@ -743,7 +753,8 @@ class LocalRunnerServiceImplTest {
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.cancelJob(jobId, WORKSPACE_ID, OTHER_USER))
-                    .isInstanceOf(NotFoundException.class);
+                    .isExactlyInstanceOf(NotFoundException.class)
+                    .hasMessageContaining("not found");
         }
     }
 }

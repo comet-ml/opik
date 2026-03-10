@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
@@ -114,6 +115,10 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
     private static String userRunnerKey(String workspaceId, String userName) {
         return "opik:runners:workspace:" + workspaceId + ":user:" + userName + ":runner";
+    }
+
+    private static String workspaceUserRunnersKey(String workspaceId, String userName) {
+        return "opik:runners:workspace:" + workspaceId + ":user:" + userName + ":runners";
     }
 
     private static String jobKey(UUID jobId) {
@@ -193,7 +198,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
                 FIELD_USER_NAME, userName));
         runnerMap.expire(runnerConfig.getPairingRunnerTtl().toJavaDuration());
 
-        addRunnerToWorkspace(workspaceId, runnerId);
+        addRunnerToWorkspace(workspaceId, userName, runnerId);
         setUserRunner(workspaceId, userName, runnerId);
 
         return LocalRunnerPairResponse.builder()
@@ -212,7 +217,7 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
             runnerId = claimPairingCode(request.pairingCode(), workspaceId);
         } else {
             runnerId = idGenerator.generateId();
-            addRunnerToWorkspace(workspaceId, runnerId);
+            addRunnerToWorkspace(workspaceId, userName, runnerId);
         }
 
         evictExistingRunner(workspaceId, userName, runnerId);
@@ -225,31 +230,26 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     @Override
     public LocalRunner.LocalRunnerPage listRunners(@NonNull String workspaceId, @NonNull String userName,
             int page, int size) {
-        RScoredSortedSet<String> runnerIds = redisClient.getScoredSortedSet(
-                workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
+        RScoredSortedSet<String> userRunnerIds = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
 
-        var allIds = runnerIds.readAll();
+        int total = userRunnerIds.size();
+        int fromIndex = page * size;
+        int toIndex = fromIndex + size - 1;
 
-        List<LocalRunner> userRunners = new ArrayList<>();
-        for (String runnerIdStr : allIds) {
+        var pageIds = userRunnerIds.valueRangeReversed(fromIndex, toIndex);
+
+        List<LocalRunner> runners = new ArrayList<>();
+        for (String runnerIdStr : pageIds) {
             UUID runnerId = UUID.fromString(runnerIdStr);
-            RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
-            String ownerUserName = runnerMap.get(FIELD_USER_NAME);
-            if (!userName.equals(ownerUserName)) {
-                continue;
-            }
             LocalRunner runner = loadRunner(runnerId, workspaceId);
             if (runner != null) {
-                userRunners.add(runner);
+                runners.add(runner);
             }
         }
 
-        int total = userRunners.size();
-        int fromIndex = Math.min(page * size, total);
-        int toIndex = Math.min(fromIndex + size, total);
-
         return LocalRunner.LocalRunnerPage.builder()
-                .page(page).size(size).total(total).content(userRunners.subList(fromIndex, toIndex)).build();
+                .page(page).size(size).total(total).content(runners).build();
     }
 
     @Override
@@ -292,9 +292,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         RBucket<String> currentRunnerBucket = redisClient.getBucket(
                 userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
         String currentRunnerId = currentRunnerBucket.get();
-        if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
+        if (currentRunnerId != null && !Objects.equals(currentRunnerId, runnerId.toString())) {
             throw new ClientErrorException(Response.status(Response.Status.GONE)
-                    .entity(new ErrorMessage(List.of("Runner evicted by a newer connection")))
+                    .entity(new ErrorMessage(List.of("Runner '%s' evicted by a newer connection".formatted(runnerId))))
                     .build());
         }
 
@@ -655,27 +655,26 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
 
         RMap<String, String> runnerMap = redisClient.getMap(
                 runnerKey(runnerId), StringCodec.INSTANCE);
+
+        boolean shouldPurge;
         if (!runnerMap.isExists()) {
-            removeRunnerFromWorkspace(workspaceId, runnerId);
-            return;
+            shouldPurge = true;
+        } else {
+            String disconnectedAt = runnerMap.get(FIELD_DISCONNECTED_AT);
+            if (disconnectedAt == null) {
+                disconnectedAt = Instant.now().toString();
+                runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
+            }
+
+            Instant disconnected = Instant.parse(disconnectedAt);
+            shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
+                    .getDeadRunnerPurgeTime().toSeconds();
         }
-
-        Map<String, String> runnerFields = runnerMap.readAllMap();
-
-        String disconnectedAt = runnerFields.get(FIELD_DISCONNECTED_AT);
-        if (disconnectedAt == null) {
-            disconnectedAt = Instant.now().toString();
-            runnerMap.put(FIELD_DISCONNECTED_AT, disconnectedAt);
-        }
-
-        Instant disconnected = Instant.parse(disconnectedAt);
-        boolean shouldPurge = Duration.between(disconnected, Instant.now()).toSeconds() >= runnerConfig
-                .getDeadRunnerPurgeTime().toSeconds();
 
         failOrphanedJobs(runnerId);
 
         if (shouldPurge) {
-            purgeRunner(runnerId, workspaceId, runnerFields);
+            purgeRunner(runnerId, workspaceId, runnerMap.get(FIELD_USER_NAME));
         }
     }
 
@@ -763,27 +762,24 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         logsList.expire(ttl);
     }
 
-    private void purgeRunner(UUID runnerId, String workspaceId, Map<String, String> runnerFields) {
+    private void purgeRunner(UUID runnerId, String workspaceId, String userName) {
         log.info("Purging dead runner {} from workspace {}", runnerId, workspaceId);
 
         redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getMap(runnerAgentsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getBucket(runnerHeartbeatKey(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getScoredSortedSet(runnerJobsKey(runnerId), StringCodec.INSTANCE).delete();
         redisClient.getSet(runnerCancellationsKey(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getList(pendingJobsKey(runnerId), StringCodec.INSTANCE).delete();
-        redisClient.getList(activeJobsKey(runnerId), StringCodec.INSTANCE).delete();
-
-        removeRunnerFromWorkspace(workspaceId, runnerId);
-
-        String userName = runnerFields.get(FIELD_USER_NAME);
         if (userName != null) {
+            removeRunnerFromWorkspace(workspaceId, userName, runnerId);
+
             RBucket<String> userRunnerBucket = redisClient.getBucket(
                     userRunnerKey(workspaceId, userName), StringCodec.INSTANCE);
             String currentId = userRunnerBucket.get();
             if (runnerId.toString().equals(currentId)) {
                 userRunnerBucket.delete();
             }
+        } else {
+            removeRunnerFromWorkspaceOnly(workspaceId, runnerId);
         }
     }
 
@@ -863,15 +859,29 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         return heartbeat.isExists();
     }
 
-    private void addRunnerToWorkspace(String workspaceId, UUID runnerId) {
+    private void addRunnerToWorkspace(String workspaceId, String userName, UUID runnerId) {
+        double score = Instant.now().toEpochMilli();
+
         RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
                 workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
-        workspaceRunners.add(Instant.now().toEpochMilli(), runnerId.toString());
+        workspaceRunners.add(score, runnerId.toString());
+
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        userRunners.add(score, runnerId.toString());
 
         workspacesWithRunners(workspaceId, true);
     }
 
-    private void removeRunnerFromWorkspace(String workspaceId, UUID runnerId) {
+    private void removeRunnerFromWorkspace(String workspaceId, String userName, UUID runnerId) {
+        removeRunnerFromWorkspaceOnly(workspaceId, runnerId);
+
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        userRunners.remove(runnerId.toString());
+    }
+
+    private void removeRunnerFromWorkspaceOnly(String workspaceId, UUID runnerId) {
         RScoredSortedSet<String> workspaceRunners = redisClient.getScoredSortedSet(
                 workspaceRunnersKey(workspaceId), StringCodec.INSTANCE);
         workspaceRunners.remove(runnerId.toString());
@@ -1035,14 +1045,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     }
 
     private void validateRunnerOwnership(UUID runnerId, String workspaceId, String userName) {
-        RMap<String, String> runnerMap = redisClient.getMap(
-                runnerKey(runnerId), StringCodec.INSTANCE);
-        Map<String, String> fields = runnerMap.readAllMap();
-        if (fields.isEmpty() || !workspaceId.equals(fields.get(FIELD_WORKSPACE_ID))) {
-            throw new NotFoundException("Runner not found: " + runnerId);
-        }
-        String ownerUserName = fields.get(FIELD_USER_NAME);
-        if (ownerUserName == null || !ownerUserName.equals(userName)) {
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        if (!userRunners.contains(runnerId.toString())) {
             throw new NotFoundException("Runner not found: " + runnerId);
         }
     }
@@ -1063,11 +1068,9 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (runnerIdStr == null) {
             throw new NotFoundException("Job not found: " + jobId);
         }
-        UUID runnerId = UUID.fromString(runnerIdStr);
-        RMap<String, String> runnerMap = redisClient.getMap(
-                runnerKey(runnerId), StringCodec.INSTANCE);
-        String ownerUserName = runnerMap.get(FIELD_USER_NAME);
-        if (ownerUserName == null || !ownerUserName.equals(userName)) {
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        if (!userRunners.contains(runnerIdStr)) {
             throw new NotFoundException("Job not found: " + jobId);
         }
         return new ValidatedJob(jobMap, fields);
