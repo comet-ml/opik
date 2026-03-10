@@ -29,15 +29,15 @@ def _update_optimization_status(client, optimization_id, status):
 
 
 def _build_suite(client):
-    from opik.evaluation.suite_evaluators import LLMJudge
+    from opik.api_objects.dataset.execution_policy import ExecutionPolicy
+
+    HARD_POLICY: ExecutionPolicy = {"runs_per_item": 3, "pass_threshold": 2}
 
     suite = client.create_evaluation_suite(
         name=SUITE_NAME,
         description="Quick GEPA v2 test (5 hard items)",
-        evaluators=[
-            LLMJudge(assertions=["Response is relevant to the user question"])
-        ],
-        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+        assertions=["Response is relevant to the user question"],
+        execution_policy=ExecutionPolicy(runs_per_item=1, pass_threshold=1),
     )
 
     suite.add_item(
@@ -45,12 +45,12 @@ def _build_suite(client):
             "question": "I think someone hacked my account! I see 3 orders I didn't make in the last 24 hours!",
             "context": "3 unknown orders in last 24h, customer account flagged",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the security concern with appropriate urgency",
             "Response advises immediate steps to secure the account such as changing password",
             "Response mentions that unauthorized orders will be investigated or reversed",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
     suite.add_item(
         data={
@@ -61,13 +61,13 @@ def _build_suite(client):
             ),
             "context": "Order #98765, 3 previous support tickets closed without resolution",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response sincerely apologizes for the repeated failures in service",
             "Response acknowledges the frustration of multiple unreturned callbacks",
             "Response offers a concrete resolution path like refund, escalation, or compensation",
             "Response does not make promises the agent cannot guarantee",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
     suite.add_item(
         data={
@@ -77,11 +77,11 @@ def _build_suite(client):
             ),
             "context": "Gift card purchased yesterday, $100 value, code: GC-INVALID-404",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response shows empathy for the time-sensitive birthday situation",
             "Response provides an immediate workaround or expedited resolution",
             "Response offers to verify or replace the gift card code",
-        ])],
+        ],
     )
     suite.add_item(
         data={
@@ -92,13 +92,13 @@ def _build_suite(client):
             ),
             "context": "Gold tier loyalty member, 5 year history, $15K lifetime spend",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the customer's loyalty and long-term relationship",
             "Response addresses the pricing concern directly without being dismissive",
             "Response highlights value propositions or loyalty benefits specific to this customer",
             "Response does not lie about or deny the price increase",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
     suite.add_item(
         data={
@@ -108,11 +108,11 @@ def _build_suite(client):
             ),
             "context": "Product: WH-2024-BLK, purchased 5 days ago, 30-day return policy",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the customer's frustration about product not meeting expectations",
             "Response addresses the false advertising concern seriously",
             "Response explains return/refund options clearly within the return policy",
-        ])],
+        ],
     )
 
     return suite

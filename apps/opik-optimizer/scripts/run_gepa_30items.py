@@ -29,15 +29,15 @@ def _update_optimization_status(client, optimization_id, status):
 
 
 def _build_suite(client):
-    from opik.evaluation.suite_evaluators import LLMJudge
+    from opik.api_objects.dataset.execution_policy import ExecutionPolicy
+
+    HARD_POLICY: ExecutionPolicy = {"runs_per_item": 3, "pass_threshold": 2}
 
     suite = client.create_evaluation_suite(
         name=SUITE_NAME,
         description="Customer support stress test (30 items, mixed difficulty)",
-        evaluators=[
-            LLMJudge(assertions=["Response is relevant to the user question"])
-        ],
-        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+        assertions=["Response is relevant to the user question"],
+        execution_policy=ExecutionPolicy(runs_per_item=1, pass_threshold=1),
     )
 
     # === EASY (10 items) — generic assertions, should pass with baseline ===
@@ -99,10 +99,10 @@ def _build_suite(client):
             "question": "I received the wrong color. I ordered blue but got red.",
             "context": "Order #67890, delivered yesterday",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response apologizes for the wrong item being sent",
             "Response offers a clear exchange or return process",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -110,10 +110,10 @@ def _build_suite(client):
             "question": "My discount code SAVE20 isn't working at checkout.",
             "context": "Code is valid, minimum purchase $50, cart total $45",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response helps troubleshoot why the code isn't working",
             "Response mentions possible reasons like minimum purchase requirements",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -121,10 +121,10 @@ def _build_suite(client):
             "question": "I want to cancel my order but the cancel button is greyed out.",
             "context": "Order #78901, placed 2 hours ago, status: processing",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response explains why the button may be disabled",
             "Response offers an alternative way to cancel",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -132,10 +132,10 @@ def _build_suite(client):
             "question": "The product page says waterproof but mine leaked in light rain.",
             "context": "Product: AllWeather Jacket v3, purchased 1 week ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response takes the product quality concern seriously",
             "Response offers a return, replacement, or warranty claim path",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -143,10 +143,10 @@ def _build_suite(client):
             "question": "I was charged twice for the same order!",
             "context": "Order #82345, two identical charges of $89.99 on credit card statement",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the double charge concern",
             "Response explains how the duplicate charge will be resolved",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -154,10 +154,10 @@ def _build_suite(client):
             "question": "Can I use my employee discount on top of the holiday sale?",
             "context": "Employee ID verified, 15% employee discount, current 25% holiday sale",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response addresses whether discounts can be stacked",
             "Response is honest if the policy is unknown rather than guessing",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -165,10 +165,10 @@ def _build_suite(client):
             "question": "My package shows delivered but I never got it.",
             "context": "Tracking: USPS delivered to front door 3 days ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response suggests concrete troubleshooting steps",
             "Response offers to open an investigation or send a replacement",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -176,10 +176,10 @@ def _build_suite(client):
             "question": "I need to return a gift but I don't have the receipt.",
             "context": "Item is from this store, still has tags, no order number available",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response explains the return policy for items without receipts",
             "Response suggests alternative ways to locate the order",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -187,9 +187,9 @@ def _build_suite(client):
             "question": "The assembly instructions for my bookshelf are missing page 3.",
             "context": "Product: ModernHome Bookshelf XL, purchased online",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response offers a practical solution to get the missing instructions",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -197,10 +197,10 @@ def _build_suite(client):
             "question": "Why was my review removed? I gave honest feedback!",
             "context": "1-star review posted 2 days ago, product: BlendMaster Pro",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the concern respectfully without being dismissive",
             "Response explains possible reasons for review removal",
-        ])],
+        ],
     )
 
     # === HARD (10 items) — multi-assertion, specific behaviors required ===
@@ -213,12 +213,12 @@ def _build_suite(client):
             ),
             "context": "3 unknown orders in last 24h, customer account flagged",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the security concern with appropriate urgency",
             "Response advises immediate steps to secure the account such as changing password",
             "Response mentions that unauthorized orders will be investigated or reversed",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -230,13 +230,13 @@ def _build_suite(client):
             ),
             "context": "Order #98765, multiple previous support tickets closed without resolution",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response sincerely apologizes for the repeated failures in service",
             "Response acknowledges the frustration of multiple unreturned callbacks",
             "Response offers a concrete resolution path like refund, escalation, or compensation",
             "Response does not make promises the agent cannot guarantee",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -247,11 +247,11 @@ def _build_suite(client):
             ),
             "context": "Gift card purchased yesterday, $100 value, code: GC-INVALID-404",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response shows empathy for the time-sensitive birthday situation",
             "Response provides an immediate workaround or expedited resolution",
             "Response offers to verify or replace the gift card code",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -263,13 +263,13 @@ def _build_suite(client):
             ),
             "context": "Gold tier loyalty member, 5 year history, $15K lifetime spend",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the customer's loyalty and long-term relationship",
             "Response addresses the pricing concern directly without being dismissive",
             "Response highlights value propositions or loyalty benefits specific to this customer",
             "Response does not lie about or deny the price increase",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -280,11 +280,11 @@ def _build_suite(client):
             ),
             "context": "Product: WH-2024-BLK, purchased 5 days ago, 30-day return policy",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the customer's frustration about product not meeting expectations",
             "Response addresses the false advertising concern seriously",
             "Response explains return or refund options clearly within the return policy",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -295,11 +295,11 @@ def _build_suite(client):
             ),
             "context": "Business account, order #B-45678, invoice already generated",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response understands the urgency of the business invoice correction",
             "Response provides a clear path to get the invoice corrected",
             "Response does not suggest the customer just edit the PDF themselves",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -311,13 +311,13 @@ def _build_suite(client):
             ),
             "context": "Account holder is 78, tech-illiterate, subscriptions started via pop-ups",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response shows empathy for the vulnerable customer situation",
             "Response addresses the request for charge reversal directly",
             "Response offers to cancel the unwanted subscriptions",
             "Response does not blame the customer for subscribing",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -328,11 +328,11 @@ def _build_suite(client):
             ),
             "context": "Product: SafeRide Infant Seat Model SR-100, purchased 2 weeks ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the child safety concern with maximum urgency",
             "Response advises to stop using the product immediately",
             "Response provides clear next steps for the recall process",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -343,13 +343,13 @@ def _build_suite(client):
             ),
             "context": "Customer placed order yesterday, reports 3 fraudulent charges today",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response takes the data security allegation seriously",
             "Response advises the customer to contact their bank immediately",
             "Response does not admit fault or liability for the alleged breach",
             "Response offers to investigate the customer's account security",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -360,11 +360,11 @@ def _build_suite(client):
             ),
             "context": "Verified influencer account, product: SmartWatch Ultra, defective screen",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response addresses the product defect concern professionally",
             "Response does not treat the influencer threat as coercion",
             "Response offers the same resolution any customer would receive",
-        ])],
+        ],
     )
 
     return suite

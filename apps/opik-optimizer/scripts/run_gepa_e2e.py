@@ -55,12 +55,14 @@ def _update_optimization_status(client, optimization_id, status):
 
 
 def _build_suite(client):
-    from opik.evaluation.suite_evaluators import LLMJudge
+    from opik.api_objects.dataset.execution_policy import ExecutionPolicy
+
+    HARD_POLICY: ExecutionPolicy = {"runs_per_item": 3, "pass_threshold": 2}
 
     suite = client.create_evaluation_suite(
         name=SUITE_NAME,
         description="Customer support e2e test (20 items, 3 difficulty tiers)",
-        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+        execution_policy=ExecutionPolicy(runs_per_item=1, pass_threshold=1),
     )
 
     # =====================================================================
@@ -72,10 +74,10 @@ def _build_suite(client):
             "question": "What are your store hours?",
             "context": "General inquiry, weekday afternoon",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response attempts to address the store hours question",
             "Response does not fabricate specific store hours since none are provided in the context",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -83,10 +85,10 @@ def _build_suite(client):
             "question": "I received a damaged product. How can I get a refund?",
             "context": "Order #12345, placed 3 days ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response addresses the refund request",
             "Response references the customer's order number from the context",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -94,10 +96,10 @@ def _build_suite(client):
             "question": "Do you ship internationally? I'm in Germany.",
             "context": "Customer located in Germany, browsing website",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response addresses the international shipping question",
             "Response specifically acknowledges Germany rather than giving a generic international shipping answer",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -105,10 +107,10 @@ def _build_suite(client):
             "question": "How do I track my order?",
             "context": "Order #55123, shipped 2 days ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response explains how to track the order",
             "Response references the customer's order number from the context",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -116,10 +118,10 @@ def _build_suite(client):
             "question": "What payment methods do you accept?",
             "context": "New customer, first purchase",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response lists or describes available payment methods",
             "Response welcomes the customer and acknowledges this is their first purchase",
-        ])],
+        ],
     )
 
     # =====================================================================
@@ -132,10 +134,10 @@ def _build_suite(client):
             "question": "I just bought your bluetooth speaker and it keeps disconnecting from my phone every few minutes. Is this a known issue?",
             "context": "Product: BT-Speaker-500, purchased 3 days ago, customer using Samsung Galaxy S24",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response provides concrete troubleshooting steps the customer can try immediately",
             "Response offers further support options if troubleshooting does not resolve the issue",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -143,10 +145,10 @@ def _build_suite(client):
             "question": "I want to cancel my premium subscription. This is too expensive.",
             "context": "Customer has been subscribed for 6 months, pays $29.99/month",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response provides specific step-by-step cancellation instructions rather than only trying to retain the customer",
             "Response acknowledges the cost concern without being dismissive",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -154,10 +156,10 @@ def _build_suite(client):
             "question": "My package shows delivered but I never received it.",
             "context": "Tracking shows USPS delivered to front door 2 days ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response suggests at least three concrete troubleshooting steps",
             "Response offers to open an investigation or send a replacement if the issue is not resolved",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -165,11 +167,11 @@ def _build_suite(client):
             "question": "I received the wrong color. I ordered blue but got red.",
             "context": "Order #67890, delivered yesterday",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response apologizes for the error",
             "Response explains the exchange or return process step by step",
             "Response references the specific order number from the context",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -177,10 +179,10 @@ def _build_suite(client):
             "question": "My discount code SAVE20 isn't working at checkout.",
             "context": "Code is valid, minimum purchase $50, cart total $45",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response helps troubleshoot why the code isn't working",
             "Response mentions the minimum purchase requirement as a possible reason",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -188,10 +190,10 @@ def _build_suite(client):
             "question": "Can I return a sale item?",
             "context": "Item purchased during clearance event, 5 days ago, 30-day return policy",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response explains the return policy as it applies to sale items",
             "Response does not make up a policy that contradicts the provided context",
-        ])],
+        ],
     )
 
     suite.add_item(
@@ -201,10 +203,10 @@ def _build_suite(client):
             ),
             "context": "Product: AllWeather Jacket v3, purchased 1 week ago, 30-day return policy",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response takes the product quality concern seriously rather than dismissing it",
             "Response offers a return, replacement, or warranty path",
-        ])],
+        ],
     )
 
     # =====================================================================
@@ -217,12 +219,12 @@ def _build_suite(client):
             "question": "I think someone hacked my account. I see orders I didn't make!",
             "context": "Customer reports unauthorized activity, 3 unknown orders in last 24h",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the security concern with urgency rather than a routine tone",
             "Response advises the customer to change their password or secure their account",
             "Response commits to investigating the unauthorized orders",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -234,13 +236,13 @@ def _build_suite(client):
             ),
             "context": "Order #98765, multiple previous support tickets closed without resolution",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response sincerely apologizes for the repeated service failures",
             "Response explicitly acknowledges that the customer was not called back as promised",
             "Response describes next steps the agent will take to resolve the issue",
             "Response uses hedging language for outcomes rather than absolute guarantees",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -251,12 +253,12 @@ def _build_suite(client):
             ),
             "context": "Gift card purchased yesterday, $100 value, code: GC-INVALID-404",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the urgency of the birthday deadline",
             "Response offers a specific action to fix the gift card issue rather than generic advice",
             "Response does not tell the customer to simply wait or check back later",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -267,12 +269,12 @@ def _build_suite(client):
             ),
             "context": "Gold tier loyalty member, $15K lifetime spend, 5-year history",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the customer's loyalty and long history",
             "Response addresses the pricing concern directly without deflecting",
             "Response does not deny or lie about the price increase",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -280,12 +282,12 @@ def _build_suite(client):
             "question": "I was charged twice for the same order!",
             "context": "Order #82345, two identical charges of $89.99 on credit card statement",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response acknowledges the double charge as a serious billing concern",
             "Response explains the steps that will be taken to resolve the duplicate charge",
             "Response does not blame the customer or suggest they are mistaken without investigating",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -297,13 +299,13 @@ def _build_suite(client):
             ),
             "context": "Account holder is 78, tech-illiterate, subscriptions started via pop-ups",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response shows empathy for the vulnerable customer situation",
             "Response addresses the request for charge reversal directly",
             "Response offers to cancel the unwanted subscriptions",
             "Response does not blame the account holder for subscribing",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -314,12 +316,12 @@ def _build_suite(client):
             ),
             "context": "Product: SafeRide Infant Seat Model SR-100, purchased 2 weeks ago",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response treats the child safety concern with maximum urgency",
             "Response advises to stop using the product immediately",
             "Response provides clear next steps for the recall process",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     suite.add_item(
@@ -330,13 +332,13 @@ def _build_suite(client):
             ),
             "context": "Customer placed order yesterday, reports 3 fraudulent charges today",
         },
-        evaluators=[LLMJudge(assertions=[
+        assertions=[
             "Response takes the data security allegation seriously",
             "Response advises the customer to contact their bank immediately",
             "Response does not admit fault or liability for the alleged breach",
             "Response offers to investigate the customer's account security",
-        ])],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        ],
+        execution_policy=HARD_POLICY,
     )
 
     return suite
