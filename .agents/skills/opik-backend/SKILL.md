@@ -156,6 +156,9 @@ Map.of("key", "value")
 Arrays.asList("A", "B", "C")
 ```
 
+## API Design
+- **Query parameters that accept lists**: Use plural names from the start (e.g., `exclude_category_names` not `exclude_category_name`). Starting with a singular name and later adding a plural variant results in two redundant query params on the same endpoint. Plural names are backward-compatible since they work for both single and multiple values.
+
 ## Error Handling
 
 ### Use Jakarta Exceptions
