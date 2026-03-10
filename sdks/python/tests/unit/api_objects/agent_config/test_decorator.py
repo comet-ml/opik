@@ -417,7 +417,48 @@ class TestConfigDecoratorTraceMetadata:
             assert max_tokens_entry["value"] == 2000
             assert max_tokens_entry["type"] == "integer"
 
-    def test_prompt_field_access_inside_trace__injects_commit_not_object(
+    @pytest.mark.parametrize(
+        "py_type,backend_value,expected_injected_value,expected_type",
+        [
+            (str, "hello", "hello", "string"),
+            (int, 42, 42, "integer"),
+            (float, 3.14, 3.14, "float"),
+            (bool, True, True, "boolean"),
+        ],
+        ids=["str", "int", "float", "bool"],
+    )
+    def test_field_access_inside_trace__injects_correct_value_and_type(
+        self,
+        mock_backend,
+        py_type,
+        backend_value,
+        expected_injected_value,
+        expected_type,
+    ):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.field", type=expected_type, value=backend_value)]
+        )
+
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+
+            @agent_config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                field: py_type = dataclasses.field(default=None)
+
+            instance = MyConfig()
+            _ = instance.field
+
+            mock_update.assert_called()
+            field_entry = mock_update.call_args[1]["metadata"]["agent_configuration"][
+                "values"
+            ]["MyConfig.field"]
+            assert field_entry["value"] == expected_injected_value
+            assert field_entry["type"] == expected_type
+
+    def test_prompt_field_access_inside_trace__injects_commit_string(
         self, mock_backend
     ):
         fake_prompt = mock.Mock(spec=Prompt)
@@ -458,6 +499,41 @@ class TestConfigDecoratorTraceMetadata:
                 ]["values"]["MyConfig.system_prompt"]
                 assert field_entry["value"] == "abc12345"
                 assert field_entry["type"] == "prompt"
+
+    def test_prompt_version_field_access_inside_trace__injects_commit_string(
+        self, mock_backend
+    ):
+        fake_version = mock.Mock(spec=PromptVersionDetail)
+        fake_version.commit = "pv123456"
+
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.version", type="prompt_commit", value="pv123456")]
+        )
+
+        prompt_detail = mock.Mock()
+        prompt_detail.requested_version = fake_version
+        mock_backend.client.rest_client.prompts.get_prompt_by_commit.return_value = (
+            prompt_detail
+        )
+
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+
+            @agent_config_decorator
+            @dataclasses.dataclass
+            class MyConfig:
+                version: PromptVersionDetail = dataclasses.field(default=None)
+
+            instance = MyConfig()
+            _ = instance.version
+
+            mock_update.assert_called()
+            field_entry = mock_update.call_args[1]["metadata"]["agent_configuration"][
+                "values"
+            ]["MyConfig.version"]
+            assert field_entry["value"] == "pv123456"
+            assert field_entry["type"] == "prompt_commit"
 
     def test_field_access_outside_trace__no_injection(self, mock_backend):
         from opik import exceptions as opik_exceptions
