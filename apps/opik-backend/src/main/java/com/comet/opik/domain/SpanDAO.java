@@ -1982,7 +1982,7 @@ class SpanDAO {
     public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
-        var segment = startSegment("spans", "Clickhouse", "delete_by_trace_id");
+        var segment = startSegment("spans", "Clickhouse", "delete_by_span_ids");
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
