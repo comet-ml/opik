@@ -30,7 +30,7 @@ public record AgentConfigValue(
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
-                AgentConfig.View.Write.class}) @NotBlank String value,
+                AgentConfig.View.Write.class}) @NotNull String value,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotNull ValueType type,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
@@ -48,7 +48,8 @@ public record AgentConfigValue(
         FLOAT("float"),
         BOOLEAN("boolean"),
         PROMPT("prompt"),
-        PROMPT_COMMIT("prompt_commit");
+        PROMPT_COMMIT("prompt_commit"),
+        NONE("none");
 
         @JsonValue
         private final String type;

@@ -290,7 +290,7 @@ class AgentConfigsResourceTest {
                                             .build())
                                     .build(),
                             422,
-                            new ErrorMessage(List.of("blueprint.values[0].value must not be blank")),
+                            new ErrorMessage(List.of("blueprint.values[0].value must not be null")),
                             ErrorMessage.class),
 
                     // Value type validation
