@@ -76,7 +76,6 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
@@ -553,13 +552,13 @@ public class ExperimentsResource {
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
             @QueryParam("experiment_ids") String experimentIdsQueryParam,
-            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
+            @QueryParam("exclude_category_names") Set<String> excludeCategoryNames) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
 
-        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
+        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNames);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -577,9 +576,9 @@ public class ExperimentsResource {
 
     private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
 
-    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
-        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
-            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
+    private Set<String> resolveExcludeCategoryNames(Set<String> excludeCategoryNames) {
+        if (excludeCategoryNames != null && !excludeCategoryNames.isEmpty()) {
+            return excludeCategoryNames;
         }
         return DEFAULT_EXCLUDE_CATEGORY_NAMES;
     }

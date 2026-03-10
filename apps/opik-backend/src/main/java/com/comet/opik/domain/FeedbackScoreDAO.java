@@ -52,13 +52,13 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
-    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, Set<String> excludeCategoryNames);
 
-    Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames);
+    Mono<List<String>> getSpanFeedbackScoreNames(UUID projectId, SpanType type,
+            Set<String> excludeCategoryNames);
 
     Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames);
+            Set<String> excludeCategoryNames);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 

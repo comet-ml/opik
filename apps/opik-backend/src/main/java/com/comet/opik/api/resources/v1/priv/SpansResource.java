@@ -399,13 +399,13 @@ public class SpansResource {
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
             @QueryParam("type") SpanType type,
-            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
+            @QueryParam("exclude_category_names") Set<String> excludeCategoryNames) {
 
         if (projectId == null) {
             throw new BadRequestException("project_id must be provided");
         }
 
-        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
+        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNames);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -556,9 +556,9 @@ public class SpansResource {
 
     private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
 
-    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
-        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
-            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
+    private Set<String> resolveExcludeCategoryNames(Set<String> excludeCategoryNames) {
+        if (excludeCategoryNames != null && !excludeCategoryNames.isEmpty()) {
+            return excludeCategoryNames;
         }
         return DEFAULT_EXCLUDE_CATEGORY_NAMES;
     }

@@ -497,9 +497,9 @@ public class TracesResource {
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
             @QueryParam("project_id") UUID projectId,
-            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
+            @QueryParam("exclude_category_names") Set<String> excludeCategoryNames) {
 
-        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
+        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNames);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -1063,9 +1063,9 @@ public class TracesResource {
 
     private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
 
-    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
-        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
-            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
+    private Set<String> resolveExcludeCategoryNames(Set<String> excludeCategoryNames) {
+        if (excludeCategoryNames != null && !excludeCategoryNames.isEmpty()) {
+            return excludeCategoryNames;
         }
         return DEFAULT_EXCLUDE_CATEGORY_NAMES;
     }
