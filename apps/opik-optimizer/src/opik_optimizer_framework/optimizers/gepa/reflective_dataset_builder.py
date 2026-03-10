@@ -16,9 +16,12 @@ class ReflectiveDatasetBuilder:
     """
 
     def __init__(
-        self, batch_sampler: FailureAwareBatchSampler | None = None,
+        self,
+        batch_sampler: FailureAwareBatchSampler | None = None,
+        persistent_failure_threshold: int = 7,
     ) -> None:
         self._batch_sampler = batch_sampler
+        self._persistent_failure_threshold = persistent_failure_threshold
 
     @staticmethod
     def _build_inputs(dataset_item: dict[str, Any]) -> dict[str, str]:
@@ -133,8 +136,6 @@ class ReflectiveDatasetBuilder:
                     "_max_failed": max_failed,
                 })
 
-        _PERSISTENT_FAILURE_THRESHOLD = 10
-
         if self._batch_sampler is not None:
             for i, (record, traj) in enumerate(zip(records, trajectories)):
                 item_id = str(traj.get("input", {}).get("id", ""))
@@ -145,7 +146,7 @@ class ReflectiveDatasetBuilder:
                 for name in current_failed:
                     failures = self._batch_sampler.get_assertion_total_failures(name)
                     evals = self._batch_sampler.get_assertion_total_evals(name)
-                    if failures >= _PERSISTENT_FAILURE_THRESHOLD:
+                    if failures >= self._persistent_failure_threshold:
                         assertion_details.append(
                             f"\"{name}\" (failed {failures} out of {evals} evaluations)"
                         )

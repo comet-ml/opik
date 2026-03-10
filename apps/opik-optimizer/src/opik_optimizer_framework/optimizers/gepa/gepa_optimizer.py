@@ -97,6 +97,7 @@ class GepaOptimizer:
             reflection_prompt_template=GENERALIZATION_REFLECTION_TEMPLATE,
             batch_sampler=sampler,
             config_descriptions=context.config_descriptions,
+            persistent_failure_threshold=cfg.persistent_failure_threshold,
         )
         adapter._cache_max_entries = cfg.max_candidates
         self.adapter = adapter

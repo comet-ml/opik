@@ -45,6 +45,10 @@ class GepaConfig:
     score_threshold: float = 1.0
     """Stop optimization early when the best trial's pass_rate reaches this value."""
 
+    persistent_failure_threshold: int = 7
+    """Minimum cumulative assertion failures before showing Failure History to
+    the reflection LLM. Lower values surface persistent failures earlier."""
+
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> GepaConfig:
         """Build config from optimizer_parameters, using defaults for missing keys."""

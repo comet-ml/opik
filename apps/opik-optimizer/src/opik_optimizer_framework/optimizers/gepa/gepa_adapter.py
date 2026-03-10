@@ -192,13 +192,16 @@ class FrameworkGEPAAdapter:
         reflection_lm: Any = None,
         reflection_prompt_template: str | None = None,
         config_descriptions: dict[str, str] | None = None,
+        persistent_failure_threshold: int = 7,
     ) -> None:
         self._config_builder = config_builder
         self._evaluation_adapter = evaluation_adapter
         self._batch_sampler = batch_sampler
 
         self._tracker = candidate_tracker or CandidateTracker()
-        self._dataset_builder = dataset_builder or ReflectiveDatasetBuilder(batch_sampler)
+        self._dataset_builder = dataset_builder or ReflectiveDatasetBuilder(
+            batch_sampler, persistent_failure_threshold=persistent_failure_threshold,
+        )
         if reflection_proposer is not None:
             self._proposer: ReflectionProposer | None = reflection_proposer
         elif reflection_lm is not None:
