@@ -120,9 +120,11 @@ STEP 1 — DIAGNOSE: [identify missing behaviors from FAILED, prefer keeping PAS
 STEP 2 — CHECK FAILURE HISTORY: [persistent failures need fundamentally different approach —
          escalate via restructuring, step-by-step procedures, conditional logic,
          or section rewrite; may use more specific rules than normal]
-STEP 3 — WRITE FIXES: [observable, verifiable actions — generalize to any input,
+STEP 3 — WRITE FIXES: [update existing rules before adding new ones;
+         observable, verifiable actions — generalize to any input,
          abstract specific examples into general categories]
-STEP 4 — STRUCTURE: [markdown formatting, group under ## headers, merge overlaps]
+STEP 4 — STRUCTURE: [markdown formatting, group by behavior pattern under ## headers,
+         merge overlaps]
 
 IMPORTANT:
 - Output ONLY the parameter text. No metadata lines.
@@ -237,16 +239,16 @@ For persistent failures, you may use more specific and detailed rules than you
 normally would.
 
 STEP 3 — WRITE FIXES:
-For each failing assertion, add or modify rules as needed. You may change
-multiple related rules together if the failure requires coordinated changes.
-Every rule must describe an observable, verifiable action — not abstract
-guidance. Rules must generalize to any input; do NOT reference specific examples
-from the feedback above — try abstracting them into general categories when
-possible.
+For each failing assertion, first check whether an existing rule can be updated
+to cover the failing behavior before adding a new one. You may change multiple
+related rules together if the failure requires coordinated changes. Every rule
+must describe an observable, verifiable action — not abstract guidance. Rules
+must generalize to any input; do NOT reference specific examples from the
+feedback above — try abstracting them into general categories when possible.
 
 STEP 4 — STRUCTURE:
-Use markdown formatting. Group related rules under ## headers. Merge
-overlapping rules. Keep the parameter concise.
+Use markdown formatting. Group rules by behavior pattern under ## headers, not
+by scenario type. Merge overlapping rules. Keep the parameter concise.
 
 IMPORTANT:
 - Output ONLY the parameter text. Do NOT include any metadata such as
