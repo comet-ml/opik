@@ -4,4 +4,6 @@
 
 ALTER TABLE agent_config_values MODIFY COLUMN `value` TEXT NULL;
 
---rollback ALTER TABLE agent_config_values MODIFY COLUMN `value` TEXT NOT NULL;
+--rollback -- Rollback is intentionally a no-op. Reverting to NOT NULL is unsafe because NULL rows
+--rollback -- may have been inserted after this migration ran. Clean or migrate those rows manually
+--rollback -- before attempting to restore the NOT NULL constraint.
