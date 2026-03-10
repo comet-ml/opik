@@ -46,6 +46,68 @@ public class TracesDAO { }
 public class TracesService { }
 ```
 
+## Lombok Conventions
+
+### Records and DTOs
+- Always annotate records/DTOs with `@Builder(toBuilder = true)`
+- Add `@NonNull` on all non-optional fields
+- Use builders (not constructors) when instantiating records
+
+```java
+// ✅ GOOD
+@Builder(toBuilder = true)
+record MyData(@NonNull UUID id, @NonNull String name, String description) {}
+
+MyData data = MyData.builder()
+        .id(id)
+        .name(name)
+        .build();
+
+// ❌ BAD - plain constructor (positional mistakes, less readable)
+new MyData(id, name, null);
+
+// ❌ BAD - @Builder without toBuilder
+@Builder
+record MyData(UUID id, String name) {}
+```
+
+### Dependency Injection
+- Use `@RequiredArgsConstructor(onConstructor_ = @Inject)` instead of manual constructors
+
+```java
+// ✅ GOOD
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+public class MyService {
+    private final @NonNull DependencyA depA;
+    private final @NonNull DependencyB depB;
+}
+
+// ❌ BAD - boilerplate constructor
+public class MyService {
+    private final DependencyA depA;
+    @Inject
+    public MyService(DependencyA depA) {
+        this.depA = depA;
+    }
+}
+```
+
+### Interfaces
+- Don't put validation annotations (`@NonNull`) on interface method parameters
+- Keep interfaces free of implementation details
+
+```java
+// ✅ GOOD
+interface MyService {
+    void process(String workspaceId, UUID promptId);
+}
+
+// ❌ BAD - validation on interface
+interface MyService {
+    void process(@NonNull String workspaceId, @NonNull UUID promptId);
+}
+```
+
 ## Critical Gotchas
 
 ### StringTemplate Memory Leak

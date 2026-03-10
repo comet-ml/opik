@@ -3,7 +3,7 @@ import isArray from "lodash/isArray";
 import isUndefined from "lodash/isUndefined";
 
 import { Experiment } from "@/types/datasets";
-import { getFeedbackScoreValue } from "@/lib/feedback-scores";
+import { getObjectiveScoreValue } from "@/lib/feedback-scores";
 import { calculatePercentageChange } from "@/lib/utils";
 
 type ScoreData = {
@@ -38,20 +38,20 @@ export const useOptimizationScores = (
     }
 
     // If we have experiments but no scores yet, use the first (or most recent) experiment as best
-    if (!objectiveName || !isArray(sortedRows?.[0]?.feedback_scores)) {
+    const firstHasScores =
+      isArray(sortedRows[0]?.feedback_scores) ||
+      isArray(sortedRows[0]?.experiment_scores);
+    if (!objectiveName || !firstHasScores) {
       // Use the most recent experiment as the "best" when no scores exist
       retVal.bestExperiment = sortedRows[sortedRows.length - 1];
       return retVal;
     }
 
     retVal.baseScore =
-      getFeedbackScoreValue(sortedRows[0].feedback_scores, objectiveName) ?? 0;
+      getObjectiveScoreValue(sortedRows[0], objectiveName) ?? 0;
 
     experiments.forEach((e) => {
-      const score = getFeedbackScoreValue(
-        e.feedback_scores ?? [],
-        objectiveName,
-      );
+      const score = getObjectiveScoreValue(e, objectiveName);
 
       if (!isUndefined(score)) {
         if (isUndefined(maxScoreValue) || score > maxScoreValue) {

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -877,8 +878,11 @@ class AgentConfigsResourceTest {
         private static final String[] BLUEPRINT_IGNORED_FIELDS = new String[]{
                 "id", "projectId", "createdBy", "createdAt", "lastUpdatedBy", "lastUpdatedAt", "values"};
 
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
         @Test
-        @DisplayName("Success: get paginated history with tagged blueprints, excludes masks")
+        @DisplayName("Success: get paginated history with tagged blueprints and delta values, excludes masks")
         void getHistory() {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
@@ -954,6 +958,20 @@ class AgentConfigsResourceTest {
                     .usingRecursiveComparison()
                     .ignoringFields(BLUEPRINT_IGNORED_FIELDS)
                     .isEqualTo(expectedBlueprints);
+
+            assertThat(historyPage.content().getFirst().values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("temperature").value("0.7").type(ValueType.FLOAT).build()));
+
+            assertThat(historyPage.content().get(1).values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()));
         }
 
         @Test
@@ -1223,6 +1241,58 @@ class AgentConfigsResourceTest {
                 assertThat(project2Latest).isNotNull();
                 assertThat(project2Latest.id()).isEqualTo(blueprint2Id);
             });
+        }
+
+        @Test
+        @DisplayName("Success: no blueprint update when prompt version created with action=NO_ACTION")
+        void createPromptVersion__whenActionIsNoAction__thenBlueprintNotUpdated() throws InterruptedException {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var promptName = "test-prompt-" + UUID.randomUUID();
+            var prompt = com.comet.opik.api.Prompt.builder()
+                    .name(promptName)
+                    .build();
+
+            promptResourceClient.createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion1 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var commit1 = promptVersion1.commit();
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Config with prompt")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                            AgentConfigValue.builder().key("system_prompt").value(commit1).type(ValueType.PROMPT)
+                                    .build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
+                    PromptVersionAction.NO_ACTION);
+
+            Thread.sleep(2000);
+
+            var latestBlueprint = agentConfigsResourceClient.getLatestBlueprint(projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+
+            assertThat(latestBlueprint).isNotNull();
+            assertThat(latestBlueprint.id()).isEqualTo(blueprint1Id);
+            assertThat(latestBlueprint.values()).hasSize(2);
+
+            var expectedValues = List.of(
+                    AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key("system_prompt").value(commit1).type(ValueType.PROMPT).build());
+
+            assertThat(latestBlueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringFields(VALUE_IGNORED_FIELDS)
+                    .ignoringCollectionOrder()
+                    .isEqualTo(expectedValues);
         }
     }
 }

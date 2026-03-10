@@ -81,7 +81,7 @@ describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
       // Verify scores calculated
       expect(firstResult.scoreResults).toBeDefined();
       expect(firstResult.scoreResults.length).toBeGreaterThan(0);
-    }, 60000);
+    }, 120000);
 
     it("should include prompt_template and model in experiment metadata", async () => {
       const dataset = await createQADataset(client);

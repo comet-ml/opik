@@ -2,7 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span, SPAN_TYPE } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
+import { processFilters } from "@/lib/filters";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
@@ -52,8 +52,9 @@ const getSpansList = async (
       project_id: projectId,
       ...(traceId && { trace_id: traceId }),
       ...(type && { type }),
-      ...processFilters(filters, generateSearchByIDFilters(search)),
+      ...processFilters(filters),
       ...processSorting(sorting),
+      ...(search && { search }),
       ...(exclude && { exclude: JSON.stringify(exclude) }),
       ...(truncate !== undefined && { truncate }),
       ...(stripAttachments !== undefined && {

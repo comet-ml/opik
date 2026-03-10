@@ -67,6 +67,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.time.Instant;
@@ -119,6 +120,7 @@ public class SpansResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -151,6 +153,7 @@ public class SpansResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
@@ -354,6 +357,7 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -369,6 +373,7 @@ public class SpansResource {
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(List.of())
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

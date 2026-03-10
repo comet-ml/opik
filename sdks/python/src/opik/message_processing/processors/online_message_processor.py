@@ -18,7 +18,7 @@ from opik.rest_api.types import (
 )
 
 from . import message_processors
-from .. import encoder_helpers, messages
+from .. import encoder_helpers, messages, permissions
 from ..replay import replay_manager, db_manager
 
 
@@ -34,6 +34,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         rest_client: rest_api_client.OpikApi,
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
         fallback_replay_manager: replay_manager.ReplayManager,
+        unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
         batch_memory_limit_mb: int = 50,
         active: bool = True,
     ):
@@ -42,6 +43,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._batch_memory_limit_mb = batch_memory_limit_mb
         self._is_active = active
         self._replay_manager = fallback_replay_manager
+        self._unauthorized_message_types_registry = unauthorized_message_types_registry
 
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
@@ -74,6 +76,16 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
 
     def process(self, message: messages.BaseMessage) -> None:
         if not self.is_active():
+            return
+
+        # check if a message type is authorized to be processed
+        if not self._unauthorized_message_types_registry.is_authorized(
+            message.message_type
+        ):
+            LOGGER.debug(
+                "Unauthorized message type: '%s' - ignored from processing.",
+                message.message_type,
+            )
             return
 
         message_type = type(message)
@@ -124,14 +136,24 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                             headers=exception.headers,
                             retry_after=rate_limiter.retry_after(),
                         )
-
-            error_tracking_extra = _generate_error_tracking_extra(exception, message)
-            LOGGER.error(
-                logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
-                message_type.__name__,
-                str(exception),
-                extra={"error_tracking_extra": error_tracking_extra},
-            )
+            elif exception.status_code == 401:
+                LOGGER.error(
+                    "Unauthorized message type '%s' processing request: %s",
+                    message.message_type,
+                    exception.body,
+                )
+                # register a message type as unauthorized to avoid re-sending it to the backend
+                self._unauthorized_message_types_registry.add(message.message_type)
+            else:
+                error_tracking_extra = _generate_error_tracking_extra(
+                    exception, message
+                )
+                LOGGER.error(
+                    logging_messages.FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER,
+                    message_type.__name__,
+                    str(exception),
+                    extra={"error_tracking_extra": error_tracking_extra},
+                )
         except tenacity.RetryError as retry_error:
             cause = retry_error.last_attempt.exception()
             error_tracking_extra = _generate_error_tracking_extra(cause, message)

@@ -30,7 +30,6 @@ from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
 from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
-from .types.find_datasets_request_type import FindDatasetsRequestType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -158,7 +157,6 @@ class DatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
-        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -179,8 +177,6 @@ class DatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
-
-        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -207,7 +203,6 @@ class DatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
-            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,
@@ -1532,7 +1527,6 @@ class AsyncDatasetsClient:
         with_optimizations_only: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
-        type: typing.Optional[FindDatasetsRequestType] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1553,8 +1547,6 @@ class AsyncDatasetsClient:
         prompt_id : typing.Optional[str]
 
         name : typing.Optional[str]
-
-        type : typing.Optional[FindDatasetsRequestType]
 
         sorting : typing.Optional[str]
 
@@ -1584,7 +1576,6 @@ class AsyncDatasetsClient:
             with_optimizations_only=with_optimizations_only,
             prompt_id=prompt_id,
             name=name,
-            type=type,
             sorting=sorting,
             filters=filters,
             request_options=request_options,

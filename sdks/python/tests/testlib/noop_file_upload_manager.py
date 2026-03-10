@@ -54,6 +54,9 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
     def all_done(self) -> bool:
         return len(self.current_uploads) == 0
 
+    def failed_uploads(self, timeout: Optional[float]) -> int:
+        return 0
+
     def close(self) -> None:
         self.current_uploads = []
         self.attachments_by_span = {}

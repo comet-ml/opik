@@ -24,4 +24,8 @@ public interface StreamConfiguration {
     Duration getPendingMessageDuration();
 
     int getMaxRetries();
+
+    int getStreamMaxLen();
+
+    int getStreamTrimLimit();
 }

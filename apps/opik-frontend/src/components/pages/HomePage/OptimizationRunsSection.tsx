@@ -141,13 +141,10 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: Optimization) => {
       navigate({
-        to: "/$workspaceName/optimizations/$datasetId/compare",
+        to: "/$workspaceName/optimizations/$optimizationId",
         params: {
-          datasetId: row.dataset_id,
+          optimizationId: row.id,
           workspaceName,
-        },
-        search: {
-          optimizations: [row.id],
         },
       });
     },

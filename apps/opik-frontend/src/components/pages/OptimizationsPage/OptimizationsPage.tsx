@@ -178,7 +178,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canViewDatasets },
+    permissions: { canViewDatasets, canDeleteOptimizationRuns },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -286,8 +286,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const columns = useMemo(() => {
-    return [selectColumn, ...defaultColumns, actionsColumn];
-  }, [defaultColumns]);
+    if (canDeleteOptimizationRuns) {
+      return [selectColumn, ...defaultColumns, actionsColumn];
+    }
+    return [selectColumn, ...defaultColumns];
+  }, [canDeleteOptimizationRuns, defaultColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -301,13 +304,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
   const handleRowClick = useCallback(
     (row: Optimization) => {
       navigate({
-        to: "/$workspaceName/optimizations/$datasetId/compare",
+        to: "/$workspaceName/optimizations/$optimizationId",
         params: {
-          datasetId: row.dataset_id,
+          optimizationId: row.id,
           workspaceName,
-        },
-        search: {
-          optimizations: [row.id],
         },
       });
     },
@@ -358,8 +358,12 @@ const OptimizationsPage: React.FunctionComponent = () => {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <OptimizationsActionsPanel optimizations={selectedRows} />
-            <Separator orientation="vertical" className="mx-2 h-4" />
+            {canDeleteOptimizationRuns && (
+              <>
+                <OptimizationsActionsPanel optimizations={selectedRows} />
+                <Separator orientation="vertical" className="mx-2 h-4" />
+              </>
+            )}
             <TooltipWrapper content="Refresh optimizations list">
               <Button
                 variant="outline"

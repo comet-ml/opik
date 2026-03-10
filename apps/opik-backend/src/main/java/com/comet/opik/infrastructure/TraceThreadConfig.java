@@ -11,12 +11,18 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.redisson.client.codec.Codec;
 
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class TraceThreadConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
@@ -61,6 +67,12 @@ public class TraceThreadConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     @Min(1) @Max(10_000) private int closeTraceThreadMaxItemPerRun;
+
+    @JsonProperty
+    @Min(1000) @Max(10_000_000) private int streamMaxLen;
+
+    @JsonProperty
+    @Min(0) @Max(10_000) private int streamTrimLimit;
 
     @JsonProperty
     @Min(2) private int claimIntervalRatio;

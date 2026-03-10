@@ -49,8 +49,19 @@ This workflow will:
 
 ### 3. Collect Pending Comments
 
-- **Fetch review comments**: Use GitHub MCP to retrieve PR review comments and/or discussion threads
-- **Fetch PR reviews**: Get all reviews to understand the review context
+- **Fetch review comments**: Use GitHub MCP to retrieve PR review comments and/or discussion threads. When using `gh api` for any list endpoint, **always** use `--paginate` to ensure all results are fetched:
+  ```bash
+  # Review comments (inline code comments)
+  gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+
+  # Issue comments (general PR comments)
+  gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
+
+  # PR reviews
+  gh api repos/comet-ml/opik/pulls/{pr_number}/reviews --paginate
+  ```
+  > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the agent silently gets only the first page and may miss real review feedback.
+- **Fetch PR reviews**: Get all reviews to understand the review context (use `--paginate` as shown above)
 - **Determine pending/unaddressed items**:
   - Prefer unresolved review threads when available
   - Otherwise, treat comments as pending if they are not from the latest code line (not "outdated") or explicitly unresolved, and have no author follow-up confirmation
@@ -133,6 +144,68 @@ If the user declines to push immediately, remind them which comments still need 
 
 ---
 
+### 7. Resolve Addressed Review Threads (Optional)
+
+After all replies are posted, offer to resolve the GitHub review threads that were addressed in this run.
+
+- **Ask**: "Would you like to resolve all addressed review threads?"
+- **If no**: Skip and finish
+- **If yes**: Proceed with thread resolution
+
+#### Fetch Review Threads
+
+Use the GitHub GraphQL API to fetch review threads for the PR:
+
+```bash
+gh api graphql -f query='
+  query {
+    repository(owner: "comet-ml", name: "opik") {
+      pullRequest(number: PR_NUMBER) {
+        reviewThreads(first: 100) {
+          nodes {
+            id
+            isResolved
+            comments(first: 1) {
+              nodes {
+                databaseId
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+'
+```
+
+#### Match Threads to Addressed Comments
+
+- Filter to unresolved threads only (`isResolved: false`)
+- Match each thread to comments addressed in this run by comparing `databaseId` from the thread's first comment against the comment IDs that received "Fixed" or "Skipping" replies
+- Only resolve threads that were actually addressed — never resolve unrelated threads
+
+#### Resolve Threads
+
+For each matched thread, resolve via GraphQL mutation:
+
+```bash
+gh api graphql -f query='
+  mutation {
+    resolveReviewThread(input: {threadId: "THREAD_NODE_ID"}) {
+      thread { isResolved }
+    }
+  }
+'
+```
+
+#### Report Results
+
+- Report success/failure count (e.g., "Resolved 7/8 threads")
+- If a resolution fails, log the error and continue with remaining threads (non-blocking)
+- Gracefully handle permission errors without failing the whole command
+
+---
+
 ## Error Handling
 
 ### **MCP Availability Errors**
@@ -164,6 +237,7 @@ The command is successful when:
 6. ✅ User can choose actions (fix, skip, reply) per comment
 7. ✅ "Skipping" replies posted immediately with AI marker
 8. ✅ "Fixed" replies posted after push with commit SHA and AI marker
+9. ✅ Addressed review threads resolved (if user opted in)
 
 ---
 

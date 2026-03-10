@@ -15,7 +15,10 @@ import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
@@ -24,6 +27,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
@@ -387,6 +391,11 @@ public class DatasetResourceClient {
 
     public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String search,
             String apiKey, String workspaceName) {
+        return getDatasetItemsWithExperimentItems(datasetId, experimentIds, search, null, apiKey, workspaceName);
+    }
+
+    public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String search,
+            List<? extends Filter> filters, String apiKey, String workspaceName) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
 
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -396,8 +405,12 @@ public class DatasetResourceClient {
                 .path("items")
                 .queryParam("experiment_ids", experimentIdsQueryParam);
 
-        if (search != null && !search.isBlank()) {
+        if (StringUtils.isNotBlank(search)) {
             webTarget = webTarget.queryParam("search", search);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
         }
 
         try (var response = webTarget
@@ -411,8 +424,8 @@ public class DatasetResourceClient {
         }
     }
 
-    public com.comet.opik.api.ProjectStats getDatasetExperimentItemsStats(UUID datasetId, List<UUID> experimentIds,
-            String apiKey, String workspaceName, List<com.comet.opik.api.filter.ExperimentsComparisonFilter> filters) {
+    public ProjectStats getDatasetExperimentItemsStats(UUID datasetId, List<UUID> experimentIds,
+            String apiKey, String workspaceName, List<ExperimentsComparisonFilter> filters) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
 
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -435,7 +448,7 @@ public class DatasetResourceClient {
                 .get()) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-            return response.readEntity(com.comet.opik.api.ProjectStats.class);
+            return response.readEntity(ProjectStats.class);
         }
     }
 

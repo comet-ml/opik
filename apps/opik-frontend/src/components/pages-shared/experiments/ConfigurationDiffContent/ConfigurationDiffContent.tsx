@@ -6,9 +6,7 @@ import uniq from "lodash/uniq";
 
 import { Experiment } from "@/types/datasets";
 import { detectConfigValueType } from "@/lib/configuration-renderer";
-import PromptDiff from "@/components/shared/CodeDiff/PromptDiff";
-import TextDiff from "@/components/shared/CodeDiff/TextDiff";
-import { Tag } from "@/components/ui/tag";
+import DiffSection from "./DiffSection";
 
 type ConfigurationDiffContentProps = {
   baselineExperiment?: Experiment | null;
@@ -21,111 +19,6 @@ const formatValue = (value: unknown): string => {
   if (typeof value === "number" || typeof value === "boolean")
     return String(value);
   return JSON.stringify(value, null, 2);
-};
-
-type DiffSectionProps = {
-  label: string;
-  baselineValue: unknown;
-  currentValue: unknown;
-};
-
-const DiffSection: React.FC<DiffSectionProps> = ({
-  label,
-  baselineValue,
-  currentValue,
-}) => {
-  const type = detectConfigValueType(label, currentValue ?? baselineValue);
-  const baseStr = formatValue(baselineValue);
-  const currStr = formatValue(currentValue);
-  const hasChanged = baseStr !== currStr;
-  const isAdded = baselineValue == null && currentValue != null;
-  const isRemoved = baselineValue != null && currentValue == null;
-
-  if (!hasChanged) return null;
-
-  return (
-    <div className="rounded-md border p-3">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="comet-body-s-accented">{label}</span>
-        {isAdded && (
-          <span className="comet-body-xs rounded-full bg-green-100 px-2 py-0.5 text-green-700">
-            Added
-          </span>
-        )}
-        {isRemoved && (
-          <span className="comet-body-xs rounded-full bg-red-100 px-2 py-0.5 text-red-700">
-            Removed
-          </span>
-        )}
-        {!isAdded && !isRemoved && (
-          <span className="comet-body-xs rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
-            Changed
-          </span>
-        )}
-      </div>
-      <div className="comet-code whitespace-pre-wrap break-words text-sm">
-        {type === "prompt" ? (
-          <PromptDiff baseline={baselineValue} current={currentValue} />
-        ) : type === "tools" ? (
-          <ToolsDiff
-            baseline={isArray(baselineValue) ? baselineValue : []}
-            current={isArray(currentValue) ? currentValue : []}
-          />
-        ) : type === "json_object" ? (
-          <TextDiff content1={baseStr} content2={currStr} mode="lines" />
-        ) : (
-          <TextDiff content1={baseStr} content2={currStr} mode="words" />
-        )}
-      </div>
-    </div>
-  );
-};
-
-const ToolsDiff: React.FC<{
-  baseline: unknown[];
-  current: unknown[];
-}> = ({ baseline, current }) => {
-  const baseNames = baseline.map((t) =>
-    isObject(t) && "name" in (t as Record<string, unknown>)
-      ? String((t as Record<string, unknown>).name)
-      : JSON.stringify(t),
-  );
-  const currNames = current.map((t) =>
-    isObject(t) && "name" in (t as Record<string, unknown>)
-      ? String((t as Record<string, unknown>).name)
-      : JSON.stringify(t),
-  );
-
-  const allNames = uniq([...baseNames, ...currNames]);
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {allNames.map((name) => {
-        const inBase = baseNames.includes(name);
-        const inCurr = currNames.includes(name);
-
-        if (inBase && inCurr) {
-          return (
-            <Tag key={name} variant="gray" size="sm">
-              {name}
-            </Tag>
-          );
-        }
-        if (inCurr && !inBase) {
-          return (
-            <Tag key={name} variant="green" size="sm">
-              + {name}
-            </Tag>
-          );
-        }
-        return (
-          <Tag key={name} variant="red" size="sm">
-            - {name}
-          </Tag>
-        );
-      })}
-    </div>
-  );
 };
 
 const getConfiguration = (

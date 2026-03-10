@@ -164,7 +164,12 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 exportConfig.getStreamName(),
                 exportConfig.getCodec());
 
-        return stream.add(StreamAddArgs.entry(DatasetExportConfig.PAYLOAD_FIELD, message))
+        var streamAddArgs = StreamAddArgs
+                .entry(DatasetExportConfig.PAYLOAD_FIELD, message)
+                .trimNonStrict()
+                .maxLen(exportConfig.getStreamMaxLen())
+                .limit(exportConfig.getStreamTrimLimit());
+        return stream.add(streamAddArgs)
                 .doOnNext(messageId -> log.info(
                         "Export job published to Redis stream: jobId='{}', messageId='{}'",
                         job.id(), messageId))

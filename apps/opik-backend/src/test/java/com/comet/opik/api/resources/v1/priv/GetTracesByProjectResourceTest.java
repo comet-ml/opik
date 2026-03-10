@@ -3998,6 +3998,65 @@ class GetTracesByProjectResourceTest {
                     values.all(),
                     filters, Map.of());
         }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterErrorTypeEqual__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .errorInfo(null)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var targetErrorType = "ValueError";
+            traces.set(0, traces.getFirst().toBuilder()
+                    .errorInfo(ErrorInfo.builder()
+                            .exceptionType(targetErrorType)
+                            .message("invalid value")
+                            .traceback("traceback")
+                            .build())
+                    .build());
+
+            // Set second trace with a different error type
+            if (traces.size() > 1) {
+                traces.set(1, traces.get(1).toBuilder()
+                        .errorInfo(ErrorInfo.builder()
+                                .exceptionType("TypeError")
+                                .message("type error")
+                                .traceback("traceback")
+                                .build())
+                        .build());
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = List.of(createTrace().toBuilder()
+                    .projectId(null)
+                    .build());
+            traceResourceClient.batchCreateTraces(unexpectedTraces, apiKey, workspaceName);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ERROR_TYPE)
+                    .operator(Operator.EQUAL)
+                    .value(targetErrorType)
+                    .build());
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(),
+                    filters, Map.of());
+        }
     }
 
     private BigDecimal calculateEstimatedCost(List<Span> spans) {
@@ -5216,6 +5275,78 @@ class GetTracesByProjectResourceTest {
                     .toList();
         }
 
+    }
+
+    @Nested
+    @DisplayName("Search Traces:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SearchTraces {
+
+        private Stream<Arguments> searchFieldProvider() {
+            return Stream.of(
+                    arguments("name"),
+                    arguments("input"),
+                    arguments("tags"));
+        }
+
+        @ParameterizedTest(name = "search by {0}")
+        @MethodSource("searchFieldProvider")
+        void searchTraces__whenSearchByField__thenReturnMatchingTraces(String field) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var uniqueTerm = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var matchingBuilder = createTrace().toBuilder().projectName(projectName);
+            switch (field) {
+                case "name" -> matchingBuilder.name("trace-" + uniqueTerm + "-matching");
+                case "input" -> matchingBuilder
+                        .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"search-" + uniqueTerm + "\"}"));
+                case "tags" -> matchingBuilder.tags(Set.of("tag-" + uniqueTerm));
+                default -> throw new IllegalArgumentException("Unknown field: " + field);
+            }
+            var matchingTrace = matchingBuilder.build();
+
+            var nonMatchingTrace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(matchingTrace, nonMatchingTrace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", uniqueTerm));
+
+            assertThat(actualPage.total()).isEqualTo(1);
+            assertThat(actualPage.content()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("When searching with no match, should return empty results")
+        void searchTraces__whenSearchHasNoMatch__thenReturnEmpty() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName,
+                    List.of(), List.of(), 10, Map.of("search", "nonexistent_xyz_12345"));
+
+            assertThat(actualPage.total()).isEqualTo(0);
+            assertThat(actualPage.content()).isEmpty();
+        }
     }
 
 }

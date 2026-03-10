@@ -38,6 +38,7 @@ type PercentageTrendProps = {
   precision?: number;
   trend?: PercentageTrendType;
   tooltip?: string;
+  iconOnly?: boolean;
 };
 
 const PercentageTrend: React.FC<PercentageTrendProps> = ({
@@ -45,11 +46,21 @@ const PercentageTrend: React.FC<PercentageTrendProps> = ({
   precision = 0,
   trend = "direct",
   tooltip,
+  iconOnly = false,
 }) => {
   if (isUndefined(percentage)) return null;
 
   const { Icon, variant } = getConfig(percentage, trend, precision);
-  const tag = (
+
+  const tag = iconOnly ? (
+    <Tag
+      size="sm"
+      variant={variant as TagProps["variant"]}
+      className="inline-flex items-center justify-center px-1"
+    >
+      <Icon className="size-3" />
+    </Tag>
+  ) : (
     <Tag
       size="md"
       variant={variant as TagProps["variant"]}

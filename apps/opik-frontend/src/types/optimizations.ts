@@ -159,11 +159,6 @@ export interface Optimization {
   total_optimization_cost?: number;
 }
 
-export interface OptimizationUpdate {
-  name?: string;
-  status?: OPTIMIZATION_STATUS;
-}
-
 export type ExperimentOptimizationMetadata = {
   step_index: number;
   candidate_id: string;

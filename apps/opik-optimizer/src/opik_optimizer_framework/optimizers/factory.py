@@ -5,11 +5,9 @@ from typing import Any
 
 def _load_registry() -> dict[str, type]:
     from opik_optimizer_framework.optimizers.gepa.gepa_optimizer import GepaOptimizer
-    from opik_optimizer_framework.optimizers.gepa_old.gepa_optimizer import GepaLegacyOptimizer
 
     return {
         "GepaOptimizer": GepaOptimizer,
-        "GepaLegacyOptimizer": GepaLegacyOptimizer,
     }
 
 

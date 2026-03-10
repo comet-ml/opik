@@ -68,6 +68,7 @@ import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -172,6 +173,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.averagingLong;
 import static java.util.stream.Collectors.groupingBy;
@@ -197,7 +199,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectId", "projectName"};
+            "lastUpdatedBy", "comments", "projectId", "projectName", "datasetItemCount"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -289,6 +291,48 @@ class ExperimentsResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissions {
+
+        @Test
+        @DisplayName("Find experiments passes required permissions to auth endpoint")
+        void findExperimentsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.findExperiments(1, 10, null, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get experiment by id passes required permissions to auth endpoint")
+        void getExperimentByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+            var id = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.getExperiment(id, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
+        }
     }
 
     @Nested
@@ -6877,6 +6921,54 @@ class ExperimentsResourceTest {
                     .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with scores, then dataset_version_id is preserved")
+        void updateExperiment_whenExperimentScoresUpdated_thenDatasetVersionIdPreserved() {
+            // given - create a dataset with items so a version exists
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    TEST_WORKSPACE, API_KEY);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("test-version-id-preserved-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .datasetName(dataset.name())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            var originalDatasetVersionId = createdExperiment.datasetVersionId();
+            assertThat(originalDatasetVersionId).isNotNull();
+
+            // when - update experiment with scores (this triggers the UPDATE INSERT-SELECT path)
+            var experimentScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build());
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(experimentScores).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // then - dataset_version_id must still be present and unchanged
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.datasetVersionId())
+                    .isNotNull()
+                    .isEqualTo(originalDatasetVersionId);
+            assertThat(updatedExperiment.experimentScores())
+                    .hasSize(1)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactly(tuple("accuracy", new BigDecimal("0.95")));
         }
     }
 

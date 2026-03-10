@@ -165,11 +165,11 @@ server:
 # Controls limits for JSON deserialization to prevent memory exhaustion
 jacksonConfig:
   # Default: 104857600 (100MB)
-  # Description: Maximum size for individual string values during JSON deserialization. 
+  # Description: Maximum size for individual string values during JSON deserialization.
   #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
-  maxStringLength: 262144000 
+  maxStringLength: 262144000
 
 # Configuration for batch operations
 batchOperations:
@@ -247,6 +247,12 @@ onlineScoring:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10, global default)
   maxRetries: 3
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: 10000
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: 100
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -328,6 +334,12 @@ datasetExport:
   maxRetries: 3
   claimIntervalRatio: 10
   pendingMessageDuration: 5m
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: 10000
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: 100
   defaultTtl: 24h
   minPartSize: 5242880  # 5MB - S3 minimum
   maxPartSize: 10485760  # 10MB
@@ -408,6 +420,25 @@ workspaceSettings:
 experimentAggregates:
   # Batch size for processing experiment items when calculating aggregates
   batchSize: 100
+
+experimentDenormalization:
+  # Default: false for testing
+  # Description: Whether the experiment denormalization job and subscriber are enabled
+  enabled: true
+  streamName: 'experiment_denormalization_stream'
+  consumerGroupName: 'experiment_denormalization'
+  consumerBatchSize: 100
+  poolingInterval: 500ms
+  longPollingDuration: 5s
+  debounceDelay: 1s
+  jobLockTime: 4s
+  jobLockWaitTime: 300ms
+  aggregationLockTime: 120s
+  claimIntervalRatio: 10
+  pendingMessageDuration: 10m
+  maxRetries: 3
+  streamMaxLen: 10000
+  streamTrimLimit: 100
 
 # Configuration AWS S3
 s3Config:
@@ -498,6 +529,19 @@ serviceToggles:
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
 
+# Local Runner configuration
+localRunner:
+  enabled: true
+  jobTimeout: 30s
+  maxPendingJobsPerRunner: 100
+  heartbeatTtl: 15s
+  nextJobPollTimeout: 3s
+  deadRunnerPurgeTime: 1h
+  completedJobTtl: 1h
+  reaperLockDuration: 10s
+  reaperLockWait: 2s
+  nextJobAsyncTimeoutBuffer: 2s
+
 # Trace Thread configuration
 traceThreadConfig:
   # Default: false for testing. Should be enabled for specific test scenarios when needed.
@@ -542,6 +586,12 @@ traceThreadConfig:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10)
   maxRetries: 3
+  # Default: 100000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: 100000
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: 100
 
 # Dataset Versioning Migration configuration
 # Includes both lazy migration (on-demand) and items_total migration (startup)
@@ -644,6 +694,12 @@ webhook:
   # Default: 10m
   # Description: Time before message considered orphaned and eligible for claiming
   pendingMessageDuration: 10m
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: 10000
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: 100
   debouncing:
     # Default: {}
     # Description: Period for events aggregation before sending to webhook endpoint

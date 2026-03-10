@@ -274,6 +274,18 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the frequency of replay manager thread's operations, such as checking for status of connection to the OPIK server and replaying failed messages if connection restored.
     """
 
+    unauthorized_message_type_retry_interval: float = 10.0
+    """
+    Interval in seconds between retrying unauthorized message types.
+    This is to control the frequency of retrying unauthorized message types.
+    """
+
+    unauthorized_message_type_max_retry_count: Optional[int] = None
+    """
+    Maximum number of retries for unauthorized message types.
+    This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)

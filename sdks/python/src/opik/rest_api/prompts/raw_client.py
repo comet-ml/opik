@@ -21,6 +21,7 @@ from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_link_public import PromptVersionLinkPublic
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from ..types.prompt_version_update import PromptVersionUpdate
+from .types.create_prompt_version_detail_action import CreatePromptVersionDetailAction
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
@@ -205,6 +206,7 @@ class RawPromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        action: typing.Optional[CreatePromptVersionDetailAction] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptVersionDetail]:
         """
@@ -218,6 +220,9 @@ class RawPromptsClient:
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
+
+        action : typing.Optional[CreatePromptVersionDetailAction]
+            Action to perform after creating the prompt version. 'update_blueprint' (default) triggers automatic blueprint auto-increment. 'no_action' skips blueprint updates.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -236,6 +241,7 @@ class RawPromptsClient:
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
                 "template_structure": template_structure,
+                "action": action,
             },
             headers={
                 "content-type": "application/json",
@@ -569,6 +575,77 @@ class RawPromptsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_prompt_by_commit(
+        self, commit: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[PromptDetail]:
+        """
+        Get prompt by commit
+
+        Parameters
+        ----------
+        commit : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[PromptDetail]
+            OK
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/prompts/by-commit/{jsonable_encoder(commit)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptDetail,
+                    parse_obj_as(
+                        type_=PromptDetail,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1052,6 +1129,7 @@ class AsyncRawPromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        action: typing.Optional[CreatePromptVersionDetailAction] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptVersionDetail]:
         """
@@ -1065,6 +1143,9 @@ class AsyncRawPromptsClient:
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
+
+        action : typing.Optional[CreatePromptVersionDetailAction]
+            Action to perform after creating the prompt version. 'update_blueprint' (default) triggers automatic blueprint auto-increment. 'no_action' skips blueprint updates.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1083,6 +1164,7 @@ class AsyncRawPromptsClient:
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
                 "template_structure": template_structure,
+                "action": action,
             },
             headers={
                 "content-type": "application/json",
@@ -1418,6 +1500,77 @@ class AsyncRawPromptsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_prompt_by_commit(
+        self, commit: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[PromptDetail]:
+        """
+        Get prompt by commit
+
+        Parameters
+        ----------
+        commit : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[PromptDetail]
+            OK
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/prompts/by-commit/{jsonable_encoder(commit)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    PromptDetail,
+                    parse_obj_as(
+                        type_=PromptDetail,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

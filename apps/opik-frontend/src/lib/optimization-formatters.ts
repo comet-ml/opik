@@ -1,5 +1,6 @@
 export const formatAsPercentage = (value: number): string => {
-  return `${Math.round(value * 100)}%`;
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  return `${Math.round(clamped * 100)}%`;
 };
 
 export const formatAsDuration = (seconds: number): string => {

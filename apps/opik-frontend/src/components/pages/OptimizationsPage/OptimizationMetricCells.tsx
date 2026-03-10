@@ -25,7 +25,7 @@ export const OptimizationPassRateCell = (
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
       >
-        <span className="comet-body-s text-light-slate">-</span>
+        <span className="comet-body-s text-muted-slate">-</span>
       </CellWrapper>
     );
   }
@@ -57,7 +57,7 @@ export const OptimizationAccuracyCell = (
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
       >
-        <span className="comet-body-s text-light-slate">-</span>
+        <span className="comet-body-s text-muted-slate">-</span>
       </CellWrapper>
     );
   }
