@@ -182,7 +182,7 @@ const PlaygroundOutputActions = ({
   const datasetName =
     datasets?.find((ds) => ds.id === plainDatasetId)?.name || null;
 
-  const canCreateRules = !!playgroundProject?.id || canCreateProjects;
+  const canUsePlayground = !!playgroundProject?.id || canCreateProjects;
 
   const { stopAll, runAll, isRunning, createdExperiments } =
     useActionButtonActions({
@@ -298,6 +298,7 @@ const PlaygroundOutputActions = ({
       !datasets.find((d) => d.id === plainDatasetId);
 
     const isDisabledButton =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       loadingDatasetItems ||
@@ -307,6 +308,7 @@ const PlaygroundOutputActions = ({
       hasMediaCompatibilityIssues;
 
     const shouldTooltipAppear =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
@@ -319,6 +321,10 @@ const PlaygroundOutputActions = ({
     const getTooltipMessage = () => {
       if (!isDisabledButton) {
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      }
+
+      if (!canUsePlayground) {
+        return "Playground project does not exist and you don't have permission to create it";
       }
 
       if (hasMediaCompatibilityIssues) {
@@ -500,7 +506,7 @@ const PlaygroundOutputActions = ({
                   />
                 </div>
               )}
-              {(canCreateRules || !!rules.length) && (
+              {(canUsePlayground || !!rules.length) && (
                 <div className="mt-2.5 flex">
                   <MetricSelector
                     rules={rules}
@@ -509,7 +515,7 @@ const PlaygroundOutputActions = ({
                     datasetId={datasetId}
                     onCreateRuleClick={handleCreateRuleClick}
                     workspaceName={workspaceName}
-                    canCreateRules={canCreateRules}
+                    canCreateRules={canUsePlayground}
                   />
                 </div>
               )}
