@@ -84,6 +84,46 @@ This test ensures traces created via low-level client are properly synchronized 
 
       await verifyTraces(page, projectName, helperClient);
     });
+
+    test('Traces are accessible via Python SDK terminal link @happypaths @fullregression @tracing', async ({
+      page,
+      createTracesClientWithUrl: projectUrl,
+    }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that the URL logged to the terminal by the Python SDK when creating traces navigates correctly to the project traces page.
+
+Steps:
+1. Create a project and 5 traces via Python SDK client (fixture captures the terminal URL)
+2. Navigate to the URL extracted from Python SDK terminal output
+3. Verify the trace detail panel is auto-opened (the SDK URL includes a specific trace_id redirect)
+4. Strip the trace= param and verify all 5 traces are visible on the project traces page`
+      });
+
+      await test.step('Navigate to the URL logged in terminal by Python SDK', async () => {
+        await page.goto(projectUrl);
+        // The SDK redirect URL includes a trace= param that auto-opens the trace detail panel —
+        // verify it opened with the correct trace, then strip the param so reloads in
+        // initialize() don't reopen the panel.
+        await expect(page.getByTestId('side-panel-close')).toBeVisible();
+        await expect(page.getByText('test-trace-0').first()).toBeVisible();
+        const url = new URL(page.url());
+        url.searchParams.delete('trace');
+        await page.goto(url.toString());
+      });
+
+      await test.step('Verify traces are visible at the linked URL', async () => {
+        const tracesPage = new TracesPage(page);
+        await tracesPage.initialize();
+        await tracesPage.waitForTracesToBeVisible();
+
+        const traceNames = await tracesPage.getAllTraceNamesInProject();
+        expect(traceNames).toHaveLength(5);
+
+        const expectedNames = Array.from({ length: 5 }, (_, i) => `test-trace-${i}`);
+        expectedNames.forEach(name => expect(traceNames).toContain(name));
+      });
+    });
   });
 
   test.describe('Trace deletion', () => {
