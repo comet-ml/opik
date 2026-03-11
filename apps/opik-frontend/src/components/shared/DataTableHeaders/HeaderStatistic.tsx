@@ -108,6 +108,10 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   const [selectedValue, setSelectedValue] =
     React.useState<AggregationValue>(defaultValue);
 
+  React.useEffect(() => {
+    setSelectedValue(defaultValue);
+  }, [defaultValue]);
+
   // Check if this column should display sum
   const shouldDisplaySum =
     statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG &&

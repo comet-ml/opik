@@ -19,6 +19,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
@@ -396,6 +397,12 @@ public class DatasetResourceClient {
 
     public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String search,
             List<? extends Filter> filters, String apiKey, String workspaceName) {
+        return getDatasetItemsWithExperimentItems(datasetId, experimentIds, search, filters, null, apiKey,
+                workspaceName);
+    }
+
+    public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String search,
+            List<? extends Filter> filters, List<SortingField> sorting, String apiKey, String workspaceName) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
 
         var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -411,6 +418,10 @@ public class DatasetResourceClient {
 
         if (CollectionUtils.isNotEmpty(filters)) {
             webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (CollectionUtils.isNotEmpty(sorting)) {
+            webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sorting));
         }
 
         try (var response = webTarget
