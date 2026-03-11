@@ -67,25 +67,19 @@ class TestEvaluatorValidation:
         assert suite.name == "test_suite"
 
     def test_add_item__with_non_llm_judge_evaluator__raises_type_error(self):
-        """Test that non-LLMJudge evaluators raise TypeError on add_item."""
-        mock_dataset = _create_mock_dataset()
-        suite = evaluation_suite.EvaluationSuite(
-            name="test_suite",
-            dataset_=mock_dataset,
-        )
-
+        """Test that non-LLMJudge evaluators raise TypeError via resolve_evaluators."""
         equals_metric = metrics.Equals()
 
         with pytest.raises(TypeError) as exc_info:
-            suite.add_item(
-                data={"input": "test"},
+            validators.resolve_evaluators(
+                assertions=None,
                 evaluators=[equals_metric],
+                context="item-level assertions",
             )
 
         assert "Evaluation suites only support LLMJudge evaluators" in str(
             exc_info.value
         )
-        assert "item-level evaluators" in str(exc_info.value)
 
     def test_add_item__with_assertions__succeeds(self):
         """Test that assertions shorthand is accepted in add_item."""
@@ -149,24 +143,18 @@ class TestEvaluatorValidation:
         assert len(item.evaluators) == 1
         assert item.evaluators[0].type == "llm_judge"
 
-    def test_add_item__with_both_assertions_and_evaluators__raises_value_error(self):
+    def test_resolve_evaluators__with_both_assertions_and_evaluators__raises_value_error(self):
         """Test that providing both assertions and evaluators raises ValueError."""
-        mock_dataset = _create_mock_dataset()
-        suite = evaluation_suite.EvaluationSuite(
-            name="test_suite",
-            dataset_=mock_dataset,
-        )
-
         llm_judge = suite_evaluators.LLMJudge(
             assertions=["Response is polite"],
             track=False,
         )
 
         with pytest.raises(ValueError, match="Cannot specify both"):
-            suite.add_item(
-                data={"input": "test"},
-                evaluators=[llm_judge],
+            validators.resolve_evaluators(
                 assertions=["Response is helpful"],
+                evaluators=[llm_judge],
+                context="item-level assertions",
             )
 
     def test_resolve_evaluators__with_assertions__returns_llm_judge(self):

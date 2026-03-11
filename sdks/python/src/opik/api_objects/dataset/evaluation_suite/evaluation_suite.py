@@ -8,6 +8,7 @@ break existing functionality.
 
 from __future__ import annotations
 
+import functools
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
@@ -328,9 +329,28 @@ class EvaluationSuite:
         from opik.evaluation import evaluator as opik_evaluator
         from . import suite_result_constructor
 
+        @functools.wraps(task)
+        def _validated_task(data: Dict[str, Any]) -> Any:
+            result = task(data)
+            if not isinstance(result, dict):
+                raise TypeError(
+                    f"The task function must return a dict with 'input' and "
+                    f"'output' keys, but it returned {type(result).__name__}. "
+                    f"Example: return {{'input': data, 'output': response}}"
+                )
+            missing = {"input", "output"} - result.keys()
+            if missing:
+                raise ValueError(
+                    f"The task function must return a dict with 'input' and "
+                    f"'output' keys, but the returned dict is missing: "
+                    f"{missing}. Got keys: {set(result.keys())}. "
+                    f"Example: return {{'input': data, 'output': response}}"
+                )
+            return result
+
         eval_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,
-            task=task,
+            task=_validated_task,
             experiment_name_prefix=experiment_name_prefix,
             experiment_name=experiment_name,
             project_name=project_name,
