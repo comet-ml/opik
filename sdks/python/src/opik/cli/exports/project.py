@@ -1,9 +1,11 @@
 """Project export functionality."""
 
 import sys
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Set
 
 import click
 from rich.console import Console
@@ -12,10 +14,10 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
+from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
     matches_name_pattern,
-    should_skip_file,
     print_export_summary,
     trace_to_csv_rows,
     write_csv_data,
@@ -24,17 +26,36 @@ from .utils import (
 
 console = Console()
 
+# Maximum number of concurrent workers for parallel span fetching.
+MAX_WORKERS = 20
+
+
+def _fetch_spans(
+    client: opik.Opik,
+    trace: Any,
+    project_name: str,
+) -> tuple:
+    """Fetch spans for a single trace. Returns (trace, spans)."""
+    return trace, client.search_spans(
+        project_name=project_name,
+        trace_id=trace.id,
+        max_results=1000,
+        truncate=False,
+    )
+
 
 def export_traces(
     client: opik.Opik,
     project_name: str,
     project_dir: Path,
-    max_results: int,
+    max_results: Optional[int],
     filter_string: Optional[str],
     project_name_filter: Optional[str] = None,
     format: str = "json",
     debug: bool = False,
     force: bool = False,
+    show_progress: bool = True,
+    manifest: Optional[ExportManifest] = None,
 ) -> tuple[int, int]:
     """Download traces and their spans with pagination support for large projects."""
     if debug:
@@ -84,21 +105,56 @@ def export_traces(
 
     exported_count = 0
     skipped_count = 0
-    page_size = min(100, max_results)  # Process in smaller batches
+    page_size = 100  # Fixed batch size per API request
     current_page = 1
     total_processed = 0
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Searching for traces...", total=None)
+    # Build the set of already-downloaded trace IDs once, before the loop.
+    # Manifest DB lookup is faster and survives aborted exports; filesystem
+    # scan is the fallback when no manifest exists.
+    ext = "csv" if format.lower() == "csv" else "json"
+    if force:
+        already_downloaded: Set[str] = set()
+    elif manifest is not None:
+        already_downloaded = manifest.load_downloaded_set()
+        if debug:
+            debug_print(
+                f"DEBUG: Loaded {len(already_downloaded)} already-downloaded trace IDs from manifest",
+                debug,
+            )
+    else:
+        already_downloaded = {
+            p.stem[len("trace_") :] for p in project_dir.glob(f"trace_*.{ext}")
+        }
+        if debug:
+            debug_print(
+                f"DEBUG: Scanned directory: {len(already_downloaded)} already-downloaded traces",
+                debug,
+            )
 
-        while total_processed < max_results:
+    _progress_cm = (
+        Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        )
+        if show_progress
+        else nullcontext()
+    )
+    with _progress_cm as progress:
+        task = (
+            progress.add_task("Searching for traces...", total=None)
+            if progress
+            else None
+        )
+
+        while max_results is None or total_processed < max_results:
             # Calculate how many traces to fetch in this batch
-            remaining = max_results - total_processed
-            current_page_size = min(page_size, remaining)
+            if max_results is not None:
+                remaining = max_results - total_processed
+                current_page_size = min(page_size, remaining)
+            else:
+                current_page_size = page_size
 
             try:
                 if debug:
@@ -159,11 +215,11 @@ def export_traces(
                 # No more traces to process
                 break
 
-            # Update progress description to show current page
-            progress.update(
-                task,
-                description=f"Downloading traces... (page {current_page}, {len(traces)} traces)",
-            )
+            if progress and task is not None:
+                progress.update(
+                    task,
+                    description=f"Downloading traces... (page {current_page}, {len(traces)} traces)",
+                )
 
             # Filter traces by project name if specified
             if project_name_filter:
@@ -184,74 +240,81 @@ def export_traces(
                 total_processed += current_page_size
                 continue
 
-            # Update progress for downloading
-            progress.update(
-                task,
-                description=f"Downloading traces... (batch {total_processed // page_size + 1})",
-            )
+            if progress and task is not None:
+                progress.update(
+                    task,
+                    description=f"Downloading traces... (batch {total_processed // page_size + 1})",
+                )
 
-            # Download each trace with its spans
+            # Step 1: Check the already-downloaded set (O(1) per trace).
+            traces_to_fetch = []
             for trace in traces:
-                try:
-                    # Get spans for this trace
-                    spans = client.search_spans(
-                        project_name=project_name,
-                        trace_id=trace.id,
-                        max_results=1000,  # Get all spans for the trace
-                        truncate=False,
-                    )
-
-                    # Create trace data structure
-                    trace_data = {
-                        "trace": trace.model_dump(),
-                        "spans": [span.model_dump() for span in spans],
-                        "downloaded_at": datetime.now().isoformat(),
-                        "project_name": project_name,
-                    }
-
-                    # Determine file path based on format
-                    if format.lower() == "csv":
-                        file_path = project_dir / f"trace_{trace.id}.csv"
-                    else:
-                        file_path = project_dir / f"trace_{trace.id}.json"
-
-                    # Check if file already exists and should be skipped
-                    if should_skip_file(file_path, force):
-                        if debug:
-                            debug_print(
-                                f"Skipping trace {trace.id} (already exists)",
-                                debug,
-                            )
-                        skipped_count += 1
-                        total_processed += 1
-                        continue
-
-                    # Save to file using the appropriate format
-                    try:
-                        if format.lower() == "csv":
-                            write_csv_data(trace_data, file_path, trace_to_csv_rows)
-                            if debug:
-                                debug_print(f"Wrote CSV file: {file_path}", debug)
-                        else:
-                            write_json_data(trace_data, file_path)
-                            if debug:
-                                debug_print(f"Wrote JSON file: {file_path}", debug)
-
-                        exported_count += 1
-                        total_processed += 1
-                    except Exception as write_error:
-                        console.print(
-                            f"[red]Error writing trace {trace.id} to file: {write_error}[/red]"
+                if trace.id in already_downloaded:
+                    if debug:
+                        debug_print(
+                            f"Skipping trace {trace.id} (already downloaded)", debug
                         )
-                        if debug:
-                            import traceback
+                    skipped_count += 1
+                    total_processed += 1
+                else:
+                    traces_to_fetch.append(trace)
 
-                            debug_print(f"Traceback: {traceback.format_exc()}", debug)
-                        continue
+            # Step 2: Fetch spans in parallel for traces that need downloading.
+            if traces_to_fetch:
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                    future_to_trace = {
+                        executor.submit(
+                            _fetch_spans, client, trace, project_name
+                        ): trace
+                        for trace in traces_to_fetch
+                    }
+                    for future in as_completed(future_to_trace):
+                        trace = future_to_trace[future]
+                        try:
+                            _, spans = future.result()
+                            trace_data = {
+                                "trace": trace.model_dump(),
+                                "spans": [span.model_dump() for span in spans],
+                                "downloaded_at": datetime.now().isoformat(),
+                                "project_name": project_name,
+                            }
+                            file_path = project_dir / f"trace_{trace.id}.{ext}"
+                            try:
+                                if format.lower() == "csv":
+                                    write_csv_data(
+                                        trace_data, file_path, trace_to_csv_rows
+                                    )
+                                    if debug:
+                                        debug_print(
+                                            f"Wrote CSV file: {file_path}", debug
+                                        )
+                                else:
+                                    write_json_data(trace_data, file_path)
+                                    if debug:
+                                        debug_print(
+                                            f"Wrote JSON file: {file_path}", debug
+                                        )
+                                exported_count += 1
+                                total_processed += 1
+                                # Track in manifest and local set so subsequent
+                                # pages don't re-download the same trace.
+                                already_downloaded.add(trace.id)
+                                if manifest is not None:
+                                    manifest.mark_trace_downloaded(trace.id)
+                            except Exception as write_error:
+                                console.print(
+                                    f"[red]Error writing trace {trace.id} to file: {write_error}[/red]"
+                                )
+                                if debug:
+                                    import traceback
 
-                except Exception as e:
-                    console.print(f"[red]Error exporting trace {trace.id}: {e}[/red]")
-                    continue
+                                    debug_print(
+                                        f"Traceback: {traceback.format_exc()}", debug
+                                    )
+                        except Exception as e:
+                            console.print(
+                                f"[red]Error exporting trace {trace.id}: {e}[/red]"
+                            )
 
             # Update pagination for next iteration
             if traces:
@@ -267,7 +330,7 @@ def export_traces(
         # Final progress update
         if exported_count == 0:
             console.print("[yellow]No traces found in the project.[/yellow]")
-        else:
+        elif progress and task is not None:
             progress.update(task, description=f"Exported {exported_count} traces total")
 
     return exported_count, skipped_count
@@ -453,6 +516,7 @@ def export_single_project(
     force: bool,
     debug: bool,
     format: str,
+    show_progress: bool = True,
 ) -> tuple[int, int, int]:
     """Export a single project."""
     try:
@@ -460,36 +524,106 @@ def export_single_project(
         project_traces_dir = output_dir / project.name
         project_traces_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if traces directory already has files in the requested format and force is not set
-        # Skip early return if a filter is provided, as we need to check if existing traces match the filter
-        if not force and not filter_string:
-            # Only check for files in the requested format
-            if format.lower() == "csv":
-                existing_traces = list(project_traces_dir.glob("trace_*.csv"))
-            else:
-                existing_traces = list(project_traces_dir.glob("trace_*.json"))
+        # Record the export start time BEFORE the first API call so that any
+        # trace created while the export runs is included in the next run's window.
+        export_start_time = datetime.now(timezone.utc).isoformat()
 
-            if existing_traces:
+        # Manifest lifecycle
+        manifest = ExportManifest(project_traces_dir)
+
+        if force:
+            if ExportManifest.exists(project_traces_dir):
+                manifest.reset()
                 if debug:
+                    debug_print("DEBUG: --force: discarding existing manifest", debug)
+        else:
+            manifest_format = manifest.get_format()
+            if manifest_format and manifest_format != format:
+                # Format changed — the manifest tracks the wrong file type; start fresh.
+                console.print(
+                    f"[yellow]Export format changed ({manifest_format} → {format}); "
+                    "discarding existing manifest and re-downloading.[/yellow]"
+                )
+                manifest.reset()
+            elif manifest.is_completed:
+                last_exported_at = manifest.get_last_exported_at()
+                if last_exported_at and debug:
                     debug_print(
-                        f"Skipping {project.name} (already has {len(existing_traces)} trace files in {format} format, use --force to re-download)",
+                        f"DEBUG: Previous export completed at {last_exported_at}; "
+                        "using incremental filter",
                         debug,
                     )
-                # Return project status, and trace counts (all skipped)
-                return (1, 0, len(existing_traces))
+            elif manifest.is_in_progress:
+                completed = manifest.downloaded_count()
+                console.print(
+                    f"[yellow]Resuming interrupted export "
+                    f"({completed} trace(s) already downloaded).[/yellow]"
+                )
+            else:
+                # Brand-new manifest (status = not_started).  Trace files may already
+                # exist on disk from a previous run that predates the manifest feature.
+                # Seed the manifest from the filesystem so those files aren't re-downloaded.
+                ext = "csv" if format.lower() == "csv" else "json"
+                existing = list(project_traces_dir.glob(f"trace_*.{ext}"))
+                if existing:
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Seeding manifest from {len(existing)} existing trace files",
+                            debug,
+                        )
+                    for p in existing:
+                        manifest.mark_trace_downloaded(p.stem[len("trace_") :])
+                    manifest.save()
+
+        # Build incremental filter when the previous export completed successfully.
+        # Use created_at (set by the backend at ingestion) rather than start_time
+        # (set by the SDK) because created_at is monotonically increasing.
+        effective_filter = filter_string
+        if not force and manifest.is_completed:
+            last_exported_at = manifest.get_last_exported_at()
+            if last_exported_at:
+                try:
+                    cutoff_dt = datetime.fromisoformat(last_exported_at) - timedelta(
+                        minutes=5
+                    )
+                    cutoff_str = cutoff_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    incremental_clause = f'created_at >= "{cutoff_str}"'
+                    effective_filter = (
+                        f"{filter_string} AND {incremental_clause}"
+                        if filter_string
+                        else incremental_clause
+                    )
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Incremental filter: {incremental_clause}", debug
+                        )
+                except (ValueError, TypeError) as e:
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Could not parse last_exported_at '{last_exported_at}': {e}; "
+                            "falling back to full fetch",
+                            debug,
+                        )
+
+        manifest.start(format)
 
         # Export related traces for this project
         traces_exported, traces_skipped = export_traces(
             client,
             project.name,
             project_traces_dir,
-            max_results or 1000,  # Use provided max_results or default to 1000
-            filter_string,
+            max_results,  # None means no limit — fetch all pages
+            effective_filter,
             None,  # project_name_filter
             format,
             debug,
             force,
+            show_progress,
+            manifest,
         )
+
+        # Mark the manifest complete so the next run uses incremental fetch.
+        manifest.complete(export_start_time)
 
         # Project export only exports traces - datasets and prompts must be exported separately
         if traces_exported > 0:
