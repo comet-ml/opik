@@ -338,7 +338,7 @@ def _export_all_experiments(
         for exp in all_experiments:
             progress.update(task, description=f"Experiment: {exp.name}")
             try:
-                exp_stats, file_written = export_experiment_by_id(
+                exp_stats, file_written, _manifest = export_experiment_by_id(
                     client,
                     experiments_dir,
                     exp.id,
