@@ -11,6 +11,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { calculateLineHeight } from "@/lib/experiments";
 import { traceExist } from "@/lib/traces";
 import { aggregateTrialItems } from "@/lib/trials";
+import groupBy from "lodash/groupBy";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
 import { cn } from "@/lib/utils";
 
@@ -48,13 +49,13 @@ const VerticallySplitCellWrapper = <TData,>({
   const rowHeight = tableMetadata?.rowHeight ?? ROW_HEIGHT.small;
 
   const items = React.useMemo(() => {
-    const itemsByExperiment = Map.groupBy(
+    const itemsByExperiment = groupBy(
       experimentCompare.experiment_items || [],
       (item) => item.experiment_id,
     );
 
     return experimentsIds.map((experimentId) => {
-      const matchingItems = itemsByExperiment.get(experimentId);
+      const matchingItems = itemsByExperiment[experimentId];
       if (!matchingItems) return undefined;
       if (matchingItems.length === 1) return matchingItems[0];
       return aggregateTrialItems(matchingItems);
