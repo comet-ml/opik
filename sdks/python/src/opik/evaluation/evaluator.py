@@ -523,20 +523,11 @@ def _evaluate_suite_task(
 
     total_time = time.time() - start_time
 
-    if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results, [])
-
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
-
-    client.flush()
-
-    _try_notifying_about_experiment_completion(experiment)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
@@ -548,11 +539,14 @@ def _evaluate_suite_task(
         experiment_scores=[],
     )
 
-    if verbose >= 2:
-        report.display_evaluation_scores_statistics(
-            dataset_name=dataset.name,
-            evaluation_results=evaluation_result_,
-        )
+    if verbose >= 1:
+        report.display_suite_results(dataset.name, total_time, evaluation_result_)
+
+    report.display_experiment_link(experiment_url=experiment_url)
+
+    client.flush()
+
+    _try_notifying_about_experiment_completion(experiment)
 
     return evaluation_result_
 

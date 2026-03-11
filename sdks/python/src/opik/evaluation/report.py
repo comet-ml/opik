@@ -116,6 +116,170 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
+def _compute_item_passed_map(
+    test_results: List[test_result.TestResult],
+) -> Dict[str, bool]:
+    results_by_item: Dict[str, List[test_result.TestResult]] = defaultdict(list)
+    for result in test_results:
+        item_id = result.test_case.dataset_item_id
+        results_by_item[item_id].append(result)
+
+    item_passed: Dict[str, bool] = {}
+    for item_id, item_results in results_by_item.items():
+        item = item_results[0].test_case.dataset_item
+        pass_threshold = 1
+        if item is not None and item.execution_policy is not None:
+            pass_threshold = item.execution_policy.pass_threshold or 1
+
+        runs_passed = sum(
+            1
+            for r in item_results
+            if not r.score_results
+            or all(
+                bool(s.value) if isinstance(s.value, bool) else s.value == 1
+                for s in r.score_results
+            )
+        )
+        item_passed[item_id] = runs_passed >= pass_threshold
+
+    return item_passed
+
+
+def display_suite_results(
+    suite_name: str,
+    total_time: float,
+    result: evaluation_result.EvaluationResult,
+) -> None:
+    test_results = result.test_results
+    nb_runs = len(test_results)
+
+    unique_item_ids = {
+        result.test_case.dataset_item_id
+        for result in test_results
+        if result.test_case.dataset_item_id is not None
+    }
+    nb_items = len(unique_item_ids) if unique_item_ids else nb_runs
+
+    item_passed_map = _compute_item_passed_map(test_results)
+    items_passed = sum(1 for v in item_passed_map.values() if v)
+    items_total = len(item_passed_map)
+    suite_passed = items_passed == items_total
+
+    # Categorize assertions: track pass/fail counts and whether failures
+    # occurred on items that ultimately failed vs items that still passed.
+    assertion_passed_count: Dict[str, int] = defaultdict(int)
+    assertion_total_count: Dict[str, int] = defaultdict(int)
+    assertion_failed_on_failed_item: Dict[str, bool] = defaultdict(bool)
+
+    for result in test_results:
+        item_id = result.test_case.dataset_item_id
+        item_did_pass = item_passed_map.get(item_id, True)
+        for score in result.score_results:
+            assertion_total_count[score.name] += 1
+            score_passed = not score.scoring_failed and (
+                (isinstance(score.value, bool) and score.value)
+                or score.value == 1
+            )
+            if score_passed:
+                assertion_passed_count[score.name] += 1
+            elif not item_did_pass:
+                assertion_failed_on_failed_item[score.name] = True
+
+    # Split assertions into: caused item failures (critical), failed but
+    # items still passed (non-critical), and fully passing.
+    critical: Dict[str, Tuple[int, int]] = {}
+    non_critical: Dict[str, Tuple[int, int]] = {}
+    fully_passed: Dict[str, Tuple[int, int]] = {}
+
+    for name in assertion_total_count:
+        passed = assertion_passed_count[name]
+        total = assertion_total_count[name]
+        if passed == total:
+            fully_passed[name] = (passed, total)
+        elif assertion_failed_on_failed_item[name]:
+            critical[name] = (passed, total)
+        else:
+            non_critical[name] = (passed, total)
+
+    # Build display
+    time_text = text.Text(f"Total time:        {_format_time(total_time)}")
+    time_text.stylize("bold", 0, 18)
+    time_text = align.Align.left(time_text)
+
+    nb_samples_text = text.Text(
+        f"Number of items:   {nb_items:,} ({nb_runs:,} runs)"
+    )
+    nb_samples_text.stylize("bold", 0, 18)
+    nb_samples_text = align.Align.left(nb_samples_text)
+
+    pass_rate = items_passed / items_total if items_total > 0 else 1.0
+    pass_style = "green bold" if suite_passed else "red bold"
+    pass_label = "PASSED" if suite_passed else "FAILED"
+    pass_text = text.Text(f"Suite result:      {pass_label}", style=pass_style)
+    pass_text.stylize("bold", 0, 18)
+    pass_text = align.Align.left(pass_text)
+
+    items_text = text.Text(f"Items passed:      {items_passed}/{items_total}")
+    items_text.stylize("bold", 0, 18)
+    items_text = align.Align.left(items_text)
+
+    rate_text = text.Text(f"Pass rate:         {pass_rate:.1f}")
+    rate_text.stylize("bold", 0, 18)
+    rate_text = align.Align.left(rate_text)
+
+    score_strings = text.Text("")
+
+    if critical:
+        score_strings += text.Text("Caused item failures:\n", style="bold")
+        for name, (passed, total) in critical.items():
+            rate = passed / total if total > 0 else 0.0
+            score_strings += text.Text(
+                f"  {name}: {rate:.0%} passed ({passed}/{total})\n",
+                style="red bold",
+            )
+        score_strings += text.Text("\n")
+
+    if non_critical:
+        score_strings += text.Text(
+            "Non-critical (items still passed):\n", style="bold"
+        )
+        for name, (passed, total) in non_critical.items():
+            rate = passed / total if total > 0 else 0.0
+            score_strings += text.Text(
+                f"  {name}: {rate:.0%} passed ({passed}/{total})\n",
+                style="yellow bold",
+            )
+        score_strings += text.Text("\n")
+
+    for name, (passed, total) in fully_passed.items():
+        score_strings += text.Text(
+            f"{name}: 100% passed ({total}/{total})\n", style="green bold"
+        )
+
+    aligned_scores = align.Align.left(score_strings)
+
+    content = table.Table.grid()
+    content.add_row(text.Text(""))
+    content.add_row(time_text)
+    content.add_row(nb_samples_text)
+    content.add_row(pass_text)
+    content.add_row(items_text)
+    content.add_row(rate_text)
+    content.add_row(text.Text(""))
+    content.add_row(aligned_scores)
+
+    panel_content = panel.Panel(
+        content,
+        title=f"{suite_name} ({nb_items} items, {nb_runs} runs)",
+        title_align="left",
+        expand=False,
+    )
+
+    console_container = console.Console()
+    console_container.print(panel_content)
+    console_container.print("Uploading results to Opik ... ")
+
+
 def display_experiment_link(experiment_url: str) -> None:
     console_container = console.Console()
 
