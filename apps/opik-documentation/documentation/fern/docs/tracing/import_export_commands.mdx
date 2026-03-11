@@ -21,31 +21,52 @@ Exports specific data types from the specified workspace to local files.
 
 **Arguments:**
 - `WORKSPACE`: The workspace name to export from
-- `TYPE`: The type of data to export (`dataset`, `project`, `experiment`, or `prompt`)
-- `NAME`: Exact name of the item to export
+- `TYPE`: The type of data to export (`all`, `dataset`, `project`, `experiment`, or `prompt`)
+- `NAME`: Exact name of the item to export (not used with `all`)
 
 **Options:**
 - `--path, -p`: Directory to save exported data (default: `opik_exports`)
 - `--max-results`: Maximum number of items to export per data type (default: 1000)
-- `--filter`: Filter string using Opik Query Language (OQL) to narrow down the search (for projects only)
+- `--filter`: OQL filter string applied to traces — works with `project`, `experiment`, and `all`
 - `--force`: Re-download items even if they already exist locally
 - `--format`: Format for exporting data (`json` or `csv`, default: `json`)
 - `--debug`: Enable debug output to show detailed information about the export process
 
-**Experiment-specific options:**
+**`all`-specific options:**
+- `--include`: Comma-separated list of data types to include (`datasets`, `prompts`, `projects`, `experiments`). Defaults to all four.
+
+**`experiment`-specific options:**
 - `--dataset NAME`: Filter experiments by dataset name (only experiments using this dataset will be exported)
 - `--max-traces INTEGER`: Maximum number of traces to export (limits total traces downloaded)
 
 **Examples:**
 ```bash
+# Export everything in the workspace
+opik export my-workspace all
+
+# Export only datasets and prompts
+opik export my-workspace all --include datasets,prompts
+
+# Export all traces logged after a given date
+opik export my-workspace all --filter 'created_at >= "2024-01-01T00:00:00Z"'
+
 # Export specific dataset by exact name
 opik export my-workspace dataset "my-test-dataset"
 
 # Export specific project by exact name
-opik export my-workspace project "my-project" --filter "status = 'completed'"
+opik export my-workspace project "my-project"
+
+# Export project traces matching an OQL filter
+opik export my-workspace project "my-project" --filter 'created_at >= "2024-01-01T00:00:00Z"'
+
+# Export project traces in a date range
+opik export my-workspace project "my-project" --filter 'created_at >= "2024-01-01T00:00:00Z" AND created_at < "2024-02-01T00:00:00Z"'
 
 # Export specific experiment by exact name
 opik export my-workspace experiment "my-experiment" --force
+
+# Export experiment traces logged after a given date
+opik export my-workspace experiment "my-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
 
 # Export experiment with dataset filtering
 opik export my-workspace experiment "my-experiment" --dataset "my-dataset"
@@ -59,26 +80,14 @@ opik export my-workspace prompt "my-template"
 # Export with custom output directory
 opik export my-workspace dataset "my-dataset" --path ./backup_data
 
-# Export using default directory (opik_exports)
-opik export my-workspace dataset "my-dataset"
-
 # Export with filter and limit
-opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 100
+opik export my-workspace project "my-project" --filter 'start_time >= "2024-01-01T00:00:00Z"' --max-results 100
 
 # Export traces in CSV format for analysis
 opik export my-workspace project "my-project" --format csv --path ./csv_data
 
 # Export with debug output
 opik export my-workspace dataset "my-dataset" --debug --force
-
-# Export datasets in CSV format for analysis
-opik export my-workspace dataset "my-dataset" --format csv --path ./analysis_data
-
-# Export prompts in CSV format for analysis
-opik export my-workspace prompt "my-template" --format csv --path ./analysis_data
-
-# Export experiments in CSV format for analysis
-opik export my-workspace experiment "my-experiment" --format csv --path ./analysis_data
 ```
 
 ## `opik import WORKSPACE TYPE NAME`
@@ -371,15 +380,21 @@ opik export my-workspace experiment "my-experiment" --path ./backup_$(date +%Y%m
 ### 3. Environment Sync
 ```bash
 # Sync from staging to production
-opik export my-workspace project "staging-project" --filter "tags contains 'ready-for-prod'"
+opik export my-workspace project "staging-project" --filter 'tags contains "ready-for-prod"'
 opik import my-workspace project "staging-project"
 ```
 
 ### 4. Data Analysis
 ```bash
-# Export specific traces for analysis
-opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 1000
-# Analyze the JSON files locally
+# Export traces for a specific time window
+opik export my-workspace project "my-project" \
+  --filter 'created_at >= "2024-01-01T00:00:00Z" AND created_at < "2024-04-01T00:00:00Z"'
+
+# Export all traces logged before a cutoff date across every project
+opik export my-workspace all --filter 'created_at < "2024-01-01T00:00:00Z"'
+
+# Export recent experiment traces only
+opik export my-workspace experiment "my-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
 ```
 
 ### 5. Dataset Management
@@ -433,6 +448,9 @@ opik export my-workspace experiment "my-experiment" --path ./experiment_data
 
 # Export experiment with dataset filtering
 opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset"
+
+# Export only traces logged after a given date
+opik export my-workspace experiment "large-experiment" --filter 'created_at >= "2024-06-01T00:00:00Z"'
 
 # Export experiment with trace limit (useful for large experiments)
 opik export my-workspace experiment "large-experiment" --max-traces 50

@@ -23,6 +23,7 @@ from opik.cli.export_manifest import ExportManifest
 from .utils import (
     create_experiment_data_structure,
     debug_print,
+    matches_trace_filter,
     write_json_data,
     write_csv_data,
     print_export_summary,
@@ -183,6 +184,7 @@ def export_traces_by_ids(
     debug: bool,
     force: bool,
     manifest: Optional[ExportManifest] = None,
+    filter_string: Optional[str] = None,
 ) -> tuple[int, int]:
     """Export traces by their IDs using parallel batch processing.
 
@@ -279,6 +281,12 @@ def export_traces_by_ids(
                             result = fetch_future.result()
                             if result is not None:
                                 fetched_trace_id, trace_data, project_name = result
+                                if filter_string and not matches_trace_filter(
+                                    trace_data.get("trace", {}), filter_string
+                                ):
+                                    skipped_count += 1
+                                    progress.update(task, advance=1)
+                                    continue
                                 fetched_traces[fetched_trace_id] = (
                                     trace_data,
                                     project_name,
@@ -503,6 +511,7 @@ def export_experiment_by_name(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    filter_string: Optional[str] = None,
 ) -> None:
     """Export an experiment by exact name."""
     try:
@@ -678,6 +687,7 @@ def export_experiment_by_name(
                     debug,
                     force,
                     manifest=trace_manifest,
+                    filter_string=filter_string,
                 )
 
         # Collect statistics for summary
@@ -724,6 +734,7 @@ def export_experiment_by_name_or_id(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    filter_string: Optional[str] = None,
 ) -> None:
     """Export an experiment by name or ID.
 
@@ -806,6 +817,7 @@ def export_experiment_by_name_or_id(
                         debug,
                         force,
                         manifest=exp_manifest,
+                        filter_string=filter_string,
                     )
 
             # Collect statistics for summary
@@ -853,6 +865,7 @@ def export_experiment_by_name_or_id(
             debug,
             format,
             api_key,
+            filter_string=filter_string,
         )
 
     except Exception as e:
@@ -862,6 +875,11 @@ def export_experiment_by_name_or_id(
 
 @click.command(name="experiment")
 @click.argument("name_or_id", type=str)
+@click.option(
+    "--filter",
+    type=str,
+    help="OQL filter string applied to traces (e.g. 'created_at >= \"2024-01-01T00:00:00Z\"').",
+)
 @click.option(
     "--dataset",
     type=str,
@@ -899,6 +917,7 @@ def export_experiment_by_name_or_id(
 def export_experiment_command(
     ctx: click.Context,
     name_or_id: str,
+    filter: Optional[str],
     dataset: Optional[str],
     max_traces: Optional[int],
     path: str,
@@ -914,5 +933,14 @@ def export_experiment_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_experiment_by_name_or_id(
-        name_or_id, workspace, path, dataset, max_traces, force, debug, format, api_key
+        name_or_id,
+        workspace,
+        path,
+        dataset,
+        max_traces,
+        force,
+        debug,
+        format,
+        api_key,
+        filter_string=filter,
     )

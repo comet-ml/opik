@@ -238,6 +238,7 @@ def _export_all_projects(
     debug: bool,
     format: str,
     max_workers: int = 5,
+    filter_string: Optional[str] = None,
 ) -> tuple[int, int, int]:
     """Export all projects in the workspace. Returns (projects_exported, traces_exported, traces_skipped)."""
     projects_exported = 0
@@ -272,7 +273,7 @@ def _export_all_projects(
                     client,
                     project,
                     projects_dir,
-                    None,  # no filter
+                    filter_string,
                     max_results,
                     force,
                     debug,
@@ -308,6 +309,7 @@ def _export_all_experiments(
     force: bool,
     debug: bool,
     format: str,
+    filter_string: Optional[str] = None,
 ) -> tuple[int, int, int, int]:
     """Export all experiments. Returns (exported, skipped, traces_exported, traces_skipped)."""
     exported = 0
@@ -370,7 +372,14 @@ def _export_all_experiments(
             f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from experiments...[/blue]"
         )
         traces_exported, traces_skipped = export_traces_by_ids(
-            client, trace_ids_list, workspace_root, None, format, debug, force
+            client,
+            trace_ids_list,
+            workspace_root,
+            None,
+            format,
+            debug,
+            force,
+            filter_string=filter_string,
         )
 
     return exported, skipped, traces_exported, traces_skipped
@@ -385,6 +394,7 @@ def export_all(
     debug: bool,
     format: str,
     api_key: Optional[str] = None,
+    filter_string: Optional[str] = None,
 ) -> None:
     """Export all data from the workspace."""
     try:
@@ -426,7 +436,13 @@ def export_all(
             projects_dir = workspace_root / "projects"
             projects_dir.mkdir(parents=True, exist_ok=True)
             proj_exp, tr_exp, tr_skip = _export_all_projects(
-                client, projects_dir, max_results, force, debug, format
+                client,
+                projects_dir,
+                max_results,
+                force,
+                debug,
+                format,
+                filter_string=filter_string,
             )
             total_stats["projects"] = proj_exp
             # Accumulate traces (experiments may also add traces below)
@@ -446,6 +462,7 @@ def export_all(
                 force,
                 debug,
                 format,
+                filter_string=filter_string,
             )
             total_stats["experiments"] = exp_exp
             total_stats["experiments_skipped"] = exp_skip
@@ -486,6 +503,11 @@ def _validate_include(
 
 
 @click.command(name="all")
+@click.option(
+    "--filter",
+    type=str,
+    help="OQL filter string applied to project and experiment traces (e.g. 'created_at >= \"2024-01-01T00:00:00Z\"').",
+)
 @click.option(
     "--path",
     "-p",
@@ -528,6 +550,7 @@ def _validate_include(
 @click.pass_context
 def export_all_command(
     ctx: click.Context,
+    filter: Optional[str],
     path: str,
     format: str,
     force: bool,
@@ -554,4 +577,14 @@ def export_all_command(
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    export_all(workspace, path, include, max_results, force, debug, format, api_key)
+    export_all(
+        workspace,
+        path,
+        include,
+        max_results,
+        force,
+        debug,
+        format,
+        api_key,
+        filter_string=filter,
+    )
