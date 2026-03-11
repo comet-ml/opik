@@ -1032,6 +1032,9 @@ class Opik:
         """
         from .dataset import validators, rest_operations
 
+        if execution_policy is not None:
+            validators.validate_execution_policy(execution_policy)
+
         evaluators = validators.resolve_evaluators(
             assertions, None, "suite-level assertions"
         )
@@ -1116,6 +1119,11 @@ class Opik:
         Returns:
             EvaluationSuite: The evaluation suite object.
         """
+        from .dataset import validators
+
+        if execution_policy is not None:
+            validators.validate_execution_policy(execution_policy)
+
         try:
             suite = self.get_evaluation_suite(name)
         except ApiError as e:

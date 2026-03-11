@@ -165,6 +165,9 @@ class EvaluationSuite:
         Raises:
             ValueError: If nothing to update is provided.
         """
+        if execution_policy is not None:
+            validators.validate_execution_policy(execution_policy)
+
         resolved = validators.resolve_evaluators(
             assertions, None, "suite-level assertions"
         )
@@ -260,6 +263,9 @@ class EvaluationSuite:
             ...     assertions=["Response is polite"],
             ... )
         """
+        if execution_policy is not None:
+            validators.validate_execution_policy(execution_policy)
+
         evaluators = validators.resolve_evaluators(
             assertions, None, "item-level assertions"
         )
@@ -294,6 +300,68 @@ class EvaluationSuite:
             **data,
         )
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
+
+    def add_items(
+        self,
+        items: List[suite_types.EvaluationSuiteItem],
+    ) -> None:
+        """
+        Add multiple test cases to the evaluation suite in a single batch.
+
+        This is more efficient than calling add_item() repeatedly, as it
+        creates only one dataset version for the entire batch.
+
+        Args:
+            items: List of test case items to add.
+
+        Example:
+            >>> suite.add_items([
+            ...     {"data": {"question": "How do I get a refund?"}},
+            ...     {
+            ...         "data": {"question": "Is my account hacked?"},
+            ...         "assertions": ["Response treats the concern with urgency"],
+            ...         "execution_policy": {"runs_per_item": 5, "pass_threshold": 4},
+            ...     },
+            ... ])
+        """
+        validators.validate_suite_items(items)
+
+        ds_items: List[dataset_item.DatasetItem] = []
+        for item in items:
+            evaluators = validators.resolve_evaluators(
+                item.get("assertions"), None, "item-level assertions"
+            )
+
+            evaluator_items = None
+            if evaluators:
+                evaluator_items = [
+                    dataset_item.EvaluatorItem(
+                        name=e.name,
+                        type="llm_judge",
+                        config=e.to_config().model_dump(by_alias=True),
+                    )
+                    for e in evaluators
+                ]
+
+            ep = item.get("execution_policy")
+            execution_policy_item = None
+            if ep:
+                execution_policy_item = dataset_item.ExecutionPolicyItem(
+                    runs_per_item=ep.get("runs_per_item"),
+                    pass_threshold=ep.get("pass_threshold"),
+                )
+
+            ds_items.append(
+                dataset_item.DatasetItem(
+                    id=id_helpers.generate_id(),
+                    description=item.get("description"),
+                    evaluators=evaluator_items,
+                    execution_policy=execution_policy_item,
+                    **item["data"],
+                )
+            )
+
+        self._dataset.__internal_api__insert_items_as_dataclasses__(ds_items)
 
     def run(
         self,

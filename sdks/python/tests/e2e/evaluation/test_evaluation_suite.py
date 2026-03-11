@@ -1079,3 +1079,61 @@ def test_get_or_create_evaluation_suite__with_tags__tags_persisted(
 
     suite = opik_client.get_evaluation_suite(dataset_name)
     assert sorted(suite.get_tags()) == ["production", "v2"]
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__add_items_batch__all_items_persisted(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that add_items() adds multiple items in a single batch.
+    """
+    assertion = "The response is factually correct"
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test batch add_items",
+    )
+
+    suite.add_items([
+        {
+            "data": {"input": {"question": "What is the capital of France?"}},
+            "assertions": [assertion],
+        },
+        {
+            "data": {"input": {"question": "What is the capital of Germany?"}},
+            "assertions": [assertion],
+        },
+        {
+            "data": {"input": {"question": "What is the capital of Spain?"}},
+            "assertions": [assertion],
+        },
+    ])
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        answers = {
+            "What is the capital of France?": "Paris",
+            "What is the capital of Germany?": "Berlin",
+            "What is the capital of Spain?": "Madrid",
+        }
+        question = item["input"]["question"]
+        return {"input": item["input"], "output": answers.get(question, "Unknown")}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_evaluation_suite_result(
+        opik_client=opik_client,
+        suite_result=suite_result,
+        items_total=3,
+        items_passed=3,
+        experiment_items_count=3,
+        total_feedback_scores=3,
+        expected_score_names={assertion},
+    )

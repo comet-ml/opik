@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
+
+from typing_extensions import Required
+
+from ..execution_policy import ExecutionPolicy
 
 if TYPE_CHECKING:
     from opik.evaluation import evaluation_result, test_result
+
+
+class EvaluationSuiteItem(TypedDict, total=False):
+    """A test case item to add to an evaluation suite."""
+
+    data: Required[Dict[str, Any]]
+    assertions: List[str]
+    description: str
+    execution_policy: ExecutionPolicy
 
 
 @dataclasses.dataclass
