@@ -11,11 +11,7 @@ from typing import (
     Union,
     Literal,
     cast,
-    TYPE_CHECKING,
 )
-
-if TYPE_CHECKING:
-    from opik.evaluation.suite_evaluators import llm_judge
 
 import httpx
 
@@ -997,7 +993,6 @@ class Opik:
         description: Optional[str] = None,
         assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
-        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Create a new evaluation suite for regression testing.
@@ -1009,14 +1004,10 @@ class Opik:
         Args:
             name: The name of the evaluation suite.
             description: Optional description of what this suite tests.
-            assertions: Shorthand for suite-level assertions. Under the hood,
-                an ``LLMJudge`` is created automatically. Cannot be combined
-                with ``evaluators``.
-            execution_policy: Dataset-level execution policy.
+            assertions: Suite-level assertions. Each string describes an
+                expected behavior that will be checked by an LLM.
+            execution_policy: Suite-level execution policy.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
-            evaluators: (Deprecated) Suite-level evaluators (e.g., LLMJudge
-                instances). Prefer ``assertions`` instead. Cannot be combined
-                with ``assertions``.
 
         Returns:
             EvaluationSuite: The created evaluation suite object.
@@ -1040,7 +1031,7 @@ class Opik:
         from .dataset import validators, rest_operations
 
         evaluators = validators.resolve_evaluators(
-            assertions, evaluators, "suite-level evaluators"
+            assertions, None, "suite-level assertions"
         )
 
         rest_operations.create_evaluation_suite_dataset(
@@ -1066,8 +1057,8 @@ class Opik:
         """
         Get an existing evaluation suite by name.
 
-        Retrieves the dataset and its version-level evaluators/execution_policy
-        from the backend, returning a fully configured EvaluationSuite.
+        Retrieves the dataset and its version-level assertions and execution
+        policy from the backend, returning a fully configured EvaluationSuite.
 
         Args:
             name: The name of the evaluation suite.
@@ -1102,25 +1093,20 @@ class Opik:
         description: Optional[str] = None,
         assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
-        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Get an existing evaluation suite by name or create a new one if it does not exist.
 
-        If the suite already exists and any of ``assertions``, ``evaluators``,
-        or ``execution_policy`` are provided, a new version is created with
-        the updated configuration (unspecified parameters retain their
-        current values).
+        If the suite already exists and ``assertions`` or ``execution_policy``
+        are provided, a new version is created with the updated configuration
+        (unspecified parameters retain their current values).
 
         Args:
             name: The name of the evaluation suite.
             description: Optional description (used only when creating).
-            assertions: Shorthand for suite-level assertions. Cannot be
-                combined with ``evaluators``.
+            assertions: Suite-level assertions. Each string describes an
+                expected behavior that will be checked by an LLM.
             execution_policy: Execution policy for the suite.
-            evaluators: (Deprecated) Suite-level evaluators. Prefer
-                ``assertions`` instead. Cannot be combined with
-                ``assertions``.
 
         Returns:
             EvaluationSuite: The evaluation suite object.
@@ -1132,21 +1118,15 @@ class Opik:
                 return self.create_evaluation_suite(
                     name=name,
                     description=description,
-                    evaluators=evaluators,
                     execution_policy=execution_policy,
                     assertions=assertions,
                 )
             raise
 
-        has_updates = (
-            assertions is not None
-            or evaluators is not None
-            or execution_policy is not None
-        )
+        has_updates = assertions is not None or execution_policy is not None
         if has_updates:
             suite.update(
                 assertions=assertions,
-                evaluators=evaluators,
                 execution_policy=execution_policy,
             )
 

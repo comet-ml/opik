@@ -9,7 +9,7 @@ break existing functionality.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
@@ -17,9 +17,6 @@ from opik.api_objects.dataset import dataset, dataset_item
 
 from . import types as suite_types
 from .. import validators, execution_policy, rest_operations
-
-if TYPE_CHECKING:
-    from opik.evaluation.suite_evaluators import llm_judge
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,15 +30,11 @@ class EvaluationSuite:
 
     Evaluation Suites let you:
     - Define test cases with inputs and context
-    - Configure evaluation criteria (LLMJudge evaluators only)
+    - Configure assertions that will be checked by an LLM
     - Run tests against any task function
 
-    Suite-level evaluators and execution policy are stored in the dataset's
+    Suite-level assertions and execution policy are stored in the dataset's
     metadata and read by the evaluation engine when running the suite.
-
-    Note:
-        Evaluation suites only support LLMJudge evaluators. Other metric types
-        (like Equals, Contains, etc.) are not supported.
 
     Example:
         >>> from opik import Opik
@@ -73,7 +66,7 @@ class EvaluationSuite:
         """
         Initialize an EvaluationSuite.
 
-        Suite-level evaluators and execution policy are stored in the dataset's
+        Suite-level assertions and execution policy are stored in the dataset's
         metadata. Use `create_evaluation_suite()` to create a suite with config.
 
         Args:
@@ -98,10 +91,7 @@ class EvaluationSuite:
         """The underlying dataset storing suite items."""
         return self._dataset
 
-    def get_items(
-        self,
-        evaluator_model: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    def get_items(self) -> List[Dict[str, Any]]:
         """
         Retrieve suite items as a list of dictionaries.
 
@@ -109,11 +99,8 @@ class EvaluationSuite:
         - "id": the dataset item ID (str)
         - "data": the test case data (dict)
         - "description": optional item description (str or None)
-        - "evaluators": list of LLMJudge instances (or empty list)
+        - "assertions": list of assertion strings (or empty list)
         - "execution_policy": ExecutionPolicyItem or None
-
-        Args:
-            evaluator_model: Optional model name to use for LLMJudge evaluators.
 
         Returns:
             A list of item dictionaries.
@@ -125,23 +112,20 @@ class EvaluationSuite:
 
         result = []
         for item in self._dataset.__internal_api__stream_items_as_dataclasses__():
-            evaluator_objects: list[llm_judge.LLMJudge] = []
+            item_assertions: list[str] = []
             if item.evaluators:
                 for e in item.evaluators:
                     if e.type == "llm_judge":
                         cfg = llm_judge_config.LLMJudgeConfig(**e.config)
-                        evaluator_objects.append(
-                            llm_judge.LLMJudge.from_config(
-                                cfg, init_kwargs={"model": evaluator_model}
-                            )
-                        )
+                        judge = llm_judge.LLMJudge.from_config(cfg)
+                        item_assertions.extend(judge.assertions)
 
             result.append(
                 {
                     "id": item.id,
                     "data": item.get_content(),
                     "description": item.description,
-                    "evaluators": evaluator_objects,
+                    "assertions": item_assertions,
                     "execution_policy": item.execution_policy,
                 }
             )
@@ -152,10 +136,9 @@ class EvaluationSuite:
         *,
         execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
         assertions: Optional[List[str]] = None,
-        evaluators: Optional[List[llm_judge.LLMJudge]] = None,
     ) -> None:
         """
-        Update the suite-level execution policy and/or evaluators.
+        Update the suite-level assertions and/or execution policy.
 
         Creates a new dataset version based on the current latest version
         with the updated configuration. Supports partial updates: any
@@ -164,26 +147,21 @@ class EvaluationSuite:
         Args:
             execution_policy: New execution policy for the suite.
                 If not provided, the current policy is kept.
-            assertions: Shorthand for suite-level assertions. Under the hood,
-                an ``LLMJudge`` is created automatically. Cannot be combined
-                with ``evaluators``.
-            evaluators: (Deprecated) New suite-level LLMJudge evaluators.
-                Prefer ``assertions`` instead. Cannot be combined with
-                ``assertions``.
+            assertions: New suite-level assertions. Each string describes
+                an expected behavior that will be checked by an LLM.
+                If not provided, the current assertions are kept.
 
         Raises:
-            TypeError: If any evaluator is not an LLMJudge instance.
             ValueError: If no current version exists to base the update on,
-                or if both assertions and evaluators are provided,
                 or if nothing to update is provided.
         """
         resolved = validators.resolve_evaluators(
-            assertions, evaluators, "suite-level evaluators"
+            assertions, None, "suite-level assertions"
         )
 
         if resolved is None and execution_policy is None:
             raise ValueError(
-                "At least one of 'assertions', 'evaluators', or "
+                "At least one of 'assertions' or "
                 "'execution_policy' must be provided."
             )
 
@@ -195,7 +173,7 @@ class EvaluationSuite:
             )
 
         if resolved is None:
-            resolved = self.get_evaluators()
+            resolved = self._dataset.get_evaluators()
         if execution_policy is None:
             execution_policy = self.get_execution_policy()
 
@@ -225,20 +203,18 @@ class EvaluationSuite:
         """
         return self._dataset.get_execution_policy()
 
-    def get_evaluators(
-        self,
-        evaluator_model: Optional[str] = None,
-    ) -> List[llm_judge.LLMJudge]:
+    def get_assertions(self) -> List[str]:
         """
-        Get the suite-level evaluators as LLMJudge instances.
-
-        Args:
-            evaluator_model: Optional model name to use for LLMJudge evaluators.
+        Get the suite-level assertions.
 
         Returns:
-            List of LLMJudge instances.
+            List of assertion strings.
         """
-        return self._dataset.get_evaluators(evaluator_model=evaluator_model)
+        evaluators = self._dataset.get_evaluators()
+        assertions: list[str] = []
+        for evaluator in evaluators:
+            assertions.extend(evaluator.assertions)
+        return assertions
 
     def add_item(
         self,
@@ -247,7 +223,6 @@ class EvaluationSuite:
         assertions: Optional[List[str]] = None,
         description: Optional[str] = None,
         execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
-        evaluators: Optional[List[llm_judge.LLMJudge]] = None,
     ) -> None:
         """
         Add a test case to the evaluation suite.
@@ -256,20 +231,11 @@ class EvaluationSuite:
             data: Dictionary containing the test case data. This is passed to
                 the task function and can contain any fields needed.
                 Example: {"user_input": "How do I get a refund?", "user_tier": "premium"}
-            assertions: Shorthand for item-specific assertions. Each string
-                describes an expected behavior that will be judged by an LLM.
-                Under the hood, an ``LLMJudge`` is created automatically.
-                Cannot be combined with ``evaluators``.
+            assertions: Item-specific assertions. Each string describes an
+                expected behavior that will be checked by an LLM.
             description: Optional description of this test case.
             execution_policy: Item-specific execution policy override.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
-            evaluators: (Deprecated) Item-specific LLMJudge evaluators.
-                Prefer ``assertions`` instead. Cannot be combined with
-                ``assertions``.
-
-        Raises:
-            TypeError: If any evaluator is not an LLMJudge instance.
-            ValueError: If both assertions and evaluators are provided.
 
         Example:
             >>> suite.add_item(
@@ -279,7 +245,7 @@ class EvaluationSuite:
             ... )
         """
         evaluators = validators.resolve_evaluators(
-            assertions, evaluators, "item-level evaluators"
+            assertions, None, "item-level assertions"
         )
 
         item_id = id_helpers.generate_id()
@@ -325,13 +291,13 @@ class EvaluationSuite:
         experiment_tags: Optional[List[str]] = None,
         verbose: int = 1,
         worker_threads: int = 16,
-        evaluator_model: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite against a task function.
 
         The task function receives each test item's data dict and must return
-        a dict with "input" and "output" keys for the evaluators.
+        a dict with "input" and "output" keys.
 
         Args:
             task: A callable that takes a dict (the item's data) and returns
@@ -344,7 +310,7 @@ class EvaluationSuite:
             experiment_tags: Optional list of tags to associate with the experiment.
             verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
             worker_threads: Number of threads for parallel task execution.
-            evaluator_model: Optional model name to use for LLMJudge evaluators.
+            model: Optional model name to use for checking assertions.
                 If not provided, uses the default model.
 
         Returns:
@@ -355,7 +321,7 @@ class EvaluationSuite:
             ...     response = call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
             ...     return {"input": data, "output": response}
             >>>
-            >>> result = suite.run(task=my_llm_task, evaluator_model="gpt-4o")
+            >>> result = suite.run(task=my_llm_task, model="gpt-4o")
             >>> print(f"Suite passed: {result.passed}")
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
@@ -373,7 +339,7 @@ class EvaluationSuite:
             experiment_tags=experiment_tags,
             verbose=verbose,
             task_threads=worker_threads,
-            evaluator_model=evaluator_model,
+            evaluator_model=model,
         )
 
         return suite_result_constructor.build_suite_result(eval_result)

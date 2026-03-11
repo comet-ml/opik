@@ -8,7 +8,7 @@ These tests verify the core evaluation suite functionality:
 5. Persistence: create, get, update, delete operations
 
 Key concepts:
-- Assertions are evaluated by an LLMJudge built internally by the SDK
+- Assertions are checked by an LLM (internally using LLMJudge)
 - Suite-level assertions and execution_policy are stored at dataset version level
 - Item-level assertions and execution_policy are stored as dataset item fields
 - Items without assertions pass by default (no assertions to fail)
@@ -652,15 +652,12 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     assert "Geography: France capital" in retrieved_descriptions
     assert "Geography: Germany capital" in retrieved_descriptions
 
-    # Verify item-level evaluators survived the round-trip
-    items_with_evaluators = [i for i in retrieved_items if len(i["evaluators"]) > 0]
-    assert len(items_with_evaluators) == 1
+    # Verify item-level assertions survived the round-trip
+    items_with_assertions = [i for i in retrieved_items if len(i["assertions"]) > 0]
+    assert len(items_with_assertions) == 1
+    assert items_with_assertions[0]["assertions"] == [item_assertion]
 
-    from opik.evaluation.suite_evaluators import LLMJudge
-
-    assert isinstance(items_with_evaluators[0]["evaluators"][0], LLMJudge)
-
-    # 3. Run the retrieved suite — evaluators/execution_policy come from BE
+    # 3. Run the retrieved suite — assertions/execution_policy come from BE
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         question = item["input"]["question"]
         if "France" in question:
@@ -727,17 +724,15 @@ def test_evaluation_suite__delete_items__items_removed(
     assert len(remaining_items) == 2
 
 
-def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
+def test_evaluation_suite__get_assertions__returns_assertion_strings(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
-    Test that get_evaluators() returns LLMJudge instances from suite-level config.
+    Test that get_assertions() returns assertion strings from suite-level config.
     """
-    from opik.evaluation.suite_evaluators import LLMJudge
-
     opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test get_evaluators",
+        description="Test get_assertions",
         assertions=[
             "Response is helpful",
             "Response is accurate",
@@ -748,9 +743,12 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
     # Retrieve from BE to verify persistence
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
-    evaluators = retrieved_suite.get_evaluators()
-    assert len(evaluators) == 1
-    assert all(isinstance(e, LLMJudge) for e in evaluators)
+    assertions = retrieved_suite.get_assertions()
+    assert set(assertions) == {
+        "Response is helpful",
+        "Response is accurate",
+        "Response is concise",
+    }
 
 
 def test_evaluation_suite__get_execution_policy__returns_persisted_policy(
@@ -803,8 +801,8 @@ def test_evaluation_suite__update__changes_assertions_and_policy(
     )
 
     # Verify initial state
-    evaluators = suite.get_evaluators()
-    assert len(evaluators) == 1
+    assertions = suite.get_assertions()
+    assert set(assertions) == {"Response is helpful"}
 
     policy = suite.get_execution_policy()
     assert policy["runs_per_item"] == 1
@@ -818,9 +816,8 @@ def test_evaluation_suite__update__changes_assertions_and_policy(
     # Retrieve from BE to verify persistence
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
-    updated_evaluators = retrieved_suite.get_evaluators()
-    assert len(updated_evaluators) == 1
-    assert set(updated_evaluators[0].assertions) == {
+    updated_assertions = retrieved_suite.get_assertions()
+    assert set(updated_assertions) == {
         "Response is accurate",
         "Response is concise",
     }
@@ -875,8 +872,6 @@ def test_get_or_create_evaluation_suite__with_new_assertions__creates_new_versio
     Test that get_or_create_evaluation_suite with new assertions on an
     existing suite creates a new version with those assertions.
     """
-    from opik.evaluation.suite_evaluators import LLMJudge
-
     opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Original suite",
@@ -889,10 +884,8 @@ def test_get_or_create_evaluation_suite__with_new_assertions__creates_new_versio
     )
 
     retrieved = opik_client.get_evaluation_suite(name=dataset_name)
-    evaluators = retrieved.get_evaluators()
-    assert len(evaluators) == 1
-    assert isinstance(evaluators[0], LLMJudge)
-    assert set(evaluators[0].assertions) == {
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {
         "Response is accurate",
         "Response is concise",
     }
@@ -923,9 +916,8 @@ def test_get_or_create_evaluation_suite__with_new_policy__creates_new_version(
     assert policy["runs_per_item"] == 5
     assert policy["pass_threshold"] == 3
 
-    evaluators = retrieved.get_evaluators()
-    assert len(evaluators) == 1
-    assert set(evaluators[0].assertions) == {"Response is helpful"}
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {"Response is helpful"}
 
 
 def test_evaluation_suite__update_assertions_only__keeps_existing_policy(
@@ -945,9 +937,8 @@ def test_evaluation_suite__update_assertions_only__keeps_existing_policy(
 
     retrieved = opik_client.get_evaluation_suite(name=dataset_name)
 
-    evaluators = retrieved.get_evaluators()
-    assert len(evaluators) == 1
-    assert set(evaluators[0].assertions) == {"Response is accurate"}
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {"Response is accurate"}
 
     policy = retrieved.get_execution_policy()
     assert policy["runs_per_item"] == 3
@@ -960,8 +951,6 @@ def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
     """
     Test that update() with only execution_policy keeps existing assertions.
     """
-    from opik.evaluation.suite_evaluators import LLMJudge
-
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test partial update",
@@ -977,10 +966,8 @@ def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
     assert policy["runs_per_item"] == 5
     assert policy["pass_threshold"] == 3
 
-    evaluators = retrieved.get_evaluators()
-    assert len(evaluators) == 1
-    assert isinstance(evaluators[0], LLMJudge)
-    assert set(evaluators[0].assertions) == {
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {
         "Response is helpful",
         "Response is accurate",
     }
