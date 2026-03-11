@@ -11,7 +11,7 @@ class AgentConfigValueHistory(UniversalBaseModel):
     id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
     key: str
-    value: str
+    value: typing.Optional[str] = None
     type: AgentConfigValueHistoryType
     description: typing.Optional[str] = None
     valid_from_blueprint_id: typing.Optional[str] = None

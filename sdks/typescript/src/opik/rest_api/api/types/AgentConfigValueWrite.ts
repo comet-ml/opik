@@ -4,7 +4,7 @@ import type * as OpikApi from "../index.js";
 
 export interface AgentConfigValueWrite {
     key: string;
-    value: string;
+    value?: string;
     type: OpikApi.AgentConfigValueWriteType;
     description?: string;
 }

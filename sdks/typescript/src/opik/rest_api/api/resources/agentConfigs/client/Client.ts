@@ -41,7 +41,6 @@ export class AgentConfigsClient {
      *             type: "blueprint",
      *             values: [{
      *                     key: "key",
-     *                     value: "value",
      *                     type: "string"
      *                 }]
      *         }

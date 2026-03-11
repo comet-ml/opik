@@ -6,7 +6,7 @@ export interface AgentConfigValueHistory {
     id?: string;
     projectId?: string;
     key: string;
-    value: string;
+    value?: string;
     type: OpikApi.AgentConfigValueHistoryType;
     description?: string;
     validFromBlueprintId?: string;
