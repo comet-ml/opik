@@ -1107,21 +1107,26 @@ class Opik:
         """
         Get an existing evaluation suite by name or create a new one if it does not exist.
 
+        If the suite already exists and any of ``assertions``, ``evaluators``,
+        or ``execution_policy`` are provided, a new version is created with
+        the updated configuration (unspecified parameters retain their
+        current values).
+
         Args:
             name: The name of the evaluation suite.
             description: Optional description (used only when creating).
-            assertions: Shorthand for suite-level assertions (used only when
-                creating). Cannot be combined with ``evaluators``.
-            execution_policy: Execution policy (used only when creating).
-            evaluators: (Deprecated) Suite-level evaluators (used only when
-                creating). Prefer ``assertions`` instead. Cannot be combined
-                with ``assertions``.
+            assertions: Shorthand for suite-level assertions. Cannot be
+                combined with ``evaluators``.
+            execution_policy: Execution policy for the suite.
+            evaluators: (Deprecated) Suite-level evaluators. Prefer
+                ``assertions`` instead. Cannot be combined with
+                ``assertions``.
 
         Returns:
             EvaluationSuite: The evaluation suite object.
         """
         try:
-            return self.get_evaluation_suite(name)
+            suite = self.get_evaluation_suite(name)
         except ApiError as e:
             if e.status_code == 404:
                 return self.create_evaluation_suite(
@@ -1132,6 +1137,20 @@ class Opik:
                     assertions=assertions,
                 )
             raise
+
+        has_updates = (
+            assertions is not None
+            or evaluators is not None
+            or execution_policy is not None
+        )
+        if has_updates:
+            suite.update(
+                assertions=assertions,
+                evaluators=evaluators,
+                execution_policy=execution_policy,
+            )
+
+        return suite
 
     def create_experiment(
         self,

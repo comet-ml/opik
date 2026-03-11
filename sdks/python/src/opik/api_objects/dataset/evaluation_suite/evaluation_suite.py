@@ -150,18 +150,20 @@ class EvaluationSuite:
     def update(
         self,
         *,
-        execution_policy: execution_policy.ExecutionPolicy,
+        execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
         assertions: Optional[List[str]] = None,
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
     ) -> None:
         """
-        Update the suite-level execution policy and evaluators.
+        Update the suite-level execution policy and/or evaluators.
 
         Creates a new dataset version based on the current latest version
-        with the updated configuration.
+        with the updated configuration. Supports partial updates: any
+        parameter not provided will retain its current value.
 
         Args:
             execution_policy: New execution policy for the suite.
+                If not provided, the current policy is kept.
             assertions: Shorthand for suite-level assertions. Under the hood,
                 an ``LLMJudge`` is created automatically. Cannot be combined
                 with ``evaluators``.
@@ -173,17 +175,17 @@ class EvaluationSuite:
             TypeError: If any evaluator is not an LLMJudge instance.
             ValueError: If no current version exists to base the update on,
                 or if both assertions and evaluators are provided,
-                or if neither assertions nor evaluators is provided.
+                or if nothing to update is provided.
         """
         resolved = validators.resolve_evaluators(
             assertions, evaluators, "suite-level evaluators"
         )
-        if resolved is None:
+
+        if resolved is None and execution_policy is None:
             raise ValueError(
-                "Either 'assertions' or 'evaluators' must be provided "
-                "when updating suite-level evaluators."
+                "At least one of 'assertions', 'evaluators', or "
+                "'execution_policy' must be provided."
             )
-        evaluators = resolved
 
         version_info = self._dataset.get_version_info()
         if version_info is None or version_info.id is None:
@@ -192,11 +194,16 @@ class EvaluationSuite:
                 "Use create_evaluation_suite() to create the suite first."
             )
 
+        if resolved is None:
+            resolved = self.get_evaluators()
+        if execution_policy is None:
+            execution_policy = self.get_execution_policy()
+
         rest_operations.update_evaluation_suite_dataset(
             rest_client=self._dataset._rest_client,
             dataset_id=self._dataset.id,
             base_version_id=version_info.id,
-            evaluators=evaluators,
+            evaluators=resolved,
             exec_policy=execution_policy,
         )
 

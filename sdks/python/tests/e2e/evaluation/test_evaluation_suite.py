@@ -866,3 +866,121 @@ def test_get_or_create_evaluation_suite__new__creates_suite(
 
     retrieved = opik_client.get_evaluation_suite(name=dataset_name)
     assert retrieved.name == dataset_name
+
+
+def test_get_or_create_evaluation_suite__with_new_assertions__creates_new_version(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite with new assertions on an
+    existing suite creates a new version with those assertions.
+    """
+    from opik.evaluation.suite_evaluators import LLMJudge
+
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Original suite",
+        assertions=["Response is helpful"],
+    )
+
+    suite = opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        assertions=["Response is accurate", "Response is concise"],
+    )
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+    evaluators = retrieved.get_evaluators()
+    assert len(evaluators) == 1
+    assert isinstance(evaluators[0], LLMJudge)
+    assert set(evaluators[0].assertions) == {
+        "Response is accurate",
+        "Response is concise",
+    }
+
+
+def test_get_or_create_evaluation_suite__with_new_policy__creates_new_version(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite with a new execution_policy
+    on an existing suite creates a new version, keeping existing assertions.
+    """
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Original suite",
+        assertions=["Response is helpful"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    suite = opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        execution_policy={"runs_per_item": 5, "pass_threshold": 3},
+    )
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 5
+    assert policy["pass_threshold"] == 3
+
+    evaluators = retrieved.get_evaluators()
+    assert len(evaluators) == 1
+    assert set(evaluators[0].assertions) == {"Response is helpful"}
+
+
+def test_evaluation_suite__update_assertions_only__keeps_existing_policy(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update() with only assertions keeps the existing execution policy.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test partial update",
+        assertions=["Response is helpful"],
+        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+    )
+
+    suite.update(assertions=["Response is accurate"])
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    evaluators = retrieved.get_evaluators()
+    assert len(evaluators) == 1
+    assert set(evaluators[0].assertions) == {"Response is accurate"}
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 3
+    assert policy["pass_threshold"] == 2
+
+
+def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update() with only execution_policy keeps existing assertions.
+    """
+    from opik.evaluation.suite_evaluators import LLMJudge
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test partial update",
+        assertions=["Response is helpful", "Response is accurate"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    suite.update(execution_policy={"runs_per_item": 5, "pass_threshold": 3})
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 5
+    assert policy["pass_threshold"] == 3
+
+    evaluators = retrieved.get_evaluators()
+    assert len(evaluators) == 1
+    assert isinstance(evaluators[0], LLMJudge)
+    assert set(evaluators[0].assertions) == {
+        "Response is helpful",
+        "Response is accurate",
+    }
