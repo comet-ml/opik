@@ -1096,7 +1096,9 @@ def import_experiments_from_directory(
                 f"Sample original trace IDs in map: {sample_original_ids}", debug
             )
 
-        # Build a map of trace_id -> project_name from trace files for project inference
+        # Build a map of trace_id -> project_name from trace filenames for project inference.
+        # The original trace ID is encoded in the filename (trace_{id}.json), so there is
+        # no need to open the files.
         trace_to_project_map: Dict[str, str] = {}
         projects_dir = workspace_root / "projects"
         if projects_dir.exists():
@@ -1105,14 +1107,10 @@ def import_experiments_from_directory(
                     continue
                 project_name = project_dir.name
                 for trace_file in project_dir.glob("trace_*.json"):
-                    try:
-                        with open(trace_file, "r", encoding="utf-8") as f:
-                            trace_data = json.load(f)
-                        original_trace_id = trace_data.get("trace", {}).get("id")
-                        if original_trace_id:
-                            trace_to_project_map[original_trace_id] = project_name
-                    except Exception:
-                        continue
+                    stem = trace_file.stem  # e.g. "trace_<uuid>"
+                    original_trace_id = stem[len("trace_") :]
+                    if original_trace_id:
+                        trace_to_project_map[original_trace_id] = project_name
 
         imported_count = 0
         skipped_count = 0
