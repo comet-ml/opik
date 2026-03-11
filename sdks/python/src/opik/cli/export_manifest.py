@@ -28,11 +28,12 @@ next run. Those traces will be re-downloaded (safe -- the file just gets overwri
 ``__del__`` provides a best-effort flush on normal process exit.
 """
 
+import json
 import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,9 +66,14 @@ class ExportManifest:
         Number of pending writes before an automatic flush to disk.
     """
 
-    def __init__(self, project_dir: Path, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
+    def __init__(
+        self,
+        project_dir: Path,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        filename: str = EXPORT_MANIFEST_FILENAME,
+    ) -> None:
         self.project_dir = project_dir
-        self.manifest_file = project_dir / EXPORT_MANIFEST_FILENAME
+        self.manifest_file = project_dir / filename
         self._batch_size = batch_size
         self._pending_downloaded: Set[str] = set()
         self._conn = self._open()
@@ -202,6 +208,29 @@ class ExportManifest:
         self._flush()
         row = self._conn.execute("SELECT COUNT(*) FROM downloaded_traces").fetchone()
         return row[0] if row else 0
+
+    # ------------------------------------------------------------------
+    # Trace ID list (used by experiment manifests)
+    # ------------------------------------------------------------------
+
+    def store_all_trace_ids(self, trace_ids: List[str]) -> None:
+        """Store the complete list of trace IDs for this export.
+
+        Used by experiment exports so that a completed-manifest re-run can
+        return the known trace IDs without calling ``experiment.get_items()``.
+        """
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO status(key, value) VALUES ('all_trace_ids', ?)",
+                (json.dumps(trace_ids),),
+            )
+
+    def get_all_trace_ids(self) -> Optional[List[str]]:
+        """Return the stored list of all trace IDs, or None if not yet stored."""
+        row = self._conn.execute(
+            "SELECT value FROM status WHERE key = 'all_trace_ids'"
+        ).fetchone()
+        return json.loads(row[0]) if row else None
 
     # ------------------------------------------------------------------
     # Lifecycle helpers

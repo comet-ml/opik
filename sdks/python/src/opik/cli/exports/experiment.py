@@ -3,9 +3,9 @@
 import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, List, Dict, Tuple
+from typing import Any, Optional, List, Dict, Set, Tuple
 
 import click
 from rich.console import Console
@@ -19,6 +19,7 @@ from rich.progress import (
 
 import opik
 from opik import exceptions
+from opik.cli.export_manifest import ExportManifest
 from .utils import (
     create_experiment_data_structure,
     debug_print,
@@ -155,6 +156,24 @@ def _write_trace_file(
         return False
 
 
+def _scan_downloaded_trace_ids(workspace_root: Path, format: str) -> Set[str]:
+    """Scan projects/ dirs for already-downloaded trace files and return their IDs.
+
+    This is a fast, zero-network way to pre-filter traces before making any API
+    calls.  A single glob over the output directory is all it takes.
+    """
+    ext = "csv" if format.lower() == "csv" else "json"
+    downloaded: Set[str] = set()
+    projects_dir = workspace_root / "projects"
+    if not projects_dir.is_dir():
+        return downloaded
+    for trace_file in projects_dir.glob(f"*/trace_*.{ext}"):
+        stem = trace_file.stem  # "trace_<trace_id>"
+        if stem.startswith("trace_"):
+            downloaded.add(stem[6:])
+    return downloaded
+
+
 def export_traces_by_ids(
     client: opik.Opik,
     trace_ids: List[str],
@@ -163,14 +182,20 @@ def export_traces_by_ids(
     format: str,
     debug: bool,
     force: bool,
+    manifest: Optional[ExportManifest] = None,
 ) -> tuple[int, int]:
     """Export traces by their IDs using parallel batch processing.
 
     Traces are saved in projects/PROJECT_NAME/ directory based on each trace's project.
     Uses parallel execution to fetch traces/spans and write files concurrently.
+
+    Already-downloaded traces are skipped before any API call is made:
+    - When *manifest* is provided its downloaded-ID set is used for the check.
+    - Otherwise the projects/ directory is scanned for existing trace files.
     """
     exported_count = 0
     skipped_count = 0
+    failed_count = 0
 
     if max_traces:
         trace_ids = trace_ids[:max_traces]
@@ -178,117 +203,143 @@ def export_traces_by_ids(
     if not trace_ids:
         return 0, 0
 
+    # Record start time before first API call so manifest.complete() can store it.
+    export_start_time = datetime.now(timezone.utc).isoformat()
+
+    # ------------------------------------------------------------------
+    # Phase 1 / Phase 2 pre-filter: skip already-downloaded traces so we
+    # never make a network call for a trace whose file already exists.
+    # ------------------------------------------------------------------
+    if not force:
+        if manifest:
+            already_downloaded = manifest.load_downloaded_set()
+        else:
+            already_downloaded = _scan_downloaded_trace_ids(workspace_root, format)
+        pending_ids = [tid for tid in trace_ids if tid not in already_downloaded]
+        skipped_count = len(trace_ids) - len(pending_ids)
+    else:
+        pending_ids = trace_ids
+
     if debug:
         debug_print(
-            f"Exporting {len(trace_ids)} trace(s) in batches of {BATCH_SIZE}", debug
+            f"Exporting {len(pending_ids)}/{len(trace_ids)} trace(s) "
+            f"({skipped_count} already downloaded, skipping API calls for those)",
+            debug,
         )
 
-    # Cache project names to avoid repeated API calls (shared across threads).
-    # The lock prevents duplicate API calls when two threads miss the cache
-    # simultaneously for the same project_id.
-    project_name_cache: dict[str, str] = {}
-    cache_lock = threading.Lock()
+    if pending_ids:
+        # Cache project names to avoid repeated API calls (shared across threads).
+        project_name_cache: dict[str, str] = {}
+        cache_lock = threading.Lock()
 
-    # Use progress bar for trace export
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            f"Exporting {len(trace_ids)} traces...", total=len(trace_ids)
-        )
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                f"Exporting {len(pending_ids)} traces...", total=len(pending_ids)
+            )
 
-        # Process traces in batches
-        for batch_start in range(0, len(trace_ids), BATCH_SIZE):
-            batch_end = min(batch_start + BATCH_SIZE, len(trace_ids))
-            batch_trace_ids = trace_ids[batch_start:batch_end]
+            for batch_start in range(0, len(pending_ids), BATCH_SIZE):
+                batch_end = min(batch_start + BATCH_SIZE, len(pending_ids))
+                batch_trace_ids = pending_ids[batch_start:batch_end]
 
-            if debug:
-                debug_print(
-                    f"Batch {batch_start // BATCH_SIZE + 1}: traces {batch_start + 1}-{batch_end}",
-                    debug,
-                )
-
-            # Fetch trace data in parallel
-            fetched_traces: dict[str, Tuple[dict, str]] = {}
-
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as fetch_executor:
-                # Submit all trace fetch tasks and track trace_id for each future
-                fetch_futures: Dict[Future[Optional[Tuple[str, dict, str]]], str] = {}
-                for trace_id in batch_trace_ids:
-                    fetch_future: Future[Optional[Tuple[str, dict, str]]] = (
-                        fetch_executor.submit(
-                            _fetch_trace_data,
-                            client,
-                            trace_id,
-                            project_name_cache,
-                            cache_lock,
-                            debug,
-                        )
-                    )
-                    fetch_futures[fetch_future] = trace_id
-
-                # Collect completed fetches
-                for fetch_future in as_completed(fetch_futures):
-                    trace_id = fetch_futures[fetch_future]
-                    try:
-                        result = fetch_future.result()
-                        if result is not None:
-                            fetched_trace_id, trace_data, project_name = result
-                            fetched_traces[fetched_trace_id] = (
-                                trace_data,
-                                project_name,
-                            )
-                    except Exception as e:
-                        if debug:
-                            console.print(
-                                f"[red]Error fetching trace {trace_id}: {e}[/red]"
-                            )
-
-            # Write files in parallel
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as write_executor:
-                # Submit all write tasks and track trace_id for each future
-                write_futures: Dict[Future[bool], str] = {}
-                for trace_id, (trace_data, project_name) in fetched_traces.items():
-                    write_future: Future[bool] = write_executor.submit(
-                        _write_trace_file,
-                        trace_id,
-                        trace_data,
-                        project_name,
-                        workspace_root,
-                        format,
-                        force,
+                if debug:
+                    debug_print(
+                        f"Batch {batch_start // BATCH_SIZE + 1}: traces {batch_start + 1}-{batch_end}",
                         debug,
                     )
-                    write_futures[write_future] = trace_id
 
-                # Process completed writes
-                for write_future in as_completed(write_futures):
-                    trace_id = write_futures[write_future]
-                    try:
-                        if write_future.result():
-                            exported_count += 1
-                        else:
-                            skipped_count += 1
-                    except Exception as e:
-                        if debug:
-                            console.print(
-                                f"[red]Error writing trace {trace_id}: {e}[/red]"
+                # Fetch trace data in parallel
+                fetched_traces: dict[str, Tuple[dict, str]] = {}
+
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as fetch_executor:
+                    fetch_futures: Dict[
+                        Future[Optional[Tuple[str, dict, str]]], str
+                    ] = {}
+                    for trace_id in batch_trace_ids:
+                        fetch_future: Future[Optional[Tuple[str, dict, str]]] = (
+                            fetch_executor.submit(
+                                _fetch_trace_data,
+                                client,
+                                trace_id,
+                                project_name_cache,
+                                cache_lock,
+                                debug,
                             )
-                    finally:
-                        progress.update(
-                            task,
-                            advance=1,
-                            description=f"Exported {exported_count}/{len(trace_ids)} traces",
                         )
+                        fetch_futures[fetch_future] = trace_id
 
-                # Update progress for traces that failed to fetch
-                for trace_id in batch_trace_ids:
-                    if trace_id not in fetched_traces:
-                        progress.update(task, advance=1)
+                    for fetch_future in as_completed(fetch_futures):
+                        trace_id = fetch_futures[fetch_future]
+                        try:
+                            result = fetch_future.result()
+                            if result is not None:
+                                fetched_trace_id, trace_data, project_name = result
+                                fetched_traces[fetched_trace_id] = (
+                                    trace_data,
+                                    project_name,
+                                )
+                        except Exception as e:
+                            if debug:
+                                console.print(
+                                    f"[red]Error fetching trace {trace_id}: {e}[/red]"
+                                )
+
+                # Count fetch failures for this batch
+                batch_fetch_failures = len(batch_trace_ids) - len(fetched_traces)
+                failed_count += batch_fetch_failures
+
+                # Write files in parallel
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as write_executor:
+                    write_futures: Dict[Future[bool], str] = {}
+                    for trace_id, (trace_data, project_name) in fetched_traces.items():
+                        write_future: Future[bool] = write_executor.submit(
+                            _write_trace_file,
+                            trace_id,
+                            trace_data,
+                            project_name,
+                            workspace_root,
+                            format,
+                            force,
+                            debug,
+                        )
+                        write_futures[write_future] = trace_id
+
+                    for write_future in as_completed(write_futures):
+                        trace_id = write_futures[write_future]
+                        try:
+                            if write_future.result():
+                                exported_count += 1
+                                if manifest:
+                                    manifest.mark_trace_downloaded(trace_id)
+                            else:
+                                skipped_count += 1
+                        except Exception as e:
+                            failed_count += 1
+                            if debug:
+                                console.print(
+                                    f"[red]Error writing trace {trace_id}: {e}[/red]"
+                                )
+                        finally:
+                            progress.update(
+                                task,
+                                advance=1,
+                                description=f"Exported {exported_count}/{len(pending_ids)} traces",
+                            )
+
+                    # Update progress for traces that failed to fetch
+                    for trace_id in batch_trace_ids:
+                        if trace_id not in fetched_traces:
+                            progress.update(task, advance=1)
+
+    # Mark manifest complete only when there were no fetch/write failures,
+    # so interrupted exports resume correctly on the next run.
+    if manifest and failed_count == 0:
+        manifest.complete(export_start_time)
 
     return exported_count, skipped_count
 
@@ -303,7 +354,7 @@ def export_experiment_by_id(
     format: str,
     trace_ids_collector: Optional[set[str]] = None,
     experiment_obj: Optional[Any] = None,
-) -> tuple[Dict[str, int], int]:
+) -> tuple[Dict[str, int], int, Optional[ExportManifest]]:
     """Export a specific experiment by ID, including related datasets and traces.
 
     Args:
@@ -311,11 +362,50 @@ def export_experiment_by_id(
             ``client.get_experiment_by_id`` call is skipped, saving one API round-trip.
 
     Returns:
-        Tuple of (stats dictionary, file_written flag) where:
+        Tuple of (stats dictionary, file_written flag, manifest) where:
         - stats: Dictionary with keys "datasets", "prompts", "traces" and their counts
         - file_written: 1 if experiment file was written, 0 if skipped or error
+        - manifest: ExportManifest for this experiment (pass to export_traces_by_ids)
     """
     try:
+        # ------------------------------------------------------------------
+        # Per-experiment manifest (Phase 2: skip get_items() on re-run)
+        # ------------------------------------------------------------------
+        output_dir.mkdir(parents=True, exist_ok=True)
+        manifest = ExportManifest(output_dir, filename=f"manifest_{experiment_id}.db")
+
+        # Reset on --force or format change.
+        if force:
+            manifest.reset()
+        elif manifest.get_format() and manifest.get_format() != format:
+            console.print(
+                f"[yellow]Export format changed ({manifest.get_format()} → {format}), "
+                f"resetting manifest for experiment {experiment_id}[/yellow]"
+            )
+            manifest.reset()
+
+        # Fast path: if the manifest records a completed export, we already
+        # have the full trace-ID list — skip the slow get_items() API call.
+        if manifest.is_completed and not force:
+            stored_ids = manifest.get_all_trace_ids()
+            if stored_ids is not None:
+                if trace_ids_collector is not None:
+                    trace_ids_collector.update(stored_ids)
+                debug_print(
+                    f"Manifest complete: skipping get_items() for experiment "
+                    f"{experiment_id} ({len(stored_ids)} trace IDs cached)",
+                    debug,
+                )
+                _empty: Dict[str, int] = {
+                    "datasets": 0,
+                    "datasets_skipped": 0,
+                    "prompts": 0,
+                    "prompts_skipped": 0,
+                    "traces": 0,
+                    "traces_skipped": len(stored_ids),
+                }
+                return (_empty, 0, manifest)
+
         if experiment_obj is not None:
             experiment = experiment_obj
             debug_print(f"Using pre-fetched experiment: {experiment.name}", debug)
@@ -324,7 +414,7 @@ def export_experiment_by_id(
             experiment = client.get_experiment_by_id(experiment_id)
             if not experiment:
                 console.print(f"[red]Experiment '{experiment_id}' not found[/red]")
-                return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
+                return ({"datasets": 0, "prompts": 0, "traces": 0}, 0, None)
 
         debug_print(f"Found experiment: {experiment.name}", debug)
 
@@ -364,7 +454,7 @@ def export_experiment_by_id(
 
         # Related prompts and traces are handled at the batch level
         # Only export related prompts by name (this is experiment-specific and can't be easily deduplicated)
-        stats = {
+        stats: Dict[str, int] = {
             "datasets": 0,
             "datasets_skipped": 0,
             "prompts": 0,
@@ -376,8 +466,12 @@ def export_experiment_by_id(
             client, experiment, output_dir, force, debug, format
         )
 
-        # Collect trace IDs from experiment items (for batch export later)
+        # Collect trace IDs from experiment items (for batch export later).
+        # Store them in the manifest so future runs can skip get_items().
         trace_ids = [item.trace_id for item in experiment_items if item.trace_id]
+        manifest.store_all_trace_ids(trace_ids)
+        manifest.start(format)
+
         if trace_ids_collector is not None:
             trace_ids_collector.update(trace_ids)
 
@@ -390,13 +484,13 @@ def export_experiment_by_id(
                 f"[green]Experiment {experiment.name} exported with stats: {stats}[/green]"
             )
 
-        # Return stats dictionary and whether file was written
-        return (stats, 1 if experiment_file_written else 0)
+        # Return stats dictionary, whether file was written, and the manifest
+        return (stats, 1 if experiment_file_written else 0, manifest)
 
     except Exception as e:
         console.print(f"[red]Error exporting experiment {experiment_id}: {e}[/red]")
         # Return empty stats and 0 for file written on error
-        return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
+        return ({"datasets": 0, "prompts": 0, "traces": 0}, 0, None)
 
 
 def export_experiment_by_name(
@@ -519,6 +613,10 @@ def export_experiment_by_name(
             "prompts_skipped": 0,
         }
 
+        # Track manifests per experiment so we can pass the right one to
+        # export_traces_by_ids() (optimisation applies cleanly to single-experiment exports).
+        experiment_manifests: Dict[str, Optional[ExportManifest]] = {}
+
         for experiment in experiments:
             if debug:
                 debug_print(
@@ -538,8 +636,9 @@ def export_experiment_by_name(
                 experiment_obj=experiment,
             )
 
-            # result is a tuple: (stats_dict, file_written_flag)
-            exp_stats, file_written = result
+            # result is a tuple: (stats_dict, file_written_flag, manifest)
+            exp_stats, file_written, exp_manifest = result
+            experiment_manifests[experiment.id] = exp_manifest
             # Aggregate stats (only related prompts, traces already handled)
             aggregated_stats["prompts"] += exp_stats.get("prompts", 0)
             aggregated_stats["prompts_skipped"] += exp_stats.get("prompts_skipped", 0)
@@ -549,8 +648,16 @@ def export_experiment_by_name(
             else:
                 skipped_count += 1
 
-        # Export all unique traces once after collecting them from all experiments
+        # Export all unique traces once after collecting them from all experiments.
+        # For a single experiment we pass its manifest so Phase 2 can skip traces
+        # that are already in the downloaded set without touching the filesystem.
+        # For multiple experiments we pass None and rely on Phase 1 (filesystem scan).
         workspace_root = output_dir.parent
+        trace_manifest: Optional[ExportManifest] = (
+            experiment_manifests.get(experiments[0].id)
+            if len(experiments) == 1
+            else None
+        )
         traces_exported = 0
         traces_skipped = 0
         if all_trace_ids:
@@ -563,7 +670,14 @@ def export_experiment_by_name(
                         f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from these experiments...[/blue]"
                     )
                 traces_exported, traces_skipped = export_traces_by_ids(
-                    client, trace_ids_list, workspace_root, None, format, debug, force
+                    client,
+                    trace_ids_list,
+                    workspace_root,
+                    None,
+                    format,
+                    debug,
+                    force,
+                    manifest=trace_manifest,
                 )
 
         # Collect statistics for summary
@@ -659,7 +773,7 @@ def export_experiment_by_name_or_id(
                 trace_ids_collector,
             )
 
-            exp_stats, file_written = result
+            exp_stats, file_written, exp_manifest = result
 
             # Export related datasets
             unique_datasets = set()
@@ -673,7 +787,8 @@ def export_experiment_by_name_or_id(
                     client, unique_datasets, datasets_dir, format, debug, force
                 )
 
-            # Export traces collected from experiment items
+            # Export traces collected from experiment items, passing the manifest
+            # so already-downloaded traces are skipped before any API call.
             workspace_root = output_dir.parent
             traces_exported = 0
             traces_skipped = 0
@@ -690,6 +805,7 @@ def export_experiment_by_name_or_id(
                         format,
                         debug,
                         force,
+                        manifest=exp_manifest,
                     )
 
             # Collect statistics for summary
