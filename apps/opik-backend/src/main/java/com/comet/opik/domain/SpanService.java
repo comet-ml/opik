@@ -220,11 +220,8 @@ public class SpanService {
                                                     Mono.defer(() -> insertUpdate(project, spanUpdate, id)))
                                             .onErrorResume(this::handleSpanDBError)
                                             .then()))))
-                    .doOnSuccess(__ -> {
-                        if (spanUpdate.traceId() != null) {
-                            eventBus.post(new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName));
-                        }
-                    });
+                    .doOnSuccess(__ -> eventBus
+                            .post(new SpansUpdated(Set.of(spanUpdate.traceId()), workspaceId, userName)));
         });
     }
 
@@ -241,10 +238,8 @@ public class SpanService {
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
                         log.info("Completed batch update for '{}' spans", batchUpdate.ids().size());
-                        if (batchUpdate.update().traceId() != null) {
-                            eventBus.post(
-                                    new SpansUpdated(Set.of(batchUpdate.update().traceId()), workspaceId, userName));
-                        }
+                        eventBus.post(
+                                new SpansUpdated(Set.of(batchUpdate.update().traceId()), workspaceId, userName));
                     });
         });
     }
