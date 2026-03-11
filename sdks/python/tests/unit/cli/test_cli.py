@@ -113,7 +113,7 @@ class TestSmokeTestCommand:
         assert result.exit_code != 0
         assert "Error" in result.output or "Missing" in result.output
 
-    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
@@ -197,7 +197,7 @@ class TestSmokeTestCommand:
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
-    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
@@ -268,3 +268,193 @@ class TestSmokeTestCommand:
         mock_start_trace.assert_called_once()
         trace_call_kwargs = mock_start_trace.call_args[1]
         assert trace_call_kwargs["project_name"] == "smoke-test-project"
+
+
+class TestCheckPermissionsCommand:
+    """Test the --check-permissions functionality via healthcheck command."""
+
+    def test_check_permissions_option__in_healthcheck_help__shown(self):
+        """Test that --check-permissions option is shown in healthcheck help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["healthcheck", "--help"])
+        assert result.exit_code == 0
+        assert "--check-permissions" in result.output
+        assert "WORKSPACE" in result.output
+
+    def test_check_permissions__missing_workspace__raises_error(self):
+        """Test that --check-permissions without a workspace value raises an error."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["healthcheck", "--check-permissions"])
+        assert result.exit_code != 0
+        assert "Error" in result.output or "Missing" in result.output
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.cli.check_user_permissions.run")
+    def test_check_permissions__workspace_provided__calls_run_with_workspace(
+        self,
+        mock_permissions_run,
+        mock_standard_run,
+    ):
+        """Test that --check-permissions pass the workspace to check_user_permissions.run."""
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--check-permissions", "my-workspace"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        mock_permissions_run.assert_called_once_with(
+            api_key=None, workspace="my-workspace"
+        )
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.cli.check_user_permissions.run")
+    def test_check_permissions__api_key_in_cli_context__passes_api_key_to_run(
+        self,
+        mock_permissions_run,
+        mock_standard_run,
+    ):
+        """Test that --check-permissions forward the api_key from CLI context."""
+        from opik.cli import cli as opik_cli
+
+        runner = CliRunner()
+        result = runner.invoke(
+            opik_cli,
+            [
+                "--api-key",
+                "test-api-key",
+                "healthcheck",
+                "--check-permissions",
+                "my-workspace",
+            ],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        mock_permissions_run.assert_called_once_with(
+            api_key="test-api-key", workspace="my-workspace"
+        )
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.cli.check_user_permissions.run")
+    def test_check_permissions__empty_workspace__raises_bad_parameter(
+        self,
+        mock_permissions_run,
+        mock_standard_run,
+    ):
+        """Test that --check-permissions with an empty workspace string raises BadParameter."""
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--check-permissions", ""],
+        )
+
+        assert result.exit_code != 0
+        assert (
+            "Error" in result.output
+            or "requires a non-empty workspace name" in result.output
+        )
+        mock_permissions_run.assert_not_called()
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.cli.check_user_permissions.run")
+    def test_check_permissions__no_flag__not_called(
+        self,
+        mock_permissions_run,
+        mock_standard_run,
+    ):
+        """Test that check_user_permissions.run is not called when --check-permissions is absent."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["healthcheck"], catch_exceptions=False)
+
+        assert result.exit_code == 0
+        mock_permissions_run.assert_not_called()
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.check_user_permissions.get_user_permissions")
+    @patch("opik.cli.healthcheck.check_user_permissions.config.OpikConfig")
+    def test_check_permissions__api_returns_user_and_workspace__displays_info(
+        self,
+        mock_opik_config,
+        mock_get_permissions,
+        mock_standard_run,
+    ):
+        """Test that user and workspace info from API response are printed."""
+        mock_config = MagicMock()
+        mock_config.api_key = "test-api-key"
+        mock_config.workspace = "my-workspace"
+        mock_config.url_override = "https://opik.example.com"
+        mock_opik_config.return_value = mock_config
+
+        mock_get_permissions.return_value = {
+            "user_name": "alice",
+            "workspace_name": "my-workspace",
+            "permissions": [
+                {"permission_name": "read", "permission_value": True},
+                {"permission_name": "write", "permission_value": False},
+            ],
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--check-permissions", "my-workspace"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        assert "alice" in result.output
+        assert "my-workspace" in result.output
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.check_user_permissions.get_user_permissions")
+    @patch("opik.cli.healthcheck.check_user_permissions.config.OpikConfig")
+    def test_check_permissions__connection_error__prints_error(
+        self,
+        mock_opik_config,
+        mock_get_permissions,
+        mock_standard_run,
+    ):
+        """Test that a ConnectionError from the API prints an error message."""
+        mock_config = MagicMock()
+        mock_config.api_key = "test-api-key"
+        mock_config.workspace = "my-workspace"
+        mock_config.url_override = "https://opik.example.com"
+        mock_opik_config.return_value = mock_config
+
+        mock_get_permissions.side_effect = ConnectionError("Network error: timeout")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--check-permissions", "my-workspace"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0
+        assert "Failed to fetch user permissions" in result.output
+
+    @patch("opik.cli.healthcheck.cli.standard_check.run")
+    @patch("opik.cli.healthcheck.check_user_permissions.config.OpikConfig")
+    def test_check_permissions__missing_api_key__raises_value_error(
+        self,
+        mock_opik_config,
+        mock_standard_run,
+    ):
+        """Test that missing api_key (not in CLI context and not in config) raises ValueError."""
+        mock_config = MagicMock()
+        mock_config.api_key = None
+        mock_config.workspace = None
+        mock_config.url_override = "https://opik.example.com"
+        mock_opik_config.return_value = mock_config
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--check-permissions", "my-workspace"],
+        )
+
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "API key is required" in str(result.exception)

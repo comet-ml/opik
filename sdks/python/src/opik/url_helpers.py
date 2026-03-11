@@ -93,3 +93,7 @@ def is_aws_presigned_url(url: str) -> bool:
     return "X-Amz-Signature" in url or (
         "Signature=" in url and "AWSAccessKeyId=" in url
     )
+
+
+def get_user_permissions_url(url_override: str) -> str:
+    return urllib.parse.urljoin(url_override, "v1/private/workspace-permissions")
