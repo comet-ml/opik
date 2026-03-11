@@ -14,7 +14,6 @@ from opik.evaluation.metrics import (
 from opik.evaluation.scorers import scorer_wrapper_metric
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
-from opik.evaluation.suite_evaluators.llm_judge import helpers as llm_judge_helpers
 from opik.evaluation.types import ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
@@ -117,7 +116,11 @@ def build_metrics_evaluator(
         )
         all_metrics.extend(item_evaluators)
 
-    all_metrics = llm_judge_helpers.merge_llm_judges(all_metrics)
+    judges = [m for m in all_metrics if isinstance(m, llm_judge.LLMJudge)]
+    non_judges = [m for m in all_metrics if not isinstance(m, llm_judge.LLMJudge)]
+    merged = llm_judge.LLMJudge.merged(judges)
+    if merged is not None:
+        all_metrics = [merged] + non_judges
 
     return MetricsEvaluator(
         scoring_metrics=all_metrics,

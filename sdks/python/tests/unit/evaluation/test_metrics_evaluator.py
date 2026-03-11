@@ -84,13 +84,10 @@ class TestLLMJudgeMerged:
         assert merged is not None
         assert merged.assertions == ["A", "B", "C"]
 
-    def test_single_judge__returns_copy_with_same_assertions(self):
+    def test_single_judge__returns_none(self):
         j1 = _make_judge(["A", "B"])
 
-        merged = llm_judge.LLMJudge.merged([j1])
-
-        assert merged is not None
-        assert merged.assertions == ["A", "B"]
+        assert llm_judge.LLMJudge.merged([j1]) is None
 
 
 class TestBuildMetricsEvaluatorMerging:
@@ -102,7 +99,7 @@ class TestBuildMetricsEvaluatorMerging:
 
         assert result == [m1, m2]
 
-    def test_single_judge__returns_unchanged(self):
+    def test_single_judge__not_merged(self):
         judge = _make_judge(["assertion A"])
 
         result = _build([judge])
@@ -120,7 +117,7 @@ class TestBuildMetricsEvaluatorMerging:
         assert isinstance(result[0], llm_judge.LLMJudge)
         assert result[0].assertions == ["A", "B", "C"]
 
-    def test_mixed_metrics__preserves_order(self):
+    def test_mixed_metrics__merged_judge_first(self):
         m1 = _make_non_judge_metric("m1")
         j1 = _make_judge(["A"])
         m2 = _make_non_judge_metric("m2")
@@ -129,9 +126,9 @@ class TestBuildMetricsEvaluatorMerging:
         result = _build([m1, j1, m2, j2])
 
         assert len(result) == 3
-        assert result[0] is m1
-        assert isinstance(result[1], llm_judge.LLMJudge)
-        assert result[1].assertions == ["A", "B"]
+        assert isinstance(result[0], llm_judge.LLMJudge)
+        assert result[0].assertions == ["A", "B"]
+        assert result[1] is m1
         assert result[2] is m2
 
     def test_mismatched_settings__skips_merge(self):

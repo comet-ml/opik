@@ -150,10 +150,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Uses settings (model, temperature, seed, track) from the first judge.
         Duplicate assertions are removed while preserving order.
 
-        Returns None if the list is empty or judges have mismatched settings
-        (model, temperature, seed, track).
+        Returns None if fewer than 2 judges are provided or if their settings
+        (model, temperature, seed, track) differ.
         """
-        if not judges:
+        if len(judges) <= 1:
             return None
 
         first = judges[0]
