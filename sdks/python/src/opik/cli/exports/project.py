@@ -217,6 +217,23 @@ def export_traces(
                 # No more traces to process
                 break
 
+            # Fast-path: on the first page, compare the API's total trace count
+            # against how many we already have.  If the API reports no more traces
+            # than we've already downloaded, every trace is present locally and we
+            # can skip scanning the remaining pages entirely.
+            if current_page == 1 and not force and already_downloaded:
+                api_total = getattr(trace_page, "total", None)
+                if api_total is not None and api_total <= len(already_downloaded):
+                    skipped_count = api_total
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Fast-path exit — API total={api_total}, "
+                            f"already_downloaded={len(already_downloaded)}; "
+                            "no new traces to fetch",
+                            debug,
+                        )
+                    break
+
             if progress and task is not None:
                 progress.update(
                     task,
@@ -344,7 +361,7 @@ def export_traces(
                 break
 
         # Final progress update
-        if exported_count == 0:
+        if exported_count == 0 and skipped_count == 0:
             console.print("[yellow]No traces found in the project.[/yellow]")
         elif progress and task is not None:
             progress.update(task, description=f"Exported {exported_count} traces total")
@@ -590,6 +607,20 @@ def export_single_project(
                     for p in existing:
                         manifest.mark_trace_downloaded(p.stem[len("trace_") :])
                     manifest.save()
+                    # Mark as completed using the newest file's mtime as the cutoff.
+                    # This lets the incremental filter kick in for the current run too,
+                    # avoiding a full API page-scan when all traces are already on disk.
+                    newest_mtime = max(p.stat().st_mtime for p in existing)
+                    seed_time = datetime.fromtimestamp(
+                        newest_mtime, tz=timezone.utc
+                    ).isoformat()
+                    manifest.complete(seed_time)
+                    if debug:
+                        debug_print(
+                            f"DEBUG: Seeded manifest from filesystem; marking completed "
+                            f"with cutoff {seed_time}",
+                            debug,
+                        )
 
         # Build incremental filter when the previous export completed successfully.
         # Use created_at (set by the backend at ingestion) rather than start_time
