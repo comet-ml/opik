@@ -69,8 +69,6 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
-    Mono<Void> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
-
     Mono<Void> deleteByTraceIds(Set<UUID> traceIds, UUID projectId);
 
     Mono<Void> deleteBySpanIds(Set<UUID> spanIds, UUID projectId);
@@ -368,24 +366,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .doOnSuccess(__ -> eventBus.post(
                             new FeedbackScoresDeleted(spanIds, EntityType.SPAN, workspaceId, userName)));
         });
-    }
-
-    @Override
-    public Mono<Void> deleteAllThreadScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
-        if (threadModelIds.isEmpty()) {
-            log.info("No thread model IDs provided for deletion of all scores in projectId '{}'", projectId);
-            return Mono.empty();
-        }
-
-        return dao.deleteAllThreadScores(threadModelIds, projectId)
-                .doOnNext(count -> {
-                    if (count > 0) {
-                        log.info("Deleted '{}' scores (all sources) for threads in projectId '{}'", count, projectId);
-                    } else {
-                        log.info("No scores found to delete for projectId '{}'", projectId);
-                    }
-                })
-                .then();
     }
 
     private Mono<Optional<String>> getAuthor() {
