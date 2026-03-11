@@ -371,7 +371,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteAllThreadScores(@NotNull Set<UUID> threadModelIds, @NotNull UUID projectId) {
+    public Mono<Void> deleteAllThreadScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
         if (threadModelIds.isEmpty()) {
             log.info("No thread model IDs provided for deletion of all scores in projectId '{}'", projectId);
             return Mono.empty();
