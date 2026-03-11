@@ -149,6 +149,7 @@ def display_suite_results(
     suite_name: str,
     total_time: float,
     result: evaluation_result.EvaluationResult,
+    verbose: int = 2,
 ) -> None:
     test_results = result.test_results
     nb_runs = len(test_results)
@@ -165,15 +166,10 @@ def display_suite_results(
     items_total = len(item_passed_map)
     suite_passed = items_passed == items_total
 
-    # Categorize assertions: track pass/fail counts and whether failures
-    # occurred on items that ultimately failed vs items that still passed.
     assertion_passed_count: Dict[str, int] = defaultdict(int)
     assertion_total_count: Dict[str, int] = defaultdict(int)
-    assertion_failed_on_failed_item: Dict[str, bool] = defaultdict(bool)
 
     for tr in test_results:
-        item_id = tr.test_case.dataset_item_id
-        item_did_pass = item_passed_map.get(item_id, True)
         for score in tr.score_results:
             assertion_total_count[score.name] += 1
             score_passed = not score.scoring_failed and (
@@ -181,24 +177,6 @@ def display_suite_results(
             )
             if score_passed:
                 assertion_passed_count[score.name] += 1
-            elif not item_did_pass:
-                assertion_failed_on_failed_item[score.name] = True
-
-    # Split assertions into: caused item failures (critical), failed but
-    # items still passed (non-critical), and fully passing.
-    critical: Dict[str, Tuple[int, int]] = {}
-    non_critical: Dict[str, Tuple[int, int]] = {}
-    fully_passed: Dict[str, Tuple[int, int]] = {}
-
-    for name in assertion_total_count:
-        passed = assertion_passed_count[name]
-        total = assertion_total_count[name]
-        if passed == total:
-            fully_passed[name] = (passed, total)
-        elif assertion_failed_on_failed_item[name]:
-            critical[name] = (passed, total)
-        else:
-            non_critical[name] = (passed, total)
 
     # Build display
     time_text = text.Text(f"Total time:        {_format_time(total_time)}")
@@ -224,35 +202,6 @@ def display_suite_results(
     rate_text.stylize("bold", 0, 18)
     rate_text = align.Align.left(rate_text)
 
-    score_strings = text.Text("")
-
-    if critical:
-        score_strings += text.Text("Caused item failures:\n", style="bold")
-        for name, (passed, total) in critical.items():
-            rate = passed / total if total > 0 else 0.0
-            score_strings += text.Text(
-                f"  {name}: {rate:.0%} passed ({passed}/{total})\n",
-                style="red bold",
-            )
-        score_strings += text.Text("\n")
-
-    if non_critical:
-        score_strings += text.Text("Non-critical (items still passed):\n", style="bold")
-        for name, (passed, total) in non_critical.items():
-            rate = passed / total if total > 0 else 0.0
-            score_strings += text.Text(
-                f"  {name}: {rate:.0%} passed ({passed}/{total})\n",
-                style="yellow bold",
-            )
-        score_strings += text.Text("\n")
-
-    for name, (passed, total) in fully_passed.items():
-        score_strings += text.Text(
-            f"{name}: 100% passed ({total}/{total})\n", style="green bold"
-        )
-
-    aligned_scores = align.Align.left(score_strings)
-
     content = table.Table.grid()
     content.add_row(text.Text(""))
     content.add_row(time_text)
@@ -260,8 +209,27 @@ def display_suite_results(
     content.add_row(pass_text)
     content.add_row(items_text)
     content.add_row(rate_text)
-    content.add_row(text.Text(""))
-    content.add_row(aligned_scores)
+
+    if verbose >= 2 and assertion_total_count:
+        # Sort by pass rate ascending (most failed first)
+        sorted_assertions = sorted(
+            assertion_total_count.keys(),
+            key=lambda n: assertion_passed_count[n] / assertion_total_count[n],
+        )
+
+        score_strings = text.Text("")
+        for name in sorted_assertions:
+            passed = assertion_passed_count[name]
+            total = assertion_total_count[name]
+            rate = passed / total if total > 0 else 0.0
+            style = "green bold" if passed == total else "red bold"
+            score_strings += text.Text(
+                f"{name}: {rate:.0%} passed ({passed}/{total})\n",
+                style=style,
+            )
+
+        content.add_row(text.Text(""))
+        content.add_row(align.Align.left(score_strings))
 
     panel_content = panel.Panel(
         content,

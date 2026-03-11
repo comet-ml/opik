@@ -370,7 +370,7 @@ class EvaluationSuite:
         experiment_config: Optional[Dict[str, Any]] = None,
         prompts: Optional[List[base_prompt.BasePrompt]] = None,
         experiment_tags: Optional[List[str]] = None,
-        verbose: int = 1,
+        verbose: int = 2,
         worker_threads: int = 16,
         model: Optional[str] = None,
     ) -> suite_types.EvaluationSuiteResult:
@@ -389,7 +389,9 @@ class EvaluationSuite:
             experiment_config: Optional configuration dict for the experiment.
             prompts: Optional list of Prompt objects to associate with the experiment.
             experiment_tags: Optional list of tags to associate with the experiment.
-            verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
+            verbose: Verbosity level. 0=silent, 1=summary only (pass/fail,
+                items passed, pass rate), 2=summary + per-assertion pass rates
+                (default).
             worker_threads: Number of threads for parallel task execution.
             model: Optional model name to use for checking assertions.
                 If not provided, uses the default model.
