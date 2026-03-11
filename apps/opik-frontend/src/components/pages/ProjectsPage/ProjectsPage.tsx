@@ -119,7 +119,7 @@ const ProjectsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canDeleteProjects },
+    permissions: { canDeleteProjects, canCreateProjects },
   } = usePermissions();
 
   const columnsDef: ColumnData<ProjectWithStatistic>[] = useMemo(() => {
@@ -388,11 +388,21 @@ const ProjectsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      generateActionsColumDef({
-        cell: ProjectRowActionsCell,
-      }),
+      ...(canDeleteProjects || canCreateProjects
+        ? [
+            generateActionsColumDef({
+              cell: ProjectRowActionsCell,
+            }),
+          ]
+        : []),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef, canDeleteProjects]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    columnsDef,
+    canDeleteProjects,
+    canCreateProjects,
+  ]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -456,9 +466,11 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewProjectClick}>
-            Create new project
-          </Button>
+          {canCreateProjects && (
+            <Button variant="default" size="sm" onClick={handleNewProjectClick}>
+              Create new project
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -483,7 +495,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateProjects && (
               <Button variant="link" onClick={handleNewProjectClick}>
                 Create new project
               </Button>

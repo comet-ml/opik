@@ -162,6 +162,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateProjects = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROJECT_CREATE),
+    [checkNullablePermission],
+  );
+
   const canWriteComments = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.COMMENT_WRITE),
     [checkNullablePermission],
@@ -183,6 +188,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateUserRole,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
+    canCreateProjects,
     canWriteComments,
     isPending: isEnabled && isPending,
   };

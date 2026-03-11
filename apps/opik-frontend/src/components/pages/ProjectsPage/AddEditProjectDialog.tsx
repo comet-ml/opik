@@ -21,6 +21,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { buildDocsUrl } from "@/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type AddEditProjectDialogProps = {
   project?: Project;
@@ -43,6 +44,10 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   const [description, setDescription] = useState(
     project ? project.description : "",
   );
+
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
 
   const isEdit = Boolean(project);
   const isValid = Boolean(name.length);
@@ -121,7 +126,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
   ]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open && canCreateProjects} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

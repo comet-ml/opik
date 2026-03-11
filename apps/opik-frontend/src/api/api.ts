@@ -47,6 +47,7 @@ export const PROVIDERS_KEYS_KEY = "provider-keys";
 export const ALERTS_KEY = "alerts";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";
+export const PROJECT_KEY = "project";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
 export const OPTIMIZATIONS_KEY = "optimizations";
 export const OPTIMIZATION_KEY = "optimization";
