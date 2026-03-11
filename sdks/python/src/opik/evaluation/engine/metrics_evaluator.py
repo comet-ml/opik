@@ -14,6 +14,7 @@ from opik.evaluation.metrics import (
 from opik.evaluation.scorers import scorer_wrapper_metric
 from opik.evaluation.suite_evaluators import llm_judge
 from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
+from opik.evaluation.suite_evaluators.llm_judge import helpers as llm_judge_helpers
 from opik.evaluation.types import ScoringKeyMappingType
 from opik.message_processing.emulation import models
 
@@ -102,40 +103,6 @@ def _extract_item_evaluators(
     return evaluators
 
 
-def _merge_llm_judges(
-    metrics: List[base_metric.BaseMetric],
-) -> List[base_metric.BaseMetric]:
-    """Merge multiple LLMJudge instances into one to reduce LLM API calls.
-
-    Replaces the first LLMJudge with the merged instance and removes the rest,
-    preserving the relative order of all other metrics. Returns the original
-    list unchanged if there are 0-1 judges or if settings differ.
-    """
-    judges: List[llm_judge.LLMJudge] = [
-        m for m in metrics if isinstance(m, llm_judge.LLMJudge)
-    ]
-
-    if len(judges) <= 1:
-        return metrics
-
-    merged = llm_judge.LLMJudge.merged(judges)
-    if merged is None:
-        return metrics
-
-    judge_set = set(id(j) for j in judges)
-    result: List[base_metric.BaseMetric] = []
-    first_replaced = False
-    for metric in metrics:
-        if id(metric) in judge_set:
-            if not first_replaced:
-                result.append(merged)
-                first_replaced = True
-        else:
-            result.append(metric)
-
-    return result
-
-
 def build_metrics_evaluator(
     item: Optional[dataset_item.DatasetItem],
     regular_metrics: List[base_metric.BaseMetric],
@@ -150,7 +117,7 @@ def build_metrics_evaluator(
         )
         all_metrics.extend(item_evaluators)
 
-    all_metrics = _merge_llm_judges(all_metrics)
+    all_metrics = llm_judge_helpers.merge_llm_judges(all_metrics)
 
     return MetricsEvaluator(
         scoring_metrics=all_metrics,

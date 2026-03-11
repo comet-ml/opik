@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from opik.evaluation.engine.metrics_evaluator import _merge_llm_judges
+from opik.evaluation.engine.metrics_evaluator import build_metrics_evaluator
 from opik.evaluation.metrics import base_metric
 from opik.evaluation.suite_evaluators import llm_judge
 
@@ -15,6 +15,17 @@ def _make_non_judge_metric(name="other_metric"):
     metric = MagicMock(spec=base_metric.BaseMetric)
     metric.name = name
     return metric
+
+
+def _build(regular_metrics):
+    """Build a MetricsEvaluator with no item and extract its regular metrics."""
+    evaluator = build_metrics_evaluator(
+        item=None,
+        regular_metrics=regular_metrics,
+        scoring_key_mapping={},
+        evaluator_model=None,
+    )
+    return evaluator.regular_metrics
 
 
 class TestLLMJudgeMerged:
@@ -40,17 +51,16 @@ class TestLLMJudgeMerged:
         j1 = _make_judge(["A"], temperature=0.5, seed=42)
         j2 = _make_judge(["B"], temperature=0.9, seed=99)
 
-        merged = llm_judge.LLMJudge.merged([j1, j2])
-
-        assert merged is None
+        assert llm_judge.LLMJudge.merged([j1, j2]) is None
 
     def test_mismatched_model__returns_none(self):
         j1 = _make_judge(["A"], model="gpt-4o")
         j2 = _make_judge(["B"], model="gpt-4o-mini")
 
-        merged = llm_judge.LLMJudge.merged([j1, j2])
+        assert llm_judge.LLMJudge.merged([j1, j2]) is None
 
-        assert merged is None
+    def test_empty_list__returns_none(self):
+        assert llm_judge.LLMJudge.merged([]) is None
 
     def test_matching_settings__merges(self):
         j1 = _make_judge(["A"], temperature=0.5, seed=42, name="suite_judge")
@@ -83,19 +93,19 @@ class TestLLMJudgeMerged:
         assert merged.assertions == ["A", "B"]
 
 
-class TestMergeLlmJudges:
+class TestBuildMetricsEvaluatorMerging:
     def test_no_judges__returns_unchanged(self):
         m1 = _make_non_judge_metric("m1")
         m2 = _make_non_judge_metric("m2")
 
-        result = _merge_llm_judges([m1, m2])
+        result = _build([m1, m2])
 
         assert result == [m1, m2]
 
     def test_single_judge__returns_unchanged(self):
         judge = _make_judge(["assertion A"])
 
-        result = _merge_llm_judges([judge])
+        result = _build([judge])
 
         assert len(result) == 1
         assert result[0] is judge
@@ -104,7 +114,7 @@ class TestMergeLlmJudges:
         j1 = _make_judge(["A", "B"])
         j2 = _make_judge(["C"])
 
-        result = _merge_llm_judges([j1, j2])
+        result = _build([j1, j2])
 
         assert len(result) == 1
         assert isinstance(result[0], llm_judge.LLMJudge)
@@ -116,7 +126,7 @@ class TestMergeLlmJudges:
         m2 = _make_non_judge_metric("m2")
         j2 = _make_judge(["B"])
 
-        result = _merge_llm_judges([m1, j1, m2, j2])
+        result = _build([m1, j1, m2, j2])
 
         assert len(result) == 3
         assert result[0] is m1
@@ -128,13 +138,13 @@ class TestMergeLlmJudges:
         j1 = _make_judge(["A"], temperature=0.5)
         j2 = _make_judge(["B"], temperature=0.9)
 
-        result = _merge_llm_judges([j1, j2])
+        result = _build([j1, j2])
 
         assert len(result) == 2
         assert result[0] is j1
         assert result[1] is j2
 
     def test_empty_list__returns_empty(self):
-        result = _merge_llm_judges([])
+        result = _build([])
 
         assert result == []
