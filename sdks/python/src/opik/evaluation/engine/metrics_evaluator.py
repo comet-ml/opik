@@ -102,6 +102,25 @@ def _extract_item_evaluators(
     return evaluators
 
 
+def _merge_llm_judges(
+    metrics: List[base_metric.BaseMetric],
+) -> List[base_metric.BaseMetric]:
+    """Merge multiple LLMJudge instances into one to reduce LLM API calls."""
+    non_judges: List[base_metric.BaseMetric] = []
+    judges: List[llm_judge.LLMJudge] = []
+
+    for metric in metrics:
+        if isinstance(metric, llm_judge.LLMJudge):
+            judges.append(metric)
+        else:
+            non_judges.append(metric)
+
+    if len(judges) <= 1:
+        return metrics
+
+    return non_judges + [llm_judge.LLMJudge.merged(judges)]
+
+
 def build_metrics_evaluator(
     item: Optional[dataset_item.DatasetItem],
     regular_metrics: List[base_metric.BaseMetric],
@@ -115,6 +134,8 @@ def build_metrics_evaluator(
             item, evaluator_model=evaluator_model
         )
         all_metrics.extend(item_evaluators)
+
+    all_metrics = _merge_llm_judges(all_metrics)
 
     return MetricsEvaluator(
         scoring_metrics=all_metrics,
