@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from rich import align, console, panel, table, text
 
 
+from opik.api_objects.dataset.evaluation_suite import types as suite_types
+
 from . import test_result, evaluation_result
 from .metrics import score_result
 
@@ -116,56 +118,22 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
-def _compute_item_passed_map(
-    test_results: List[test_result.TestResult],
-) -> Dict[str, bool]:
-    results_by_item: Dict[str, List[test_result.TestResult]] = defaultdict(list)
-    for result in test_results:
-        item_id = result.test_case.dataset_item_id
-        results_by_item[item_id].append(result)
-
-    item_passed: Dict[str, bool] = {}
-    for item_id, item_results in results_by_item.items():
-        item = item_results[0].test_case.dataset_item
-        pass_threshold = 1
-        if item is not None and item.execution_policy is not None:
-            if item.execution_policy.pass_threshold is not None:
-                pass_threshold = item.execution_policy.pass_threshold
-
-        runs_passed = sum(
-            1
-            for r in item_results
-            if not r.score_results
-            or all(
-                bool(s.value) if isinstance(s.value, bool) else s.value == 1
-                for s in r.score_results
-            )
-        )
-        item_passed[item_id] = runs_passed >= pass_threshold
-
-    return item_passed
-
-
 def display_suite_results(
     suite_name: str,
     total_time: float,
-    result: evaluation_result.EvaluationResult,
+    suite_result: suite_types.EvaluationSuiteResult,
     verbose: int = 2,
 ) -> None:
-    test_results = result.test_results
+    test_results = [
+        tr
+        for item_result in suite_result.item_results.values()
+        for tr in item_result.test_results
+    ]
     nb_runs = len(test_results)
-
-    unique_item_ids = {
-        tr.test_case.dataset_item_id
-        for tr in test_results
-        if tr.test_case.dataset_item_id is not None
-    }
-    nb_items = len(unique_item_ids) if unique_item_ids else nb_runs
-
-    item_passed_map = _compute_item_passed_map(test_results)
-    items_passed = sum(1 for v in item_passed_map.values() if v)
-    items_total = len(item_passed_map)
-    suite_passed = items_passed == items_total
+    nb_items = suite_result.items_total
+    items_passed = suite_result.items_passed
+    items_total = suite_result.items_total
+    suite_passed = suite_result.all_items_passed
 
     assertion_passed_count: Dict[str, int] = defaultdict(int)
     assertion_total_count: Dict[str, int] = defaultdict(int)

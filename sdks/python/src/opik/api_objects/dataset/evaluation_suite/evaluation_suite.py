@@ -431,13 +431,12 @@ class EvaluationSuite:
             >>> print(f"Items passed: {result.items_passed}/{result.items_total}")
         """
         from opik.evaluation import evaluator as opik_evaluator
-        from . import suite_result_constructor
 
         @functools.wraps(task)
         def _validated_task(data: Dict[str, Any]) -> Any:
             return validate_task_result(task(data))
 
-        eval_result = opik_evaluator.evaluate_suite(
+        return opik_evaluator.evaluate_suite(
             dataset=self._dataset,
             task=_validated_task,
             experiment_name_prefix=experiment_name_prefix,
@@ -450,5 +449,3 @@ class EvaluationSuite:
             task_threads=worker_threads,
             evaluator_model=model,
         )
-
-        return suite_result_constructor.build_suite_result(eval_result)
