@@ -1138,9 +1138,7 @@ class Opik:
             raise
 
         has_updates = (
-            assertions is not None
-            or execution_policy is not None
-            or tags is not None
+            assertions is not None or execution_policy is not None or tags is not None
         )
         if has_updates:
             suite.update(

@@ -1,6 +1,6 @@
 """Validators for dataset and evaluation suite operations."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 
 def validate_evaluators(evaluators: List[Any], context: str) -> None:
@@ -68,13 +68,9 @@ _VALID_ITEM_KEYS = {"data", "assertions", "description", "execution_policy"}
 _VALID_EXECUTION_POLICY_KEYS = {"runs_per_item", "pass_threshold"}
 
 
-def validate_execution_policy(
-    ep: Any, context: str = "execution_policy"
-) -> None:
+def validate_execution_policy(ep: Any, context: str = "execution_policy") -> None:
     if not isinstance(ep, dict):
-        raise TypeError(
-            f"'{context}' must be a dict, got {type(ep).__name__}"
-        )
+        raise TypeError(f"'{context}' must be a dict, got {type(ep).__name__}")
     unknown_keys = set(ep.keys()) - _VALID_EXECUTION_POLICY_KEYS
     if unknown_keys:
         raise ValueError(
@@ -84,12 +80,11 @@ def validate_execution_policy(
     for key in ep:
         if not isinstance(ep[key], int):
             raise TypeError(
-                f"'{context}.{key}' must be an int, "
-                f"got {type(ep[key]).__name__}"
+                f"'{context}.{key}' must be an int, got {type(ep[key]).__name__}"
             )
 
 
-def validate_suite_items(items: List[Dict[str, Any]]) -> None:
+def validate_suite_items(items: List[Any]) -> None:
     for i, item in enumerate(items):
         if not isinstance(item, dict):
             raise TypeError(
@@ -104,9 +99,7 @@ def validate_suite_items(items: List[Dict[str, Any]]) -> None:
             )
 
         if "data" not in item:
-            raise ValueError(
-                f"Item at index {i} is missing required key 'data'"
-            )
+            raise ValueError(f"Item at index {i} is missing required key 'data'")
         if not isinstance(item["data"], dict):
             raise TypeError(
                 f"Item at index {i} 'data' must be a dict, "

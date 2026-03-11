@@ -154,9 +154,9 @@ def display_suite_results(
     nb_runs = len(test_results)
 
     unique_item_ids = {
-        result.test_case.dataset_item_id
-        for result in test_results
-        if result.test_case.dataset_item_id is not None
+        tr.test_case.dataset_item_id
+        for tr in test_results
+        if tr.test_case.dataset_item_id is not None
     }
     nb_items = len(unique_item_ids) if unique_item_ids else nb_runs
 
@@ -171,14 +171,13 @@ def display_suite_results(
     assertion_total_count: Dict[str, int] = defaultdict(int)
     assertion_failed_on_failed_item: Dict[str, bool] = defaultdict(bool)
 
-    for result in test_results:
-        item_id = result.test_case.dataset_item_id
+    for tr in test_results:
+        item_id = tr.test_case.dataset_item_id
         item_did_pass = item_passed_map.get(item_id, True)
-        for score in result.score_results:
+        for score in tr.score_results:
             assertion_total_count[score.name] += 1
             score_passed = not score.scoring_failed and (
-                (isinstance(score.value, bool) and score.value)
-                or score.value == 1
+                (isinstance(score.value, bool) and score.value) or score.value == 1
             )
             if score_passed:
                 assertion_passed_count[score.name] += 1
@@ -206,9 +205,7 @@ def display_suite_results(
     time_text.stylize("bold", 0, 18)
     time_text = align.Align.left(time_text)
 
-    nb_samples_text = text.Text(
-        f"Number of items:   {nb_items:,} ({nb_runs:,} runs)"
-    )
+    nb_samples_text = text.Text(f"Number of items:   {nb_items:,} ({nb_runs:,} runs)")
     nb_samples_text.stylize("bold", 0, 18)
     nb_samples_text = align.Align.left(nb_samples_text)
 
@@ -240,9 +237,7 @@ def display_suite_results(
         score_strings += text.Text("\n")
 
     if non_critical:
-        score_strings += text.Text(
-            "Non-critical (items still passed):\n", style="bold"
-        )
+        score_strings += text.Text("Non-critical (items still passed):\n", style="bold")
         for name, (passed, total) in non_critical.items():
             rate = passed / total if total > 0 else 0.0
             score_strings += text.Text(

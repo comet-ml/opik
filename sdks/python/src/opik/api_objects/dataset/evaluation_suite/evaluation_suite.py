@@ -65,14 +65,10 @@ class EvaluationSuite:
         dataset_: dataset.Dataset,
     ):
         """
-        Initialize an EvaluationSuite.
+        Internal constructor — not part of the public API.
 
-        Suite-level assertions and execution policy are stored in the dataset's
-        metadata. Use `create_evaluation_suite()` to create a suite with config.
-
-        Args:
-            name: The name of the evaluation suite.
-            dataset_: The underlying dataset storing suite items and config.
+        Use :meth:`opik.Opik.create_evaluation_suite` or
+        :meth:`opik.Opik.get_or_create_evaluation_suite` instead.
         """
         self._name = name
         self._dataset = dataset_
@@ -190,6 +186,7 @@ class EvaluationSuite:
         has_version_updates = resolved is not None or execution_policy is not None
         if has_version_updates:
             version_info = self._dataset.get_version_info()
+            assert version_info is not None
 
             if resolved is None:
                 resolved = self._dataset.get_evaluators()

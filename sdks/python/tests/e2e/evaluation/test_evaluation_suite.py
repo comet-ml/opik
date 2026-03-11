@@ -878,7 +878,7 @@ def test_get_or_create_evaluation_suite__with_new_assertions__creates_new_versio
         assertions=["Response is helpful"],
     )
 
-    suite = opik_client.get_or_create_evaluation_suite(
+    opik_client.get_or_create_evaluation_suite(
         name=dataset_name,
         assertions=["Response is accurate", "Response is concise"],
     )
@@ -905,7 +905,7 @@ def test_get_or_create_evaluation_suite__with_new_policy__creates_new_version(
         execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
 
-    suite = opik_client.get_or_create_evaluation_suite(
+    opik_client.get_or_create_evaluation_suite(
         name=dataset_name,
         execution_policy={"runs_per_item": 5, "pass_threshold": 3},
     )
@@ -1097,20 +1097,22 @@ def test_evaluation_suite__add_items_batch__all_items_persisted(
         description="Test batch add_items",
     )
 
-    suite.add_items([
-        {
-            "data": {"input": {"question": "What is the capital of France?"}},
-            "assertions": [assertion],
-        },
-        {
-            "data": {"input": {"question": "What is the capital of Germany?"}},
-            "assertions": [assertion],
-        },
-        {
-            "data": {"input": {"question": "What is the capital of Spain?"}},
-            "assertions": [assertion],
-        },
-    ])
+    suite.add_items(
+        [
+            {
+                "data": {"input": {"question": "What is the capital of France?"}},
+                "assertions": [assertion],
+            },
+            {
+                "data": {"input": {"question": "What is the capital of Germany?"}},
+                "assertions": [assertion],
+            },
+            {
+                "data": {"input": {"question": "What is the capital of Spain?"}},
+                "assertions": [assertion],
+            },
+        ]
+    )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         answers = {
