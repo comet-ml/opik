@@ -85,6 +85,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id \\<> ''
+                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                   <if(search_text)> AND <search_text> <endif>
             ), spans_agg AS (
                 SELECT
@@ -403,6 +405,8 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id \\<> ''
+                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                   <if(search_text)> AND <search_text> <endif>
             ), spans_agg AS (
                 SELECT

@@ -43,7 +43,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                 ),
             	total_spans AS (
             			SELECT
-            			    count(distinct id) as total_count
+            			    uniq(id) as total_count
             			FROM spans
             			WHERE workspace_id = :workspace_id
             			AND project_id = :project_id

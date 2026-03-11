@@ -287,9 +287,8 @@ class ExperimentDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>
                     AND project_id IN :target_project_ids
-                    <else>
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
                     <endif>
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
                 ) AS t ON ei.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -300,9 +299,8 @@ class ExperimentDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>
                     AND project_id IN :target_project_ids
-                    <else>
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                     <endif>
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY experiment_id
@@ -389,10 +387,8 @@ class ExperimentDAO {
                     INNER JOIN (
                         SELECT DISTINCT id FROM traces
                         WHERE workspace_id = :workspace_id
-                        <if(has_target_projects)>AND project_id IN :target_project_ids
-                        <else>
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND id IN (SELECT trace_id FROM experiment_items_final)
-                        <endif>
                     ) AS t ON et.trace_id = t.id
                     LEFT JOIN feedback_scores_final fs ON fs.entity_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
@@ -695,9 +691,8 @@ class ExperimentDAO {
                     WHERE workspace_id = :workspace_id
                     <if(has_target_projects)>
                     AND project_id IN :target_project_ids
-                    <else>
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
                     <endif>
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
                 ) t ON ei.trace_id = t.id
                 GROUP BY ei.experiment_id
             )
@@ -796,9 +791,8 @@ class ExperimentDAO {
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>
                         AND project_id IN :target_project_ids
-                        <else>
-                        AND id IN (SELECT trace_id FROM experiment_items_final)
                         <endif>
+                        AND id IN (SELECT trace_id FROM experiment_items_final)
                     ) t ON ei.trace_id = t.id
                     GROUP BY ei.experiment_id
                 ) ep ON ef.id = ep.experiment_id
@@ -893,10 +887,8 @@ class ExperimentDAO {
                         project_id
                     FROM traces final
                     WHERE workspace_id = :workspace_id
-                    <if(has_target_projects)>AND project_id IN :target_project_ids
-                    <else>
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND id IN (SELECT trace_id FROM experiment_items_final)
-                    <endif>
                 ) AS t ON ei.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -904,10 +896,8 @@ class ExperimentDAO {
                         sum(total_estimated_cost) as total_estimated_cost
                     FROM spans final
                     WHERE workspace_id = :workspace_id
-                    <if(has_target_projects)>AND project_id IN :target_project_ids
-                    <else>
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_final)
-                    <endif>
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON t.id = s.trace_id
                 GROUP BY experiment_id
@@ -991,10 +981,8 @@ class ExperimentDAO {
                     INNER JOIN (
                         SELECT DISTINCT id FROM traces
                         WHERE workspace_id = :workspace_id
-                        <if(has_target_projects)>AND project_id IN :target_project_ids
-                        <else>
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                         AND id IN (SELECT trace_id FROM experiment_items_final)
-                        <endif>
                     ) AS t ON et.trace_id = t.id
                     LEFT JOIN feedback_scores_final fs ON fs.entity_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
