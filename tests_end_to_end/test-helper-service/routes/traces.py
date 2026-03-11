@@ -124,7 +124,7 @@ def create_traces_and_get_url():
     # Parse the URL from the SDK's terminal log message:
     # 'Started logging traces to the "project_name" project at {url}.'
     url_match = re.search(
-        r'Started logging traces.*? at (https?://\S+?)\.',
+        r'Started logging traces.*? at (https?://\S+)\.',
         terminal_output
     )
     if not url_match:
