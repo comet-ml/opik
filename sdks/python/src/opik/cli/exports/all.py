@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, Optional, TypeVar, Union
 
+import httpx
 import pydantic
 import click
 from rich.console import Console
@@ -20,10 +21,14 @@ from rich.progress import (
 import opik
 from opik.api_objects.prompt import Prompt, ChatPrompt
 from .dataset import export_single_dataset
-from .experiment import export_experiment_by_id, export_traces_by_ids
+from .experiment import (
+    export_experiment_by_id,
+    _export_collected_trace_ids,
+)
 from .project import export_single_project
 from .prompt import export_single_prompt
 from .utils import debug_print, print_export_summary
+from ..utils import validate_include
 
 console = Console()
 
@@ -57,13 +62,26 @@ def _fetch_experiments_page_raw(client: opik.Opik, page: int) -> tuple[list, int
     httpx_client = (
         client.rest_client.experiments._raw_client._client_wrapper.httpx_client
     )
-    response = httpx_client.request(
-        "v1/private/experiments",
-        method="GET",
-        params={"page": page, "size": PAGE_SIZE},
-    )
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = httpx_client.request(
+            "v1/private/experiments",
+            method="GET",
+            params={"page": page, "size": PAGE_SIZE},
+        )
+        response.raise_for_status()
+        data = response.json()
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        console.print(
+            f"[yellow]Warning: transient network error fetching experiments page {page}: {e}. "
+            "Skipping page.[/yellow]"
+        )
+        return [], 0
+    except httpx.HTTPStatusError as e:
+        console.print(
+            f"[yellow]Warning: HTTP error fetching experiments page {page}: {e}. "
+            "Skipping page.[/yellow]"
+        )
+        return [], 0
     total = data.get("total", 0)
     items = [
         SimpleNamespace(id=raw.get("id"), name=raw.get("name", ""))
@@ -362,25 +380,16 @@ def _export_all_experiments(
                 progress.advance(task)
 
     # Batch-export all traces collected from experiments
-    traces_exported = 0
-    traces_skipped = 0
-    if all_trace_ids:
-        trace_ids_list = list(all_trace_ids)
-        if max_results:
-            trace_ids_list = trace_ids_list[:max_results]
-        console.print(
-            f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from experiments...[/blue]"
-        )
-        traces_exported, traces_skipped = export_traces_by_ids(
-            client,
-            trace_ids_list,
-            workspace_root,
-            None,
-            format,
-            debug,
-            force,
-            filter_string=filter_string,
-        )
+    traces_exported, traces_skipped = _export_collected_trace_ids(
+        client,
+        workspace_root,
+        all_trace_ids,
+        max_results,
+        format,
+        debug,
+        force,
+        filter_string=filter_string,
+    )
 
     return exported, skipped, traces_exported, traces_skipped
 
@@ -492,14 +501,7 @@ _DEFAULT_INCLUDE = "datasets,prompts,projects,experiments"
 def _validate_include(
     ctx: click.Context, param: click.Parameter, value: str
 ) -> list[str]:
-    parts = [p.strip().lower() for p in value.split(",") if p.strip()]
-    invalid = set(parts) - _VALID_INCLUDES
-    if invalid:
-        raise click.BadParameter(
-            f"Invalid item(s): {', '.join(sorted(invalid))}. "
-            f"Valid values: {', '.join(sorted(_VALID_INCLUDES))}."
-        )
-    return parts
+    return validate_include(value, _VALID_INCLUDES, ctx, param)
 
 
 @click.command(name="all")

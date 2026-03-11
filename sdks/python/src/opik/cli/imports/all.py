@@ -15,6 +15,7 @@ from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import debug_print, print_import_summary
+from ..utils import validate_include
 
 console = Console()
 
@@ -25,14 +26,7 @@ _DEFAULT_INCLUDE = "datasets,prompts,projects,experiments"
 def _validate_include(
     ctx: click.Context, param: click.Parameter, value: str
 ) -> List[str]:
-    parts = [p.strip().lower() for p in value.split(",") if p.strip()]
-    invalid = set(parts) - _VALID_INCLUDES
-    if invalid:
-        raise click.BadParameter(
-            f"Invalid item(s): {', '.join(sorted(invalid))}. "
-            f"Valid values: {', '.join(sorted(_VALID_INCLUDES))}."
-        )
-    return parts
+    return validate_include(value, _VALID_INCLUDES, ctx, param)
 
 
 def _merge_stats(total: Dict[str, int], phase: Dict[str, int]) -> None:

@@ -175,6 +175,45 @@ def _scan_downloaded_trace_ids(workspace_root: Path, format: str) -> Set[str]:
     return downloaded
 
 
+def _export_collected_trace_ids(
+    client: opik.Opik,
+    workspace_root: Path,
+    all_trace_ids: set,
+    max_limit: Optional[int],
+    format: str,
+    debug: bool,
+    force: bool,
+    manifest: Optional[ExportManifest] = None,
+    filter_string: Optional[str] = None,
+) -> tuple[int, int]:
+    """Export a collected set of trace IDs, applying the optional limit.
+
+    This is the common tail of both the ``export experiment`` and ``export all``
+    flows: cap ``all_trace_ids`` to *max_limit*, print a status line, then
+    delegate to :func:`export_traces_by_ids`.  Returns ``(exported, skipped)``.
+    """
+    if not all_trace_ids:
+        return 0, 0
+    trace_ids_list = list(all_trace_ids)
+    if max_limit:
+        trace_ids_list = trace_ids_list[:max_limit]
+    if len(trace_ids_list) > 1:
+        console.print(
+            f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from experiments...[/blue]"
+        )
+    return export_traces_by_ids(
+        client,
+        trace_ids_list,
+        workspace_root,
+        None,
+        format,
+        debug,
+        force,
+        manifest=manifest,
+        filter_string=filter_string,
+    )
+
+
 def export_traces_by_ids(
     client: opik.Opik,
     trace_ids: List[str],
@@ -215,6 +254,11 @@ def export_traces_by_ids(
     if not force:
         if manifest:
             already_downloaded = manifest.load_downloaded_set()
+            # A freshly created manifest returns an empty set even when files already
+            # exist on disk from an earlier run.  Fall back to a filesystem scan so
+            # pre-existing traces are detected and skipped before any API call.
+            if not already_downloaded:
+                already_downloaded = _scan_downloaded_trace_ids(workspace_root, format)
         else:
             already_downloaded = _scan_downloaded_trace_ids(workspace_root, format)
         pending_ids = [tid for tid in trace_ids if tid not in already_downloaded]
@@ -394,9 +438,14 @@ def export_experiment_by_id(
 
         # Fast path: if the manifest records a completed export, we already
         # have the full trace-ID list — skip the slow get_items() API call.
+        # Guard: also verify the experiment JSON file still exists on disk so
+        # that a deleted file doesn't keep the export permanently cached.
         if manifest.is_completed and not force:
             stored_ids = manifest.get_all_trace_ids()
-            if stored_ids is not None:
+            experiment_files = list(
+                output_dir.glob(f"experiment_*_{experiment_id}.json")
+            )
+            if stored_ids is not None and experiment_files:
                 if trace_ids_collector is not None:
                     trace_ids_collector.update(stored_ids)
                 debug_print(
@@ -413,6 +462,15 @@ def export_experiment_by_id(
                     "traces_skipped": len(stored_ids),
                 }
                 return (_empty, 0, manifest)
+            elif stored_ids is not None and not experiment_files:
+                # Manifest says completed but the experiment file was deleted.
+                # Reset and fall through to a full re-export.
+                debug_print(
+                    f"Manifest complete but experiment file missing for {experiment_id}; "
+                    "resetting manifest and re-exporting.",
+                    debug,
+                )
+                manifest.reset()
 
         if experiment_obj is not None:
             experiment = experiment_obj
@@ -667,28 +725,17 @@ def export_experiment_by_name(
             if len(experiments) == 1
             else None
         )
-        traces_exported = 0
-        traces_skipped = 0
-        if all_trace_ids:
-            trace_ids_list = list(all_trace_ids)
-            if max_traces:
-                trace_ids_list = trace_ids_list[:max_traces]
-            if len(trace_ids_list) > 0:
-                if len(all_trace_ids) > 1:
-                    console.print(
-                        f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from these experiments...[/blue]"
-                    )
-                traces_exported, traces_skipped = export_traces_by_ids(
-                    client,
-                    trace_ids_list,
-                    workspace_root,
-                    None,
-                    format,
-                    debug,
-                    force,
-                    manifest=trace_manifest,
-                    filter_string=filter_string,
-                )
+        traces_exported, traces_skipped = _export_collected_trace_ids(
+            client,
+            workspace_root,
+            all_trace_ids,
+            max_traces,
+            format,
+            debug,
+            force,
+            manifest=trace_manifest,
+            filter_string=filter_string,
+        )
 
         # Collect statistics for summary
         stats = {

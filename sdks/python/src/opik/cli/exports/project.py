@@ -56,7 +56,7 @@ def export_traces(
     force: bool = False,
     show_progress: bool = True,
     manifest: Optional[ExportManifest] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, bool]:
     """Download traces and their spans with pagination support for large projects."""
     if debug:
         debug_print(
@@ -105,6 +105,7 @@ def export_traces(
 
     exported_count = 0
     skipped_count = 0
+    had_errors = False
     page_size = 100  # Fixed batch size per API request
     current_page = 1
     total_processed = 0
@@ -209,6 +210,7 @@ def export_traces(
                         debug_print(f"Technical details: {e}", debug)
                 else:
                     console.print(f"[red]Error searching traces: {e}[/red]")
+                had_errors = True
                 break
 
             if not traces:
@@ -247,15 +249,28 @@ def export_traces(
                 )
 
             # Step 1: Check the already-downloaded set (O(1) per trace).
+            # Also verify the file still exists on disk — a stale manifest entry
+            # for a deleted file would otherwise skip a trace forever.
             traces_to_fetch = []
             for trace in traces:
                 if trace.id in already_downloaded:
-                    if debug:
-                        debug_print(
-                            f"Skipping trace {trace.id} (already downloaded)", debug
-                        )
-                    skipped_count += 1
-                    total_processed += 1
+                    file_path = project_dir / f"trace_{trace.id}.{ext}"
+                    if file_path.exists():
+                        if debug:
+                            debug_print(
+                                f"Skipping trace {trace.id} (already downloaded)", debug
+                            )
+                        skipped_count += 1
+                        total_processed += 1
+                    else:
+                        # File was deleted after the manifest was written — re-download.
+                        if debug:
+                            debug_print(
+                                f"Trace {trace.id} in manifest but file missing; re-downloading",
+                                debug,
+                            )
+                        already_downloaded.discard(trace.id)
+                        traces_to_fetch.append(trace)
                 else:
                     traces_to_fetch.append(trace)
 
@@ -305,6 +320,7 @@ def export_traces(
                                 console.print(
                                     f"[red]Error writing trace {trace.id} to file: {write_error}[/red]"
                                 )
+                                had_errors = True
                                 if debug:
                                     import traceback
 
@@ -333,7 +349,7 @@ def export_traces(
         elif progress and task is not None:
             progress.update(task, description=f"Exported {exported_count} traces total")
 
-    return exported_count, skipped_count
+    return exported_count, skipped_count, had_errors
 
 
 def export_project_by_name(
@@ -608,7 +624,7 @@ def export_single_project(
         manifest.start(format)
 
         # Export related traces for this project
-        traces_exported, traces_skipped = export_traces(
+        traces_exported, traces_skipped, traces_had_errors = export_traces(
             client,
             project.name,
             project_traces_dir,
@@ -622,8 +638,11 @@ def export_single_project(
             manifest,
         )
 
-        # Mark the manifest complete so the next run uses incremental fetch.
-        manifest.complete(export_start_time)
+        # Only mark the manifest complete when the export finished without errors.
+        # Leaving it in_progress on failure means the next run resumes from where
+        # this one left off rather than skipping traces that were never written.
+        if not traces_had_errors:
+            manifest.complete(export_start_time)
 
         # Project export only exports traces - datasets and prompts must be exported separately
         if traces_exported > 0:
