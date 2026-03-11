@@ -93,9 +93,32 @@ Imports specific data types from local files to the specified workspace.
 **Options:**
 - `--path, -p`: Directory containing exported data (default: `opik_exports`)
 - `--dry-run`: Show what would be imported without actually importing
+- `--force`: Discard the migration manifest and re-import everything from scratch
 - `--debug`: Enable debug output to show detailed information about the import process
 
 **Note:** Experiment imports automatically recreate experiments where possible. No additional flags are needed.
+
+### Resumable imports
+
+Every import automatically maintains a `migration_manifest.db` SQLite database
+in the `--path` directory. It tracks which files have been imported and the ID
+mappings needed to link experiments back to their traces.
+
+If an import is interrupted (e.g. network error, Ctrl-C), simply re-run the
+same command — it will resume from where it left off without creating
+duplicates:
+
+```
+Resuming interrupted import: 142/500 file(s) already completed
+```
+
+When a previously completed import is re-run:
+
+```
+Import already completed. Use --force to re-import.
+```
+
+Use `--force` to discard the manifest and start fresh.
 
 **Examples:**
 ```bash
@@ -120,6 +143,12 @@ opik import my-workspace dataset "my-dataset" --path ./custom-exports
 # Dry run to see what would be imported
 opik import my-workspace project "my-project" --dry-run
 
+# Resume an interrupted import (automatic — just re-run the same command)
+opik import my-workspace project "my-project" --path ./migration_data
+
+# Discard progress and restart from scratch
+opik import my-workspace project "my-project" --path ./migration_data --force
+
 # Import with debug output
 opik import my-workspace experiment "my-experiment" --debug
 ```
@@ -132,6 +161,7 @@ The exported data is stored in JSON files with the following structure:
 
 ```
 OUTPUT_DIR/
+├── migration_manifest.db          # Created automatically during import to track progress
 └── WORKSPACE/
     ├── datasets/
     │   ├── dataset_DATASET_NAME_1.json
@@ -295,13 +325,39 @@ trace-123,my-trace,2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,thread-456,span-789
 
 ## Use Cases
 
-### 1. Project Migration
-```bash
-# Export all data from source project
-opik export my-workspace project "old-project" --path ./migration_data
+### 1. Migrating between Opik installations
 
-# Import to new workspace
-opik import my-workspace project "old-project" --path ./migration_data
+Migration is a two-step process because the source and destination typically
+have different API keys. Export with your source credentials, then import with
+your destination credentials. The `migration_manifest.db` created during
+import travels with the exported data and makes the import safe to interrupt
+and resume.
+
+```bash
+# Step 1: Export from source (run with source API key / Opik URL)
+OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
+  opik export my-workspace project "my-project" --path ./migration_data
+
+# Step 2: Import to destination (run with destination API key / Opik URL)
+# If this is interrupted, just re-run the same command — it resumes automatically.
+OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
+  opik import my-workspace project "my-project" --path ./migration_data
+```
+
+To migrate all data types at once:
+
+```bash
+# Export everything (source credentials)
+OPIK_API_KEY=<source_key> opik export my-workspace dataset "my-dataset" --path ./migration_data
+OPIK_API_KEY=<source_key> opik export my-workspace prompt "my-prompt" --path ./migration_data
+OPIK_API_KEY=<source_key> opik export my-workspace project "my-project" --path ./migration_data
+OPIK_API_KEY=<source_key> opik export my-workspace experiment "my-experiment" --path ./migration_data
+
+# Import everything (destination credentials)
+OPIK_API_KEY=<dest_key> opik import my-workspace dataset "my-dataset" --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace prompt "my-prompt" --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace project "my-project" --path ./migration_data
+OPIK_API_KEY=<dest_key> opik import my-workspace experiment "my-experiment" --path ./migration_data
 ```
 
 ### 2. Data Backup
@@ -392,32 +448,46 @@ opik import my-workspace experiment "evaluation" --path ./experiment_data
 
 ### Common Issues
 
-1. **"No traces found"**
+1. **Import was interrupted and re-running creates duplicates**
+   - This should not happen — the import automatically detects and resumes from the `migration_manifest.db` in your `--path` directory
+   - If you do not see the "Resuming interrupted import" message, check that you are pointing to the same `--path` as the original run
+   - If the manifest database is unreadable, delete `migration_manifest.db` and use `--force` to start fresh (this will re-import everything)
+
+2. **"Import already completed. Use --force to re-import."**
+   - The manifest records that a previous run finished successfully
+   - If you genuinely need to re-import (e.g. the destination was wiped), use `--force`
+
+3. **Experiment items are missing after import**
+   - Experiments are linked to traces by ID; if the trace import was interrupted and no manifest was present, some mappings may be missing
+   - Re-run the project import first (it populates the trace ID map in the manifest), then re-run the experiment import
+   - Use `--debug` to see how many trace IDs were matched
+
+4. **"No traces found"**
    - Check if the project name is correct
    - Verify you have access to the project
    - Try without filters first
 
-2. **"Project directory not found"**
+5. **"Project directory not found"**
    - Make sure you've exported data first
    - Check the input directory path
    - Verify the project name matches
 
-3. **"Opik SDK not available"**
+6. **"Opik SDK not available"**
    - Ensure Opik is properly installed
    - Check your Python environment
    - Verify the installation with `opik healthcheck`
 
-4. **"Dataset/Project/Experiment/Prompt not found"**
+7. **"Dataset/Project/Experiment/Prompt not found"**
    - Check that the exact name is correct
    - Verify you have access to the item
    - Use `--debug` for more detailed error information
 
-5. **"No datasets/projects found"**
+8. **"No datasets/projects found"**
    - The system will show available items to help you choose the right name
    - Check spelling and case sensitivity
    - Ensure the item exists in the workspace
 
-6. **"Dataset not found"**
+9. **"Dataset not found"**
    - The system will show datasets used by matching experiments
    - Verify the dataset name is correct
    - Use `--debug` to see detailed search information
@@ -464,7 +534,7 @@ opik import my-workspace project "my-project" --path ./temp_data --dry-run
 opik import my-workspace experiment "my-experiment" --path ./temp_data --dry-run
 opik import my-workspace prompt "my-template" --path ./temp_data --dry-run
 
-# 4. Actually import all data including experiments and prompts
+# 4. Import all data — if interrupted, just re-run the same commands to resume
 opik import my-workspace dataset "my-dataset" --path ./temp_data
 opik import my-workspace project "my-project" --path ./temp_data
 opik import my-workspace experiment "my-experiment" --path ./temp_data

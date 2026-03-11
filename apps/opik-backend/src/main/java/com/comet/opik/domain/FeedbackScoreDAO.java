@@ -52,17 +52,17 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
-    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, Set<String> excludeCategoryNames);
 
-    Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
+    Mono<List<String>> getSpanFeedbackScoreNames(UUID projectId, SpanType type,
+            Set<String> excludeCategoryNames);
 
-    Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+    Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            Set<String> excludeCategoryNames);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
-
-    Mono<Long> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Singleton
@@ -171,6 +171,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             <if(experiment_ids)>
             AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
             <endif>
+            <if(exclude_category_names)>
+            AND category_name NOT IN :exclude_category_names
+            <endif>
             UNION DISTINCT
             SELECT DISTINCT
                 name,
@@ -183,6 +186,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             AND entity_type = :entity_type
             <if(experiment_ids)>
             AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
+            <endif>
+            <if(exclude_category_names)>
+            AND category_name NOT IN :exclude_category_names
             <endif>
             <if(experiment_ids)>
             UNION DISTINCT
@@ -255,6 +261,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'span'
+                <if(exclude_category_names)>
+                AND category_name NOT IN :exclude_category_names
+                <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, name
                 UNION ALL
@@ -276,6 +285,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 )
                 <endif>
                 AND entity_type = 'span'
+                <if(exclude_category_names)>
+                AND category_name NOT IN :exclude_category_names
+                <endif>
                 ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
                 LIMIT 1 BY entity_id, author, name
             ) AS names
@@ -481,7 +493,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId) {
+    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_trace_feedback_score_names",
@@ -490,11 +502,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
             bindTemplateParam(projectIds, null, template);
+            bindExcludeCategoryNames(template, excludeCategoryNames);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
 
             bindStatementParam(projectIds, null, statement, EntityType.TRACE);
+            bindExcludeCategoryNames(statement, excludeCategoryNames);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -504,15 +518,18 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
+    public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            @NonNull Set<String> excludeCategoryNames) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
                     workspaceId, experimentIds.size());
             bindTemplateParam(null, experimentIds, template);
+            bindExcludeCategoryNames(template, excludeCategoryNames);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
+            bindExcludeCategoryNames(statement, excludeCategoryNames);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()
@@ -571,46 +588,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> deleteAllThreadScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
-                "Argument 'threadModelIds' must not be empty");
-
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-
-            // Delete from feedback_scores table - no source filter, deletes all scores
-            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_all_thread_scores",
-                    workspaceId, threadModelIds.size());
-            template1.add("project_id", projectId);
-            template1.add("table_name", "feedback_scores");
-
-            var statement1 = connection.createStatement(template1.render())
-                    .bind("entity_ids", threadModelIds)
-                    .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("project_id", projectId)
-                    .bind("workspace_id", workspaceId);
-
-            // Delete from authored_feedback_scores table - no source filter, deletes all scores
-            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
-                    "delete_all_thread_scores_authored", workspaceId, threadModelIds.size());
-            template2.add("project_id", projectId);
-            template2.add("table_name", "authored_feedback_scores");
-
-            var statement2 = connection.createStatement(template2.render())
-                    .bind("entity_ids", threadModelIds)
-                    .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("project_id", projectId)
-                    .bind("workspace_id", workspaceId);
-
-            return Mono.from(statement1.execute())
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .then(Mono.from(statement2.execute()))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
-        }));
-    }
-
-    @Override
-    @WithSpan
-    public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
+    public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
+            @NonNull Set<String> excludeCategoryNames) {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var template = getSTWithLogComment(SELECT_SPAN_FEEDBACK_SCORE_NAMES, "get_span_feedback_score_names",
@@ -619,6 +598,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             if (type != null) {
                 template.add("type", type.name());
             }
+            bindExcludeCategoryNames(template, excludeCategoryNames);
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
@@ -627,6 +607,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             if (type != null) {
                 statement.bind("type", type.name());
             }
+            bindExcludeCategoryNames(statement, excludeCategoryNames);
 
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
@@ -654,6 +635,18 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
         if (CollectionUtils.isNotEmpty(experimentIds)) {
             template.add("experiment_ids", experimentIds);
+        }
+    }
+
+    private void bindExcludeCategoryNames(ST template, @NonNull Set<String> excludeCategoryNames) {
+        if (CollectionUtils.isNotEmpty(excludeCategoryNames)) {
+            template.add("exclude_category_names", excludeCategoryNames);
+        }
+    }
+
+    private void bindExcludeCategoryNames(Statement statement, @NonNull Set<String> excludeCategoryNames) {
+        if (CollectionUtils.isNotEmpty(excludeCategoryNames)) {
+            statement.bind("exclude_category_names", excludeCategoryNames);
         }
     }
 

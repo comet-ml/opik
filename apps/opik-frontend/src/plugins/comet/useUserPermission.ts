@@ -100,6 +100,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.ANNOTATION_QUEUE_CREATE,
+      ),
+    [checkNullablePermission],
+  );
+
   const canDeleteAnnotationQueues = useMemo(
     () =>
       checkNullablePermission(
@@ -154,6 +162,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canWriteComments = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.COMMENT_WRITE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -161,6 +174,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canViewDashboards,
     canViewDatasets,
     canDeleteProjects,
+    canCreateAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
     canDeletePrompts,
@@ -169,6 +183,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateUserRole,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
+    canWriteComments,
     isPending: isEnabled && isPending,
   };
 };

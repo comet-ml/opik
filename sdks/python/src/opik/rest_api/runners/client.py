@@ -8,6 +8,7 @@ from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
+from ..types.local_runner_job_metadata import LocalRunnerJobMetadata
 from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
@@ -166,6 +167,7 @@ class RunnersClient:
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -182,6 +184,8 @@ class RunnersClient:
         runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -202,6 +206,7 @@ class RunnersClient:
             project=project,
             runner_id=runner_id,
             mask_id=mask_id,
+            metadata=metadata,
             request_options=request_options,
         )
         return _response.data
@@ -643,6 +648,7 @@ class AsyncRunnersClient:
         project: typing.Optional[str] = OMIT,
         runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -659,6 +665,8 @@ class AsyncRunnersClient:
         runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -682,6 +690,7 @@ class AsyncRunnersClient:
             project=project,
             runner_id=runner_id,
             mask_id=mask_id,
+            metadata=metadata,
             request_options=request_options,
         )
         return _response.data

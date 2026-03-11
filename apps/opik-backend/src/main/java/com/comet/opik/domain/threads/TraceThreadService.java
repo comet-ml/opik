@@ -8,7 +8,6 @@ import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.WorkspaceConfiguration;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
-import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TraceThreadsCreated;
 import com.comet.opik.api.resources.v1.events.TraceThreadBufferConfig;
 import com.comet.opik.domain.IdGenerator;
@@ -28,7 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import reactor.util.context.ContextView;
 
 import java.time.Duration;
@@ -228,49 +226,28 @@ class TraceThreadServiceImpl implements TraceThreadService {
 
         return Mono.deferContextual(context -> getThreadsByIds(traceThreads, criteria)
                 .flatMap(existingThreads -> saveThreads(traceThreads, existingThreads)
-                        .doOnSuccess(
-                                entry -> {
-                                    List<TraceThreadModel> savedThreads = entry.getValue();
-                                    Long count = entry.getKey();
+                        .doOnSuccess(entry -> {
+                            List<TraceThreadModel> savedThreads = entry.getValue();
+                            Long count = entry.getKey();
 
-                                    Set<UUID> existingThreadModelIds = existingThreads.stream()
-                                            .map(TraceThreadModel::id)
-                                            .collect(Collectors.toSet());
+                            Set<UUID> existingThreadModelIds = existingThreads.stream()
+                                    .map(TraceThreadModel::id)
+                                    .collect(Collectors.toSet());
 
-                                    List<TraceThreadModel> createdThreadIds = savedThreads
-                                            .stream()
-                                            .filter(thread -> !existingThreadModelIds.contains(thread.id()))
-                                            .toList();
+                            List<TraceThreadModel> createdThreadIds = savedThreads
+                                    .stream()
+                                    .filter(thread -> !existingThreadModelIds.contains(thread.id()))
+                                    .toList();
 
-                                    if (!createdThreadIds.isEmpty()) {
-                                        eventBus.post(new TraceThreadsCreated(createdThreadIds, projectId,
-                                                context.get(RequestContext.WORKSPACE_ID),
-                                                context.get(RequestContext.USER_NAME)));
-                                    }
-
-                                    log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
-                                })
-                        .flatMap(count -> Mono.fromCallable(() -> {
-                            // Trigger ThreadsReopened for all existing threads that received new traces,
-                            // regardless of their status. This ensures consistent behavior for score deletion
-                            // and other side effects, independent of the thread status concept.
-                            // Note: The event is named "Reopened" because internally threads still have
-                            // an active/inactive status, even though this is hidden from the UI.
-                            if (existingThreads.isEmpty()) {
-                                return Mono.empty();
+                            if (!createdThreadIds.isEmpty()) {
+                                eventBus.post(new TraceThreadsCreated(createdThreadIds, projectId,
+                                        context.get(RequestContext.WORKSPACE_ID),
+                                        context.get(RequestContext.USER_NAME)));
                             }
-                            log.info("Processing '{}' threads with new traces for projectId: '{}'",
-                                    existingThreads.size(), projectId);
 
-                            eventBus.post(new ThreadsReopened(
-                                    existingThreads.stream().map(TraceThreadModel::id).collect(Collectors.toSet()),
-                                    projectId,
-                                    context.get(RequestContext.WORKSPACE_ID),
-                                    context.get(RequestContext.USER_NAME)));
-
-                            return null;
-                        }).subscribeOn(Schedulers.boundedElastic())))
-                .then());
+                            log.info("Saved '{}' trace threads for projectId: '{}'", count, projectId);
+                        })
+                        .then()));
     }
 
     private Mono<Map.Entry<Long, List<TraceThreadModel>>> saveThreads(List<TraceThreadModel> traceThreads,
@@ -395,17 +372,10 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 new LockService.Lock(projectId, TraceThreadService.THREADS_LOCK),
                 Mono.defer(() -> traceThreadDAO.openThread(projectId, threadId))
                         .then(Mono.defer(() -> getOrCreateThreadId(projectId, threadId)))
-                        .doOnSuccess(threadModelId -> publishReopenedEvent(projectId, threadId, ctx, threadModelId))
+                        .doOnSuccess(threadModelId -> log.info("Opened thread for threadId '{}' and projectId: '{}'",
+                                threadId, projectId))
                         .then(),
                 LOCK_DURATION));
-    }
-
-    private void publishReopenedEvent(UUID projectId, String threadId, ContextView ctx, UUID threadModelId) {
-        log.info("Opened thread for threadId '{}' and projectId: '{}'", threadId, projectId);
-
-        eventBus.post(new ThreadsReopened(
-                Set.of(threadModelId), projectId, ctx.get(RequestContext.WORKSPACE_ID),
-                ctx.get(RequestContext.USER_NAME)));
     }
 
     @Override

@@ -40,6 +40,7 @@ import { Separator } from "@/components/ui/separator";
 import { Description } from "@/components/ui/description";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SCOPE_OPTIONS = [
   {
@@ -86,6 +87,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   onQueueCreated,
   queue: defaultQueue,
 }) => {
+  const {
+    permissions: { canCreateAnnotationQueues },
+  } = usePermissions();
+
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
 
   const form = useForm<FormData>({
@@ -157,7 +162,10 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open && (isEdit || canCreateAnnotationQueues)}
+      onOpenChange={setOpen}
+    >
       <DialogContent
         className="max-w-lg sm:max-w-[790px]"
         hideOverlay={isNestedDialogOpen}
