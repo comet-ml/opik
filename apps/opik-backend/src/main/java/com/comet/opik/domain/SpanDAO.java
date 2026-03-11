@@ -2176,7 +2176,7 @@ class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(SELECT_BY_PROJECT_ID, criteria, "find_span_stream", workspaceId);
 
-            if (shouldUseSpanIdPrefilter(criteria)) {
+            if (shouldUseSpanIdPrefilter(criteria, template)) {
                 template.add("span_id_prefilter", true);
             }
 
@@ -2214,22 +2214,21 @@ class SpanDAO {
 
             bindTemplateExcludeFieldVariables(spanSearchCriteria, template);
 
-            boolean sortHasFeedbackScores = Optional
-                    .ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
+            var orderBySql = sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields());
+            boolean sortHasFeedbackScores = Optional.ofNullable(orderBySql)
                     .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
-            if (shouldUseSpanIdPrefilter(spanSearchCriteria) && !sortHasFeedbackScores) {
+
+            if (shouldUseSpanIdPrefilter(spanSearchCriteria, template) && !sortHasFeedbackScores) {
                 template.add("span_id_prefilter", true);
             }
 
             var finalTemplate = template;
-            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
+            Optional.ofNullable(orderBySql)
                     .ifPresent(sortFields -> {
-
-                        if (sortFields.contains("feedback_scores")) {
+                        if (sortHasFeedbackScores) {
                             finalTemplate.add("sort_has_feedback_scores", true);
                         }
-
                         finalTemplate.add("sort_fields", sortFields);
                     });
 
@@ -2348,26 +2347,24 @@ class SpanDAO {
         return template;
     }
 
-    private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria) {
-        boolean hasFeedbackScoreFilters = Optional.ofNullable(criteria.filters())
-                .map(filters -> FilterQueryBuilder.toAnalyticsDbFilters(
-                        filters, FilterStrategy.FEEDBACK_SCORES).isPresent()
-                        || FilterQueryBuilder
-                                .toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY).isPresent())
-                .orElse(false);
+    /**
+     * Determines whether to activate the span_id_prefilter CTE for narrowing feedback_scores
+     * and comments scans. Uses template attributes already computed by newFindTemplate to avoid
+     * redundant toAnalyticsDbFilters calls.
+     *
+     * <p>Only activates for filters that narrow beyond what time-range alone provides:
+     * uuidFromTime/uuidToTime are excluded because the if/else fallback applies them directly
+     * to feedback_scores; lastReceivedSpanId is excluded because it's a pagination cursor,
+     * not a semantic filter.
+     */
+    private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria, ST template) {
+        boolean hasFeedbackScoreFilters = template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null;
 
-        // Only activate for filters that narrow beyond what time-range alone provides.
-        // uuidFromTime/uuidToTime are excluded: when time-range is the only filter,
-        // the if/else fallback applies it directly to feedback_scores — the prefilter
-        // would add an extra spans scan for no additional selectivity.
-        // lastReceivedSpanId is excluded: it's a pagination cursor, not a semantic filter.
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
                 || criteria.searchText() != null
-                || Optional.ofNullable(criteria.filters())
-                        .flatMap(filters -> FilterQueryBuilder.toAnalyticsDbFilters(
-                                filters, FilterStrategy.SPAN))
-                        .isPresent();
+                || template.getAttribute("filters") != null;
 
         return !hasFeedbackScoreFilters && hasNarrowingFilters;
     }
