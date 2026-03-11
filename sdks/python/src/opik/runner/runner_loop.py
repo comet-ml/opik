@@ -121,7 +121,7 @@ class RunnerLoop:
             self._shutdown_event.set()
 
         self._kill_active_jobs()
-        pool.shutdown(wait=True, cancel_futures=True)
+        pool.shutdown(wait=False, cancel_futures=True)
         LOGGER.info("Runner loop stopped")
 
     def _poll_job(self, backoff: _Backoff) -> Optional[LocalRunnerJob]:
@@ -137,7 +137,11 @@ class RunnerLoop:
             if e.status_code == 204:
                 job = None
             else:
-                raise
+                LOGGER.debug(
+                    "Unexpected API error while polling for jobs", exc_info=True
+                )
+                backoff.wait(self._shutdown_event)
+                return None
         except Exception:
             LOGGER.debug("Error polling for jobs", exc_info=True)
             backoff.wait(self._shutdown_event)
@@ -156,7 +160,7 @@ class RunnerLoop:
         executor: job_executor.JobExecutor,
         job: LocalRunnerJob,
         agents: Dict[str, AgentInfo],
-        slot: Optional[threading.Semaphore] = None,
+        slot: threading.Semaphore,
     ) -> None:
         """Run a job via the executor, catching crashes and releasing the pool slot."""
         try:
@@ -172,8 +176,7 @@ class RunnerLoop:
             except Exception:
                 LOGGER.debug("Failed to report crash for job %s", job.id, exc_info=True)
         finally:
-            if slot is not None:
-                slot.release()
+            slot.release()
 
     def _heartbeat_loop(self) -> None:
         """Daemon loop that registers agents, sends heartbeats, and kills cancelled jobs."""

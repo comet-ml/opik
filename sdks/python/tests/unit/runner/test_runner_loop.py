@@ -164,8 +164,11 @@ class TestSafeExecute:
             loop._lock,
         )
 
+        slot = threading.Semaphore(1)
+        slot.acquire()
         with patch.object(executor, "execute", side_effect=RuntimeError("boom")):
-            loop._safe_execute(executor, job, {})
+            loop._safe_execute(executor, job, {}, slot)
+        assert slot.acquire(blocking=False), "slot should have been released"
 
         mock_api.runners.report_job_result.assert_called_once()
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
