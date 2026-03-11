@@ -985,9 +985,20 @@ class AgentConfigsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AutomaticBlueprintUpdates {
 
-        @Test
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
+        static Stream<Arguments> excludeProjectIdsForAutoUpdate() {
+            return Stream.of(
+                    arguments(null, "null exclude set"),
+                    arguments(Set.of(), "empty exclude set"));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource("excludeProjectIdsForAutoUpdate")
         @DisplayName("Success: when new prompt version created, blueprint with that prompt is auto-updated")
-        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint() {
+        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint(
+                Set<UUID> excludeProjectIds, String description) {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1014,7 +1025,8 @@ class AgentConfigsResourceTest {
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
+                    excludeProjectIds);
             var commit2 = promptVersion2.commit();
 
             Awaitility.await().untilAsserted(() -> {
