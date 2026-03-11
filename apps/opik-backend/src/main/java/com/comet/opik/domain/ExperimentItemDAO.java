@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -343,6 +344,58 @@ class ExperimentItemDAO {
             ;
             """;
 
+    private static final String GET_EXPERIMENT_REFS_BY_TRACE_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.trace_id IN :trace_ids
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String GET_EXPERIMENT_REFS_BY_ITEM_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.id IN :item_ids
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.trace_id IN (
+                SELECT DISTINCT trace_id FROM spans FINAL
+                WHERE id IN :span_ids AND workspace_id = :workspace_id
+            )
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String FILTER_EXPERIMENT_IDS_BY_STATUS = """
+            SELECT id
+            FROM experiments FINAL
+            WHERE workspace_id = :workspace_id
+            AND id IN :experiment_ids
+            AND status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
 
@@ -521,5 +574,61 @@ class ExperimentItemDAO {
                 .bind("experiment_ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "trace_ids", traceIds, statuses);
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "item_ids", itemIds, statuses);
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "span_ids", spanIds, statuses);
+    }
+
+    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String idParamName,
+            @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses) {
+        if (ids.isEmpty() || statuses.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(sql)
+                            .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
+                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
+                        row.get("experiment_id", UUID.class),
+                        row.get("trace_id", UUID.class))));
+    }
+
+    @WithSpan
+    public Flux<UUID> filterExperimentIdsByStatus(@NonNull Set<UUID> experimentIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (experimentIds.isEmpty() || statuses.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(FILTER_EXPERIMENT_IDS_BY_STATUS)
+                            .bind("experiment_ids",
+                                    experimentIds.stream().map(UUID::toString).toArray(String[]::new))
+                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)));
     }
 }

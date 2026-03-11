@@ -2142,14 +2142,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     @Override
     public Flux<ExperimentGroupItem> findGroups(ExperimentGroupCriteria criteria) {
-        log.info("Finding experiment groups from aggregates by criteria: '{}'", criteria);
         return streamGroupQuery(FIND_GROUPS_FROM_AGGREGATES, criteria,
                 ExperimentGroupMappers::toExperimentGroupItem);
     }
 
     @Override
     public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(ExperimentGroupCriteria criteria) {
-        log.info("Finding experiment groups aggregations from aggregates by criteria: '{}'", criteria);
         return streamGroupQuery(FIND_GROUPS_AGGREGATIONS_FROM_AGGREGATES, criteria,
                 ExperimentGroupMappers::toExperimentGroupAggregationItem);
     }
@@ -2179,9 +2177,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             @NonNull DatasetItemSearchCriteria criteria,
             @NonNull UUID versionId) {
 
-        log.info("Counting dataset items with experiment items from aggregates for dataset: '{}'",
-                criteria.datasetId());
-
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(
                     SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
@@ -2210,9 +2205,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             @NonNull UUID versionId,
             int page,
             int size) {
-
-        log.info("Getting dataset items with experiment items from aggregates for dataset: '{}'",
-                criteria.datasetId());
 
         var countMono = countDatasetItemsWithExperimentItemsFromAggregates(criteria, versionId);
 
@@ -2282,9 +2274,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             @NonNull UUID versionId,
             @NonNull Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters) {
-        log.info("Getting experiment items stats from aggregates for dataset '{}', version '{}', experiments '{}'",
-                datasetId, versionId, experimentIds);
-
         return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_EXPERIMENT_ITEMS_STATS_FROM_AGGREGATES,
                     "getExperimentItemsStatsFromAggregates", workspaceId, datasetId);
