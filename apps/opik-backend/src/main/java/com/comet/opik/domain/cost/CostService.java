@@ -83,6 +83,10 @@ public class CostService {
             return DEFAULT_COST;
         }
 
+        // Strip provider prefix if present (e.g. "openai/gpt-4o" -> "gpt-4o")
+        // LiteLLM sends model names with provider prefix via gen_ai.request.model
+        modelName = parseModelName(modelName);
+
         // Try exact match first (backwards compatibility)
         String exactKey = createModelProviderKey(modelName, provider);
         ModelPrice exactMatch = modelProviderPrices.get(exactKey);

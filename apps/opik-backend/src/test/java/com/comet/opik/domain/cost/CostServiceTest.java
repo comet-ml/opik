@@ -148,6 +148,33 @@ class CostServiceTest {
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
 
+    /**
+     * Test for issue #5621: LiteLLM OTel model names with provider prefix not found in pricing table.
+     *
+     * LiteLLM sends model names with provider prefix via gen_ai.request.model
+     * (e.g. "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022").
+     * These should be stripped before lookup to match the stored keys.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithProviderPrefix")
+    void calculateCost_shouldStripProviderPrefix_issue5621(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithProviderPrefix() {
+        return Stream.of(
+                Arguments.of("openai/gpt-4o", "openai"),
+                Arguments.of("openai/gpt-4o-mini", "openai"),
+                Arguments.of("anthropic/claude-3-5-sonnet-20241022", "anthropic"),
+                Arguments.of("anthropic/claude-3-5-haiku-20241022", "anthropic"));
+    }
+
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
         return Stream.of(
                 // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
