@@ -92,6 +92,15 @@ class EvaluationSuite:
         """The underlying dataset storing suite items."""
         return self._dataset
 
+    def get_tags(self) -> List[str]:
+        """
+        Get the tags for the suite.
+
+        Returns:
+            List of tag strings.
+        """
+        return self._dataset.get_tags()
+
     def get_items(self) -> List[Dict[str, Any]]:
         """
         Retrieve suite items as a list of dictionaries.
@@ -137,13 +146,13 @@ class EvaluationSuite:
         *,
         execution_policy: Optional[execution_policy.ExecutionPolicy] = None,
         assertions: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
-        Update the suite-level assertions and/or execution policy.
+        Update the suite-level assertions, execution policy, and/or tags.
 
-        Creates a new dataset version based on the current latest version
-        with the updated configuration. Supports partial updates: any
-        parameter not provided will retain its current value.
+        Supports partial updates: any parameter not provided will retain
+        its current value.
 
         Args:
             execution_policy: New execution policy for the suite.
@@ -151,40 +160,46 @@ class EvaluationSuite:
             assertions: New suite-level assertions. Each string describes
                 an expected behavior that will be checked by an LLM.
                 If not provided, the current assertions are kept.
+            tags: Tags for the suite.
 
         Raises:
-            ValueError: If no current version exists to base the update on,
-                or if nothing to update is provided.
+            ValueError: If nothing to update is provided.
         """
         resolved = validators.resolve_evaluators(
             assertions, None, "suite-level assertions"
         )
 
-        if resolved is None and execution_policy is None:
+        if resolved is None and execution_policy is None and tags is None:
             raise ValueError(
-                "At least one of 'assertions' or "
-                "'execution_policy' must be provided."
+                "At least one of 'assertions', "
+                "'execution_policy', or 'tags' must be provided."
             )
 
-        version_info = self._dataset.get_version_info()
-        if version_info is None or version_info.id is None:
-            raise ValueError(
-                "Cannot update suite: no existing version found. "
-                "Use create_evaluation_suite() to create the suite first."
+        # Tags are a dataset-level field, so they're updated separately
+        # from assertions/execution_policy which are version-level.
+        if tags is not None:
+            self._dataset._rest_client.datasets.update_dataset(
+                id=self._dataset.id,
+                name=self._name,
+                tags=tags,
             )
 
-        if resolved is None:
-            resolved = self._dataset.get_evaluators()
-        if execution_policy is None:
-            execution_policy = self.get_execution_policy()
+        has_version_updates = resolved is not None or execution_policy is not None
+        if has_version_updates:
+            version_info = self._dataset.get_version_info()
 
-        rest_operations.update_evaluation_suite_dataset(
-            rest_client=self._dataset._rest_client,
-            dataset_id=self._dataset.id,
-            base_version_id=version_info.id,
-            evaluators=resolved,
-            exec_policy=execution_policy,
-        )
+            if resolved is None:
+                resolved = self._dataset.get_evaluators()
+            if execution_policy is None:
+                execution_policy = self.get_execution_policy()
+
+            rest_operations.update_evaluation_suite_dataset(
+                rest_client=self._dataset._rest_client,
+                dataset_id=self._dataset.id,
+                base_version_id=version_info.id,
+                evaluators=resolved,
+                exec_policy=execution_policy,
+            )
 
     def delete_items(self, item_ids: List[str]) -> None:
         """

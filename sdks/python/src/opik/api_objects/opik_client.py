@@ -993,6 +993,7 @@ class Opik:
         description: Optional[str] = None,
         assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        tags: Optional[List[str]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Create a new evaluation suite for regression testing.
@@ -1008,6 +1009,7 @@ class Opik:
                 expected behavior that will be checked by an LLM.
             execution_policy: Suite-level execution policy.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
+            tags: Optional list of tags for the suite.
 
         Returns:
             EvaluationSuite: The created evaluation suite object.
@@ -1040,6 +1042,7 @@ class Opik:
             description=description,
             evaluators=evaluators,
             exec_policy=execution_policy,
+            tags=tags,
         )
         suite_dataset = dataset.Dataset(
             name=name,
@@ -1093,12 +1096,13 @@ class Opik:
         description: Optional[str] = None,
         assertions: Optional[List[str]] = None,
         execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        tags: Optional[List[str]] = None,
     ) -> evaluation_suite.EvaluationSuite:
         """
         Get an existing evaluation suite by name or create a new one if it does not exist.
 
-        If the suite already exists and ``assertions`` or ``execution_policy``
-        are provided, a new version is created with the updated configuration
+        If the suite already exists and ``assertions``, ``execution_policy``,
+        or ``tags`` are provided, the suite is updated accordingly
         (unspecified parameters retain their current values).
 
         Args:
@@ -1107,6 +1111,7 @@ class Opik:
             assertions: Suite-level assertions. Each string describes an
                 expected behavior that will be checked by an LLM.
             execution_policy: Execution policy for the suite.
+            tags: Optional list of tags for the suite.
 
         Returns:
             EvaluationSuite: The evaluation suite object.
@@ -1120,14 +1125,20 @@ class Opik:
                     description=description,
                     execution_policy=execution_policy,
                     assertions=assertions,
+                    tags=tags,
                 )
             raise
 
-        has_updates = assertions is not None or execution_policy is not None
+        has_updates = (
+            assertions is not None
+            or execution_policy is not None
+            or tags is not None
+        )
         if has_updates:
             suite.update(
                 assertions=assertions,
                 execution_policy=execution_policy,
+                tags=tags,
             )
 
         return suite

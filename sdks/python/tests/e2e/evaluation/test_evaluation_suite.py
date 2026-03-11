@@ -1015,3 +1015,67 @@ def test_evaluation_suite__task_returns_dict_missing_keys__raises_value_error(
 
     with pytest.raises(ValueError, match="missing.*input.*output"):
         suite.run(task=bad_task, experiment_name=experiment_name, verbose=0)
+
+
+# =============================================================================
+# TAGS
+# =============================================================================
+
+
+def test_evaluation_suite__create_with_tags__tags_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that tags passed to create_evaluation_suite are persisted
+    and can be retrieved via get_evaluation_suite().
+    """
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Suite with tags",
+        tags=["regression", "v2"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["regression", "v2"]
+
+
+def test_evaluation_suite__update_tags__tags_updated(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that tags can be updated on an existing evaluation suite
+    and verified via get_evaluation_suite().
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Suite for tag update test",
+        tags=["initial"],
+    )
+
+    suite.update(tags=["updated", "new-tag"])
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["new-tag", "updated"]
+
+
+def test_get_or_create_evaluation_suite__with_tags__tags_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create passes tags on creation and updates.
+    """
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        tags=["v1"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert suite.get_tags() == ["v1"]
+
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        tags=["v2", "production"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["production", "v2"]
