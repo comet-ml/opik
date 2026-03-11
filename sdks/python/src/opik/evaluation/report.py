@@ -211,6 +211,16 @@ def display_suite_results(
     rate_text.stylize("bold", 0, 18)
     rate_text = align.Align.left(rate_text)
 
+    # Compute per-item timing averages
+    task_times = [
+        tr.task_execution_time
+        for tr in test_results
+        if tr.task_execution_time is not None
+    ]
+    scoring_times = [
+        tr.scoring_time for tr in test_results if tr.scoring_time is not None
+    ]
+
     content = table.Table.grid()
     content.add_row(text.Text(""))
     content.add_row(time_text)
@@ -218,6 +228,23 @@ def display_suite_results(
     content.add_row(pass_text)
     content.add_row(items_text)
     content.add_row(rate_text)
+
+    if task_times and scoring_times:
+        avg_task = sum(task_times) / len(task_times)
+        avg_scoring = sum(scoring_times) / len(scoring_times)
+        avg_total = avg_task + avg_scoring
+
+        avg_task_text = text.Text(f"Avg task time:     {avg_task:.2f}s")
+        avg_task_text.stylize("bold", 0, 18)
+        avg_scoring_text = text.Text(f"Avg scoring time:  {avg_scoring:.2f}s")
+        avg_scoring_text.stylize("bold", 0, 18)
+        avg_total_text = text.Text(f"Avg total time:    {avg_total:.2f}s")
+        avg_total_text.stylize("bold", 0, 18)
+
+        content.add_row(text.Text(""))
+        content.add_row(align.Align.left(avg_task_text))
+        content.add_row(align.Align.left(avg_scoring_text))
+        content.add_row(align.Align.left(avg_total_text))
 
     if verbose >= 2 and assertion_total_count:
         # Sort by pass rate ascending (most failed first)
