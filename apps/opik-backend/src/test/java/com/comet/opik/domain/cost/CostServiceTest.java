@@ -69,7 +69,7 @@ class CostServiceTest {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.putObject("cost")
                 .put("currency", "USD")
-                .put("total_tokens", 0.42);
+                .put("total_cost", 0.42);
 
         BigDecimal cost = CostService.calculateCost("unknown-model", "unknown", Map.of(), metadata);
 
