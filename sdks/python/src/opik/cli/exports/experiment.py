@@ -1,10 +1,11 @@
 """Experiment export functionality."""
 
 import sys
+import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
+from typing import Any, Optional, List, Dict, Tuple
 
 import click
 from rich.console import Console
@@ -45,6 +46,7 @@ def _fetch_trace_data(
     client: opik.Opik,
     trace_id: str,
     project_name_cache: dict[str, str],
+    cache_lock: threading.Lock,
     debug: bool,
 ) -> Optional[Tuple[str, dict, str]]:
     """Fetch trace and span data for a single trace ID.
@@ -60,11 +62,16 @@ def _fetch_trace_data(
         if not trace.project_id:
             return None
 
-        # Get project name (use cache if available)
+        # Get project name (use cache if available).
+        # Fast path: check without the lock first (already-cached entries).
+        # If missing, fetch without holding the lock (slow API call), then
+        # use setdefault so that the first writer wins in case two threads
+        # raced on the same project_id.
         if trace.project_id not in project_name_cache:
             try:
                 project = client.get_project(trace.project_id)
-                project_name_cache[trace.project_id] = project.name
+                with cache_lock:
+                    project_name_cache.setdefault(trace.project_id, project.name)
             except Exception as e:
                 if debug:
                     debug_print(
@@ -176,8 +183,11 @@ def export_traces_by_ids(
             f"Exporting {len(trace_ids)} trace(s) in batches of {BATCH_SIZE}", debug
         )
 
-    # Cache project names to avoid repeated API calls (shared across threads)
+    # Cache project names to avoid repeated API calls (shared across threads).
+    # The lock prevents duplicate API calls when two threads miss the cache
+    # simultaneously for the same project_id.
     project_name_cache: dict[str, str] = {}
+    cache_lock = threading.Lock()
 
     # Use progress bar for trace export
     with Progress(
@@ -215,6 +225,7 @@ def export_traces_by_ids(
                             client,
                             trace_id,
                             project_name_cache,
+                            cache_lock,
                             debug,
                         )
                     )
@@ -291,8 +302,13 @@ def export_experiment_by_id(
     debug: bool,
     format: str,
     trace_ids_collector: Optional[set[str]] = None,
+    experiment_obj: Optional[Any] = None,
 ) -> tuple[Dict[str, int], int]:
     """Export a specific experiment by ID, including related datasets and traces.
+
+    Args:
+        experiment_obj: Optional pre-fetched experiment object. When provided the
+            ``client.get_experiment_by_id`` call is skipped, saving one API round-trip.
 
     Returns:
         Tuple of (stats dictionary, file_written flag) where:
@@ -300,14 +316,15 @@ def export_experiment_by_id(
         - file_written: 1 if experiment file was written, 0 if skipped or error
     """
     try:
-        console.print(f"[blue]Fetching experiment by ID: {experiment_id}[/blue]")
-
-        # Get the specific experiment by ID
-        experiment = client.get_experiment_by_id(experiment_id)
-        if not experiment:
-            console.print(f"[red]Experiment '{experiment_id}' not found[/red]")
-            # Return empty stats and 0 for file written when not found
-            return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
+        if experiment_obj is not None:
+            experiment = experiment_obj
+            debug_print(f"Using pre-fetched experiment: {experiment.name}", debug)
+        else:
+            console.print(f"[blue]Fetching experiment by ID: {experiment_id}[/blue]")
+            experiment = client.get_experiment_by_id(experiment_id)
+            if not experiment:
+                console.print(f"[red]Experiment '{experiment_id}' not found[/red]")
+                return ({"datasets": 0, "prompts": 0, "traces": 0}, 0)
 
         debug_print(f"Found experiment: {experiment.name}", debug)
 
@@ -518,6 +535,7 @@ def export_experiment_by_name(
                 debug,
                 format,
                 all_trace_ids,
+                experiment_obj=experiment,
             )
 
             # result is a tuple: (stats_dict, file_written_flag)
