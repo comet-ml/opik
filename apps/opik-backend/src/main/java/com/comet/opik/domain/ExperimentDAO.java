@@ -317,8 +317,9 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <endif>
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -333,8 +334,9 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <endif>
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -590,8 +592,9 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <endif>
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -606,8 +609,9 @@ class ExperimentDAO {
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>
                 AND project_id IN :target_project_ids
-                <endif>
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -908,8 +912,10 @@ class ExperimentDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                <if(has_target_projects)>AND project_id IN :target_project_ids
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -922,8 +928,10 @@ class ExperimentDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                <if(has_target_projects)>AND project_id IN :target_project_ids
+                <else>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
