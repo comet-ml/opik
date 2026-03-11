@@ -1,6 +1,7 @@
 """Export all workspace data."""
 
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,12 +24,12 @@ from opik.api_objects.prompt import Prompt, ChatPrompt
 from .dataset import export_single_dataset
 from .experiment import (
     export_experiment_by_id,
-    _export_collected_trace_ids,
+    export_collected_trace_ids,
 )
 from .project import export_single_project
 from .prompt import export_single_prompt
 from .utils import debug_print, print_export_summary
-from ..utils import validate_include
+from ..include_validation import validate_include
 
 console = Console()
 
@@ -356,9 +357,13 @@ def _export_all_experiments(
     ) as progress:
         task = progress.add_task("Exporting experiments...", total=len(all_experiments))
 
+        semaphore = threading.Semaphore(max_workers * 2)
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_exp = {
-                executor.submit(
+            future_to_exp: dict = {}
+            for exp in all_experiments:
+                semaphore.acquire()
+                future = executor.submit(
                     export_experiment_by_id,
                     client,
                     experiments_dir,
@@ -368,9 +373,8 @@ def _export_all_experiments(
                     debug,
                     format,
                     None,  # Don't pass shared set; collect from manifest in main thread
-                ): exp
-                for exp in all_experiments
-            }
+                )
+                future_to_exp[future] = exp
             for future in as_completed(future_to_exp):
                 exp = future_to_exp[future]
                 try:
@@ -390,12 +394,13 @@ def _export_all_experiments(
                         f"[red]Error exporting experiment '{exp.name}': {e}[/red]"
                     )
                 finally:
+                    semaphore.release()
                     progress.update(
                         task, advance=1, description=f"Experiment: {exp.name}"
                     )
 
     # Batch-export all traces collected from experiments
-    traces_exported, traces_skipped = _export_collected_trace_ids(
+    traces_exported, traces_skipped = export_collected_trace_ids(
         client,
         workspace_root,
         all_trace_ids,

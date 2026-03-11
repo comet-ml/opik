@@ -27,18 +27,22 @@ from opik.api_objects.prompt.types import PromptType
 
 
 class TestBuildImportMetadata:
-    def test_no_matching_fields_no_existing_metadata_returns_none(self):
+    def test_build_import_metadata__no_matching_fields_no_existing_metadata__returns_none(
+        self,
+    ):
         source = {"name": "my-trace"}
         result = build_import_metadata(source, _TRACE_IMPORT_FIELDS, None)
         assert result is None
 
-    def test_no_matching_fields_returns_existing_metadata_unchanged(self):
+    def test_build_import_metadata__no_matching_fields_with_existing__returns_existing_unchanged(
+        self,
+    ):
         source = {"name": "my-trace"}
         existing = {"key": "value"}
         result = build_import_metadata(source, _TRACE_IMPORT_FIELDS, existing)
         assert result is existing
 
-    def test_fields_present_no_existing_metadata(self):
+    def test_build_import_metadata__fields_present_no_existing__happyflow(self):
         source = {"created_by": "alice", "created_at": "2024-01-01T00:00:00Z"}
         result = build_import_metadata(source, ["created_by", "created_at"], None)
         assert result == {
@@ -46,7 +50,9 @@ class TestBuildImportMetadata:
             "_import_created_at": "2024-01-01T00:00:00Z",
         }
 
-    def test_fields_present_merged_with_existing_metadata(self):
+    def test_build_import_metadata__fields_present_merged_with_existing__happyflow(
+        self,
+    ):
         source = {"created_by": "bob", "ttft": 0.5}
         existing = {"custom_key": "custom_val"}
         result = build_import_metadata(source, ["created_by", "ttft"], existing)
@@ -56,24 +62,26 @@ class TestBuildImportMetadata:
             "_import_ttft": 0.5,
         }
 
-    def test_none_field_values_are_skipped(self):
+    def test_build_import_metadata__none_field_values__are_skipped(self):
         source = {"created_by": None, "last_updated_by": "carol"}
         result = build_import_metadata(source, ["created_by", "last_updated_by"], None)
         assert result == {"_import_last_updated_by": "carol"}
 
-    def test_all_none_values_returns_existing(self):
+    def test_build_import_metadata__all_none_values_with_existing__returns_existing(
+        self,
+    ):
         source = {"created_by": None, "created_at": None}
         existing = {"x": 1}
         result = build_import_metadata(source, ["created_by", "created_at"], existing)
         assert result is existing
 
-    def test_does_not_mutate_existing_metadata(self):
+    def test_build_import_metadata__with_existing__does_not_mutate_existing(self):
         source = {"created_by": "dave"}
         existing = {"orig": "val"}
         build_import_metadata(source, ["created_by"], existing)
         assert existing == {"orig": "val"}
 
-    def test_span_fields_subset(self):
+    def test_build_import_metadata__span_fields_subset__happyflow(self):
         source = {
             "created_at": "2024-01-01",
             "created_by": "user",
@@ -90,7 +98,7 @@ class TestBuildImportMetadata:
             "_import_ttft",
         }
 
-    def test_experiment_fields_subset(self):
+    def test_build_import_metadata__experiment_fields_subset__happyflow(self):
         source = {
             "created_at": "2024-01-01",
             "created_by": "user",

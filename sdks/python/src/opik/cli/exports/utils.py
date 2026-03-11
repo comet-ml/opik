@@ -3,7 +3,7 @@
 import csv
 import dataclasses
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -15,110 +15,20 @@ from opik.api_objects.experiment.experiment_item import ExperimentItemContent
 
 console = Console()
 
-
-def _compare_values(a: Any, operator: str, b: Any) -> bool:
-    """Compare two values using the given operator."""
-    if operator == "=":
-        return a == b
-    if operator == "!=":
-        return a != b
-    if operator == ">":
-        return a > b
-    if operator == ">=":
-        return a >= b
-    if operator == "<":
-        return a < b
-    if operator == "<=":
-        return a <= b
-    return False
+_TRACE_FILE_PREFIX = "trace_"
 
 
-def matches_trace_filter(trace_dict: dict, filter_string: str) -> bool:
-    """Evaluate an OQL filter string against a trace dict client-side.
+def extract_trace_id_from_filename(trace_file: Path) -> Optional[str]:
+    """Return the trace ID embedded in a ``trace_<uuid>.<ext>`` filename stem.
 
-    Used when filtering experiment traces that are fetched by ID rather than
-    via a server-side paginated query (which handles filtering natively).
-    Returns True if the trace passes all filter clauses, False otherwise.
+    Returns ``None`` when the filename does not match the expected pattern or
+    the extracted ID is empty.
     """
-    from opik.api_objects.opik_query_language import OpikQueryLanguage
-
-    try:
-        oql = OpikQueryLanguage.for_traces(filter_string)
-        expressions = oql.get_filter_expressions()
-    except ValueError:
-        return True  # Don't silently drop traces on parse errors
-
-    if not expressions:
-        return True
-
-    for expr in expressions:
-        field = expr.get("field", "")
-        operator = expr.get("operator", "")
-        value = expr.get("value", "")
-        field_type = expr.get("type", "string")
-        key = expr.get("key", "")
-
-        # Resolve field value: dict-key access (e.g. metadata.foo), dotted
-        # composite fields (e.g. usage.total_tokens), or plain fields.
-        if key:
-            parent = trace_dict.get(field)
-            field_value = parent.get(key) if isinstance(parent, dict) else None
-        elif "." in field:
-            parts = field.split(".", 1)
-            parent = trace_dict.get(parts[0], {})
-            field_value = parent.get(parts[1]) if isinstance(parent, dict) else None
-        else:
-            field_value = trace_dict.get(field)
-
-        if operator in ("is_empty", "is_not_empty"):
-            is_empty = field_value is None or field_value in ("", {}, [])
-            if operator == "is_empty" and not is_empty:
-                return False
-            if operator == "is_not_empty" and is_empty:
-                return False
-            continue
-
-        if field_value is None:
-            return False
-
-        if field_type == "date_time":
-            try:
-                if isinstance(field_value, datetime):
-                    fv: datetime = (
-                        field_value
-                        if field_value.tzinfo
-                        else field_value.replace(tzinfo=timezone.utc)
-                    )
-                else:
-                    fv = datetime.fromisoformat(str(field_value).replace("Z", "+00:00"))
-                fv_cmp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                result = _compare_values(fv, operator, fv_cmp)
-            except Exception:
-                result = False
-        elif field_type == "number":
-            try:
-                result = _compare_values(
-                    float(str(field_value)), operator, float(value)
-                )
-            except Exception:
-                result = False
-        else:
-            fv_str = str(field_value)
-            if operator == "contains":
-                result = value in fv_str
-            elif operator == "not_contains":
-                result = value not in fv_str
-            elif operator == "starts_with":
-                result = fv_str.startswith(value)
-            elif operator == "ends_with":
-                result = fv_str.endswith(value)
-            else:
-                result = _compare_values(fv_str, operator, value)
-
-        if not result:
-            return False
-
-    return True
+    stem = trace_file.stem  # e.g. "trace_<uuid>"
+    if not stem.startswith(_TRACE_FILE_PREFIX):
+        return None
+    trace_id = stem[len(_TRACE_FILE_PREFIX) :]
+    return trace_id if trace_id else None
 
 
 def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:

@@ -18,6 +18,7 @@ from opik.rest_api.types.project_public import ProjectPublic
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
+    extract_trace_id_from_filename,
     matches_name_pattern,
     print_export_summary,
     trace_to_csv_rows,
@@ -143,7 +144,9 @@ def export_traces(
             )
     else:
         already_downloaded = {
-            p.stem[len("trace_") :] for p in project_dir.glob(f"trace_*.{ext}")
+            tid
+            for p in project_dir.glob(f"trace_*.{ext}")
+            if (tid := extract_trace_id_from_filename(p))
         }
         if debug:
             debug_print(
@@ -623,7 +626,9 @@ def export_single_project(
                             debug,
                         )
                     for p in existing:
-                        manifest.mark_trace_downloaded(p.stem[len("trace_") :])
+                        trace_id = extract_trace_id_from_filename(p)
+                        if trace_id:
+                            manifest.mark_trace_downloaded(trace_id)
                     manifest.save()
                     # Mark as completed using the newest file's mtime as the cutoff.
                     # This lets the incremental filter kick in for the current run too,

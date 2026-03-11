@@ -24,6 +24,7 @@ from opik.rest_api.types.experiment_item import ExperimentItem
 from rich.console import Console
 
 from ..migration_manifest import MigrationManifest
+from ..exports.utils import extract_trace_id_from_filename
 from .utils import (
     handle_trace_reference,
     translate_trace_id,
@@ -1107,8 +1108,7 @@ def import_experiments_from_directory(
                     continue
                 project_name = project_dir.name
                 for trace_file in project_dir.glob("trace_*.json"):
-                    stem = trace_file.stem  # e.g. "trace_<uuid>"
-                    original_trace_id = stem[len("trace_") :]
+                    original_trace_id = extract_trace_id_from_filename(trace_file)
                     if original_trace_id:
                         trace_to_project_map[original_trace_id] = project_name
 

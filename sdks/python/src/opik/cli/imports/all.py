@@ -15,7 +15,7 @@ from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
 from .utils import debug_print, print_import_summary
-from ..utils import validate_include
+from ..include_validation import validate_include
 
 console = Console()
 

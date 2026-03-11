@@ -23,13 +23,14 @@ from opik.cli.export_manifest import ExportManifest
 from .utils import (
     create_experiment_data_structure,
     debug_print,
-    matches_trace_filter,
+    extract_trace_id_from_filename,
     write_json_data,
     write_csv_data,
     print_export_summary,
     should_skip_file,
     trace_to_csv_rows,
 )
+from .trace_filter import matches_trace_filter
 from .dataset import export_experiment_datasets
 from .prompt import (
     export_related_prompts_by_name,
@@ -169,13 +170,13 @@ def _scan_downloaded_trace_ids(workspace_root: Path, format: str) -> Set[str]:
     if not projects_dir.is_dir():
         return downloaded
     for trace_file in projects_dir.glob(f"*/trace_*.{ext}"):
-        stem = trace_file.stem  # "trace_<trace_id>"
-        if stem.startswith("trace_"):
-            downloaded.add(stem[6:])
+        trace_id = extract_trace_id_from_filename(trace_file)
+        if trace_id:
+            downloaded.add(trace_id)
     return downloaded
 
 
-def _export_collected_trace_ids(
+def export_collected_trace_ids(
     client: opik.Opik,
     workspace_root: Path,
     all_trace_ids: set,
@@ -329,7 +330,6 @@ def export_traces_by_ids(
                                     trace_data.get("trace", {}), filter_string
                                 ):
                                     skipped_count += 1
-                                    progress.update(task, advance=1)
                                     continue
                                 fetched_traces[fetched_trace_id] = (
                                     trace_data,
@@ -725,7 +725,7 @@ def export_experiment_by_name(
             if len(experiments) == 1
             else None
         )
-        traces_exported, traces_skipped = _export_collected_trace_ids(
+        traces_exported, traces_skipped = export_collected_trace_ids(
             client,
             workspace_root,
             all_trace_ids,
