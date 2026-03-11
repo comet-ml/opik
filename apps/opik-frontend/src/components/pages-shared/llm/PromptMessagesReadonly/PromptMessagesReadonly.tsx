@@ -1,5 +1,8 @@
 import React from "react";
 import capitalize from "lodash/capitalize";
+import { cn } from "@/lib/utils";
+import { useHeightTruncation } from "@/hooks/useHeightTruncation";
+import { Button } from "@/components/ui/button";
 import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
@@ -11,6 +14,7 @@ export interface ChatMessage {
 
 interface PromptMessageCardProps {
   message: ChatMessage;
+  truncate?: boolean;
 }
 
 type MediaItem = {
@@ -81,14 +85,21 @@ const getTextAndMedia = (
   return { text: "", images: [], videos: [], audios: [] };
 };
 
+const MAX_LINES = 3;
+
 export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
   message,
+  truncate = false,
 }) => {
   const { text, images, videos, audios } = React.useMemo(
     () => getTextAndMedia(message.content),
     [message.content],
   );
   const hasMedia = images.length > 0 || videos.length > 0 || audios.length > 0;
+  const { ref, isTruncated, isExpanded, toggle } = useHeightTruncation(
+    MAX_LINES,
+    truncate,
+  );
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
@@ -98,9 +109,25 @@ export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
         </span>
       </div>
       {text && (
-        <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+        <div
+          ref={ref}
+          className={cn(
+            "comet-body-s whitespace-pre-wrap break-words text-foreground",
+            truncate && !isExpanded && "line-clamp-3",
+          )}
+        >
           {text}
         </div>
+      )}
+      {isTruncated && (
+        <Button
+          variant="tableLink"
+          size="sm"
+          onClick={toggle}
+          className="h-auto self-start p-0 text-xs"
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </Button>
       )}
       {hasMedia && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -115,10 +142,12 @@ export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
 
 interface PromptMessagesReadonlyProps {
   messages: ChatMessage[];
+  truncate?: boolean;
 }
 
 const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
   messages,
+  truncate = false,
 }) => {
   if (messages.length === 0) {
     return null;
@@ -127,7 +156,11 @@ const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
   return (
     <div className="flex flex-col gap-2">
       {messages.map((message, index) => (
-        <PromptMessageCard key={`${message.role}-${index}`} message={message} />
+        <PromptMessageCard
+          key={`${message.role}-${index}`}
+          message={message}
+          truncate={truncate}
+        />
       ))}
     </div>
   );

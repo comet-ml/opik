@@ -78,6 +78,7 @@ import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import ConfigurationVersionCell from "@/components/shared/DataTableCells/ConfigurationVersionCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
@@ -97,6 +98,9 @@ import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import useConfigVersionMap from "@/api/agent-configs/useConfigVersionMap";
+import { isAgentConfigurationMetadata } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
+import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -132,6 +136,8 @@ const formatSpanScoreLabel = (scoreName: string): string => {
 const parseSpanScoreName = (label: string): string => {
   return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
 };
+
+const COLUMN_CONFIGURATION_VERSION_ID = "configuration_version";
 
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -303,6 +309,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_EXPERIMENT_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
+  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
@@ -425,6 +432,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
+  const isAgentConfigurationEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
+  );
+
+  const versionMap = useConfigVersionMap(projectId, {
+    enabled: isAgentConfigurationEnabled,
+  });
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -937,6 +951,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 }),
               },
             },
+            ...(isAgentConfigurationEnabled
+              ? [
+                  {
+                    id: COLUMN_CONFIGURATION_VERSION_ID,
+                    label: "Configuration",
+                    type: COLUMN_TYPE.string,
+                    sortable: false,
+                    cell: ConfigurationVersionCell as never,
+                    accessorFn: (row: BaseTraceData) => {
+                      const agentConfig = (
+                        row.metadata as Record<string, unknown>
+                      )?.[AGENT_CONFIGURATION_METADATA_KEY];
+                      if (!isAgentConfigurationMetadata(agentConfig))
+                        return "-";
+                      const version = versionMap[agentConfig.blueprint_id];
+                      return version !== undefined ? `v${version}` : "-";
+                    },
+                  },
+                ]
+              : []),
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -977,7 +1011,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
+  }, [
+    type,
+    handleThreadIdClick,
+    isGuardrailsEnabled,
+    isAgentConfigurationEnabled,
+    versionMap,
+  ]);
 
   const filtersColumnData = useMemo(() => {
     return [
