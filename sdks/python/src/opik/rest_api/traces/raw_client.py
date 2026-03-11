@@ -1111,7 +1111,7 @@ class RawTracesClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
-        exclude_category_name: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
@@ -1121,7 +1121,7 @@ class RawTracesClient:
         ----------
         project_id : typing.Optional[str]
 
-        exclude_category_name : typing.Optional[str]
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1136,7 +1136,7 @@ class RawTracesClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "exclude_category_name": exclude_category_name,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -3213,7 +3213,7 @@ class AsyncRawTracesClient:
         self,
         *,
         project_id: typing.Optional[str] = None,
-        exclude_category_name: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
@@ -3223,7 +3223,7 @@ class AsyncRawTracesClient:
         ----------
         project_id : typing.Optional[str]
 
-        exclude_category_name : typing.Optional[str]
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3238,7 +3238,7 @@ class AsyncRawTracesClient:
             method="GET",
             params={
                 "project_id": project_id,
-                "exclude_category_name": exclude_category_name,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )

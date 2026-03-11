@@ -67,7 +67,7 @@ class AgentConfigsClient:
         from Opik import AgentBlueprintWrite
         from Opik import AgentConfigValueWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.agent_configs.create_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', value='value', type="string", )], ), )
+        client.agent_configs.create_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
         """
         _response = self._raw_client.create_agent_config(
             blueprint=blueprint,
@@ -338,7 +338,7 @@ class AsyncAgentConfigsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.agent_configs.create_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', value='value', type="string", )], ), )
+            await client.agent_configs.create_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_agent_config(

@@ -6,7 +6,7 @@ export interface AgentConfigValuePublic {
     id?: string;
     projectId?: string;
     key: string;
-    value: string;
+    value?: string;
     type: OpikApi.AgentConfigValuePublicType;
     description?: string;
     validFromBlueprintId?: string;
