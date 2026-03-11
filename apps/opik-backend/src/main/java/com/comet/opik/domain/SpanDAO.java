@@ -828,9 +828,11 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
+                <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                <else>
                 <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                <endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
               )
@@ -853,9 +855,11 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
+                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                  <else>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -874,9 +878,11 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter) <endif>
+                  <if(span_id_prefilter)> AND entity_id IN (SELECT id FROM span_id_prefilter)
+                  <else>
                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2210,9 +2216,8 @@ class SpanDAO {
 
             boolean sortHasFeedbackScores = Optional
                     .ofNullable(sortingQueryBuilder.toOrderBySql(spanSearchCriteria.sortingFields()))
-                    .map(s -> s.contains("feedback_scores"))
+                    .map(sortFields -> sortFields.contains("feedback_scores"))
                     .orElse(false);
-
             if (shouldUseSpanIdPrefilter(spanSearchCriteria) && !sortHasFeedbackScores) {
                 template.add("span_id_prefilter", true);
             }
@@ -2344,22 +2349,27 @@ class SpanDAO {
     }
 
     private boolean shouldUseSpanIdPrefilter(SpanSearchCriteria criteria) {
-        boolean hasFeedbackScoreDependency = Optional.ofNullable(criteria.filters())
-                .map(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
-                        .isPresent()
-                        || filterQueryBuilder
-                                .toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
-                                .isPresent())
+        boolean hasFeedbackScoreFilters = Optional.ofNullable(criteria.filters())
+                .map(filters -> FilterQueryBuilder.toAnalyticsDbFilters(
+                        filters, FilterStrategy.FEEDBACK_SCORES).isPresent()
+                        || FilterQueryBuilder
+                                .toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY).isPresent())
                 .orElse(false);
 
+        // Only activate for filters that narrow beyond what time-range alone provides.
+        // uuidFromTime/uuidToTime are excluded: when time-range is the only filter,
+        // the if/else fallback applies it directly to feedback_scores — the prefilter
+        // would add an extra spans scan for no additional selectivity.
+        // lastReceivedSpanId is excluded: it's a pagination cursor, not a semantic filter.
         boolean hasNarrowingFilters = criteria.traceId() != null
                 || criteria.type() != null
                 || criteria.searchText() != null
                 || Optional.ofNullable(criteria.filters())
-                        .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN))
+                        .flatMap(filters -> FilterQueryBuilder.toAnalyticsDbFilters(
+                                filters, FilterStrategy.SPAN))
                         .isPresent();
 
-        return !hasFeedbackScoreDependency && hasNarrowingFilters;
+        return !hasFeedbackScoreFilters && hasNarrowingFilters;
     }
 
     private void bindSearchCriteria(Statement statement, SpanSearchCriteria spanSearchCriteria) {
