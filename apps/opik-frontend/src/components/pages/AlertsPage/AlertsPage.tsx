@@ -43,6 +43,7 @@ import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/AlertsPage/AlertsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const getRowId = (a: Alert) => a.id!;
 
@@ -190,6 +191,10 @@ const AlertsPage: React.FunctionComponent = () => {
     },
   );
 
+  const {
+    permissions: { canUpdateAlerts },
+  } = usePermissions();
+
   const [page, setPage] = useState(1);
   const [size, setSize] = useLocalStorageState<number>(PAGINATION_SIZE_KEY, {
     defaultValue: 10,
@@ -281,11 +286,15 @@ const AlertsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: AlertsRowActionsCell,
-      }),
+      ...(canUpdateAlerts
+        ? [
+            generateActionsColumDef({
+              cell: AlertsRowActionsCell,
+            }),
+          ]
+        : []),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy]);
+  }, [columnsOrder, selectedColumns, sortableBy, canUpdateAlerts]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -356,9 +365,11 @@ const AlertsPage: React.FunctionComponent = () => {
               order={columnsOrder}
               onOrderChange={setColumnsOrder}
             ></ColumnsButton>
-            <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-              Create new alert
-            </Button>
+            {canUpdateAlerts && (
+              <Button variant="default" size="sm" onClick={handleNewAlertClick}>
+                Create new alert
+              </Button>
+            )}
           </div>
         </div>
         <DataTable
@@ -374,7 +385,7 @@ const AlertsPage: React.FunctionComponent = () => {
           columnPinning={DEFAULT_COLUMN_PINNING}
           noData={
             <DataTableNoData title={noDataText}>
-              {noData && (
+              {noData && canUpdateAlerts && (
                 <Button variant="link" onClick={handleNewAlertClick}>
                   Create new alert
                 </Button>

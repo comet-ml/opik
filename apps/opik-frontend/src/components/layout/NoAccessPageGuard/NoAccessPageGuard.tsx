@@ -6,11 +6,15 @@ import { Button } from "@/components/ui/button";
 interface NoAccessPageGuardProps {
   canViewPage?: boolean | null;
   resourceName?: string;
+  message?: string;
+  children?: React.ReactNode;
 }
 
 const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
   canViewPage,
   resourceName = "this resource",
+  message,
+  children,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const router = useRouter();
@@ -36,7 +40,10 @@ const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">403</div>}
         title="Access denied"
-        message={`You don't have permissions to view ${resourceName} in this workspace.`}
+        message={
+          message ??
+          `You don't have permissions to view ${resourceName} in this workspace.`
+        }
       >
         <div className="flex gap-2 pt-5">
           <Button onClick={handleGoHome}>Go to home</Button>
@@ -50,7 +57,7 @@ const NoAccessPageGuard: React.FC<NoAccessPageGuardProps> = ({
     );
   }
 
-  return <Outlet />;
+  return children ?? <Outlet />;
 };
 
 export default NoAccessPageGuard;
