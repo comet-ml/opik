@@ -18,17 +18,21 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterConstructorMapper(AgentConfig.class)
@@ -305,11 +309,15 @@ interface AgentConfigDAO {
                 AND acv.type = 'prompt'
                 AND acv.valid_to_blueprint_id IS NULL
                 AND acv.value IN (SELECT commit FROM prompt_commits)
+                <if(exclude_project_ids)> AND ab.project_id NOT IN (<exclude_project_ids>) <endif>
             """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
     List<BlueprintValueReference> findProjectsWithOutdatedPromptReferences(
             @Bind("workspace_id") String workspaceId,
             @Bind("prompt_id") UUID promptId,
-            @Bind("new_commit") String newCommit);
+            @Bind("new_commit") String newCommit,
+            @Define("exclude_project_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "exclude_project_ids") Set<UUID> excludeProjectIds);
 
     @SqlQuery("""
             SELECT

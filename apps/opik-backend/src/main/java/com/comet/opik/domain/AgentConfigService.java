@@ -47,7 +47,8 @@ public interface AgentConfigService {
             String workspaceId,
             UUID promptId,
             String newCommit,
-            String userName);
+            String userName,
+            Set<UUID> excludeProjectIds);
 }
 
 @Slf4j
@@ -443,16 +444,18 @@ class AgentConfigServiceImpl implements AgentConfigService {
             @NonNull String workspaceId,
             @NonNull UUID promptId,
             @NonNull String newCommit,
-            @NonNull String userName) {
+            @NonNull String userName,
+            Set<UUID> excludeProjectIds) {
 
-        log.info("Updating blueprints for new prompt version: promptId='{}', commit='{}', workspace='{}'",
-                promptId, newCommit, workspaceId);
+        log.info(
+                "Updating blueprints for new prompt version: promptId='{}', commit='{}', workspace='{}', excludeProjects='{}'",
+                promptId, newCommit, workspaceId, excludeProjectIds);
 
         List<UUID> createdBlueprintIds = transactionTemplate.inTransaction(WRITE, handle -> {
             AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
             List<AgentConfigDAO.BlueprintValueReference> references = dao
-                    .findProjectsWithOutdatedPromptReferences(workspaceId, promptId, newCommit);
+                    .findProjectsWithOutdatedPromptReferences(workspaceId, promptId, newCommit, excludeProjectIds);
 
             if (references.isEmpty()) {
                 log.info("No blueprints to update for prompt '{}' with commit '{}'", promptId, newCommit);

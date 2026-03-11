@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
-import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -48,6 +47,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -985,9 +985,20 @@ class AgentConfigsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AutomaticBlueprintUpdates {
 
-        @Test
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
+        static Stream<Arguments> excludeProjectIdsForAutoUpdate() {
+            return Stream.of(
+                    arguments(null, "null exclude set"),
+                    arguments(Set.of(), "empty exclude set"));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource("excludeProjectIdsForAutoUpdate")
         @DisplayName("Success: when new prompt version created, blueprint with that prompt is auto-updated")
-        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint() {
+        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint(
+                Set<UUID> excludeProjectIds, String description) {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1014,7 +1025,8 @@ class AgentConfigsResourceTest {
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
+                    excludeProjectIds);
             var commit2 = promptVersion2.commit();
 
             Awaitility.await().untilAsserted(() -> {
@@ -1231,8 +1243,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: no blueprint update when prompt version created with action=NO_ACTION")
-        void createPromptVersion__whenActionIsNoAction__thenBlueprintNotUpdated() throws InterruptedException {
+        @DisplayName("Success: no blueprint update when project is excluded via excludeBlueprintUpdateForProjects")
+        void createPromptVersion__whenProjectExcluded__thenBlueprintNotUpdated() throws InterruptedException {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1260,7 +1272,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
-                    PromptVersionAction.NO_ACTION);
+                    Set.of(projectId));
 
             Thread.sleep(2000);
 
