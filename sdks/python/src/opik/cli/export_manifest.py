@@ -83,7 +83,7 @@ class ExportManifest:
         conn = sqlite3.connect(
             str(self.manifest_file),
             isolation_level=None,
-            check_same_thread=True,
+            check_same_thread=False,
         )
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")

@@ -436,11 +436,11 @@ def export_experiment_by_id(
             )
             manifest.reset()
 
-        # Fast path: if the manifest records a completed export, we already
-        # have the full trace-ID list — skip the slow get_items() API call.
-        # Guard: also verify the experiment JSON file still exists on disk so
-        # that a deleted file doesn't keep the export permanently cached.
-        if manifest.is_completed and not force:
+        # Fast path: if the manifest already has stored trace IDs AND the experiment
+        # JSON file exists on disk, skip all API calls (get_experiment_by_id +
+        # get_items).  This covers both completed and in_progress manifest states —
+        # e.g. a previous run that fetched items but crashed before finishing traces.
+        if not force:
             stored_ids = manifest.get_all_trace_ids()
             experiment_files = list(
                 output_dir.glob(f"experiment_*_{experiment_id}.json")
@@ -449,8 +449,8 @@ def export_experiment_by_id(
                 if trace_ids_collector is not None:
                     trace_ids_collector.update(stored_ids)
                 debug_print(
-                    f"Manifest complete: skipping get_items() for experiment "
-                    f"{experiment_id} ({len(stored_ids)} trace IDs cached)",
+                    f"Manifest has stored IDs + file exists: skipping API calls for "
+                    f"experiment {experiment_id} ({len(stored_ids)} trace IDs cached)",
                     debug,
                 )
                 _empty: Dict[str, int] = {
@@ -463,11 +463,11 @@ def export_experiment_by_id(
                 }
                 return (_empty, 0, manifest)
             elif stored_ids is not None and not experiment_files:
-                # Manifest says completed but the experiment file was deleted.
+                # Manifest has IDs but the experiment file was deleted.
                 # Reset and fall through to a full re-export.
                 debug_print(
-                    f"Manifest complete but experiment file missing for {experiment_id}; "
-                    "resetting manifest and re-exporting.",
+                    f"Manifest has stored IDs but experiment file missing for "
+                    f"{experiment_id}; resetting manifest and re-exporting.",
                     debug,
                 )
                 manifest.reset()

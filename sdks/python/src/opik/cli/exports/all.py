@@ -328,6 +328,7 @@ def _export_all_experiments(
     debug: bool,
     format: str,
     filter_string: Optional[str] = None,
+    max_workers: int = 10,
 ) -> tuple[int, int, int, int]:
     """Export all experiments. Returns (exported, skipped, traces_exported, traces_skipped)."""
     exported = 0
@@ -355,10 +356,10 @@ def _export_all_experiments(
     ) as progress:
         task = progress.add_task("Exporting experiments...", total=len(all_experiments))
 
-        for exp in all_experiments:
-            progress.update(task, description=f"Experiment: {exp.name}")
-            try:
-                exp_stats, file_written, _manifest = export_experiment_by_id(
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_exp = {
+                executor.submit(
+                    export_experiment_by_id,
                     client,
                     experiments_dir,
                     exp.id,
@@ -366,18 +367,32 @@ def _export_all_experiments(
                     force,
                     debug,
                     format,
-                    all_trace_ids,
-                )
-                if file_written:
-                    exported += 1
-                else:
-                    skipped += 1
-            except Exception as e:
-                console.print(
-                    f"[red]Error exporting experiment '{exp.name}': {e}[/red]"
-                )
-            finally:
-                progress.advance(task)
+                    None,  # Don't pass shared set; collect from manifest in main thread
+                ): exp
+                for exp in all_experiments
+            }
+            for future in as_completed(future_to_exp):
+                exp = future_to_exp[future]
+                try:
+                    exp_stats, file_written, exp_manifest = future.result()
+                    if file_written:
+                        exported += 1
+                    else:
+                        skipped += 1
+                    # Collect trace IDs from the manifest in the main thread
+                    # (safe: worker is done, no concurrent access)
+                    if exp_manifest is not None:
+                        stored_ids = exp_manifest.get_all_trace_ids()
+                        if stored_ids:
+                            all_trace_ids.update(stored_ids)
+                except Exception as e:
+                    console.print(
+                        f"[red]Error exporting experiment '{exp.name}': {e}[/red]"
+                    )
+                finally:
+                    progress.update(
+                        task, advance=1, description=f"Experiment: {exp.name}"
+                    )
 
     # Batch-export all traces collected from experiments
     traces_exported, traces_skipped = _export_collected_trace_ids(
