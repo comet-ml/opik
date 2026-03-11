@@ -32,6 +32,8 @@ from .utils import (
     clean_usage_for_import,
     debug_print,
     sort_spans_topologically,
+    build_import_metadata,
+    _EXPERIMENT_IMPORT_FIELDS,
 )
 from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
@@ -432,6 +434,16 @@ def recreate_experiment(
                 f"Adding project_name '{project_name}' to experiment metadata",
                 debug,
             )
+
+        # Preserve read-only fields that cannot yet be set via the API
+        experiment_metadata = (
+            build_import_metadata(
+                experiment_info,
+                _EXPERIMENT_IMPORT_FIELDS,
+                experiment_metadata,
+            )
+            or {}
+        )
 
         # Create the experiment
         experiment = client.create_experiment(
