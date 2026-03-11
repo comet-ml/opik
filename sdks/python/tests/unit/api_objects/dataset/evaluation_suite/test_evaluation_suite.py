@@ -603,6 +603,28 @@ class TestBuildSuiteResult:
         assert suite_result.item_results["item-1"].runs_passed == 0
 
 
+class TestValidateTaskResult:
+    def test_non_dict__raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must return a dict with 'input' and 'output'"
+        ):
+            evaluation_suite.validate_task_result("just a string")
+
+    def test_missing_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing.*output"):
+            evaluation_suite.validate_task_result({"input": "hello"})
+
+    def test_missing_both_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing"):
+            evaluation_suite.validate_task_result({"response": "hello"})
+
+    def test_valid_result__returns_dict(self):
+        result = evaluation_suite.validate_task_result(
+            {"input": "hello", "output": "world"}
+        )
+        assert result == {"input": "hello", "output": "world"}
+
+
 class TestEvaluationSuiteResultPassRate:
     """Unit tests for EvaluationSuiteResult.pass_rate property."""
 
@@ -636,8 +658,8 @@ class TestEvaluationSuiteResultPassRate:
 
         assert result.pass_rate == 0.3
 
-    def test_pass_rate__zero_items__returns_1(self):
-        """Edge case: no items evaluated should return 1.0 (vacuously true)."""
+    def test_pass_rate__zero_items__returns_none(self):
+        """Edge case: no items evaluated should return None."""
         result = suite_types.EvaluationSuiteResult(
             items_passed=0,
             items_total=0,
@@ -645,4 +667,4 @@ class TestEvaluationSuiteResultPassRate:
             evaluation_result_=mock.MagicMock(),
         )
 
-        assert result.pass_rate == 1.0
+        assert result.pass_rate is None

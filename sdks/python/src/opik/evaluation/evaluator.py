@@ -543,8 +543,7 @@ def _evaluate_suite_task(
         report.display_suite_results(
             dataset.name, total_time, evaluation_result_, verbose=verbose
         )
-
-    report.display_experiment_link(experiment_url=experiment_url)
+        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 

@@ -25,6 +25,24 @@ LOGGER = logging.getLogger(__name__)
 LLMTask = Callable[[Dict[str, Any]], Any]
 
 
+def validate_task_result(result: Any) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        raise TypeError(
+            f"The task function must return a dict with 'input' and "
+            f"'output' keys, but it returned {type(result).__name__}. "
+            f"Example: return {{'input': data, 'output': response}}"
+        )
+    missing = {"input", "output"} - result.keys()
+    if missing:
+        raise ValueError(
+            f"The task function must return a dict with 'input' and "
+            f"'output' keys, but the returned dict is missing: "
+            f"{missing}. Got keys: {set(result.keys())}. "
+            f"Example: return {{'input': data, 'output': response}}"
+        )
+    return result
+
+
 class EvaluationSuite:
     """
     A pre-configured regression test suite for LLM applications.
@@ -186,7 +204,11 @@ class EvaluationSuite:
         has_version_updates = resolved is not None or execution_policy is not None
         if has_version_updates:
             version_info = self._dataset.get_version_info()
-            assert version_info is not None
+            if version_info is None:
+                raise RuntimeError(
+                    f"Cannot update evaluation suite '{self._name}': "
+                    "no version info found. Add at least one item first."
+                )
 
             if resolved is None:
                 resolved = self._dataset.get_evaluators()
@@ -413,22 +435,7 @@ class EvaluationSuite:
 
         @functools.wraps(task)
         def _validated_task(data: Dict[str, Any]) -> Any:
-            result = task(data)
-            if not isinstance(result, dict):
-                raise TypeError(
-                    f"The task function must return a dict with 'input' and "
-                    f"'output' keys, but it returned {type(result).__name__}. "
-                    f"Example: return {{'input': data, 'output': response}}"
-                )
-            missing = {"input", "output"} - result.keys()
-            if missing:
-                raise ValueError(
-                    f"The task function must return a dict with 'input' and "
-                    f"'output' keys, but the returned dict is missing: "
-                    f"{missing}. Got keys: {set(result.keys())}. "
-                    f"Example: return {{'input': data, 'output': response}}"
-                )
-            return result
+            return validate_task_result(task(data))
 
         eval_result = opik_evaluator.evaluate_suite(
             dataset=self._dataset,

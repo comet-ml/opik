@@ -129,7 +129,8 @@ def _compute_item_passed_map(
         item = item_results[0].test_case.dataset_item
         pass_threshold = 1
         if item is not None and item.execution_policy is not None:
-            pass_threshold = item.execution_policy.pass_threshold or 1
+            if item.execution_policy.pass_threshold is not None:
+                pass_threshold = item.execution_policy.pass_threshold
 
         runs_passed = sum(
             1
@@ -187,9 +188,16 @@ def display_suite_results(
     nb_samples_text.stylize("bold", 0, 18)
     nb_samples_text = align.Align.left(nb_samples_text)
 
-    pass_rate = items_passed / items_total if items_total > 0 else 1.0
-    pass_style = "green bold" if suite_passed else "red bold"
-    pass_label = "PASSED" if suite_passed else "FAILED"
+    pass_rate = items_passed / items_total if items_total > 0 else None
+    if items_total == 0:
+        pass_style = "yellow bold"
+        pass_label = "NO ITEMS"
+    elif suite_passed:
+        pass_style = "green bold"
+        pass_label = "PASSED"
+    else:
+        pass_style = "red bold"
+        pass_label = "FAILED"
     pass_text = text.Text(f"Suite result:      {pass_label}", style=pass_style)
     pass_text.stylize("bold", 0, 18)
     pass_text = align.Align.left(pass_text)
@@ -198,7 +206,8 @@ def display_suite_results(
     items_text.stylize("bold", 0, 18)
     items_text = align.Align.left(items_text)
 
-    rate_text = text.Text(f"Pass rate:         {pass_rate:.1f}")
+    rate_value = f"{pass_rate:.1%}" if pass_rate is not None else "N/A"
+    rate_text = text.Text(f"Pass rate:         {rate_value}")
     rate_text.stylize("bold", 0, 18)
     rate_text = align.Align.left(rate_text)
 
@@ -214,7 +223,11 @@ def display_suite_results(
         # Sort by pass rate ascending (most failed first)
         sorted_assertions = sorted(
             assertion_total_count.keys(),
-            key=lambda n: assertion_passed_count[n] / assertion_total_count[n],
+            key=lambda n: (
+                assertion_passed_count[n] / assertion_total_count[n]
+                if assertion_total_count[n] > 0
+                else 0.0
+            ),
         )
 
         score_strings = text.Text("")

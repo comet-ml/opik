@@ -974,50 +974,6 @@ def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
 
 
 # =============================================================================
-# ERROR HANDLING: Task return value validation
-# =============================================================================
-
-
-def test_evaluation_suite__task_returns_non_dict__raises_type_error(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that a clear error is raised when the task returns a non-dict value.
-    """
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test task validation",
-    )
-    suite.add_item(data={"input": {"question": "Hello"}})
-
-    def bad_task(item: Dict[str, Any]) -> str:
-        return "just a string"
-
-    with pytest.raises(TypeError, match="must return a dict with 'input' and 'output'"):
-        suite.run(task=bad_task, experiment_name=experiment_name, verbose=0)
-
-
-def test_evaluation_suite__task_returns_dict_missing_keys__raises_value_error(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that a clear error is raised when the task returns a dict without
-    the required 'input' and 'output' keys.
-    """
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test task validation",
-    )
-    suite.add_item(data={"input": {"question": "Hello"}})
-
-    def bad_task(item: Dict[str, Any]) -> Dict[str, Any]:
-        return {"response": "just the response"}
-
-    with pytest.raises(ValueError, match="missing.*input.*output"):
-        suite.run(task=bad_task, experiment_name=experiment_name, verbose=0)
-
-
-# =============================================================================
 # TAGS
 # =============================================================================
 
