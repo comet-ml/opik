@@ -106,15 +106,20 @@ def import_prompts_from_directory(
                     skipped_count += 1
                     continue
 
-                # Convert string type to PromptType enum if needed
+                # Convert string type to PromptType enum if needed.
+                # The exported value is uppercased (e.g. "MUSTACHE") but the
+                # enum uses lowercase values (e.g. "mustache"), so try both.
                 if prompt_type and isinstance(prompt_type, str):
                     try:
-                        prompt_type_enum = PromptType(prompt_type)
+                        prompt_type_enum = PromptType(prompt_type.lower())
                     except ValueError:
-                        console.print(
-                            f"[yellow]Unknown prompt type '{prompt_type}', using MUSTACHE[/yellow]"
-                        )
-                        prompt_type_enum = PromptType.MUSTACHE
+                        try:
+                            prompt_type_enum = PromptType(prompt_type)
+                        except ValueError:
+                            console.print(
+                                f"[yellow]Unknown prompt type '{prompt_type}', using MUSTACHE[/yellow]"
+                            )
+                            prompt_type_enum = PromptType.MUSTACHE
                 else:
                     prompt_type_enum = PromptType.MUSTACHE
 
