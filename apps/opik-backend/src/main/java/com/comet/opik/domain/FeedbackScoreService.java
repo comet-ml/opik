@@ -50,13 +50,13 @@ public interface FeedbackScoreService {
     Mono<Void> deleteSpanScore(UUID id, DeleteFeedbackScore score);
     Mono<Void> deleteTraceScore(UUID id, DeleteFeedbackScore score);
 
-    Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames);
+    Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId, Set<String> excludeCategoryNames);
 
     Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames);
+            Set<String> excludeCategoryNames);
 
     Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames);
+            Set<String> excludeCategoryNames);
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
