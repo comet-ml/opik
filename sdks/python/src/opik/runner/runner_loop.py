@@ -1,18 +1,41 @@
 import logging
+import os
 import random
 import signal
 import threading
-from typing import Dict
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Optional
 
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
 from . import agents_registry, job_executor
 from .agents_registry import AgentInfo
+from .constants import (
+    DEFAULT_BACKOFF_CAP_SECONDS,
+    DEFAULT_BACKOFF_INITIAL_SECONDS,
+    DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
+    DEFAULT_MAX_WORKERS,
+    POLL_IDLE_INTERVAL_SECONDS,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-POLL_IDLE_INTERVAL_SECONDS = 0.5
+
+class _Backoff:
+    """Exponential backoff with jitter, resettable on success."""
+
+    def __init__(self, cap: float) -> None:
+        self._cap = cap
+        self._delay = DEFAULT_BACKOFF_INITIAL_SECONDS
+
+    def reset(self) -> None:
+        self._delay = DEFAULT_BACKOFF_INITIAL_SECONDS
+
+    def wait(self, event: threading.Event) -> None:
+        jittered = min(self._delay, self._cap) * (0.5 + random.random() * 0.5)
+        event.wait(jittered)
+        self._delay = min(self._delay * 2, self._cap)
 
 
 def _agents_to_payload(agents: Dict[str, AgentInfo]) -> Dict:
@@ -23,24 +46,39 @@ def _agents_to_payload(agents: Dict[str, AgentInfo]) -> Dict:
 
 
 class RunnerLoop:
+    """Main event loop that polls for jobs and dispatches them to a thread pool.
+
+    Manages a bounded ThreadPoolExecutor for concurrent job execution,
+    a heartbeat daemon for server communication and job cancellation,
+    and graceful shutdown via signal handlers.
+    """
+
     def __init__(
         self,
         api: OpikApi,
         runner_id: str,
         shutdown_event: threading.Event,
-        heartbeat_interval_seconds: float = 5.0,
-        backoff_cap_seconds: float = 30.0,
+        heartbeat_interval_seconds: float = DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
+        backoff_cap_seconds: float = DEFAULT_BACKOFF_CAP_SECONDS,
+        max_workers: Optional[int] = None,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
         self._shutdown_event = shutdown_event
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._backoff_cap_seconds = backoff_cap_seconds
+        self._max_workers = max_workers or os.cpu_count() or DEFAULT_MAX_WORKERS
         self._active_jobs: Dict[str, job_executor.JobProcess] = {}
         self._cancelled_jobs: set = set()
         self._lock = threading.Lock()
 
     def run(self) -> None:
+        """Poll for jobs and submit them to the thread pool until shutdown.
+
+        A semaphore gates polling so we never fetch more jobs than the pool
+        can handle. On shutdown, active subprocesses are killed first, then
+        the pool is drained.
+        """
         self._install_signal_handlers()
 
         heartbeat_thread = threading.Thread(
@@ -56,52 +94,75 @@ class RunnerLoop:
             self._lock,
         )
 
-        backoff = 1.0
+        slot = threading.Semaphore(self._max_workers)
+        pool = ThreadPoolExecutor(max_workers=self._max_workers)
+        backoff = _Backoff(cap=self._backoff_cap_seconds)
 
         try:
             while not self._shutdown_event.is_set():
-                try:
-                    job = self._api.runners.next_job(self._runner_id)
-                except ApiError as e:
-                    if e.status_code == 204:
-                        job = None
-                    else:
-                        raise
-                except Exception:
-                    LOGGER.debug("Error polling for jobs", exc_info=True)
-                    wait = min(backoff, self._backoff_cap_seconds) * (
-                        0.5 + random.random() * 0.5
-                    )
-                    self._shutdown_event.wait(wait)
-                    backoff = min(backoff * 2, self._backoff_cap_seconds)
-                    continue
-
-                if job is None:
-                    backoff = 1.0
+                if not slot.acquire(blocking=False):
                     self._shutdown_event.wait(POLL_IDLE_INTERVAL_SECONDS)
                     continue
 
-                backoff = 1.0
-                agents = agents_registry.load_agents()
+                job = self._poll_job(backoff)
+                if job is None:
+                    slot.release()
+                    continue
 
-                thread = threading.Thread(
-                    target=self._safe_execute,
-                    args=(executor, job, agents),
-                    daemon=True,
-                )
-                thread.start()
+                submitted = False
+                try:
+                    agents = agents_registry.load_agents()
+                    pool.submit(self._safe_execute, executor, job, agents, slot)
+                    submitted = True
+                finally:
+                    if not submitted:
+                        slot.release()
         except KeyboardInterrupt:
             self._shutdown_event.set()
 
         self._kill_active_jobs()
+        pool.shutdown(wait=False, cancel_futures=True)
         LOGGER.info("Runner loop stopped")
+
+    def _poll_job(self, backoff: _Backoff) -> Optional[LocalRunnerJob]:
+        """Try to fetch the next job, handling errors with backoff.
+
+        Returns the job on success, or None if no job is available or an
+        error occurred. The caller must release the semaphore slot when
+        None is returned.
+        """
+        try:
+            job = self._api.runners.next_job(self._runner_id)
+        except ApiError as e:
+            if e.status_code == 204:
+                job = None
+            else:
+                LOGGER.debug(
+                    "Unexpected API error while polling for jobs", exc_info=True
+                )
+                backoff.wait(self._shutdown_event)
+                return None
+        except Exception:
+            LOGGER.debug("Error polling for jobs", exc_info=True)
+            backoff.wait(self._shutdown_event)
+            return None
+
+        if job is None:
+            backoff.reset()
+            self._shutdown_event.wait(POLL_IDLE_INTERVAL_SECONDS)
+            return None
+
+        backoff.reset()
+        return job
 
     def _safe_execute(
         self,
         executor: job_executor.JobExecutor,
         job: LocalRunnerJob,
         agents: Dict[str, AgentInfo],
+        slot: threading.Semaphore,
     ) -> None:
+        """Run a job via the executor, catching crashes and releasing the pool slot."""
         try:
             executor.execute(job, agents)
         except Exception:
@@ -114,8 +175,11 @@ class RunnerLoop:
                 )
             except Exception:
                 LOGGER.debug("Failed to report crash for job %s", job.id, exc_info=True)
+        finally:
+            slot.release()
 
     def _heartbeat_loop(self) -> None:
+        """Daemon loop that registers agents, sends heartbeats, and kills cancelled jobs."""
         while not self._shutdown_event.is_set():
             try:
                 agents = agents_registry.load_agents()
