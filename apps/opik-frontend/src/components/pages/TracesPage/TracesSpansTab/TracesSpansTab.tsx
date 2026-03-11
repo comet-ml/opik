@@ -436,7 +436,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
   );
 
-  const versionMap = useConfigVersionMap(projectId);
+  const versionMap = useConfigVersionMap(projectId, {
+    enabled: isAgentConfigurationEnabled,
+  });
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
