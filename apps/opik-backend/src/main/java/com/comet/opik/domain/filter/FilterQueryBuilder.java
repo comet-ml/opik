@@ -3,6 +3,7 @@ package com.comet.opik.domain.filter;
 import com.comet.opik.api.filter.AlertField;
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.AutomationRuleEvaluatorField;
+import com.comet.opik.api.filter.DashboardField;
 import com.comet.opik.api.filter.DatasetField;
 import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.ExperimentField;
@@ -458,6 +459,18 @@ public class FilterQueryBuilder {
                     .put(AlertField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .build());
 
+    private static final Map<DashboardField, String> DASHBOARD_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DashboardField, String>builder()
+                    .put(DashboardField.ID, ID_DB)
+                    .put(DashboardField.NAME, NAME_DB)
+                    .put(DashboardField.TYPE, TYPE_DB)
+                    .put(DashboardField.SCOPE, SCOPE_DB)
+                    .put(DashboardField.CREATED_AT, CREATED_AT_DB)
+                    .put(DashboardField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DashboardField.CREATED_BY, CREATED_BY_DB)
+                    .put(DashboardField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
     private static final Map<AutomationRuleEvaluatorField, String> AUTOMATION_RULE_EVALUATOR_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
                     .put(AutomationRuleEvaluatorField.ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, ID_DB))
@@ -691,6 +704,16 @@ public class FilterQueryBuilder {
                 OptimizationField.DATASET_ID,
                 OptimizationField.STATUS));
 
+        map.put(FilterStrategy.DASHBOARD, Set.of(
+                DashboardField.ID,
+                DashboardField.NAME,
+                DashboardField.TYPE,
+                DashboardField.SCOPE,
+                DashboardField.CREATED_AT,
+                DashboardField.LAST_UPDATED_AT,
+                DashboardField.CREATED_BY,
+                DashboardField.LAST_UPDATED_BY));
+
         return map;
     }
 
@@ -889,6 +912,7 @@ public class FilterQueryBuilder {
             case AutomationRuleEvaluatorField automationRuleEvaluatorField ->
                 AUTOMATION_RULE_EVALUATOR_FIELDS_MAP.get(automationRuleEvaluatorField);
             case OptimizationField optimizationField -> OPTIMIZATION_FIELDS_MAP.get(optimizationField);
+            case DashboardField dashboardField -> DASHBOARD_FIELDS_MAP.get(dashboardField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

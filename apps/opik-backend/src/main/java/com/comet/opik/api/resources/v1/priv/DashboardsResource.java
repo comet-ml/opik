@@ -5,6 +5,8 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.filter.DashboardFilter;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDashboards;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
@@ -61,6 +63,7 @@ public class DashboardsResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDashboards sortingFactory;
+    private final @NonNull FiltersFactory filtersFactory;
 
     @POST
     @Operation(operationId = "createDashboard", summary = "Create dashboard", description = "Create a new dashboard in a workspace", responses = {
@@ -114,15 +117,17 @@ public class DashboardsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+        var dashboardFilters = filtersFactory.newFilters(filters, DashboardFilter.LIST_TYPE_REFERENCE);
 
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}', sorting '{}'",
                 workspaceId, page, size, name, sorting);
 
-        DashboardPage dashboardPage = service.find(page, size, name, sortingFields);
+        DashboardPage dashboardPage = service.find(page, size, name, sortingFields, dashboardFilters);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
         return Response.ok(dashboardPage).build();
