@@ -5,6 +5,8 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .dashboard_public_scope import DashboardPublicScope
+from .dashboard_public_type import DashboardPublicType
 from .json_node_public import JsonNodePublic
 
 
@@ -13,6 +15,8 @@ class DashboardPublic(UniversalBaseModel):
     workspace_id: typing.Optional[str] = None
     name: str
     slug: typing.Optional[str] = None
+    type: typing.Optional[DashboardPublicType] = None
+    scope: typing.Optional[DashboardPublicScope] = None
     description: typing.Optional[str] = None
     config: JsonNodePublic
     created_by: typing.Optional[str] = None

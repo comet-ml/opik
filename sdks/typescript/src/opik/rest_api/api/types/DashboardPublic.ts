@@ -7,6 +7,8 @@ export interface DashboardPublic {
     workspaceId?: string;
     name: string;
     slug?: string;
+    type?: OpikApi.DashboardPublicType;
+    scope?: OpikApi.DashboardPublicScope;
     description?: string;
     config: OpikApi.JsonNodePublic;
     createdBy?: string;

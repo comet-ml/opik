@@ -22,4 +22,5 @@ export interface ExperimentItem {
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemTraceVisibilityMode;
     description?: string;
+    executionPolicy?: OpikApi.ExecutionPolicy;
 }
