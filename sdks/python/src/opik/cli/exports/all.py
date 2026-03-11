@@ -4,7 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterator, Optional, TypeVar
+from typing import Any, Iterator, Optional, TypeVar, Union
 
 import pydantic
 import click
@@ -18,6 +18,7 @@ from rich.progress import (
 )
 
 import opik
+from opik.api_objects.prompt import Prompt, ChatPrompt
 from .dataset import export_single_dataset
 from .experiment import export_experiment_by_id, export_traces_by_ids
 from .project import export_single_project
@@ -188,7 +189,7 @@ def _export_all_prompts(
             progress.update(task, description=f"Prompt: {prompt_public.name}")
             try:
                 # Use template_structure to decide which SDK type to fetch
-                prompt_obj = None
+                prompt_obj: Optional[Union[Prompt, ChatPrompt]] = None
                 if prompt_public.template_structure == "chat":
                     try:
                         prompt_obj = client.get_chat_prompt(prompt_public.name)
