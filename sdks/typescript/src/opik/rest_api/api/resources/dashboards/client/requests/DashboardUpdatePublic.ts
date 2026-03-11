@@ -8,6 +8,8 @@ import type * as OpikApi from "../../../../index.js";
  */
 export interface DashboardUpdatePublic {
     name?: string;
+    type?: OpikApi.DashboardUpdatePublicType;
+    scope?: OpikApi.DashboardUpdatePublicScope;
     description?: string;
     config?: OpikApi.JsonNodePublic;
 }

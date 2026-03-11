@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Comment } from "./Comment.js";
+import { ExecutionPolicy } from "./ExecutionPolicy.js";
 import { ExperimentItemTraceVisibilityMode } from "./ExperimentItemTraceVisibilityMode.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { JsonListString } from "./JsonListString.js";
@@ -35,6 +36,7 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
             ExperimentItemTraceVisibilityMode.optional(),
         ),
         description: core.serialization.string().optional(),
+        executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
     });
 
 export declare namespace ExperimentItem {
@@ -58,5 +60,6 @@ export declare namespace ExperimentItem {
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemTraceVisibilityMode.Raw | null;
         description?: string | null;
+        execution_policy?: ExecutionPolicy.Raw | null;
     }
 }

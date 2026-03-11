@@ -15,6 +15,10 @@ from ..types.dashboard_page_public import DashboardPagePublic
 from ..types.dashboard_public import DashboardPublic
 from ..types.json_node_public import JsonNodePublic
 from ..types.json_node_write import JsonNodeWrite
+from .types.dashboard_update_public_scope import DashboardUpdatePublicScope
+from .types.dashboard_update_public_type import DashboardUpdatePublicType
+from .types.dashboard_write_scope import DashboardWriteScope
+from .types.dashboard_write_type import DashboardWriteType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -31,6 +35,7 @@ class RawDashboardsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPagePublic]:
         """
@@ -45,6 +50,8 @@ class RawDashboardsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -62,6 +69,7 @@ class RawDashboardsClient:
                 "size": size,
                 "name": name,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -85,6 +93,8 @@ class RawDashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        type: typing.Optional[DashboardWriteType] = OMIT,
+        scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPublic]:
@@ -96,6 +106,10 @@ class RawDashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        type : typing.Optional[DashboardWriteType]
+
+        scope : typing.Optional[DashboardWriteScope]
 
         description : typing.Optional[str]
 
@@ -112,6 +126,8 @@ class RawDashboardsClient:
             method="POST",
             json={
                 "name": name,
+                "type": type,
+                "scope": scope,
                 "description": description,
                 "config": config,
             },
@@ -220,6 +236,8 @@ class RawDashboardsClient:
         dashboard_id: str,
         *,
         name: typing.Optional[str] = OMIT,
+        type: typing.Optional[DashboardUpdatePublicType] = OMIT,
+        scope: typing.Optional[DashboardUpdatePublicScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         config: typing.Optional[JsonNodePublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -232,6 +250,10 @@ class RawDashboardsClient:
         dashboard_id : str
 
         name : typing.Optional[str]
+
+        type : typing.Optional[DashboardUpdatePublicType]
+
+        scope : typing.Optional[DashboardUpdatePublicScope]
 
         description : typing.Optional[str]
 
@@ -250,6 +272,8 @@ class RawDashboardsClient:
             method="PATCH",
             json={
                 "name": name,
+                "type": type,
+                "scope": scope,
                 "description": description,
                 "config": config,
             },
@@ -345,6 +369,7 @@ class AsyncRawDashboardsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPagePublic]:
         """
@@ -359,6 +384,8 @@ class AsyncRawDashboardsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -376,6 +403,7 @@ class AsyncRawDashboardsClient:
                 "size": size,
                 "name": name,
                 "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -399,6 +427,8 @@ class AsyncRawDashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        type: typing.Optional[DashboardWriteType] = OMIT,
+        scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPublic]:
@@ -410,6 +440,10 @@ class AsyncRawDashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        type : typing.Optional[DashboardWriteType]
+
+        scope : typing.Optional[DashboardWriteScope]
 
         description : typing.Optional[str]
 
@@ -426,6 +460,8 @@ class AsyncRawDashboardsClient:
             method="POST",
             json={
                 "name": name,
+                "type": type,
+                "scope": scope,
                 "description": description,
                 "config": config,
             },
@@ -534,6 +570,8 @@ class AsyncRawDashboardsClient:
         dashboard_id: str,
         *,
         name: typing.Optional[str] = OMIT,
+        type: typing.Optional[DashboardUpdatePublicType] = OMIT,
+        scope: typing.Optional[DashboardUpdatePublicScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         config: typing.Optional[JsonNodePublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -546,6 +584,10 @@ class AsyncRawDashboardsClient:
         dashboard_id : str
 
         name : typing.Optional[str]
+
+        type : typing.Optional[DashboardUpdatePublicType]
+
+        scope : typing.Optional[DashboardUpdatePublicScope]
 
         description : typing.Optional[str]
 
@@ -564,6 +606,8 @@ class AsyncRawDashboardsClient:
             method="PATCH",
             json={
                 "name": name,
+                "type": type,
+                "scope": scope,
                 "description": description,
                 "config": config,
             },
