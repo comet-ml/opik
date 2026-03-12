@@ -337,7 +337,9 @@ export class EvaluationSuite {
       "suite-level assertions"
     );
 
-    if (!resolvedEvaluators && !options.executionPolicy && !options.tags) {
+    const assertionsProvided = options.assertions !== undefined;
+
+    if (!resolvedEvaluators && !assertionsProvided && !options.executionPolicy && !options.tags) {
       throw new Error(
         "At least one of 'assertions', 'executionPolicy', or 'tags' must be provided."
       );
@@ -351,7 +353,7 @@ export class EvaluationSuite {
       });
     }
 
-    const hasVersionUpdates = resolvedEvaluators || options.executionPolicy;
+    const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.executionPolicy;
     if (hasVersionUpdates) {
       const versionInfo = await this.dataset.getVersionInfo();
       if (!versionInfo) {
@@ -363,9 +365,11 @@ export class EvaluationSuite {
 
       // Partial updates: retain current values for omitted params
       const evaluators = resolvedEvaluators ??
-        (versionInfo.evaluators
-          ? deserializeEvaluators(versionInfo.evaluators)
-          : []);
+        (assertionsProvided
+          ? []
+          : (versionInfo.evaluators
+            ? deserializeEvaluators(versionInfo.evaluators)
+            : []));
       const executionPolicy = options.executionPolicy ??
         resolveExecutionPolicy(versionInfo.executionPolicy);
 

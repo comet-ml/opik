@@ -132,6 +132,7 @@ export class LLMJudge extends BaseSuiteEvaluator {
       model: first.modelName,
       seed: first.seed,
       temperature: first.temperature,
+      track: first.trackMetric,
     });
   }
 
