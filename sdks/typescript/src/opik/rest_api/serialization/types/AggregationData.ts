@@ -26,6 +26,9 @@ export const AggregationData: core.serialization.ObjectSchema<
         "experiment_scores",
         core.serialization.list(FeedbackScoreAverage).optional(),
     ),
+    passRateAvg: core.serialization.property("pass_rate_avg", core.serialization.number().optional()),
+    passedCountSum: core.serialization.property("passed_count_sum", core.serialization.number().optional()),
+    totalCountSum: core.serialization.property("total_count_sum", core.serialization.number().optional()),
 });
 
 export declare namespace AggregationData {
@@ -37,5 +40,8 @@ export declare namespace AggregationData {
         duration?: PercentageValues.Raw | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;
         experiment_scores?: FeedbackScoreAverage.Raw[] | null;
+        pass_rate_avg?: number | null;
+        passed_count_sum?: number | null;
+        total_count_sum?: number | null;
     }
 }

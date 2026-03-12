@@ -33,10 +33,6 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
-$OPIK_AI_BACKEND_CONTAINERS = @(
-    "opik-opik-ai-backend-1"
-)
-
 $LOCAL_BE_CONTAINERS = @(
     "opik-python-backend-1",
     "opik-frontend-1"
@@ -44,11 +40,6 @@ $LOCAL_BE_CONTAINERS = @(
 
 $LOCAL_BE_FE_CONTAINERS = @(
     "opik-python-backend-1"
-)
-
-$LOCAL_AI_CONTAINERS = @(
-    "opik-python-backend-1",
-    "opik-backend-1"
 )
 
 function Get-Containers {
@@ -62,8 +53,6 @@ function Get-Containers {
         $containers = $INFRA_CONTAINERS + $LOCAL_BE_CONTAINERS
     } elseif ($LOCAL_BE_FE) {
         $containers = $INFRA_CONTAINERS + $LOCAL_BE_FE_CONTAINERS
-    } elseif ($LOCAL_AI) {
-        $containers = $INFRA_CONTAINERS + $LOCAL_AI_CONTAINERS
     } else {
         # Full Opik (default)
         $containers = $INFRA_CONTAINERS + $BACKEND_CONTAINERS + $OPIK_CONTAINERS
@@ -72,10 +61,6 @@ function Get-Containers {
     # Add guardrails containers if enabled
     if ($GUARDRAILS_ENABLED) {
         $containers += $GUARDRAILS_CONTAINERS
-    }
-    
-    if ($OPIK_AI_BACKEND_ENABLED) {
-        $containers += $OPIK_AI_BACKEND_CONTAINERS
     }
     
     return $containers
@@ -124,9 +109,6 @@ function Get-DockerComposeCommand {
     } elseif ($LOCAL_BE_FE) {
         $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-be-fe.yaml")
         $dockerArgs += "--profile", "local-be-fe"
-    } elseif ($LOCAL_AI) {
-        $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.local-ai.yaml")
-        $dockerArgs += "--profile", "local-ai"
     } else {
         # Full Opik (default) - includes all dependencies
         $dockerArgs += "--profile", "opik"
@@ -135,10 +117,6 @@ function Get-DockerComposeCommand {
     # Always add guardrails profile if enabled
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
-    }
-    
-    if ($OPIK_AI_BACKEND_ENABLED) {
-        $dockerArgs += "--profile", "opik-ai-backend"
     }
     
     return $dockerArgs
@@ -225,9 +203,7 @@ function Show-Usage {
     Write-Host '  --backend         Start only infrastructure + backend services (Backend, Python Backend etc.)'
     Write-Host '  --local-be        Start all services EXCEPT backend (for local backend development)'
     Write-Host '  --local-be-fe     Start only infrastructure + Python backend (for local backend + frontend development)'
-    Write-Host '  --local-ai        Start infrastructure + backend + Python backend (for local Opik AI backend + frontend development)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
-    Write-Host '  --opik-ai         Enable Opik AI backend trace analyzer (can be combined with other flags)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
@@ -615,9 +591,6 @@ function Show-Banner {
     if ($GUARDRAILS_ENABLED) {
         Write-Host '║  ✅ Guardrails services started successfully!                   ║'
     }
-    if ($OPIK_AI_BACKEND_ENABLED) {
-        Write-Host '║  ✅ Opik AI backend trace analyzer started successfully!        ║'
-    }
     if ($INFRA) {
         Write-Host '║  ✅ Infrastructure services started successfully!               ║'
         Write-Host '║                                                                 ║'
@@ -633,17 +606,6 @@ function Show-Banner {
         Write-Host '║     Port mapping: ENABLED (required for local processes)        ║'
         Write-Host '║                                                                 ║'
         Write-Host '║  📊 Access the UI (start backend + frontend first):             ║'
-        Write-Host '║     http://localhost:5174                                       ║'
-        Write-Host '║                                                                 ║'
-    } elseif ($LOCAL_AI) {
-        Write-Host '║  ✅ Local AI backend mode services started!                     ║'
-        Write-Host '║                                                                 ║'
-        Write-Host '║  ⚙️  Configuration:                                              ║'
-        Write-Host '║     Opik AI backend is NOT running in Docker                    ║'
-        Write-Host '║     Frontend is NOT running in Docker                           ║'
-        Write-Host '║     Port mapping: ENABLED (required for local processes)        ║'
-        Write-Host '║                                                                 ║'
-        Write-Host '║  📊 Access the UI (start AI backend + frontend first):          ║'
         Write-Host '║     http://localhost:5174                                       ║'
         Write-Host '║                                                                 ║'
     } elseif ($LOCAL_BE) {
@@ -696,14 +658,9 @@ function Get-StartCommand {
         $cmd += " --local-be"
     } elseif ($LOCAL_BE_FE) {
         $cmd += " --local-be-fe"
-    } elseif ($LOCAL_AI) {
-        $cmd += " --local-ai"
     }
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
-    }
-    if ($OPIK_AI_BACKEND_ENABLED) {
-        $cmd += " --opik-ai"
     }
 
     return $cmd
@@ -720,16 +677,11 @@ function Get-VerifyCommand {
         $cmd += " --local-be"
     } elseif ($LOCAL_BE_FE) {
         $cmd += " --local-be-fe"
-    } elseif ($LOCAL_AI) {
-        $cmd += " --local-ai"
     }
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
     }
-    if ($OPIK_AI_BACKEND_ENABLED) {
-        $cmd += " --opik-ai"
-    }
-    
+
     return "$cmd --verify"
 }
 
@@ -737,18 +689,15 @@ $BUILD_MODE = $false
 $DEBUG_MODE = $false
 $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
-$OPIK_AI_BACKEND_ENABLED = $false
 # PowerShell persists environment variables across script runs, so we need to reset them
 $env:OPIK_REVERSE_PROXY_URL = ""
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
-$env:TOGGLE_OPIK_AI_ENABLED = "false"
 # Default: full opik (all profiles)
 $INFRA = $false
 $BACKEND = $false
 $LOCAL_BE = $false
 $LOCAL_BE_FE = $false
-$LOCAL_AI = $false
 
 if ($options -contains '--build') {
     $BUILD_MODE = $true
@@ -794,13 +743,6 @@ if ($options -contains '--local-be') {
     $options = $options | Where-Object { $_ -ne '--local-be' }
 }
 
-if ($options -contains '--local-ai') {
-    $LOCAL_AI = $true
-    $PORT_MAPPING = $true  # Required for local processes to connect to infrastructure
-    $env:TOGGLE_OPIK_AI_ENABLED = "true"  # Enable OpikAI feature toggle for the backend
-    $options = $options | Where-Object { $_ -ne '--local-ai' }
-}
-
 if ($options -contains '--guardrails') {
     $GUARDRAILS_ENABLED = $true
     # Only override flavor if not already set by local-be
@@ -811,40 +753,21 @@ if ($options -contains '--guardrails') {
     $options = $options | Where-Object { $_ -ne '--guardrails' }
 }
 
-if ($options -contains '--opik-ai') {
-    $OPIK_AI_BACKEND_ENABLED = $true
-    # Set frontend flavor to opik-ai-backend if not already set
-    if ($env:OPIK_FRONTEND_FLAVOR -eq "default") {
-        $env:OPIK_FRONTEND_FLAVOR = "opik-ai-backend"
-    }
-    $env:TOGGLE_OPIK_AI_ENABLED = "true"
-    $options = $options | Where-Object { $_ -ne '--opik-ai' }
-}
-
-# Validate mutually exclusive optional services
-if ($GUARDRAILS_ENABLED -and $OPIK_AI_BACKEND_ENABLED) {
-    Write-Host "❌ Error: --guardrails and --opik-ai cannot be used together."
-    Write-Host "   Each requires a different nginx configuration. Please use only one at a time."
-    exit 1
-}
-
 # Count active partial profiles
 $PROFILE_COUNT = 0
 if ($INFRA) { $PROFILE_COUNT++ }
 if ($BACKEND) { $PROFILE_COUNT++ }
 if ($LOCAL_BE) { $PROFILE_COUNT++ }
 if ($LOCAL_BE_FE) { $PROFILE_COUNT++ }
-if ($LOCAL_AI) { $PROFILE_COUNT++ }
 
 # Validate mutually exclusive profile flags
 if ($PROFILE_COUNT -gt 1) {
-    Write-Host "❌ Error: --infra, --backend, --local-be, --local-be-fe, and --local-ai flags are mutually exclusive."
+    Write-Host "❌ Error: --infra, --backend, --local-be, and --local-be-fe flags are mutually exclusive."
     Write-Host "   Choose one of the following:"
     Write-Host "   • .\opik.ps1 --infra        (infrastructure services only)"
     Write-Host "   • .\opik.ps1 --backend      (infrastructure + backend services)"
     Write-Host "   • .\opik.ps1 --local-be     (all services except backend - for local backend development)"
     Write-Host "   • .\opik.ps1 --local-be-fe  (infrastructure + Python backend - for local BE+FE development)"
-    Write-Host "   • .\opik.ps1 --local-ai     (infrastructure + backend + Python backend - for local AI+FE development)"
     Write-Host "   • .\opik.ps1                (full Opik suite - default)"
     exit 1
 }

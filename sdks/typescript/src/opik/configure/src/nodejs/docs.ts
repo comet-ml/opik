@@ -64,7 +64,7 @@ import { Opik } from 'opik';
 const opik = new Opik({
   apiKey: ${apiKeyText},                    // Required
   apiUrl: ${hostText},                      // Required (Cloud or Local URL)
-  workspaceName: 'my-workspace',                   // Required
+  workspaceName: 'my-workspace',                   // Optional
   projectName: 'my-project',                       // Optional (defaults to "Default")
   batchDelayMs: 100,                               // Optional: Default 100ms
   holdUntilFlush: false,                           // Optional: Default false
@@ -641,7 +641,7 @@ Configuration:
   }="https://www.comet.com/opik/api" # Required (Cloud or Local)
   export ${
     OPIK_ENV_VARS.WORKSPACE
-  }="your-workspace-name"                # Required
+  }="your-workspace-name"                # Optional
   export ${
     OPIK_ENV_VARS.PROJECT_NAME
   }="your-project-name"               # Optional (defaults to "Default")

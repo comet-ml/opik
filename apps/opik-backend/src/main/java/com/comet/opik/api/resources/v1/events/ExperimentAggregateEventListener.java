@@ -65,7 +65,11 @@ public class ExperimentAggregateEventListener {
             return;
         }
         if (FINISHED_STATUSES.contains(event.newStatus())) {
-            publisher.publish(Set.of(event.experimentId()), event.workspaceId(), event.userName());
+            publisher.publish(Set.of(event.experimentId()), event.workspaceId(), event.userName())
+                    .subscribe(null,
+                            e -> log.error(
+                                    "Error triggering aggregation for experiment '{}' in workspace '{}'",
+                                    event.experimentId(), event.workspaceId(), e));
         }
     }
 
@@ -207,8 +211,14 @@ public class ExperimentAggregateEventListener {
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName))
-                .filter(CollectionUtils::isNotEmpty)
-                .doOnNext(experimentIds -> publisher.publish(experimentIds, workspaceId, userName))
-                .then();
+                .flatMap(experimentIds -> publishIfNotEmpty(experimentIds, workspaceId, userName));
+    }
+
+    private Mono<Void> publishIfNotEmpty(Set<UUID> experimentIds, String workspaceId, String userName) {
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            log.warn("No finished experiments to publish for workspace '{}'", workspaceId);
+            return Mono.empty();
+        }
+        return publisher.publish(experimentIds, workspaceId, userName);
     }
 }

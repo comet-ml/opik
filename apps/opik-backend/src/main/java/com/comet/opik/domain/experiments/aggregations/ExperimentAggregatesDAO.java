@@ -1932,7 +1932,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 null, // promptVersion (singular) - not in DB
                 promptVersions,
                 datasetVersionId,
-                null); // datasetVersionSummary - not in DB
+                null, // datasetVersionSummary - not in DB
+                null, // passRate - not in aggregates
+                null, // passedCount - not in aggregates
+                null); // totalCount - not in aggregates
     }
 
     /**

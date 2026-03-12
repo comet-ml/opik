@@ -1441,6 +1441,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dashboard page
@@ -3676,7 +3680,7 @@ paths:
       tags:
       - Runners
       summary: List local runners
-      description: List all local runners in the current workspace
+      description: List local runners owned by the current user in the workspace
       operationId: listRunners
       parameters:
       - name: page
@@ -9958,6 +9962,16 @@ components:
         slug:
           type: string
           readOnly: true
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -9988,6 +10002,16 @@ components:
           maxLength: 120
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10022,6 +10046,16 @@ components:
           minLength: 1
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10140,7 +10174,8 @@ components:
           minimum: 1
           type: integer
           format: int32
-      description: Default execution policy for items in this version
+      description: Execution policy captured from dataset item version at creation
+        time.
       readOnly: true
     DatasetItemChanges_Public:
       type: object
@@ -10298,6 +10333,9 @@ components:
           minimum: 1
           type: integer
           format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     Dataset:
       required:
       - name
@@ -10630,6 +10668,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
     FeedbackScore:
       required:
       - name
@@ -11169,6 +11209,9 @@ components:
           minimum: 1
           type: integer
           format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -11243,6 +11286,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -11677,6 +11722,8 @@ components:
           enum:
           - default
           - hidden
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
     Column_Public:
       type: object
       properties:
@@ -12106,6 +12153,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     PercentageValues:
       type: object
       properties:
@@ -13012,6 +13076,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary_Public"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     JsonListString_Public:
       type: object
       anyOf:
@@ -13098,6 +13179,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
+        pass_rate_avg:
+          type: number
+        passed_count_sum:
+          type: integer
+          format: int64
+        total_count_sum:
+          type: integer
+          format: int64
     ExperimentGroupAggregationsResponse:
       type: object
       properties:
@@ -15587,15 +15676,16 @@ components:
           enum:
           - text
           - chat
-        action:
-          type: string
-          description: Action to perform after creating the prompt version. 'update_blueprint'
-            (default) triggers automatic blueprint auto-increment. 'no_action' skips
-            blueprint updates.
-          default: update_blueprint
-          enum:
-          - update_blueprint
-          - no_action
+        exclude_blueprint_update_for_projects:
+          uniqueItems: true
+          type: array
+          description: Optional set of project IDs to exclude from automatic blueprint
+            creation when this prompt version is committed.
+          items:
+            type: string
+            description: Optional set of project IDs to exclude from automatic blueprint
+              creation when this prompt version is committed.
+            format: uuid
     Prompt_Detail:
       required:
       - name
@@ -15882,6 +15972,7 @@ components:
         Core properties like template, metadata etc. cannot be modified after creation.
     ServiceTogglesConfig:
       required:
+      - agentConfigurationEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -15949,6 +16040,8 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
+          type: boolean
+        agentConfigurationEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

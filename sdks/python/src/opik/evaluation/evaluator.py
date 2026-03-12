@@ -1,6 +1,17 @@
 import logging
 import time
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+    cast,
+)
 
 from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
@@ -25,6 +36,10 @@ from .scorers import scorer_function, scorer_wrapper_metric
 from . import test_result
 from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
 from .. import url_helpers
+from ..api_objects.dataset.evaluation_suite import suite_result_constructor
+
+if TYPE_CHECKING:
+    from ..api_objects.dataset.evaluation_suite import types as suite_types
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -310,7 +325,7 @@ def evaluate_suite(
     verbose: int = 1,
     task_threads: int = 16,
     evaluator_model: Optional[str] = None,
-) -> evaluation_result.EvaluationResult:
+) -> "suite_types.EvaluationSuiteResult":
     """
     Run evaluation on a dataset configured as an evaluation suite.
 
@@ -321,36 +336,8 @@ def evaluate_suite(
     - Does not accept trial_count (it comes from the dataset's execution_policy)
     - Does not accept dataset_sampler or nb_samples (suites evaluate all items)
 
-    The dataset should be created via `opik_client.create_evaluation_suite()` which
-    sets up the evaluators and execution policy on the dataset object.
-
-    Args:
-        dataset: A Dataset instance configured as an evaluation suite.
-
-        task: A callable that takes a dict (the item's data) and returns
-            a dict with "input" and "output" keys for the evaluators.
-
-        experiment_name_prefix: Optional prefix for auto-generated experiment name.
-
-        experiment_name: Optional explicit name for the experiment.
-
-        project_name: Optional project name for tracking.
-
-        experiment_config: Optional configuration dict for the experiment.
-
-        prompts: Optional list of Prompt objects to associate with the experiment.
-
-        experiment_tags: Optional list of tags to associate with the experiment.
-
-        verbose: Verbosity level (0=silent, 1=normal, 2=detailed).
-
-        task_threads: Number of threads for parallel task execution.
-
-        evaluator_model: Optional model name to use for LLMJudge evaluators.
-            If not provided, uses the default model.
-
     Returns:
-        EvaluationResult containing test results for building suite results.
+        EvaluationSuiteResult with pass/fail status for each item and the suite.
     """
     client = opik_client.get_client_cached()
 
@@ -369,7 +356,7 @@ def evaluate_suite(
         dataset_version_id=None,
     )
 
-    return _evaluate_suite_task(
+    eval_result, total_time = _evaluate_suite_task(
         client=client,
         experiment=experiment_,
         dataset=dataset,
@@ -379,6 +366,15 @@ def evaluate_suite(
         task_threads=task_threads,
         evaluator_model=evaluator_model,
     )
+
+    suite_result = suite_result_constructor.build_suite_result(eval_result)
+
+    if verbose >= 1:
+        report.display_suite_results(
+            dataset.name, total_time, suite_result, verbose=verbose
+        )
+
+    return suite_result
 
 
 def _evaluate_task(
@@ -489,7 +485,7 @@ def _evaluate_suite_task(
     verbose: int,
     task_threads: int,
     evaluator_model: Optional[str],
-) -> evaluation_result.EvaluationResult:
+) -> Tuple[evaluation_result.EvaluationResult, float]:
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
@@ -523,20 +519,11 @@ def _evaluate_suite_task(
 
     total_time = time.time() - start_time
 
-    if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results, [])
-
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
         url_override=client.config.url_override,
     )
-
-    report.display_experiment_link(experiment_url=experiment_url)
-
-    client.flush()
-
-    _try_notifying_about_experiment_completion(experiment)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
@@ -548,13 +535,14 @@ def _evaluate_suite_task(
         experiment_scores=[],
     )
 
-    if verbose >= 2:
-        report.display_evaluation_scores_statistics(
-            dataset_name=dataset.name,
-            evaluation_results=evaluation_result_,
-        )
+    if verbose >= 1:
+        report.display_experiment_link(experiment_url=experiment_url)
 
-    return evaluation_result_
+    client.flush()
+
+    _try_notifying_about_experiment_completion(experiment)
+
+    return evaluation_result_, total_time
 
 
 def evaluate_experiment(

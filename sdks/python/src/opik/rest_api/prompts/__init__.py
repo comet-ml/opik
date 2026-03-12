@@ -2,16 +2,6 @@
 
 # isort: skip_file
 
-from .types import (
-    CreatePromptVersionDetailAction,
-    CreatePromptVersionDetailTemplateStructure,
-    PromptWriteTemplateStructure,
-    PromptWriteType,
-)
+from .types import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
 
-__all__ = [
-    "CreatePromptVersionDetailAction",
-    "CreatePromptVersionDetailTemplateStructure",
-    "PromptWriteTemplateStructure",
-    "PromptWriteType",
-]
+__all__ = ["CreatePromptVersionDetailTemplateStructure", "PromptWriteTemplateStructure", "PromptWriteType"]

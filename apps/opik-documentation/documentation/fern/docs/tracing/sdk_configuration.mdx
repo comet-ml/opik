@@ -432,7 +432,7 @@ await flushAll();
 | -------------------------- | ---------------------------- | ------------------------------------------------------------------------- |
 | url_override               | `OPIK_URL_OVERRIDE`          | The URL of the Opik server - Defaults to `https://www.comet.com/opik/api` |
 | api_key                    | `OPIK_API_KEY`               | The API key - Only required for Opik Cloud                                |
-| workspace                  | `OPIK_WORKSPACE`             | The workspace name - Only required for Opik Cloud                         |
+| workspace                  | `OPIK_WORKSPACE`             | The workspace name - Optional                                             |
 | project_name               | `OPIK_PROJECT_NAME`          | The project name to use                                                   |
 | N/A                        | `OPIK_DEFAULT_LLM`           | Default LLM used by Python evaluation/simulation helpers - Defaults to `openai/gpt-5-nano` |
 | opik_track_disable         | `OPIK_TRACK_DISABLE`         | Disable tracking of traces and spans - Defaults to `false`                |
@@ -448,7 +448,7 @@ await flushAll();
 | ------------------ | ----------------------- | -------------------------------------------------------------------- |
 | apiUrl             | `OPIK_URL_OVERRIDE`     | The URL of the Opik server - Defaults to `http://localhost:5173/api` |
 | apiKey             | `OPIK_API_KEY`          | The API key - Required for Opik Cloud                                |
-| workspaceName      | `OPIK_WORKSPACE`        | The workspace name - Required for Opik Cloud                         |
+| workspaceName      | `OPIK_WORKSPACE`        | The workspace name - Optional                                        |
 | projectName        | `OPIK_PROJECT_NAME`     | The project name - Defaults to `Default Project`                     |
 | batchDelayMs       | `OPIK_BATCH_DELAY_MS`   | Batching delay in milliseconds - Defaults to `300`                   |
 | holdUntilFlush     | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush - Defaults to `false`                   |
@@ -496,7 +496,7 @@ The TypeScript SDK validates configuration at startup. Common errors:
 
 - **"OPIK_URL_OVERRIDE is not set"**: Set the `OPIK_URL_OVERRIDE` environment variable
 - **"OPIK_API_KEY is not set"**: Required for Opik Cloud deployments
-- **"OPIK_WORKSPACE is not set"**: Required for Opik Cloud deployments
+- **"OPIK_WORKSPACE is not set"**: Optional, but can be set for Opik Cloud deployments
 
 #### Debug Logging
 

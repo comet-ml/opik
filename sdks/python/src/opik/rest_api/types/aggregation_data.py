@@ -16,6 +16,9 @@ class AggregationData(UniversalBaseModel):
     duration: typing.Optional[PercentageValues] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     experiment_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
+    pass_rate_avg: typing.Optional[float] = None
+    passed_count_sum: typing.Optional[int] = None
+    total_count_sum: typing.Optional[int] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

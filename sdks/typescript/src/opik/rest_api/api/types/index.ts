@@ -137,6 +137,8 @@ export * from "./CompletionTokensDetails.js";
 export * from "./CountValueStatPublic.js";
 export * from "./DashboardPagePublic.js";
 export * from "./DashboardPublic.js";
+export * from "./DashboardPublicScope.js";
+export * from "./DashboardPublicType.js";
 export * from "./DataPointDouble.js";
 export * from "./DataPointNumberPublic.js";
 export * from "./Dataset.js";

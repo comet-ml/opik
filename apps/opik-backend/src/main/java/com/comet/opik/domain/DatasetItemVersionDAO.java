@@ -274,6 +274,12 @@ public interface DatasetItemVersionDAO {
      */
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemRowIds);
 
+    record DatasetItemPolicyEntry(UUID datasetVersionId, UUID datasetItemId, ExecutionPolicy policy) {
+    }
+
+    Flux<DatasetItemPolicyEntry> getExecutionPoliciesByDatasetItemIds(Set<UUID> datasetItemIds,
+            Set<UUID> datasetVersionIds);
+
     /**
      * Mapping from row ID to dataset_item_id.
      */
@@ -1448,6 +1454,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE id IN :datasetItemRowIds
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
+            """;
+
+    private static final String SELECT_EXECUTION_POLICIES_BY_DATASET_ITEM_IDS = """
+            SELECT DISTINCT
+                dataset_item_id,
+                dataset_version_id,
+                execution_policy
+            FROM dataset_item_versions
+            WHERE dataset_item_id IN :datasetItemIds
+            AND dataset_version_id IN :datasetVersionIds
+            AND workspace_id = :workspace_id
             """;
 
     private static final String SELECT_ITEMS_BY_DATASET_ITEM_IDS = """
@@ -3091,6 +3108,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             UUID.fromString(row.get("id", String.class)))))
                     .collectList()
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItemPolicyEntry> getExecutionPoliciesByDatasetItemIds(
+            @NonNull Set<UUID> datasetItemIds,
+            @NonNull Set<UUID> datasetVersionIds) {
+        if (datasetItemIds.isEmpty() || datasetVersionIds.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(SELECT_EXECUTION_POLICIES_BY_DATASET_ITEM_IDS)
+                    .bind("datasetItemIds", datasetItemIds.toArray(UUID[]::new))
+                    .bind("datasetVersionIds", datasetVersionIds.toArray(UUID[]::new));
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                    "get_execution_policies_by_dataset_item_ids");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
+                        var versionId = UUID.fromString(row.get("dataset_version_id", String.class));
+                        var policy = ExecutionPolicyMapper.fromJson(row.get("execution_policy", String.class));
+                        return new DatasetItemPolicyEntry(versionId, datasetItemId, policy);
+                    }))
+                    .filter(entry -> entry.policy() != null);
         });
     }
 

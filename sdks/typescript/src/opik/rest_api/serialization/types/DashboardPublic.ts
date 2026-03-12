@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { DashboardPublicScope } from "./DashboardPublicScope.js";
+import { DashboardPublicType } from "./DashboardPublicType.js";
 import { JsonNodePublic } from "./JsonNodePublic.js";
 
 export const DashboardPublic: core.serialization.ObjectSchema<
@@ -13,6 +15,8 @@ export const DashboardPublic: core.serialization.ObjectSchema<
     workspaceId: core.serialization.property("workspace_id", core.serialization.string().optional()),
     name: core.serialization.string(),
     slug: core.serialization.string().optional(),
+    type: DashboardPublicType.optional(),
+    scope: DashboardPublicScope.optional(),
     description: core.serialization.string().optional(),
     config: JsonNodePublic,
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -27,6 +31,8 @@ export declare namespace DashboardPublic {
         workspace_id?: string | null;
         name: string;
         slug?: string | null;
+        type?: DashboardPublicType.Raw | null;
+        scope?: DashboardPublicScope.Raw | null;
         description?: string | null;
         config: JsonNodePublic.Raw;
         created_by?: string | null;

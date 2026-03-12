@@ -12,7 +12,6 @@ from ..types.prompt_version_link_public import PromptVersionLinkPublic
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from ..types.prompt_version_update import PromptVersionUpdate
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
-from .types.create_prompt_version_detail_action import CreatePromptVersionDetailAction
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
@@ -151,7 +150,7 @@ class PromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
-        action: typing.Optional[CreatePromptVersionDetailAction] = OMIT,
+        exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
@@ -166,8 +165,8 @@ class PromptsClient:
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
-        action : typing.Optional[CreatePromptVersionDetailAction]
-            Action to perform after creating the prompt version. 'update_blueprint' (default) triggers automatic blueprint auto-increment. 'no_action' skips blueprint updates.
+        exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
+            Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -188,7 +187,7 @@ class PromptsClient:
             name=name,
             version=version,
             template_structure=template_structure,
-            action=action,
+            exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
             request_options=request_options,
         )
         return _response.data
@@ -683,7 +682,7 @@ class AsyncPromptsClient:
         name: str,
         version: PromptVersionDetail,
         template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
-        action: typing.Optional[CreatePromptVersionDetailAction] = OMIT,
+        exclude_blueprint_update_for_projects: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
@@ -698,8 +697,8 @@ class AsyncPromptsClient:
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
             Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
-        action : typing.Optional[CreatePromptVersionDetailAction]
-            Action to perform after creating the prompt version. 'update_blueprint' (default) triggers automatic blueprint auto-increment. 'no_action' skips blueprint updates.
+        exclude_blueprint_update_for_projects : typing.Optional[typing.Sequence[str]]
+            Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -723,7 +722,7 @@ class AsyncPromptsClient:
             name=name,
             version=version,
             template_structure=template_structure,
-            action=action,
+            exclude_blueprint_update_for_projects=exclude_blueprint_update_for_projects,
             request_options=request_options,
         )
         return _response.data
