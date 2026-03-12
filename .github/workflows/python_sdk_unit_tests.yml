@@ -1,5 +1,9 @@
-name: SDK Unit Tests
-run-name: "SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: Python SDK Unit Tests
+run-name: "Python SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 on:
   pull_request:
     paths:
@@ -14,7 +18,7 @@ env:
   OPIK_SENTRY_ENABLE: False
 jobs:
   UnitTests:
-    name: Units_Python_${{matrix.python_version}}
+    name: Python SDK Unit Tests ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -67,8 +71,8 @@ jobs:
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
-        if: failure()
+        if: always()
         with:
           action_fail: true
-          check_name: SDK Unit Tests Results
+          check_name: Python SDK Unit Tests Results (Python ${{matrix.python_version}})
           files: ${{ github.workspace }}/test_results.xml
