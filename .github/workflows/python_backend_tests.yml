@@ -1,15 +1,21 @@
 name: "Python Backend Tests"
 run-name: "Python Backend Tests on ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 
 on:
   pull_request:
-    paths: 
+    paths:
       - "apps/opik-python-backend/**"
+      - ".github/workflows/python_backend_tests.yml"
   push:
-    branches: 
+    branches:
       - 'main'
-    paths: 
+    paths:
       - "apps/opik-python-backend/**"
+      - ".github/workflows/python_backend_tests.yml"
   workflow_dispatch:
 
 jobs:
