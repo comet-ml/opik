@@ -30,6 +30,13 @@ def matches_trace_filter(trace_dict: dict, filter_string: str) -> bool:
     Used when filtering experiment traces that are fetched by ID rather than
     via a server-side paginated query (which handles filtering natively).
     Returns True if the trace passes all filter clauses, False otherwise.
+
+    Edge case — parse failure: if ``OpikQueryLanguage`` raises ``ValueError``
+    (malformed syntax or an unsupported construct), the filter cannot be
+    evaluated and the function returns ``True`` (keep the trace).  A warning
+    is logged so callers can detect the situation.  The rationale is that
+    silently dropping traces on a best-effort client-side filter is more
+    harmful than letting a few extra traces through.
     """
     from opik.api_objects.opik_query_language import OpikQueryLanguage
 
