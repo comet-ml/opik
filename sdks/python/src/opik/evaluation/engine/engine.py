@@ -1,5 +1,6 @@
 import functools
 import logging
+import time
 from typing import List, Optional, Iterator, Callable
 
 import opik
@@ -180,6 +181,7 @@ class EvaluationEngine:
             client=self._client,
         ):
             LOGGER.debug("Task started, input: %s", item_content)
+            task_start = time.perf_counter()
             try:
                 task_output_ = task(item_content)
             except Exception as exception:
@@ -189,6 +191,7 @@ class EvaluationEngine:
                     )
 
                 raise
+            task_execution_time = time.perf_counter() - task_start
             LOGGER.debug("Task finished, output: %s", task_output_)
 
             opik_context.update_current_trace(output=task_output_)
@@ -200,6 +203,7 @@ class EvaluationEngine:
                 dataset_item_content=item_content,
                 dataset_item=item,
             )
+            scoring_start = time.perf_counter()
             test_result_ = self._compute_test_result_for_test_case(
                 test_case_=test_case_,
                 regular_metrics=regular_metrics,
@@ -207,6 +211,8 @@ class EvaluationEngine:
                 evaluator_model=evaluator_model,
                 trial_id=trial_id,
             )
+            test_result_.task_execution_time = task_execution_time
+            test_result_.scoring_time = time.perf_counter() - scoring_start
 
         return test_result_
 

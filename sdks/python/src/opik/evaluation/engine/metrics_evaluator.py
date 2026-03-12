@@ -116,6 +116,12 @@ def build_metrics_evaluator(
         )
         all_metrics.extend(item_evaluators)
 
+    judges = [m for m in all_metrics if isinstance(m, llm_judge.LLMJudge)]
+    non_judges = [m for m in all_metrics if not isinstance(m, llm_judge.LLMJudge)]
+    merged = llm_judge.LLMJudge.merged(judges)
+    if merged is not None:
+        all_metrics = [merged] + non_judges
+
     return MetricsEvaluator(
         scoring_metrics=all_metrics,
         scoring_key_mapping=scoring_key_mapping,
