@@ -5,7 +5,7 @@
  *     {}
  */
 export interface ListJobsRequest {
-    project?: string;
+    projectId?: string;
     page?: number;
     size?: number;
 }

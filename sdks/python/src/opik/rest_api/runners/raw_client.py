@@ -17,6 +17,7 @@ from ..errors.not_found_error import NotFoundError
 from ..types.error_message import ErrorMessage
 from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
+from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
 from ..types.local_runner_job_page import LocalRunnerJobPage
@@ -201,7 +202,7 @@ class RawRunnersClient:
         runner_name: str,
         pairing_code: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> HttpResponse[None]:
+    ) -> HttpResponse[LocalRunnerConnectResponse]:
         """
         Exchange a pairing code or API key for local runner credentials
 
@@ -216,7 +217,8 @@ class RawRunnersClient:
 
         Returns
         -------
-        HttpResponse[None]
+        HttpResponse[LocalRunnerConnectResponse]
+            Runner connected
         """
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/local-runners/connections",
@@ -233,7 +235,14 @@ class RawRunnersClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
+                _data = typing.cast(
+                    LocalRunnerConnectResponse,
+                    parse_obj_as(
+                        type_=LocalRunnerConnectResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
                     headers=dict(_response.headers),
@@ -265,9 +274,8 @@ class RawRunnersClient:
         self,
         *,
         agent_name: str,
+        project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
-        project: typing.Optional[str] = OMIT,
-        runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -278,11 +286,9 @@ class RawRunnersClient:
         ----------
         agent_name : str
 
+        project_id : str
+
         inputs : typing.Optional[JsonNode]
-
-        project : typing.Optional[str]
-
-        runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
 
@@ -299,8 +305,7 @@ class RawRunnersClient:
             json={
                 "agent_name": agent_name,
                 "inputs": inputs,
-                "project": project,
-                "runner_id": runner_id,
+                "project_id": project_id,
                 "mask_id": mask_id,
             },
             headers={
@@ -340,13 +345,15 @@ class RawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def generate_pairing_code(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[LocalRunnerPairResponse]:
         """
         Generate a pairing code for a local runner in the current workspace
 
         Parameters
         ----------
+        project_id : str
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -358,7 +365,14 @@ class RawRunnersClient:
         _response = self._client_wrapper.httpx_client.request(
             "v1/private/local-runners/pairs",
             method="POST",
+            json={
+                "project_id": project_id,
+            },
+            headers={
+                "content-type": "application/json",
+            },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -548,7 +562,7 @@ class RawRunnersClient:
         self,
         runner_id: str,
         *,
-        project: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -560,7 +574,7 @@ class RawRunnersClient:
         ----------
         runner_id : str
 
-        project : typing.Optional[str]
+        project_id : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -578,7 +592,7 @@ class RawRunnersClient:
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/jobs",
             method="GET",
             params={
-                "project": project,
+                "project_id": project_id,
                 "page": page,
                 "size": size,
             },
@@ -613,6 +627,7 @@ class RawRunnersClient:
     def list_runners(
         self,
         *,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -622,6 +637,8 @@ class RawRunnersClient:
 
         Parameters
         ----------
+        project_id : typing.Optional[str]
+
         page : typing.Optional[int]
 
         size : typing.Optional[int]
@@ -638,6 +655,7 @@ class RawRunnersClient:
             "v1/private/local-runners",
             method="GET",
             params={
+                "project_id": project_id,
                 "page": page,
                 "size": size,
             },
@@ -1033,7 +1051,7 @@ class AsyncRawRunnersClient:
         runner_name: str,
         pairing_code: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> AsyncHttpResponse[None]:
+    ) -> AsyncHttpResponse[LocalRunnerConnectResponse]:
         """
         Exchange a pairing code or API key for local runner credentials
 
@@ -1048,7 +1066,8 @@ class AsyncRawRunnersClient:
 
         Returns
         -------
-        AsyncHttpResponse[None]
+        AsyncHttpResponse[LocalRunnerConnectResponse]
+            Runner connected
         """
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/local-runners/connections",
@@ -1065,7 +1084,14 @@ class AsyncRawRunnersClient:
         )
         try:
             if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
+                _data = typing.cast(
+                    LocalRunnerConnectResponse,
+                    parse_obj_as(
+                        type_=LocalRunnerConnectResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 400:
                 raise BadRequestError(
                     headers=dict(_response.headers),
@@ -1097,9 +1123,8 @@ class AsyncRawRunnersClient:
         self,
         *,
         agent_name: str,
+        project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
-        project: typing.Optional[str] = OMIT,
-        runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -1110,11 +1135,9 @@ class AsyncRawRunnersClient:
         ----------
         agent_name : str
 
+        project_id : str
+
         inputs : typing.Optional[JsonNode]
-
-        project : typing.Optional[str]
-
-        runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
 
@@ -1131,8 +1154,7 @@ class AsyncRawRunnersClient:
             json={
                 "agent_name": agent_name,
                 "inputs": inputs,
-                "project": project,
-                "runner_id": runner_id,
+                "project_id": project_id,
                 "mask_id": mask_id,
             },
             headers={
@@ -1172,13 +1194,15 @@ class AsyncRawRunnersClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def generate_pairing_code(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[LocalRunnerPairResponse]:
         """
         Generate a pairing code for a local runner in the current workspace
 
         Parameters
         ----------
+        project_id : str
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1190,7 +1214,14 @@ class AsyncRawRunnersClient:
         _response = await self._client_wrapper.httpx_client.request(
             "v1/private/local-runners/pairs",
             method="POST",
+            json={
+                "project_id": project_id,
+            },
+            headers={
+                "content-type": "application/json",
+            },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
@@ -1380,7 +1411,7 @@ class AsyncRawRunnersClient:
         self,
         runner_id: str,
         *,
-        project: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1392,7 +1423,7 @@ class AsyncRawRunnersClient:
         ----------
         runner_id : str
 
-        project : typing.Optional[str]
+        project_id : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -1410,7 +1441,7 @@ class AsyncRawRunnersClient:
             f"v1/private/local-runners/{jsonable_encoder(runner_id)}/jobs",
             method="GET",
             params={
-                "project": project,
+                "project_id": project_id,
                 "page": page,
                 "size": size,
             },
@@ -1445,6 +1476,7 @@ class AsyncRawRunnersClient:
     async def list_runners(
         self,
         *,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1454,6 +1486,8 @@ class AsyncRawRunnersClient:
 
         Parameters
         ----------
+        project_id : typing.Optional[str]
+
         page : typing.Optional[int]
 
         size : typing.Optional[int]
@@ -1470,6 +1504,7 @@ class AsyncRawRunnersClient:
             "v1/private/local-runners",
             method="GET",
             params={
+                "project_id": project_id,
                 "page": page,
                 "size": size,
             },

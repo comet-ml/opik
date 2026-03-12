@@ -6,6 +6,7 @@ from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.json_node import JsonNode
 from ..types.local_runner import LocalRunner
+from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
 from ..types.local_runner_job_page import LocalRunnerJobPage
@@ -130,7 +131,7 @@ class RunnersClient:
         runner_name: str,
         pairing_code: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> LocalRunnerConnectResponse:
         """
         Exchange a pairing code or API key for local runner credentials
 
@@ -145,7 +146,8 @@ class RunnersClient:
 
         Returns
         -------
-        None
+        LocalRunnerConnectResponse
+            Runner connected
 
         Examples
         --------
@@ -162,9 +164,8 @@ class RunnersClient:
         self,
         *,
         agent_name: str,
+        project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
-        project: typing.Optional[str] = OMIT,
-        runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -175,11 +176,9 @@ class RunnersClient:
         ----------
         agent_name : str
 
+        project_id : str
+
         inputs : typing.Optional[JsonNode]
-
-        project : typing.Optional[str]
-
-        runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
 
@@ -194,26 +193,27 @@ class RunnersClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.create_job(agent_name='agent_name', )
+        client.runners.create_job(agent_name='agent_name', project_id='project_id', )
         """
         _response = self._raw_client.create_job(
             agent_name=agent_name,
+            project_id=project_id,
             inputs=inputs,
-            project=project,
-            runner_id=runner_id,
             mask_id=mask_id,
             request_options=request_options,
         )
         return _response.data
 
     def generate_pairing_code(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
     ) -> LocalRunnerPairResponse:
         """
         Generate a pairing code for a local runner in the current workspace
 
         Parameters
         ----------
+        project_id : str
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -226,9 +226,9 @@ class RunnersClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.generate_pairing_code()
+        client.runners.generate_pairing_code(project_id='project_id', )
         """
-        _response = self._raw_client.generate_pairing_code(request_options=request_options)
+        _response = self._raw_client.generate_pairing_code(project_id=project_id, request_options=request_options)
         return _response.data
 
     def get_job(self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunnerJob:
@@ -312,7 +312,7 @@ class RunnersClient:
         self,
         runner_id: str,
         *,
-        project: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -324,7 +324,7 @@ class RunnersClient:
         ----------
         runner_id : str
 
-        project : typing.Optional[str]
+        project_id : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -345,13 +345,14 @@ class RunnersClient:
         client.runners.list_jobs(runner_id='runnerId', )
         """
         _response = self._raw_client.list_jobs(
-            runner_id, project=project, page=page, size=size, request_options=request_options
+            runner_id, project_id=project_id, page=page, size=size, request_options=request_options
         )
         return _response.data
 
     def list_runners(
         self,
         *,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -361,6 +362,8 @@ class RunnersClient:
 
         Parameters
         ----------
+        project_id : typing.Optional[str]
+
         page : typing.Optional[int]
 
         size : typing.Optional[int]
@@ -379,7 +382,9 @@ class RunnersClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.runners.list_runners()
         """
-        _response = self._raw_client.list_runners(page=page, size=size, request_options=request_options)
+        _response = self._raw_client.list_runners(
+            project_id=project_id, page=page, size=size, request_options=request_options
+        )
         return _response.data
 
     def next_job(self, runner_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunnerJob:
@@ -604,7 +609,7 @@ class AsyncRunnersClient:
         runner_name: str,
         pairing_code: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
-    ) -> None:
+    ) -> LocalRunnerConnectResponse:
         """
         Exchange a pairing code or API key for local runner credentials
 
@@ -619,7 +624,8 @@ class AsyncRunnersClient:
 
         Returns
         -------
-        None
+        LocalRunnerConnectResponse
+            Runner connected
 
         Examples
         --------
@@ -639,9 +645,8 @@ class AsyncRunnersClient:
         self,
         *,
         agent_name: str,
+        project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
-        project: typing.Optional[str] = OMIT,
-        runner_id: typing.Optional[str] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -652,11 +657,9 @@ class AsyncRunnersClient:
         ----------
         agent_name : str
 
+        project_id : str
+
         inputs : typing.Optional[JsonNode]
-
-        project : typing.Optional[str]
-
-        runner_id : typing.Optional[str]
 
         mask_id : typing.Optional[str]
 
@@ -673,27 +676,28 @@ class AsyncRunnersClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.runners.create_job(agent_name='agent_name', )
+            await client.runners.create_job(agent_name='agent_name', project_id='project_id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_job(
             agent_name=agent_name,
+            project_id=project_id,
             inputs=inputs,
-            project=project,
-            runner_id=runner_id,
             mask_id=mask_id,
             request_options=request_options,
         )
         return _response.data
 
     async def generate_pairing_code(
-        self, *, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
     ) -> LocalRunnerPairResponse:
         """
         Generate a pairing code for a local runner in the current workspace
 
         Parameters
         ----------
+        project_id : str
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -708,10 +712,10 @@ class AsyncRunnersClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.runners.generate_pairing_code()
+            await client.runners.generate_pairing_code(project_id='project_id', )
         asyncio.run(main())
         """
-        _response = await self._raw_client.generate_pairing_code(request_options=request_options)
+        _response = await self._raw_client.generate_pairing_code(project_id=project_id, request_options=request_options)
         return _response.data
 
     async def get_job(self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None) -> LocalRunnerJob:
@@ -806,7 +810,7 @@ class AsyncRunnersClient:
         self,
         runner_id: str,
         *,
-        project: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -818,7 +822,7 @@ class AsyncRunnersClient:
         ----------
         runner_id : str
 
-        project : typing.Optional[str]
+        project_id : typing.Optional[str]
 
         page : typing.Optional[int]
 
@@ -842,13 +846,14 @@ class AsyncRunnersClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.list_jobs(
-            runner_id, project=project, page=page, size=size, request_options=request_options
+            runner_id, project_id=project_id, page=page, size=size, request_options=request_options
         )
         return _response.data
 
     async def list_runners(
         self,
         *,
+        project_id: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -858,6 +863,8 @@ class AsyncRunnersClient:
 
         Parameters
         ----------
+        project_id : typing.Optional[str]
+
         page : typing.Optional[int]
 
         size : typing.Optional[int]
@@ -879,7 +886,9 @@ class AsyncRunnersClient:
             await client.runners.list_runners()
         asyncio.run(main())
         """
-        _response = await self._raw_client.list_runners(page=page, size=size, request_options=request_options)
+        _response = await self._raw_client.list_runners(
+            project_id=project_id, page=page, size=size, request_options=request_options
+        )
         return _response.data
 
     async def next_job(

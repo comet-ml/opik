@@ -1,45 +1,32 @@
 import logging
 import os
 import platform
-import threading
 import uuid
-from typing import Optional
+from typing import Optional, Tuple
 
 import click
 import httpx
 
 from opik import httpx_client
+from opik.rest_api.core.api_error import ApiError
 from opik.config import OpikConfig
 from opik.rest_api.client import OpikApi
-from opik.runner import (
-    agents_registry,
-    runner_loop,
-    state,
-)
 
 LOGGER = logging.getLogger(__name__)
 
 
-@click.command()
+@click.command(context_settings={"ignore_unknown_options": True})
 @click.option("--pair", "pair_code", default=None, help="Pairing code for the runner.")
 @click.option("--name", default=None, help="Runner name.")
+@click.argument("command", nargs=-1, type=click.UNPROCESSED, required=False)
 @click.pass_context
 def connect(
     ctx: click.Context,
     pair_code: Optional[str],
     name: Optional[str],
+    command: Tuple[str, ...],
 ) -> None:
-    """Connect a local runner to Opik and start processing jobs."""
-    runner_state = state.RunnerState.load()
-    if runner_state is not None:
-        pid = runner_state.pid
-        if _is_process_alive(pid):
-            click.echo(
-                f"Runner already running (PID {pid}). Use 'opik disconnect' first."
-            )
-            raise SystemExit(1)
-        state.RunnerState.clear()
-
+    """Connect a local runner to Opik and exec the user command."""
     config = OpikConfig()
     api_key = ctx.obj.get("api_key") if ctx.obj else None
 
@@ -59,51 +46,40 @@ def connect(
 
     try:
         runner_name = name or f"{platform.node()}-{uuid.uuid4().hex[:6]}"
-        # Server returns 201 with runner_id in the Location header, no JSON body.
-        resp = api.runners.with_raw_response.connect_runner(
+        resp = api.runners.connect_runner(
             runner_name=runner_name,
             pairing_code=pair_code,
         )
-        runner_id = resp.headers["location"].rsplit("/", 1)[-1]
 
-        runner_state = state.RunnerState(
-            runner_id=runner_id,
-            pid=os.getpid(),
-            name=name or "",
-            base_url=config.url_override,
-        )
-        runner_state.save()
+        runner_id = resp.runner_id or ""
+        project_name = resp.project_name or ""
 
-        agents = agents_registry.load_agents()
-        if agents:
-            payload = {
-                name: {k: v for k, v in a.to_dict().items() if k != "name"}
-                for name, a in agents.items()
-            }
-            api.runners.register_agents(runner_id, request=payload)
+        click.echo(f"Runner connected (ID: {runner_id}).")
 
-        click.echo(f"Runner connected (ID: {runner_id}). Listening for jobs...")
+        if not command:
+            click.echo("No command specified. Set env vars and exiting.")
+            return
 
-        shutdown_event = threading.Event()
-        loop = runner_loop.RunnerLoop(api, runner_id, shutdown_event)
-        loop.run()
+        env = {
+            **os.environ,
+            "OPIK_RUNNER_MODE": "true",
+            "OPIK_RUNNER_ID": runner_id,
+            "OPIK_PROJECT_NAME": project_name,
+        }
+
+        http_client.close()
+        os.execvpe(command[0], list(command), env)
+    except ApiError as e:
+        click.echo(f"Error: {e.body}" if e.body else f"Error: {e.status_code}")
+        raise SystemExit(1)
     except httpx.ConnectError:
         click.echo(
             f"Error: Could not connect to Opik at {config.url_override}. "
             "Check that the backend is running."
         )
         raise SystemExit(1)
+    except OSError as e:
+        click.echo(f"Error: Could not execute command '{command[0]}': {e}")
+        raise SystemExit(1)
     finally:
         http_client.close()
-        state.RunnerState.clear()
-        click.echo("Runner disconnected.")
-
-
-def _is_process_alive(pid: int) -> bool:
-    # Signal 0 doesn't kill — it only checks whether the process exists.
-    # Works on both Unix (POSIX) and Windows.
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False

@@ -9,5 +9,6 @@ export type { ListJobsRequest } from "./ListJobsRequest.js";
 export type { ListRunnersRequest } from "./ListRunnersRequest.js";
 export type { LocalRunnerConnectRequest } from "./LocalRunnerConnectRequest.js";
 export type { LocalRunnerJobResultRequest } from "./LocalRunnerJobResultRequest.js";
+export type { LocalRunnerPairRequest } from "./LocalRunnerPairRequest.js";
 export type { NextJobRequest } from "./NextJobRequest.js";
 export type { RegisterAgentsRequest } from "./RegisterAgentsRequest.js";

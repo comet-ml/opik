@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AgentBlueprintHistoryType } from "./AgentBlueprintHistoryType.js";
+import { AgentConfigValueHistory } from "./AgentConfigValueHistory.js";
 
 export const AgentBlueprintHistory: core.serialization.ObjectSchema<
     serializers.AgentBlueprintHistory.Raw,
@@ -17,6 +18,7 @@ export const AgentBlueprintHistory: core.serialization.ObjectSchema<
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+    values: core.serialization.list(AgentConfigValueHistory),
 });
 
 export declare namespace AgentBlueprintHistory {
@@ -29,5 +31,6 @@ export declare namespace AgentBlueprintHistory {
         created_at?: string | null;
         last_updated_by?: string | null;
         last_updated_at?: string | null;
+        values: AgentConfigValueHistory.Raw[];
     }
 }

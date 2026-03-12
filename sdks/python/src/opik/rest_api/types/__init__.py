@@ -10,6 +10,8 @@ from .agent_blueprint_public_type import AgentBlueprintPublicType
 from .agent_blueprint_write import AgentBlueprintWrite
 from .agent_blueprint_write_type import AgentBlueprintWriteType
 from .agent_config_env import AgentConfigEnv
+from .agent_config_value_history import AgentConfigValueHistory
+from .agent_config_value_history_type import AgentConfigValueHistoryType
 from .agent_config_value_public import AgentConfigValuePublic
 from .agent_config_value_public_type import AgentConfigValuePublicType
 from .agent_config_value_write import AgentConfigValueWrite
@@ -397,6 +399,7 @@ from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
 from .local_runner import LocalRunner
+from .local_runner_connect_response import LocalRunnerConnectResponse
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
 from .local_runner_job_page import LocalRunnerJobPage
@@ -622,6 +625,8 @@ __all__ = [
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
     "AgentConfigEnv",
+    "AgentConfigValueHistory",
+    "AgentConfigValueHistoryType",
     "AgentConfigValuePublic",
     "AgentConfigValuePublicType",
     "AgentConfigValueWrite",
@@ -966,6 +971,7 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
+    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
     "LocalRunnerJobPage",

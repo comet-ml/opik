@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
@@ -38,22 +40,27 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LocalRunnerServiceImplTest {
 
-    private static final String WORKSPACE_ID = "test-workspace";
-    private static final String OTHER_WORKSPACE_ID = "other-workspace";
+    private static final String WORKSPACE_ID = "00000000-0000-0000-0000-000000000001";
+    private static final String OTHER_WORKSPACE_ID = "00000000-0000-0000-0000-000000000002";
     private static final String USER_NAME = "test-user";
     private static final String RUNNER_NAME = "my-runner";
     private static final String AGENT_NAME = "test-agent";
+    private static final UUID PROJECT_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
+    private static final String PROJECT_NAME = "test-project";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final RedisContainer redis = RedisContainerUtils.newRedisContainer();
     private RedissonClient redisClient;
     private LocalRunnerConfig runnerConfig;
     private IdGenerator idGenerator;
+    private ProjectService projectService;
     private LocalRunnerServiceImpl runnerService;
 
     private int uuidCounter = 0;
@@ -81,8 +88,12 @@ class LocalRunnerServiceImplTest {
         runnerConfig.setReaperLockWait(Duration.seconds(5));
 
         idGenerator = Mockito.mock(IdGenerator.class);
+        projectService = Mockito.mock(ProjectService.class);
 
-        runnerService = new LocalRunnerServiceImpl(redisClient, runnerConfig, idGenerator);
+        when(projectService.get(eq(PROJECT_ID), any())).thenReturn(
+                Project.builder().id(PROJECT_ID).name(PROJECT_NAME).build());
+
+        runnerService = new LocalRunnerServiceImpl(redisClient, runnerConfig, idGenerator, projectService);
     }
 
     @BeforeEach
@@ -108,26 +119,20 @@ class LocalRunnerServiceImplTest {
 
     private UUID pairAndConnect(String workspaceId, String userName, String runnerName) {
         stubNextId();
-        LocalRunnerPairResponse pair = runnerService.generatePairingCode(workspaceId, userName);
+        LocalRunnerPairResponse pair = runnerService.generatePairingCode(workspaceId, userName, PROJECT_ID);
         LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                 .pairingCode(pair.pairingCode())
                 .runnerName(runnerName)
                 .build();
-        return runnerService.connect(workspaceId, userName, req);
-    }
-
-    private UUID connectViaApiKey(String workspaceId, String userName, String runnerName) {
-        stubNextId();
-        LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                .runnerName(runnerName)
-                .build();
-        return runnerService.connect(workspaceId, userName, req);
+        LocalRunnerConnectResponse resp = runnerService.connect(workspaceId, userName, req);
+        return resp.runnerId();
     }
 
     private UUID createTestJob(String workspaceId, String userName, String agentName) {
         stubNextId();
         CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                 .agentName(agentName)
+                .projectId(PROJECT_ID)
                 .build();
         return runnerService.createJob(workspaceId, userName, req);
     }
@@ -142,32 +147,36 @@ class LocalRunnerServiceImplTest {
         @Test
         void createsPairKeyInRedis() {
             stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             RBucket<String> pairBucket = redisClient.getBucket(
                     "opik:runners:pair:" + resp.pairingCode(), StringCodec.INSTANCE);
             assertThat(pairBucket.isExists()).isTrue();
-            assertThat(pairBucket.get()).isEqualTo(resp.runnerId() + ":" + WORKSPACE_ID);
+            String value = pairBucket.get();
+            assertThat(value).contains(resp.runnerId().toString());
+            assertThat(value).contains(WORKSPACE_ID);
+            assertThat(value).contains(PROJECT_ID.toString());
             assertThat(pairBucket.remainTimeToLive()).isPositive();
         }
 
         @Test
         void createsRunnerHash() {
             stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             RMap<String, String> runnerMap = redisClient.getMap(
                     "opik:runners:runner:" + resp.runnerId(), StringCodec.INSTANCE);
             assertThat(runnerMap.get("status")).isEqualTo("pairing");
             assertThat(runnerMap.get("workspace_id")).isEqualTo(WORKSPACE_ID);
             assertThat(runnerMap.get("user_name")).isEqualTo(USER_NAME);
+            assertThat(runnerMap.get("project_id")).isEqualTo(PROJECT_ID.toString());
             assertThat(runnerMap.remainTimeToLive()).isPositive();
         }
 
         @Test
         void addsToWorkspaceSets() {
             stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             RScoredSortedSet<String> wsRunners = redisClient.getScoredSortedSet(
                     "opik:runners:workspace:" + WORKSPACE_ID + ":runners", StringCodec.INSTANCE);
@@ -179,14 +188,26 @@ class LocalRunnerServiceImplTest {
         }
 
         @Test
-        void setsUserRunnerMapping() {
+        void doesNotSetUserRunnerMappingUntilConnect() {
             stubNextId();
-            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             RBucket<String> userRunner = redisClient.getBucket(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":user:" + USER_NAME + ":runner",
+                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":user:" + USER_NAME
+                            + ":runner",
                     StringCodec.INSTANCE);
-            assertThat(userRunner.get()).isEqualTo(resp.runnerId().toString());
+            assertThat(userRunner.isExists()).isFalse();
+        }
+
+        @Test
+        void addsToProjectRunnersSet() {
+            stubNextId();
+            LocalRunnerPairResponse resp = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
+
+            RSet<String> projectRunners = redisClient.getSet(
+                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":runners",
+                    StringCodec.INSTANCE);
+            assertThat(projectRunners.contains(resp.runnerId().toString())).isTrue();
         }
     }
 
@@ -196,31 +217,34 @@ class LocalRunnerServiceImplTest {
         @Test
         void withPairingCode_claimsPairAndReturnsCredentials() {
             stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                     .pairingCode(pair.pairingCode())
                     .runnerName(RUNNER_NAME)
                     .build();
-            UUID runnerId = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerConnectResponse resp = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
 
-            assertThat(runnerId).isEqualTo(pair.runnerId());
+            assertThat(resp.runnerId()).isEqualTo(pair.runnerId());
+            assertThat(resp.projectId()).isEqualTo(PROJECT_ID);
+            assertThat(resp.projectName()).isEqualTo(PROJECT_NAME);
 
             RBucket<String> pairBucket = redisClient.getBucket(
                     "opik:runners:pair:" + pair.pairingCode(), StringCodec.INSTANCE);
             assertThat(pairBucket.isExists()).isFalse();
 
             RMap<String, String> runnerMap = redisClient.getMap(
-                    "opik:runners:runner:" + runnerId, StringCodec.INSTANCE);
+                    "opik:runners:runner:" + resp.runnerId(), StringCodec.INSTANCE);
             assertThat(runnerMap.get("status")).isEqualTo("connected");
             assertThat(runnerMap.get("name")).isEqualTo(RUNNER_NAME);
             assertThat(runnerMap.get("connected_at")).isNotBlank();
+            assertThat(runnerMap.get("project_id")).isEqualTo(PROJECT_ID.toString());
         }
 
         @Test
         void withPairingCode_removesRunnerTTL() {
             stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                     .pairingCode(pair.pairingCode())
@@ -236,39 +260,24 @@ class LocalRunnerServiceImplTest {
         @Test
         void withPairingCode_setsHeartbeat() {
             stubNextId();
-            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+            LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
 
             LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                     .pairingCode(pair.pairingCode())
                     .runnerName(RUNNER_NAME)
                     .build();
-            UUID runnerId = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
+            LocalRunnerConnectResponse resp = runnerService.connect(WORKSPACE_ID, USER_NAME, req);
 
             RBucket<String> hb = redisClient.getBucket(
-                    "opik:runners:runner:" + runnerId + ":heartbeat", StringCodec.INSTANCE);
+                    "opik:runners:runner:" + resp.runnerId() + ":heartbeat", StringCodec.INSTANCE);
             assertThat(hb.isExists()).isTrue();
             assertThat(hb.remainTimeToLive()).isPositive();
         }
 
         @Test
-        void withoutPairingCode_createsNewRunner() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
-
-            RMap<String, String> runnerMap = redisClient.getMap(
-                    "opik:runners:runner:" + runnerId, StringCodec.INSTANCE);
-            assertThat(runnerMap.get("status")).isEqualTo("connected");
-            assertThat(runnerMap.get("name")).isEqualTo(RUNNER_NAME);
-            assertThat(runnerMap.get("workspace_id")).isEqualTo(WORKSPACE_ID);
-
-            RBucket<String> hb = redisClient.getBucket(
-                    "opik:runners:runner:" + runnerId + ":heartbeat", StringCodec.INSTANCE);
-            assertThat(hb.isExists()).isTrue();
-        }
-
-        @Test
         void replacesExistingRunner() {
             UUID oldRunnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, "old-runner");
-            UUID newRunnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, "new-runner");
+            UUID newRunnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, "new-runner");
 
             assertThat(newRunnerId).isNotEqualTo(oldRunnerId);
 
@@ -277,7 +286,8 @@ class LocalRunnerServiceImplTest {
             assertThat(oldHb.isExists()).isFalse();
 
             RBucket<String> userRunner = redisClient.getBucket(
-                    "opik:runners:workspace:" + WORKSPACE_ID + ":user:" + USER_NAME + ":runner",
+                    "opik:runners:workspace:" + WORKSPACE_ID + ":project:" + PROJECT_ID + ":user:" + USER_NAME
+                            + ":runner",
                     StringCodec.INSTANCE);
             assertThat(userRunner.get()).isEqualTo(newRunnerId.toString());
         }
@@ -326,7 +336,7 @@ class LocalRunnerServiceImplTest {
             stubNextId();
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
-                    .project("my-project")
+                    .projectId(PROJECT_ID)
                     .build();
             UUID jobId = runnerService.createJob(WORKSPACE_ID, USER_NAME, req);
 
@@ -335,7 +345,7 @@ class LocalRunnerServiceImplTest {
             assertThat(job.runnerId()).isEqualTo(runnerId);
             assertThat(job.agentName()).isEqualTo(AGENT_NAME);
             assertThat(job.status().getValue()).isEqualTo("pending");
-            assertThat(job.project()).isEqualTo("my-project");
+            assertThat(job.projectId()).isEqualTo(PROJECT_ID);
 
             RList<String> pending = redisClient.getList(
                     "opik:runners:jobs:" + runnerId + ":pending", StringCodec.INSTANCE);
@@ -564,20 +574,23 @@ class LocalRunnerServiceImplTest {
     @Test
     void fullFlow_pairConnectCreateJobNextJobReportResult() {
         stubNextId();
-        LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME);
+        LocalRunnerPairResponse pair = runnerService.generatePairingCode(WORKSPACE_ID, USER_NAME, PROJECT_ID);
         assertThat(pair.pairingCode()).hasSize(6);
 
         LocalRunnerConnectRequest connectReq = LocalRunnerConnectRequest.builder()
                 .pairingCode(pair.pairingCode())
                 .runnerName(RUNNER_NAME)
                 .build();
-        UUID runnerId = runnerService.connect(WORKSPACE_ID, USER_NAME, connectReq);
+        LocalRunnerConnectResponse connectResp = runnerService.connect(WORKSPACE_ID, USER_NAME, connectReq);
+        UUID runnerId = connectResp.runnerId();
         assertThat(runnerId).isEqualTo(pair.runnerId());
+        assertThat(connectResp.projectId()).isEqualTo(PROJECT_ID);
+        assertThat(connectResp.projectName()).isEqualTo(PROJECT_NAME);
 
-        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().project("my-project").build();
+        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().build();
         runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agentMeta));
 
-        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, 0, 25);
+        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, null, 0, 25);
         assertThat(runnerPage.content()).hasSize(1);
         assertThat(runnerPage.content().get(0).agents()).hasSize(1);
 
@@ -586,7 +599,7 @@ class LocalRunnerServiceImplTest {
         inputs.put("prompt", "hello");
         CreateLocalRunnerJobRequest jobReq = CreateLocalRunnerJobRequest.builder()
                 .agentName(AGENT_NAME)
-                .project("my-project")
+                .projectId(PROJECT_ID)
                 .inputs(inputs)
                 .build();
         UUID jobId = runnerService.createJob(WORKSPACE_ID, USER_NAME, jobReq);

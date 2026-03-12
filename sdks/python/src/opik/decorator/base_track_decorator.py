@@ -2,8 +2,6 @@ import abc
 import functools
 import inspect
 import logging
-import os
-import sys
 from typing import (
     Any,
     Callable,
@@ -620,35 +618,20 @@ def _apply_entrypoint(
     wrapped_func: Callable,
     track_options: "arguments_helpers.TrackOptions",
 ) -> None:
-    from ..runner.entrypoint import (
-        extract_params,
-        self_register,
-        dispatch_agent,
-        REGISTRY,
-    )
+    from ..runner.registry import extract_params, register
 
     agent_name = track_options.name or original_func.__name__
     agent_project = track_options.project_name or "default"
-    source_file = os.path.abspath(inspect.getfile(original_func))
     params = extract_params(original_func)
-
     docstring = inspect.getdoc(original_func) or ""
 
-    REGISTRY[agent_name] = {
-        "func": wrapped_func,
-        "name": agent_name,
-        "project": agent_project,
-        "python": sys.executable,
-        "file": source_file,
-        "params": params,
-        "docstring": docstring,
-    }
-
-    self_register(agent_name, agent_project, source_file, params, docstring)
-
-    target_agent = os.environ.get("OPIK_AGENT")
-    if target_agent == agent_name:
-        dispatch_agent(wrapped_func)
+    register(
+        name=agent_name,
+        func=wrapped_func,
+        project=agent_project,
+        params=params,
+        docstring=docstring,
+    )
 
 
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
