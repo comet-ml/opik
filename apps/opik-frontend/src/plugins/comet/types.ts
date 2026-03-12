@@ -77,6 +77,7 @@ export enum ManagementPermissionsNames {
   PROJECT_CREATE = "project_create",
   COMMENT_WRITE = "comment_write",
   ALERT_UPDATE = "alert_update",
+  TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
 }
 
 export interface UserPermission {
