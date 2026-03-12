@@ -164,7 +164,9 @@ class InProcessRunnerLoop:
         func: Callable = entry["func"]
 
         if job.trace_id:
-            inputs["opik_args"] = {"trace": {"id": job.trace_id}}
+            opik_args = inputs.setdefault("opik_args", {})
+            trace_args = opik_args.setdefault("trace", {})
+            trace_args["id"] = job.trace_id
 
         trace_id = job.trace_id
 

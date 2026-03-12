@@ -282,6 +282,41 @@ class TestJobExecution:
 
         mock_api.runners.report_job_result.assert_not_called()
 
+    def test_execute_job__trace_id__merges_opik_args(self, mock_api, shutdown_event):
+        captured_kwargs = {}
+
+        def my_agent(**kwargs):
+            captured_kwargs.update(kwargs)
+            return "ok"
+
+        registry.register("my_agent", my_agent, "proj", [], "")
+
+        lp = in_process_loop.InProcessRunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+        )
+
+        job = LocalRunnerJob(
+            id="j-1",
+            agent_name="my_agent",
+            inputs={
+                "opik_args": {
+                    "trace": {"tags": ["existing"]},
+                    "span": {"metadata": {"k": "v"}},
+                }
+            },
+            trace_id="t-123",
+        )
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(lp._execute_job(job))
+        loop.close()
+
+        assert captured_kwargs["opik_args"]["trace"]["id"] == "t-123"
+        assert captured_kwargs["opik_args"]["trace"]["tags"] == ["existing"]
+        assert captured_kwargs["opik_args"]["span"]["metadata"] == {"k": "v"}
+
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
