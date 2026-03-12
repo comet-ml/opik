@@ -853,6 +853,7 @@ class RawSpansClient:
         *,
         project_id: typing.Optional[str] = None,
         type: typing.Optional[FindFeedbackScoreNames1RequestType] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
@@ -863,6 +864,8 @@ class RawSpansClient:
         project_id : typing.Optional[str]
 
         type : typing.Optional[FindFeedbackScoreNames1RequestType]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -878,6 +881,7 @@ class RawSpansClient:
             params={
                 "project_id": project_id,
                 "type": type,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
@@ -2051,6 +2055,7 @@ class AsyncRawSpansClient:
         *,
         project_id: typing.Optional[str] = None,
         type: typing.Optional[FindFeedbackScoreNames1RequestType] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
@@ -2061,6 +2066,8 @@ class AsyncRawSpansClient:
         project_id : typing.Optional[str]
 
         type : typing.Optional[FindFeedbackScoreNames1RequestType]
+
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2076,6 +2083,7 @@ class AsyncRawSpansClient:
             params={
                 "project_id": project_id,
                 "type": type,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )

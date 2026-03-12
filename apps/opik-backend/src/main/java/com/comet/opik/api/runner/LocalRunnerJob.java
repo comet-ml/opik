@@ -25,6 +25,7 @@ public record LocalRunnerJob(
         UUID projectId,
         UUID traceId,
         UUID maskId,
+        LocalRunnerJobMetadata metadata,
         int timeout,
         Instant createdAt,
         Instant startedAt,

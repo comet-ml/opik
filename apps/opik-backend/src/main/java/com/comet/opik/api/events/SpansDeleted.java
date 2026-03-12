@@ -10,15 +10,14 @@ import java.util.UUID;
 
 @Getter
 @Accessors(fluent = true)
-public class ThreadsReopened extends BaseEvent {
+public class SpansDeleted extends BaseEvent {
+    private final @NonNull Set<UUID> traceIds;
+    private final @NonNull Set<UUID> spanIds;
 
-    private final Set<UUID> threadModelIds;
-    private final UUID projectId;
-
-    public ThreadsReopened(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId, @NonNull String workspaceId,
+    public SpansDeleted(@NonNull Set<UUID> spanIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
             @NonNull String userName) {
         super(workspaceId, userName);
-        this.threadModelIds = threadModelIds;
-        this.projectId = projectId;
+        this.traceIds = traceIds;
+        this.spanIds = spanIds;
     }
 }

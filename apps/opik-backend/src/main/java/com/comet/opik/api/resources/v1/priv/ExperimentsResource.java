@@ -38,6 +38,8 @@ import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -111,6 +113,7 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Experiments resource", content = @Content(schema = @Schema(implementation = Experiment.ExperimentPage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView(Experiment.View.Public.class)
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -268,6 +271,7 @@ public class ExperimentsResource {
     @Operation(operationId = "getExperimentById", summary = "Get experiment by id", description = "Get experiment by id", responses = {
             @ApiResponse(responseCode = "200", description = "Experiment resource", content = @Content(schema = @Schema(implementation = Experiment.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
     @JsonView(Experiment.View.Public.class)
     public Response get(@PathParam("id") UUID id) {
 
@@ -546,7 +550,9 @@ public class ExperimentsResource {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findFeedbackScoreNames(@QueryParam("experiment_ids") String experimentIdsQueryParam) {
+    public Response findFeedbackScoreNames(
+            @QueryParam("experiment_ids") String experimentIdsQueryParam,
+            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
@@ -557,7 +563,7 @@ public class ExperimentsResource {
         log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
                 experimentIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNames(experimentIds)
+                .getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryNames)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
@@ -565,4 +571,5 @@ public class ExperimentsResource {
 
         return Response.ok(feedbackScoreNames).build();
     }
+
 }

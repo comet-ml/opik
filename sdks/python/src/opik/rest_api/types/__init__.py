@@ -207,6 +207,8 @@ from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
+from .dashboard_public_scope import DashboardPublicScope
+from .dashboard_public_type import DashboardPublicType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -402,6 +404,7 @@ from .local_runner import LocalRunner
 from .local_runner_connect_response import LocalRunnerConnectResponse
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
+from .local_runner_job_metadata import LocalRunnerJobMetadata
 from .local_runner_job_page import LocalRunnerJobPage
 from .local_runner_job_status import LocalRunnerJobStatus
 from .local_runner_log_entry import LocalRunnerLogEntry
@@ -786,6 +789,8 @@ __all__ = [
     "CountValueStatPublic",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -974,6 +979,7 @@ __all__ = [
     "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
+    "LocalRunnerJobMetadata",
     "LocalRunnerJobPage",
     "LocalRunnerJobStatus",
     "LocalRunnerLogEntry",

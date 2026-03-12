@@ -221,7 +221,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const {
-    permissions: { canDeleteAnnotationQueues },
+    permissions: { canCreateAnnotationQueues, canDeleteAnnotationQueues },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("queues_search", StringParam, {
@@ -422,9 +422,11 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button size="sm" onClick={handleNewQueue}>
-            Create new queue
-          </Button>
+          {canCreateAnnotationQueues && (
+            <Button size="sm" onClick={handleNewQueue}>
+              Create new queue
+            </Button>
+          )}
         </div>
       </PageBodyStickyContainer>
       <DataTableStateHandler

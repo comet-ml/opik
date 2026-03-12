@@ -102,7 +102,7 @@ const PlaygroundOutputActions = ({
   const createProjectMutation = useProjectCreateMutation();
 
   const {
-    permissions: { canViewExperiments, canViewDatasets },
+    permissions: { canViewExperiments, canViewDatasets, canCreateProjects },
   } = usePermissions();
 
   // Define filters column data - includes all dataset columns and tags
@@ -131,7 +131,6 @@ const PlaygroundOutputActions = ({
     data: playgroundProject,
     isError: isProjectError,
     error: projectError,
-    isLoading: isLoadingProject,
   } = useProjectByName(
     {
       projectName: PLAYGROUND_PROJECT_NAME,
@@ -183,6 +182,8 @@ const PlaygroundOutputActions = ({
   const datasetName =
     datasets?.find((ds) => ds.id === plainDatasetId)?.name || null;
 
+  const canUsePlayground = !!playgroundProject?.id || canCreateProjects;
+
   const { stopAll, runAll, isRunning, createdExperiments } =
     useActionButtonActions({
       workspaceName,
@@ -229,16 +230,8 @@ const PlaygroundOutputActions = ({
     try {
       let projectId: string | undefined = playgroundProject?.id;
 
-      // If project is still loading, wait a bit (shouldn't normally happen, but just in case)
-      if (isLoadingProject) {
-        // Wait a moment and try to get the project again
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        projectId = (playgroundProject as any)?.id;
-      }
-
       // If project doesn't exist (404), create it
-      if (!projectId && isProjectNotFound) {
+      if (!projectId && isProjectNotFound && canCreateProjects) {
         const result = await createProjectMutation.mutateAsync({
           project: { name: PLAYGROUND_PROJECT_NAME },
         });
@@ -262,9 +255,9 @@ const PlaygroundOutputActions = ({
   }, [
     playgroundProject,
     isProjectNotFound,
-    isLoadingProject,
     createProjectMutation,
     queryClient,
+    canCreateProjects,
   ]);
 
   const renderActionButton = () => {
@@ -305,6 +298,7 @@ const PlaygroundOutputActions = ({
       !datasets.find((d) => d.id === plainDatasetId);
 
     const isDisabledButton =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       loadingDatasetItems ||
@@ -314,6 +308,7 @@ const PlaygroundOutputActions = ({
       hasMediaCompatibilityIssues;
 
     const shouldTooltipAppear =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
@@ -326,6 +321,10 @@ const PlaygroundOutputActions = ({
     const getTooltipMessage = () => {
       if (!isDisabledButton) {
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      }
+
+      if (!canUsePlayground) {
+        return "Playground project does not exist and you don't have permission to create it";
       }
 
       if (hasMediaCompatibilityIssues) {
@@ -507,16 +506,19 @@ const PlaygroundOutputActions = ({
                   />
                 </div>
               )}
-              <div className="mt-2.5 flex">
-                <MetricSelector
-                  rules={rules}
-                  selectedRuleIds={selectedRuleIds}
-                  onSelectionChange={setSelectedRuleIds}
-                  datasetId={datasetId}
-                  onCreateRuleClick={handleCreateRuleClick}
-                  workspaceName={workspaceName}
-                />
-              </div>
+              {(canUsePlayground || !!rules.length) && (
+                <div className="mt-2.5 flex">
+                  <MetricSelector
+                    rules={rules}
+                    selectedRuleIds={selectedRuleIds}
+                    onSelectionChange={setSelectedRuleIds}
+                    datasetId={datasetId}
+                    onCreateRuleClick={handleCreateRuleClick}
+                    workspaceName={workspaceName}
+                    canCreateRules={canUsePlayground}
+                  />
+                </div>
+              )}
               {datasetId && (
                 <div className="mt-2.5 flex h-8 items-center justify-center">
                   <Separator orientation="vertical" className="mr-2 h-4" />

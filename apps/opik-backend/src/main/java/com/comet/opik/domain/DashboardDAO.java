@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.infrastructure.db.DashboardScopeMapper;
+import com.comet.opik.infrastructure.db.DashboardTypeMapper;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.JsonNodeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
@@ -11,6 +13,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMap;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -18,19 +21,24 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
+@RegisterArgumentFactory(DashboardTypeMapper.class)
+@RegisterArgumentFactory(DashboardScopeMapper.class)
 @RegisterColumnMapper(JsonNodeColumnMapper.class)
+@RegisterColumnMapper(DashboardTypeMapper.class)
+@RegisterColumnMapper(DashboardScopeMapper.class)
 @RegisterConstructorMapper(Dashboard.class)
 public interface DashboardDAO {
 
-    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, name, slug, description, config, created_by, last_updated_by) "
+    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
             +
-            "VALUES (:dashboard.id, :workspaceId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
+            "VALUES (:dashboard.id, :workspaceId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
     void save(@BindMethods("dashboard") Dashboard dashboard, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
@@ -39,6 +47,8 @@ public interface DashboardDAO {
                 slug = COALESCE(:slug, slug),
                 description = COALESCE(:dashboard.description, description),
                 config = COALESCE(:dashboard.config, config),
+                type = COALESCE(:dashboard.type, type),
+                scope = COALESCE(:dashboard.scope, scope),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
             """)
@@ -63,21 +73,27 @@ public interface DashboardDAO {
 
     @SqlQuery("SELECT COUNT(id) FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
-            "<if(search)> AND name like concat('%', :search, '%') <endif>")
+            "<if(search)> AND name like concat('%', :search, '%') <endif>" +
+            "<if(filters)> AND <filters> <endif>")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     long findCount(@Bind("workspaceId") String workspaceId,
-            @Define("search") @Bind("search") String search);
+            @Define("search") @Bind("search") String search,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
 
     @SqlQuery("SELECT * FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
+            "<if(filters)> AND <filters> <endif> " +
             "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             "LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dashboard> find(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping,
             @Define("sort_fields") String sortingFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);

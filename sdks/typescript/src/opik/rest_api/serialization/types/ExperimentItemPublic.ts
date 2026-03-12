@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ExecutionPolicyPublic } from "./ExecutionPolicyPublic.js";
 import { ExperimentItemPublicTraceVisibilityMode } from "./ExperimentItemPublicTraceVisibilityMode.js";
 
 export const ExperimentItemPublic: core.serialization.ObjectSchema<
@@ -22,6 +23,7 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
         "trace_visibility_mode",
         ExperimentItemPublicTraceVisibilityMode.optional(),
     ),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyPublic.optional()),
 });
 
 export declare namespace ExperimentItemPublic {
@@ -36,5 +38,6 @@ export declare namespace ExperimentItemPublic {
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemPublicTraceVisibilityMode.Raw | null;
+        execution_policy?: ExecutionPolicyPublic.Raw | null;
     }
 }

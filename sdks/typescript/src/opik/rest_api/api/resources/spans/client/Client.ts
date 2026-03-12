@@ -902,7 +902,7 @@ export class SpansClient {
         request: OpikApi.FindFeedbackScoreNames1Request = {},
         requestOptions?: SpansClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
-        const { projectId, type: type_ } = request;
+        const { projectId, type: type_, excludeCategoryNames } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             type:
@@ -912,6 +912,7 @@ export class SpansClient {
                           omitUndefined: true,
                       })
                     : undefined,
+            exclude_category_names: excludeCategoryNames,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

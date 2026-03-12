@@ -4,6 +4,7 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { JsonNode } from "../../../../types/JsonNode.js";
+import { LocalRunnerJobMetadata } from "../../../../types/LocalRunnerJobMetadata.js";
 
 export const CreateLocalRunnerJobRequest: core.serialization.Schema<
     serializers.CreateLocalRunnerJobRequest.Raw,
@@ -13,6 +14,7 @@ export const CreateLocalRunnerJobRequest: core.serialization.Schema<
     inputs: JsonNode.optional(),
     projectId: core.serialization.property("project_id", core.serialization.string()),
     maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
+    metadata: LocalRunnerJobMetadata.optional(),
 });
 
 export declare namespace CreateLocalRunnerJobRequest {
@@ -21,5 +23,6 @@ export declare namespace CreateLocalRunnerJobRequest {
         inputs?: JsonNode.Raw | null;
         project_id: string;
         mask_id?: string | null;
+        metadata?: LocalRunnerJobMetadata.Raw | null;
     }
 }

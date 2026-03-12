@@ -3,5 +3,6 @@
 import typing
 
 BreakdownConfigPublicField = typing.Union[
-    typing.Literal["none", "tags", "metadata", "name", "error_info", "model", "provider", "type"], typing.Any
+    typing.Literal["none", "tags", "metadata", "name", "error_info", "error_type", "model", "provider", "type"],
+    typing.Any,
 ]

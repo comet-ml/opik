@@ -51,7 +51,11 @@ def connect(
             pairing_code=pair_code,
         )
 
-        runner_id = resp.runner_id or ""
+        runner_id = resp.runner_id
+        if not runner_id:
+            click.echo("Error: server did not return a runner_id")
+            raise SystemExit(1)
+
         project_name = resp.project_name or ""
 
         click.echo(f"Runner connected (ID: {runner_id}).")

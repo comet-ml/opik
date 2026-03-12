@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, List
 
 from rich import align
 from rich.console import Console
@@ -105,5 +105,37 @@ def print_backend_workspace_availability(
     console.print(is_available_label, is_available_text)
 
     if err_msg:
-        err_msg = Text(err_msg, style=DEFAULT_ERROR_COLOR)
-        console.print(err_msg)
+        print_error_message(err_msg)
+
+
+def print_error_message(err_msg: str) -> None:
+    err_msg = Text(err_msg, style=DEFAULT_ERROR_COLOR)
+    console.print(err_msg)
+
+
+def print_opik_permissions_url(opik_url: str) -> None:
+    opik_url_label = make_key_text("OPIK url:")
+    opik_url = make_value_text(opik_url)
+    console.print(opik_url_label, opik_url)
+
+
+def print_user_permissions(user_permissions: Dict[str, Any]) -> None:
+    user_label = make_key_text("User:")
+    user_name = make_value_text(user_permissions["user_name"])
+    workspace_label = make_key_text("Workspace:")
+    workspace_name = make_value_text(user_permissions["workspace_name"])
+    console.print(user_label, user_name)
+    console.print(workspace_label, workspace_name)
+
+    # print permissions
+    permissions: List[Dict[str, str]] = user_permissions["permissions"]
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Permission", style=DEFAULT_KEY_COLOR)
+    table.add_column("Available", style=DEFAULT_VALUE_COLOR)
+
+    for permission in permissions:
+        value = permission["permission_value"] == "true"
+        table.add_row(permission["permission_name"], str(value))
+
+    console.print(table)

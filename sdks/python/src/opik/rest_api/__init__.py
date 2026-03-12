@@ -172,6 +172,8 @@ from .types import (
     CountValueStatPublic,
     DashboardPagePublic,
     DashboardPublic,
+    DashboardPublicScope,
+    DashboardPublicType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -360,6 +362,7 @@ from .types import (
     LocalRunnerConnectResponse,
     LocalRunnerHeartbeatResponse,
     LocalRunnerJob,
+    LocalRunnerJobMetadata,
     LocalRunnerJobPage,
     LocalRunnerJobStatus,
     LocalRunnerLogEntry,
@@ -622,6 +625,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
+from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -819,6 +823,12 @@ __all__ = [
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
+    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublicType",
+    "DashboardWriteScope",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -1022,6 +1032,7 @@ __all__ = [
     "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
+    "LocalRunnerJobMetadata",
     "LocalRunnerJobPage",
     "LocalRunnerJobResultRequestStatus",
     "LocalRunnerJobStatus",

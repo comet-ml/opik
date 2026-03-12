@@ -6,6 +6,7 @@ import "tailwindcss/tailwind.css";
 import App from "@/components/App";
 import usePluginsStore from "@/store/PluginsStore";
 import { APP_VERSION } from "@/constants/app";
+import { runLocalStorageMigrations } from "@/lib/ls-migrations";
 
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
@@ -28,4 +29,5 @@ if (IS_SENTRY_ENABLED) {
 }
 
 usePluginsStore.getState().setupPlugins(import.meta.env.MODE);
+runLocalStorageMigrations();
 root.render(<App />);

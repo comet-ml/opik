@@ -9,7 +9,7 @@ from .agent_config_value_write_type import AgentConfigValueWriteType
 
 class AgentConfigValueWrite(UniversalBaseModel):
     key: str
-    value: str
+    value: typing.Optional[str] = None
     type: AgentConfigValueWriteType
     description: typing.Optional[str] = None
 

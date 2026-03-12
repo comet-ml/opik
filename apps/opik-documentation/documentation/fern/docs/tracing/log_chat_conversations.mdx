@@ -37,7 +37,7 @@ You can log chat conversations by specifying the `thread_id` parameter when usin
     apiUrl: "https://www.comet.com/opik/api", // Only required if you are using Opik Cloud
     apiKey: "your-api-key",
     projectName: "your-project-name",
-    workspaceName: "your-workspace-name", // Only required if you are using Opik Cloud
+    workspaceName: "your-workspace-name", // Optional
     });
 
     const threadId = "your-thread-id"; // any unique string per conversation
@@ -375,11 +375,9 @@ in a thread before running the rules. This gives conversations time to settle be
 
 When a new trace is added to an existing thread, the following happens:
 
-- **All previous feedback scores are deleted**: This includes both manual feedback scores and online evaluation scores. This ensures that the thread is re-evaluated with the complete, updated conversation context.
+- **Existing feedback scores are preserved**: Any manual feedback scores or online evaluation scores you have added remain intact.
 - **The cooldown timer restarts**: The timer resets from the moment the new trace is added, ensuring online evaluation waits for the full cooldown period before scoring the updated thread.
-- **Online evaluation re-runs**: Once the cooldown period expires, thread-level online scoring rules will automatically evaluate the complete conversation again.
-
-This behavior ensures that online evaluation scores always reflect the final, complete state of the conversation rather than intermediate states.
+- **Online evaluation re-runs**: Once the cooldown period expires, thread-level online scoring rules will automatically evaluate the complete conversation again. If a new score is logged with the same name as an existing score, the existing score is updated.
 
 ## Advanced Thread Features
 

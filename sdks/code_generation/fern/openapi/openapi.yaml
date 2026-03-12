@@ -1441,6 +1441,10 @@ paths:
         in: query
         schema:
           type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dashboard page
@@ -2800,6 +2804,14 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -3464,10 +3476,6 @@ paths:
             Location:
               description: URI of the runner
               style: simple
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunnerConnectResponse"
         "400":
           description: Bad request
           content:
@@ -3518,11 +3526,6 @@ paths:
       summary: Generate a pairing code
       description: Generate a pairing code for a local runner in the current workspace
       operationId: generatePairingCode
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LocalRunnerPairRequest"
       responses:
         "201":
           description: Pairing code generated
@@ -3641,11 +3644,10 @@ paths:
         schema:
           type: string
           format: uuid
-      - name: project_id
+      - name: project
         in: query
         schema:
           type: string
-          format: uuid
       - name: page
         in: query
         schema:
@@ -3678,14 +3680,9 @@ paths:
       tags:
       - Runners
       summary: List local runners
-      description: List all local runners in the current workspace
+      description: List local runners owned by the current user in the workspace
       operationId: listRunners
       parameters:
-      - name: project_id
-        in: query
-        schema:
-          type: string
-          format: uuid
       - name: page
         in: query
         schema:
@@ -5341,6 +5338,14 @@ paths:
           - tool
           - llm
           - guardrail
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -5947,6 +5952,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
@@ -6897,7 +6910,6 @@ components:
       required:
       - key
       - type
-      - value
       type: object
       properties:
         key:
@@ -6905,7 +6917,6 @@ components:
           minLength: 0
           type: string
         value:
-          minLength: 1
           type: string
         type:
           type: string
@@ -7026,7 +7037,6 @@ components:
       required:
       - key
       - type
-      - value
       type: object
       properties:
         id:
@@ -7042,7 +7052,6 @@ components:
           minLength: 0
           type: string
         value:
-          minLength: 1
           type: string
         type:
           type: string
@@ -7121,7 +7130,6 @@ components:
       required:
       - key
       - type
-      - value
       type: object
       properties:
         id:
@@ -7137,7 +7145,6 @@ components:
           minLength: 0
           type: string
         value:
-          minLength: 1
           type: string
         type:
           type: string
@@ -8149,10 +8156,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8162,6 +8165,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8325,9 +8332,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -8681,10 +8688,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8694,6 +8697,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8770,9 +8777,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -9031,10 +9038,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9044,6 +9047,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9225,9 +9232,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -9477,10 +9484,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9490,6 +9493,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9571,10 +9578,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -9584,6 +9587,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9955,6 +9962,16 @@ components:
         slug:
           type: string
           readOnly: true
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -9985,6 +10002,16 @@ components:
           maxLength: 120
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10019,6 +10046,16 @@ components:
           minLength: 1
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -10137,7 +10174,8 @@ components:
           minimum: 1
           type: integer
           format: int32
-      description: Default execution policy for items in this version
+      description: Execution policy captured from dataset item version at creation
+        time.
       readOnly: true
     DatasetItemChanges_Public:
       type: object
@@ -10295,6 +10333,9 @@ components:
           minimum: 1
           type: integer
           format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     Dataset:
       required:
       - name
@@ -10627,6 +10668,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
     FeedbackScore:
       required:
       - name
@@ -11166,6 +11209,9 @@ components:
           minimum: 1
           type: integer
           format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -11240,6 +11286,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -11674,6 +11722,8 @@ components:
           enum:
           - default
           - hidden
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
     Column_Public:
       type: object
       properties:
@@ -12103,6 +12153,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     PercentageValues:
       type: object
       properties:
@@ -13009,6 +13076,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary_Public"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     JsonListString_Public:
       type: object
       anyOf:
@@ -13095,6 +13179,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
+        pass_rate_avg:
+          type: number
+        passed_count_sum:
+          type: integer
+          format: int64
+        total_count_sum:
+          type: integer
+          format: int64
     ExperimentGroupAggregationsResponse:
       type: object
       properties:
@@ -14087,20 +14179,6 @@ components:
         text:
           minLength: 1
           type: string
-    LocalRunnerConnectResponse:
-      type: object
-      properties:
-        runner_id:
-          type: string
-          format: uuid
-        workspace_id:
-          type: string
-          format: uuid
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
     LocalRunnerConnectRequest:
       required:
       - runner_name
@@ -14114,7 +14192,6 @@ components:
     CreateLocalRunnerJobRequest:
       required:
       - agent_name
-      - project_id
       type: object
       properties:
         agent_name:
@@ -14122,10 +14199,29 @@ components:
           type: string
         inputs:
           $ref: "#/components/schemas/JsonNode"
-        project_id:
+        project:
+          type: string
+        runner_id:
           type: string
           format: uuid
         mask_id:
+          type: string
+          format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
+    LocalRunnerJobMetadata:
+      type: object
+      properties:
+        dataset_id:
+          type: string
+          format: uuid
+        dataset_version_id:
+          type: string
+          format: uuid
+        dataset_item_version_id:
+          type: string
+          format: uuid
+        dataset_item_id:
           type: string
           format: uuid
     LocalRunnerPairResponse:
@@ -14139,14 +14235,6 @@ components:
         expires_in_seconds:
           type: integer
           format: int32
-    LocalRunnerPairRequest:
-      required:
-      - project_id
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
     LocalRunnerJob:
       type: object
       properties:
@@ -14172,15 +14260,16 @@ components:
           $ref: "#/components/schemas/JsonNode"
         error:
           type: string
-        project_id:
+        project:
           type: string
-          format: uuid
         trace_id:
           type: string
           format: uuid
         mask_id:
           type: string
           format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
         timeout:
           type: integer
           format: int32
@@ -14198,9 +14287,8 @@ components:
       properties:
         name:
           type: string
-        project_id:
+        project:
           type: string
-          format: uuid
         description:
           type: string
         language:
@@ -14224,9 +14312,6 @@ components:
           format: uuid
         name:
           type: string
-        project_id:
-          type: string
-          format: uuid
         status:
           type: string
           enum:
@@ -15080,6 +15165,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         results:
           type: array
           items:
@@ -15104,6 +15190,7 @@ components:
           - metadata
           - name
           - error_info
+          - error_type
           - model
           - provider
           - type
@@ -15136,6 +15223,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         interval_start:
           type: string
           format: date-time
@@ -15369,10 +15457,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15489,10 +15577,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15584,10 +15672,20 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
+        exclude_blueprint_update_for_projects:
+          uniqueItems: true
+          type: array
+          description: Optional set of project IDs to exclude from automatic blueprint
+            creation when this prompt version is committed.
+          items:
+            type: string
+            description: Optional set of project IDs to exclude from automatic blueprint
+              creation when this prompt version is committed.
+            format: uuid
     Prompt_Detail:
       required:
       - name
@@ -15608,10 +15706,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15748,10 +15846,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -15874,6 +15972,7 @@ components:
         Core properties like template, metadata etc. cannot be modified after creation.
     ServiceTogglesConfig:
       required:
+      - agentConfigurationEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -15941,6 +16040,8 @@ components:
         ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
+          type: boolean
+        agentConfigurationEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

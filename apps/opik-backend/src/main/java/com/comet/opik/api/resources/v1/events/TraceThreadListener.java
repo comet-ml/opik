@@ -1,9 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ThreadTimestamps;
-import com.comet.opik.api.events.ThreadsReopened;
 import com.comet.opik.api.events.TracesCreated;
-import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
@@ -28,7 +26,6 @@ import java.util.UUID;
 public class TraceThreadListener {
 
     private final @NonNull TraceThreadService traceThreadService;
-    private final @NonNull FeedbackScoreService feedbackScoreService;
 
     /**
      * Handles the TracesCreated event by processing trace threads in a thread-safe manner.
@@ -113,40 +110,6 @@ public class TraceThreadListener {
         log.info("Processing trace threads for workspace: '{}', projectId: '{}', threadIds: '[{}]'",
                 event.workspaceId(), projectId, threadInfo.keySet());
         return traceThreadService.processTraceThreads(threadInfo, projectId);
-    }
-
-    /**
-     * Handles the ThreadsReopened event by deleting all scores for the specified threads.
-     * This is triggered in two scenarios:
-     * 1. When new traces are added to an existing thread (thread is "reopened" for activity)
-     * 2. When the explicit PUT /threads/open API endpoint is called
-     *
-     * The handler ensures that all scores (manual UI, SDK, and online scoring) are removed
-     * so the thread can be re-evaluated after the cooling period expires.
-     *
-     * Note: While the active/inactive thread status concept has been hidden from the UI,
-     * the status still exists internally. This cleanup behavior is preserved to maintain
-     * data consistency. The thread will be re-evaluated using its original sampling decision
-     * after the cooling period expires.
-     *
-     * @param event the ThreadsReopened event containing the thread model IDs and project ID
-     */
-    @Subscribe
-    public void onThreadsReopened(@NonNull ThreadsReopened event) {
-        log.info("Received ThreadsReopened event for workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
-                event.workspaceId(), event.projectId(), event.threadModelIds());
-
-        feedbackScoreService.deleteAllThreadScores(event.threadModelIds(), event.projectId())
-                .doOnError(error -> {
-                    log.error(
-                            "Error deleting all scores for threads in workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
-                            event.workspaceId(), event.projectId(), event.threadModelIds(), error);
-                })
-                .doOnSuccess(unused -> log.info("Deleted all scores for threads in workspace: '{}', projectId: '{}'",
-                        event.workspaceId(), event.projectId()))
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, event.workspaceId())
-                        .put(RequestContext.USER_NAME, event.userName()))
-                .subscribe();
     }
 
 }

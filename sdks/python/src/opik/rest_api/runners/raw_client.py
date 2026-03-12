@@ -20,6 +20,7 @@ from ..types.local_runner import LocalRunner
 from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
+from ..types.local_runner_job_metadata import LocalRunnerJobMetadata
 from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
@@ -277,6 +278,7 @@ class RawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -291,6 +293,8 @@ class RawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -307,6 +311,9 @@ class RawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -633,7 +640,7 @@ class RawRunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[LocalRunnerPage]:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------
@@ -1126,6 +1133,7 @@ class AsyncRawRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1140,6 +1148,8 @@ class AsyncRawRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1156,6 +1166,9 @@ class AsyncRawRunnersClient:
                 "inputs": inputs,
                 "project_id": project_id,
                 "mask_id": mask_id,
+                "metadata": convert_and_respect_annotation_metadata(
+                    object_=metadata, annotation=LocalRunnerJobMetadata, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1482,7 +1495,7 @@ class AsyncRawRunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[LocalRunnerPage]:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------

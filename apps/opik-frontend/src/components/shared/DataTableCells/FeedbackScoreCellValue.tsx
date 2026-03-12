@@ -14,11 +14,13 @@ const FeedbackScoreCellValue = ({
   feedbackScore,
   color: customColor,
   onValueChange,
+  tooltipSuffix,
 }: {
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
   onValueChange?: (name: string, value: number) => void;
+  tooltipSuffix?: string;
 }) => {
   const { getColor } = useWorkspaceColorMap();
   const [openHoverCard, setOpenHoverCard] = useState(false);
@@ -55,6 +57,9 @@ const FeedbackScoreCellValue = ({
     ? `${category} (${formattedValue})`
     : String(formattedValue);
   const fullPrecisionText = category ? `${category} (${value})` : String(value);
+  const tooltipContent = tooltipSuffix
+    ? `${fullPrecisionText} | ${tooltipSuffix}`
+    : fullPrecisionText;
   const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
 
   return (
@@ -75,7 +80,7 @@ const FeedbackScoreCellValue = ({
         onOpenChange={setOpenHoverCard}
       >
         {showTooltip ? (
-          <TooltipWrapper content={fullPrecisionText}>
+          <TooltipWrapper content={tooltipContent}>
             <div className="truncate">{displayText}</div>
           </TooltipWrapper>
         ) : (

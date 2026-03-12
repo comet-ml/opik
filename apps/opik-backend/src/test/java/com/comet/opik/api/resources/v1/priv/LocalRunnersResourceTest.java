@@ -19,6 +19,7 @@ import com.comet.opik.api.runner.LocalRunnerConnectRequest;
 import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
+import com.comet.opik.api.runner.LocalRunnerJobMetadata;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
@@ -413,6 +414,30 @@ class LocalRunnersResourceTest {
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().get(0).id()).isEqualTo(runner1);
         }
+
+        @Test
+        void paginatesCorrectly() {
+            String sharedWorkspace = randomUUID().toString();
+            String sharedWorkspaceId = randomUUID().toString();
+            String userName = randomUUID().toString();
+            String apiKey = randomUUID().toString();
+            mockTargetWorkspace(apiKey, sharedWorkspace, sharedWorkspaceId, userName);
+
+            for (int i = 0; i < 3; i++) {
+                LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
+                        .runnerName("paginate-runner-" + i)
+                        .build();
+                UUID rid = runnersClient.connect(req, apiKey, sharedWorkspace);
+                runnersClient.heartbeat(rid, apiKey, sharedWorkspace);
+            }
+
+            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(0, 2, apiKey, sharedWorkspace);
+            assertThat(page0.content()).hasSize(2);
+            assertThat(page0.total()).isEqualTo(3);
+
+            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(1, 2, apiKey, sharedWorkspace);
+            assertThat(page1.content()).hasSize(1);
+        }
     }
 
     @Nested
@@ -732,22 +757,29 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void storesMaskId() {
+        void storesMaskIdAndMetadata() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             connectRunnerWithPairing("cj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.maskId()).isEqualTo(maskId);
+            assertThat(job.metadata()).isEqualTo(metadata);
         }
 
         @Test
-        void storesMaskIdNullWhenNotProvided() {
+        void storesMaskIdAndMetadataNullWhenNotProvided() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             connectRunnerWithPairing("cj-no-mask-id", projectId, ctx.apiKey, ctx.workspace);
@@ -758,6 +790,7 @@ class LocalRunnersResourceTest {
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.maskId()).isNull();
+            assertThat(job.metadata()).isNull();
         }
 
         @Test
@@ -797,18 +830,25 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void returnsMaskIdWhenClaimed() {
+        void returnsMaskIdAndMetadataWhenClaimed() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithPairing("nj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
             assertThat(claimed.maskId()).isEqualTo(maskId);
+            assertThat(claimed.metadata()).isEqualTo(metadata);
         }
 
         @Test
@@ -858,20 +898,27 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void returnsMaskIdInList() {
+        void returnsMaskIdAndMetadataInList() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithPairing("lj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
+            var metadata = LocalRunnerJobMetadata.builder()
+                    .datasetId(randomUUID())
+                    .datasetVersionId(randomUUID())
+                    .datasetItemVersionId(randomUUID())
+                    .datasetItemId(randomUUID())
+                    .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
                     ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().getFirst().maskId()).isEqualTo(maskId);
+            assertThat(page.content().getFirst().metadata()).isEqualTo(metadata);
         }
 
         @Test

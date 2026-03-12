@@ -152,8 +152,6 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
               isTemplate={isTemplate}
               navigateOnCreate={false}
               onDashboardCreated={handleDashboardCreated}
-              defaultProjectId={config?.projectIds?.[0]}
-              defaultExperimentIds={experimentsIds}
             />
           )}
           <MetricDateRangeSelect

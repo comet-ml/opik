@@ -140,7 +140,7 @@ class LocalRunnerReaperIntegrationTest {
         void failsOrphanedActiveJobs() throws InterruptedException {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
             waitForHeartbeatExpiry();
             runnerService.reapDeadRunners();
@@ -264,10 +264,10 @@ class LocalRunnerReaperIntegrationTest {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(60).build();
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agent));
 
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -284,7 +284,7 @@ class LocalRunnerReaperIntegrationTest {
         void skipsJobWithinTimeout() {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
             runnerService.reapDeadRunners();
 
@@ -300,7 +300,7 @@ class LocalRunnerReaperIntegrationTest {
             try {
                 UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
                 UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-                runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+                runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
                 RMap<String, String> jobMap = redisClient.getMap(
                         "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -322,10 +322,10 @@ class LocalRunnerReaperIntegrationTest {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agent));
 
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -343,10 +343,10 @@ class LocalRunnerReaperIntegrationTest {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agent));
 
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
             RMap<String, String> jobMap = redisClient.getMap(
                     "opik:runners:job:" + jobId, StringCodec.INSTANCE);
@@ -363,12 +363,12 @@ class LocalRunnerReaperIntegrationTest {
             UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(5).build();
-            runnerService.registerAgents(runnerId, WORKSPACE_ID, Map.of(AGENT_NAME, agent));
+            runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agent));
 
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
-            runnerService.nextJob(runnerId, WORKSPACE_ID).toCompletableFuture().join();
+            runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
-            runnerService.reportResult(jobId, WORKSPACE_ID,
+            runnerService.reportResult(jobId, WORKSPACE_ID, USER_NAME,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).build());
 
             RMap<String, String> jobMap = redisClient.getMap(

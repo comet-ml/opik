@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentCompare } from "./CommentCompare.js";
+import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode.js";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare.js";
 import { JsonListStringCompare } from "./JsonListStringCompare.js";
@@ -36,6 +37,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         ExperimentItemCompareTraceVisibilityMode.optional(),
     ),
     description: core.serialization.string().optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
 });
 
 export declare namespace ExperimentItemCompare {
@@ -58,5 +60,6 @@ export declare namespace ExperimentItemCompare {
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
         description?: string | null;
+        execution_policy?: ExecutionPolicyCompare.Raw | null;
     }
 }

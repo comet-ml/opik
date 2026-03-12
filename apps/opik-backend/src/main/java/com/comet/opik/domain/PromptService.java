@@ -300,7 +300,8 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
+                    createPromptVersion.excludeBlueprintUpdateForProjects());
 
             return savedPromptVersion;
         });
@@ -311,7 +312,8 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName);
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
+                        createPromptVersion.excludeBlueprintUpdateForProjects());
 
                 return savedPromptVersion;
             });
@@ -745,7 +747,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
-            String userName) {
+            String userName, Set<UUID> excludeProjectIds) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
@@ -759,6 +761,7 @@ class PromptServiceImpl implements PromptService {
                 .promptId(promptVersion.promptId())
                 .commit(promptVersion.commit())
                 .userName(userName)
+                .excludeProjectIds(excludeProjectIds)
                 .build());
     }
 

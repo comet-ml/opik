@@ -9,6 +9,7 @@ from ..types.local_runner import LocalRunner
 from ..types.local_runner_connect_response import LocalRunnerConnectResponse
 from ..types.local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from ..types.local_runner_job import LocalRunnerJob
+from ..types.local_runner_job_metadata import LocalRunnerJobMetadata
 from ..types.local_runner_job_page import LocalRunnerJobPage
 from ..types.local_runner_log_entry import LocalRunnerLogEntry
 from ..types.local_runner_page import LocalRunnerPage
@@ -167,6 +168,7 @@ class RunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -181,6 +183,8 @@ class RunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -200,6 +204,7 @@ class RunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            metadata=metadata,
             request_options=request_options,
         )
         return _response.data
@@ -358,7 +363,7 @@ class RunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> LocalRunnerPage:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------
@@ -648,6 +653,7 @@ class AsyncRunnersClient:
         project_id: str,
         inputs: typing.Optional[JsonNode] = OMIT,
         mask_id: typing.Optional[str] = OMIT,
+        metadata: typing.Optional[LocalRunnerJobMetadata] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -662,6 +668,8 @@ class AsyncRunnersClient:
         inputs : typing.Optional[JsonNode]
 
         mask_id : typing.Optional[str]
+
+        metadata : typing.Optional[LocalRunnerJobMetadata]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -684,6 +692,7 @@ class AsyncRunnersClient:
             project_id=project_id,
             inputs=inputs,
             mask_id=mask_id,
+            metadata=metadata,
             request_options=request_options,
         )
         return _response.data
@@ -859,7 +868,7 @@ class AsyncRunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> LocalRunnerPage:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------

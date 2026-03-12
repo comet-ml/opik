@@ -7,6 +7,7 @@ import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
+import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
@@ -43,8 +44,14 @@ const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
     const value = get(item, accessor);
     if (!isNumber(value)) return "-";
 
+    const tooltipContent = isAggregatedItem(item)
+      ? `${formatCost(value, { modifier: "full" })} | ${getTrialAvgTooltip(
+          item.trialCount,
+        )}`
+      : formatCost(value, { modifier: "full" });
+
     return (
-      <TooltipWrapper content={formatCost(value, { modifier: "full" })}>
+      <TooltipWrapper content={tooltipContent}>
         <span>{formatter(value)}</span>
       </TooltipWrapper>
     );

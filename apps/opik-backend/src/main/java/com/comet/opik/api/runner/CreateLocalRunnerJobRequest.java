@@ -17,5 +17,6 @@ public record CreateLocalRunnerJobRequest(
         @NotBlank String agentName,
         JsonNode inputs,
         @NotNull UUID projectId,
-        UUID maskId) {
+        UUID maskId,
+        LocalRunnerJobMetadata metadata) {
 }

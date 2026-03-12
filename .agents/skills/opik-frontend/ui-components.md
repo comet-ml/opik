@@ -18,11 +18,15 @@
 <Button variant="ghost">Link Action</Button>
 <Button variant="minimal">Subtle Action</Button>
 
+// Link actions
+<Button variant="link">Link</Button>
+<Button variant="tableLink">Table Link</Button>
+
 // Icon buttons
 <Button variant="default" size="icon"><Icon /></Button>
 <Button variant="ghost" size="icon-sm"><Icon /></Button>
 
-// Sizes: "3xs" | "2xs" | "sm" | "default" | "lg"
+// Sizes: "3xs" | "2xs" | "xs" | "sm" | "default" | "lg"
 // Icon sizes: "icon-3xs" | "icon-2xs" | "icon-xs" | "icon-sm" | "icon" | "icon-lg"
 ```
 

@@ -395,6 +395,45 @@ const prettifyDemoProjectLogic = (
   return undefined;
 };
 
+const UNTRUSTED_METADATA_BLOCK_RE =
+  /^(?:[^\n]*\(untrusted metadata\):\s*```json\s*\n[\s\S]*?```\s*)+/;
+
+// e.g. "[Fri 2026-03-06 11:35 GMT+1] "
+const LEADING_TIMESTAMP_RE = /^\[[\w\s\-:+/]+\]\s*/;
+
+const prettifyOpenClawMessageLogic = (
+  message: object | string | undefined,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  if (!isObject(message)) return undefined;
+
+  if (
+    config.type === "input" &&
+    "prompt" in message &&
+    isString(message.prompt) &&
+    "systemPrompt" in message &&
+    isString(message.systemPrompt)
+  ) {
+    const stripped = message.prompt
+      .replace(UNTRUSTED_METADATA_BLOCK_RE, "")
+      .replace(LEADING_TIMESTAMP_RE, "")
+      .trim();
+    return stripped.length > 0 ? stripped : message.prompt;
+  }
+
+  if (
+    config.type === "output" &&
+    "output" in message &&
+    isString(message.output) &&
+    "lastAssistant" in message &&
+    isObject(message.lastAssistant)
+  ) {
+    return message.output;
+  }
+
+  return undefined;
+};
+
 const prettifyCustomMessagingLogic = (
   message: object | string | undefined,
   config: PrettifyMessageConfig,
@@ -527,15 +566,60 @@ const prettifyGenericLogic = (
   }
 };
 
+// Workaround: when the backend truncates large input/output JSON (truncate=true),
+// it cuts the serialized string at ~10k chars, producing invalid JSON that can't
+// be parsed. This extracts known text field values directly from the broken string.
+// Can be removed if we instead truncate individual field values in the backend.
+const KNOWN_TEXT_FIELDS: Record<string, string[]> = {
+  input: ["question", "message", "query", "prompt", "input", "text", "content"],
+  output: ["answer", "output", "response", "reply"],
+};
+
+const extractTextFieldFromTruncatedJson = (
+  jsonString: string,
+  config: PrettifyMessageConfig,
+): string | undefined => {
+  const fields = KNOWN_TEXT_FIELDS[config.type];
+  if (!fields) return undefined;
+
+  for (const field of fields) {
+    const needle = `"${field}":"`;
+    const idx = jsonString.indexOf(needle);
+    if (idx === -1) continue;
+
+    const valueStart = idx + needle.length;
+    let i = valueStart;
+    while (i < jsonString.length) {
+      if (jsonString[i] === "\\") {
+        i += 2;
+      } else if (jsonString[i] === '"') {
+        break;
+      } else {
+        i++;
+      }
+    }
+
+    if (i <= valueStart || i >= jsonString.length) continue;
+
+    try {
+      return JSON.parse(`"${jsonString.slice(valueStart, i)}"`);
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+};
+
 export const prettifyMessage = (
   message: object | string | undefined,
   config: PrettifyMessageConfig = {
     type: "input",
   },
-) => {
+): PrettifyMessageResponse => {
   if (isString(message)) {
+    const extracted = extractTextFieldFromTruncatedJson(message, config);
     return {
-      message,
+      message: extracted || message,
       prettified: true,
     } as PrettifyMessageResponse;
   }
@@ -560,6 +644,10 @@ export const prettifyMessage = (
 
     if (!isString(processedMessage)) {
       processedMessage = prettifyDemoProjectLogic(message, config);
+    }
+
+    if (!isString(processedMessage)) {
+      processedMessage = prettifyOpenClawMessageLogic(message, config);
     }
 
     if (!isString(processedMessage)) {

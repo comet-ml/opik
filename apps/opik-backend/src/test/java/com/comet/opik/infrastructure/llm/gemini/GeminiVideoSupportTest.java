@@ -190,7 +190,7 @@ class GeminiVideoSupportTest {
                     .build();
 
             var request = ChatCompletionRequest.builder()
-                    .model("gemini-2.0-flash-exp")
+                    .model("gemini-2.0-flash")
                     .messages(List.of(opikMessage))
                     .build();
 

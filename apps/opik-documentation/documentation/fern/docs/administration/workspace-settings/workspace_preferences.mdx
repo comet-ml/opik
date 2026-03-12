@@ -17,7 +17,7 @@ Only workspace owners can modify these preferences. See [Roles and Permissions](
 
 Set how long a thread stays active before switching to inactive. Options range from 5 minutes up to 1 hour.
 
-Once inactive, you can log feedback scores via the UI, SDK, or online evaluation rules. Sending a new message reactivates the thread and clears all scores, tags, and comments.
+Once inactive, thread-level online scoring rules will automatically evaluate the conversation. Sending a new message reactivates the thread and restarts the cooldown timer. Existing feedback scores are preserved.
 
 **Default:** 5 minutes
 
