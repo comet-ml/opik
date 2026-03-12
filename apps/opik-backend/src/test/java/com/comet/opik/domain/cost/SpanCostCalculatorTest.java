@@ -105,4 +105,82 @@ class SpanCostCalculatorTest {
 
         assertThat(cost).isEqualByComparingTo("0.015");
     }
+
+    // --- Cache Cost OTel Fallback Tests ---
+
+    @Test
+    void textGenerationWithCacheCostOpenAIUsesOtelCacheReadKey() {
+        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
+                BigDecimal.ZERO, new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
+                SpanCostCalculator::textGenerationWithCacheCostOpenAI);
+
+        // Simulate LiteLLM OTel span: prompt_tokens=1000, cache_read_input_tokens=200
+        // OpenAI style: cached tokens are included in prompt_tokens, so non-cached = 800
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read_input_tokens", 200));
+
+        // inputTokens = 1000 - 200 = 800, outputTokens = 100, cachedRead = 200
+        BigDecimal expected = new BigDecimal("0.01").multiply(new BigDecimal("800"))
+                .add(new BigDecimal("0.02").multiply(new BigDecimal("100")))
+                .add(new BigDecimal("0.005").multiply(new BigDecimal("200")));
+        assertThat(cost).isEqualByComparingTo(expected);
+    }
+
+    @Test
+    void textGenerationWithCacheCostOpenAIOriginalUsageKeyTakesPrecedenceOverOtelKey() {
+        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
+                BigDecimal.ZERO, new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
+                SpanCostCalculator::textGenerationWithCacheCostOpenAI);
+
+        // Both keys present: original_usage key should take precedence
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostOpenAI(modelPrice,
+                Map.of("original_usage.prompt_tokens", 1000, "original_usage.completion_tokens", 100,
+                        "original_usage.prompt_tokens_details.cached_tokens", 300,
+                        "cache_read_input_tokens", 200));
+
+        // original_usage.prompt_tokens_details.cached_tokens=300 takes precedence over cache_read_input_tokens=200
+        BigDecimal expected = new BigDecimal("0.01").multiply(new BigDecimal("700"))
+                .add(new BigDecimal("0.02").multiply(new BigDecimal("100")))
+                .add(new BigDecimal("0.005").multiply(new BigDecimal("300")));
+        assertThat(cost).isEqualByComparingTo(expected);
+    }
+
+    @Test
+    void textGenerationWithCacheCostAnthropicUsesOtelCacheReadKey() {
+        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
+                new BigDecimal("0.015"), new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
+                SpanCostCalculator::textGenerationWithCacheCostAnthropic);
+
+        // Simulate LiteLLM OTel span for Anthropic: bare keys without original_usage. prefix
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostAnthropic(modelPrice,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read_input_tokens", 200, "cache_creation_input_tokens", 50));
+
+        // input=1000, output=100, cacheRead=200, cacheCreation=50
+        BigDecimal expected = new BigDecimal("0.01").multiply(new BigDecimal("1000"))
+                .add(new BigDecimal("0.02").multiply(new BigDecimal("100")))
+                .add(new BigDecimal("0.015").multiply(new BigDecimal("50")))
+                .add(new BigDecimal("0.005").multiply(new BigDecimal("200")));
+        assertThat(cost).isEqualByComparingTo(expected);
+    }
+
+    @Test
+    void textGenerationWithCacheCostBedrockUsesOtelCacheReadKey() {
+        ModelPrice modelPrice = new ModelPrice(new BigDecimal("0.01"), new BigDecimal("0.02"),
+                new BigDecimal("0.015"), new BigDecimal("0.005"), BigDecimal.ZERO, BigDecimal.ZERO,
+                SpanCostCalculator::textGenerationWithCacheCostBedrock);
+
+        // Simulate LiteLLM OTel span for Bedrock: bare keys without original_usage. prefix
+        BigDecimal cost = SpanCostCalculator.textGenerationWithCacheCostBedrock(modelPrice,
+                Map.of("prompt_tokens", 1000, "completion_tokens", 100,
+                        "cache_read_input_tokens", 200, "cache_creation_input_tokens", 50));
+
+        // input=1000, output=100, cacheRead=200, cacheCreation=50
+        BigDecimal expected = new BigDecimal("0.01").multiply(new BigDecimal("1000"))
+                .add(new BigDecimal("0.02").multiply(new BigDecimal("100")))
+                .add(new BigDecimal("0.015").multiply(new BigDecimal("50")))
+                .add(new BigDecimal("0.005").multiply(new BigDecimal("200")));
+        assertThat(cost).isEqualByComparingTo(expected);
+    }
 }
