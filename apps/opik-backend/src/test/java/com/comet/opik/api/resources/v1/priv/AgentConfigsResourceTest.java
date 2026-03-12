@@ -875,6 +875,69 @@ class AgentConfigsResourceTest {
             agentConfigsResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("Success: reassigning env to different blueprint closes old record and creates new one")
+        void updateEnv__whenBlueprintChanged__thenCloseOldAndInsertNew() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("First blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Second blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint1Id)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var result1 = agentConfigsResourceClient.getBlueprintByEnv("prod", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(result1.id()).isEqualTo(blueprint1Id);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint2Id)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var result2 = agentConfigsResourceClient.getBlueprintByEnv("prod", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(result2.id()).isEqualTo(blueprint2Id);
+
+            var historyPage = agentConfigsResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+            assertThat(historyPage.content()).hasSize(2);
+            assertThat(historyPage.content().getFirst().envs()).containsExactly("prod");
+            assertThat(historyPage.content().getLast().envs()).isNull();
+        }
     }
 
     @Nested
