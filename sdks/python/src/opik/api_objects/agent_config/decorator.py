@@ -392,10 +392,10 @@ def _inject_trace_metadata(
 
         agent_config_metadata: typing.Dict[str, typing.Any] = {
             "blueprint_id": resolved_cache.blueprint_id,
-            "values": values,
         }
         if mask_id is not None:
             agent_config_metadata["mask_id"] = mask_id
+        agent_config_metadata["values"] = values
 
         opik_context.update_current_trace(
             metadata={
