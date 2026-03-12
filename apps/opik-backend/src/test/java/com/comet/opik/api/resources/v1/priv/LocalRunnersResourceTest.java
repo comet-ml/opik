@@ -417,25 +417,18 @@ class LocalRunnersResourceTest {
 
         @Test
         void paginatesCorrectly() {
-            String sharedWorkspace = randomUUID().toString();
-            String sharedWorkspaceId = randomUUID().toString();
-            String userName = randomUUID().toString();
-            String apiKey = randomUUID().toString();
-            mockTargetWorkspace(apiKey, sharedWorkspace, sharedWorkspaceId, userName);
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
             for (int i = 0; i < 3; i++) {
-                LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                        .runnerName("paginate-runner-" + i)
-                        .build();
-                UUID rid = runnersClient.connect(req, apiKey, sharedWorkspace);
-                runnersClient.heartbeat(rid, apiKey, sharedWorkspace);
+                connectRunnerWithPairing("paginate-runner-" + i, projectId, ctx.apiKey, ctx.workspace);
             }
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(0, 2, apiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(null, 0, 2, ctx.apiKey, ctx.workspace);
             assertThat(page0.content()).hasSize(2);
             assertThat(page0.total()).isEqualTo(3);
 
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(1, 2, apiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(null, 1, 2, ctx.apiKey, ctx.workspace);
             assertThat(page1.content()).hasSize(1);
         }
     }

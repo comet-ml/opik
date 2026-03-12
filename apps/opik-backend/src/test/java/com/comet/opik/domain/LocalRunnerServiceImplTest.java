@@ -592,7 +592,7 @@ class LocalRunnerServiceImplTest {
         assertThat(connectResp.projectId()).isEqualTo(PROJECT_ID);
         assertThat(connectResp.projectName()).isEqualTo(PROJECT_NAME);
 
-        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().project("my-project").build();
+        LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().build();
         runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agentMeta));
 
         LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, null, 0, 25);
@@ -650,16 +650,16 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void listRunners_excludesOtherUsersRunners() {
-            connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, 0, 25);
+            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, null, 0, 25);
             assertThat(page.content()).isEmpty();
             assertThat(page.total()).isZero();
         }
 
         @Test
         void getRunner_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.getRunner(WORKSPACE_ID, OTHER_USER, runnerId))
                     .isExactlyInstanceOf(NotFoundException.class)
@@ -668,7 +668,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void registerAgents_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.registerAgents(runnerId, WORKSPACE_ID, OTHER_USER,
                     Map.of(AGENT_NAME, LocalRunner.Agent.builder().build())))
@@ -678,7 +678,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void heartbeat_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.heartbeat(runnerId, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
@@ -687,21 +687,20 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void createJob_rejectsOtherUsersRunner() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
-                    .runnerId(runnerId)
+                    .projectId(PROJECT_ID)
                     .build();
 
             assertThatThrownBy(() -> runnerService.createJob(WORKSPACE_ID, OTHER_USER, req))
-                    .isExactlyInstanceOf(NotFoundException.class)
-                    .hasMessageContaining("Runner not found");
+                    .isExactlyInstanceOf(NotFoundException.class);
         }
 
         @Test
         void nextJob_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.nextJob(runnerId, WORKSPACE_ID, OTHER_USER))
                     .isExactlyInstanceOf(NotFoundException.class)
@@ -710,7 +709,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void listJobs_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
             assertThatThrownBy(() -> runnerService.listJobs(runnerId, null, WORKSPACE_ID, OTHER_USER, 0, 10))
                     .isExactlyInstanceOf(NotFoundException.class)
@@ -719,7 +718,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void getJob_rejectsOtherUser() {
-            connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJob(jobId, WORKSPACE_ID, OTHER_USER))
@@ -729,7 +728,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void getJobLogs_rejectsOtherUser() {
-            connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.getJobLogs(jobId, 0, WORKSPACE_ID, OTHER_USER))
@@ -739,7 +738,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void appendLogs_rejectsOtherUser() {
-            connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.appendLogs(jobId, WORKSPACE_ID, OTHER_USER,
@@ -750,7 +749,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void reportResult_rejectsOtherUser() {
-            UUID runnerId = connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            UUID runnerId = pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
             runnerService.nextJob(runnerId, WORKSPACE_ID, USER_NAME).toCompletableFuture().join();
 
@@ -762,7 +761,7 @@ class LocalRunnerServiceImplTest {
 
         @Test
         void cancelJob_rejectsOtherUser() {
-            connectViaApiKey(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
+            pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
             UUID jobId = createTestJob(WORKSPACE_ID, USER_NAME, AGENT_NAME);
 
             assertThatThrownBy(() -> runnerService.cancelJob(jobId, WORKSPACE_ID, OTHER_USER))
