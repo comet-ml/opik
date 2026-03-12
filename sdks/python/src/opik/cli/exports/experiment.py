@@ -462,6 +462,46 @@ def export_experiment_by_id(
                     "traces_skipped": len(stored_ids),
                 }
                 return (_empty, 0, manifest)
+            elif stored_ids is None and experiment_files:
+                # JSON exists but manifest lacks stored IDs (e.g. exported before
+                # the per-experiment manifest feature, or a run that was interrupted
+                # before store_all_trace_ids was called).  Extract trace IDs directly
+                # from the JSON file to avoid a get_items() API round-trip.
+                try:
+                    import json as _json
+
+                    with open(experiment_files[0]) as _fh:
+                        _exp_data = _json.load(_fh)
+                    trace_ids_from_json = [
+                        item.get("trace_id")
+                        for item in _exp_data.get("items", [])
+                        if item.get("trace_id")
+                    ]
+                    manifest.store_all_trace_ids(trace_ids_from_json)
+                    manifest.start(format)
+                    if trace_ids_collector is not None:
+                        trace_ids_collector.update(trace_ids_from_json)
+                    debug_print(
+                        f"Read {len(trace_ids_from_json)} trace IDs from existing JSON "
+                        f"for experiment {experiment_id}; skipping get_items() API call",
+                        debug,
+                    )
+                    _empty2: Dict[str, int] = {
+                        "datasets": 0,
+                        "datasets_skipped": 0,
+                        "prompts": 0,
+                        "prompts_skipped": 0,
+                        "traces": 0,
+                        "traces_skipped": len(trace_ids_from_json),
+                    }
+                    return (_empty2, 0, manifest)
+                except Exception as _e:
+                    debug_print(
+                        f"Could not read trace IDs from JSON for experiment "
+                        f"{experiment_id}: {_e}; falling back to get_items() API call",
+                        debug,
+                    )
+                    # Fall through to full API path
             elif stored_ids is not None and not experiment_files:
                 # Manifest has IDs but the experiment file was deleted.
                 # Reset and fall through to a full re-export.

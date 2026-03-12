@@ -374,6 +374,12 @@ def _export_all_experiments(
                     format,
                     None,  # Don't pass shared set; collect from manifest in main thread
                 )
+                # Release the semaphore slot as soon as the future completes so
+                # the submission loop can proceed even before as_completed runs.
+                # Without this, submitting more than max_workers*2 experiments
+                # deadlocks: the main thread blocks on acquire() while Loop 2
+                # (which calls release()) has not started yet.
+                future.add_done_callback(lambda _f: semaphore.release())
                 future_to_exp[future] = exp
             for future in as_completed(future_to_exp):
                 exp = future_to_exp[future]
@@ -394,7 +400,6 @@ def _export_all_experiments(
                         f"[red]Error exporting experiment '{exp.name}': {e}[/red]"
                     )
                 finally:
-                    semaphore.release()
                     progress.update(
                         task, advance=1, description=f"Experiment: {exp.name}"
                     )
