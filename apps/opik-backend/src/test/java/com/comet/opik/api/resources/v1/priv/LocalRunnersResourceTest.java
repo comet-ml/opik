@@ -345,13 +345,13 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void withoutPairingCode_returns400() {
+        void withoutPairingCode_returns422() {
             LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                     .runnerName("runner")
                     .build();
 
             try (var response = runnersClient.callConnect(req, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(400);
+                assertThat(response.getStatus()).isEqualTo(422);
             }
         }
     }
