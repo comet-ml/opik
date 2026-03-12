@@ -6,6 +6,7 @@ import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import jakarta.annotation.Nullable;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -17,6 +18,7 @@ import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -92,10 +94,20 @@ public class ProjectResourceClient {
     }
 
     public FeedbackScoreNames findFeedbackScoreNames(String projectIdsQueryParam, String apiKey, String workspaceName) {
+        return findFeedbackScoreNames(projectIdsQueryParam, null, apiKey, workspaceName);
+    }
+
+    public FeedbackScoreNames findFeedbackScoreNames(String projectIdsQueryParam,
+            @Nullable Set<String> excludeCategoryNames, String apiKey, String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
                 .path("names")
                 .queryParam("project_ids", projectIdsQueryParam);
+        if (excludeCategoryNames != null) {
+            for (String categoryName : excludeCategoryNames) {
+                webTarget = webTarget.queryParam("exclude_category_names", categoryName);
+            }
+        }
 
         try (var actualResponse = webTarget
                 .request()
@@ -103,7 +115,6 @@ public class ProjectResourceClient {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            // then
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
 
             return actualResponse.readEntity(FeedbackScoreNames.class);
