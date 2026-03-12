@@ -706,10 +706,15 @@ def add_start_candidates(
     Returns:
         The result of the span creation, including the span and trace data.
     """
+    preset_trace_id = None
+    if opik_args_data and opik_args_data.trace_args and opik_args_data.trace_args.id:
+        preset_trace_id = opik_args_data.trace_args.id
+
     span_creation_result = span_creation_handler.create_span_respecting_context(
         start_span_arguments=start_span_parameters,
         distributed_trace_headers=opik_distributed_trace_headers,
         should_create_duplicate_root_span=create_duplicate_root_span,
+        preset_trace_id=preset_trace_id,
     )
     if span_creation_result.should_process_span_data:
         context_storage.add_span_data(span_creation_result.span_data)

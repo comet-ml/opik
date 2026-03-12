@@ -164,12 +164,7 @@ class InProcessRunnerLoop:
         func: Callable = entry["func"]
 
         if job.trace_id:
-            from .. import id_helpers
-
-            inputs["opik_distributed_trace_headers"] = {
-                "opik_trace_id": job.trace_id,
-                "opik_parent_span_id": id_helpers.generate_id(),
-            }
+            inputs["opik_args"] = {"trace": {"id": job.trace_id}}
 
         trace_id = job.trace_id
 
