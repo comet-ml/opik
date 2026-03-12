@@ -172,6 +172,8 @@ from .types import (
     CountValueStatPublic,
     DashboardPagePublic,
     DashboardPublic,
+    DashboardPublicScope,
+    DashboardPublicType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -622,6 +624,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
+from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -634,12 +637,7 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import (
-    CreatePromptVersionDetailAction,
-    CreatePromptVersionDetailTemplateStructure,
-    PromptWriteTemplateStructure,
-    PromptWriteType,
-)
+from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
 from .runners import LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
@@ -821,10 +819,15 @@ __all__ = [
     "CompletionTokensDetails",
     "ConflictError",
     "CountValueStatPublic",
-    "CreatePromptVersionDetailAction",
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
+    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublicType",
+    "DashboardWriteScope",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",

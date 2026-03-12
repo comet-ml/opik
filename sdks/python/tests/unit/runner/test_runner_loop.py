@@ -37,6 +37,7 @@ def loop(mock_api, shutdown_event):
         "r-1",
         shutdown_event,
         heartbeat_interval_seconds=100,
+        max_workers=10,
     )
 
 
@@ -163,8 +164,11 @@ class TestSafeExecute:
             loop._lock,
         )
 
+        slot = threading.Semaphore(1)
+        slot.acquire()
         with patch.object(executor, "execute", side_effect=RuntimeError("boom")):
-            loop._safe_execute(executor, job, {})
+            loop._safe_execute(executor, job, {}, slot)
+        assert slot.acquire(blocking=False), "slot should have been released"
 
         mock_api.runners.report_job_result.assert_called_once()
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
@@ -241,9 +245,150 @@ class TestHeartbeatLoop:
         assert shutdown_event.is_set()
 
 
+class TestBackoff:
+    def test_run__repeated_errors__increases_delay_between_polls(
+        self, mock_api, shutdown_event
+    ):
+        loop = runner_loop.RunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+            heartbeat_interval_seconds=100,
+            backoff_cap_seconds=10.0,
+            max_workers=10,
+        )
+        timestamps = []
+
+        def side_effect(runner_id):
+            timestamps.append(time.monotonic())
+            if len(timestamps) >= 4:
+                shutdown_event.set()
+                return None
+            raise ConnectionError("fail")
+
+        mock_api.runners.next_job.side_effect = side_effect
+        loop.run()
+
+        assert len(timestamps) >= 4
+        gap_1 = timestamps[1] - timestamps[0]
+        gap_2 = timestamps[2] - timestamps[1]
+        assert gap_2 > gap_1, "delay should increase after repeated errors"
+
+    def test_run__error_then_success__resets_backoff(self, mock_api, shutdown_event):
+        loop = runner_loop.RunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+            heartbeat_interval_seconds=100,
+            backoff_cap_seconds=10.0,
+            max_workers=10,
+        )
+        timestamps = []
+        call_count = 0
+
+        def side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            timestamps.append(time.monotonic())
+            if call_count <= 3:
+                raise ConnectionError("fail")
+            if call_count == 4:
+                return None
+            if call_count <= 6:
+                raise ConnectionError("fail again")
+            shutdown_event.set()
+            return None
+
+        mock_api.runners.next_job.side_effect = side_effect
+        loop.run()
+
+        assert len(timestamps) >= 7
+        gap_after_reset = timestamps[5] - timestamps[4]
+        gap_before_reset = timestamps[3] - timestamps[2]
+        assert gap_after_reset < gap_before_reset, (
+            "backoff should reset after a successful poll"
+        )
+
+
 class TestSignalHandlers:
     def test_signal_handlers__installed__sets_handlers(self, shutdown_event, loop):
         loop._install_signal_handlers()
+
+
+class TestSafeExecuteSlot:
+    def test_safe_execute__releases_slot_on_success(
+        self, mock_api, shutdown_event, loop
+    ):
+        job = LocalRunnerJob(id="j-1", agent_name="a", inputs={})
+        executor = job_executor.JobExecutor(
+            mock_api,
+            loop._active_jobs,
+            loop._cancelled_jobs,
+            loop._lock,
+        )
+        slot = threading.Semaphore(1)
+        slot.acquire()
+
+        with patch.object(executor, "execute"):
+            loop._safe_execute(executor, job, {}, slot)
+
+        assert slot.acquire(blocking=False), "slot was not released"
+        slot.release()
+
+    def test_safe_execute__releases_slot_on_failure(
+        self, mock_api, shutdown_event, loop
+    ):
+        job = LocalRunnerJob(id="j-1", agent_name="a", inputs={})
+        executor = job_executor.JobExecutor(
+            mock_api,
+            loop._active_jobs,
+            loop._cancelled_jobs,
+            loop._lock,
+        )
+        slot = threading.Semaphore(1)
+        slot.acquire()
+
+        with patch.object(executor, "execute", side_effect=RuntimeError("boom")):
+            loop._safe_execute(executor, job, {}, slot)
+
+        assert slot.acquire(blocking=False), "slot was not released after failure"
+        slot.release()
+
+    def test_run__pool_full__delays_polling(self, mock_api, shutdown_event):
+        loop = runner_loop.RunnerLoop(
+            mock_api,
+            "r-1",
+            shutdown_event,
+            heartbeat_interval_seconds=100,
+            max_workers=1,
+        )
+        execute_started = threading.Event()
+        execute_release = threading.Event()
+
+        job = LocalRunnerJob(id="j-1", agent_name="test", inputs={"q": "hi"})
+        call_count = 0
+
+        def next_job_side_effect(runner_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return job
+            if execute_started.is_set() and not execute_release.is_set():
+                shutdown_event.set()
+            return None
+
+        mock_api.runners.next_job.side_effect = next_job_side_effect
+
+        def slow_execute(j, agents):
+            execute_started.set()
+            execute_release.wait(timeout=5)
+
+        with patch.object(
+            job_executor.JobExecutor, "execute", side_effect=slow_execute
+        ):
+            loop.run()
+
+        assert execute_started.is_set()
 
 
 class TestKillActiveJobs:

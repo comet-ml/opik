@@ -71,6 +71,34 @@ class TestConnect:
         call_kwargs = api.runners.with_raw_response.connect_runner.call_args[1]
         assert call_kwargs["pairing_code"] == "ABCD"
 
+    @patch("opik.cli.connect.runner_loop")
+    @patch("opik.cli.connect.OpikApi")
+    @patch("opik.cli.connect.httpx_client")
+    @patch("opik.cli.connect.OpikConfig")
+    def test_connect__max_jobs_flag__propagates_to_runner_loop(
+        self, mock_config_cls, mock_httpx_client, mock_api_cls, mock_loop, cli_runner
+    ):
+        config = MagicMock()
+        config.url_override = "https://api.test"
+        config.api_key = "key"
+        config.workspace = "ws"
+        mock_config_cls.return_value = config
+
+        mock_httpx_client.get.return_value = MagicMock()
+
+        api = MagicMock()
+        raw_resp = MagicMock()
+        raw_resp.headers = {"location": "/v1/private/local-runners/r-abc"}
+        api.runners.with_raw_response.connect_runner.return_value = raw_resp
+        mock_api_cls.return_value = api
+        mock_loop.RunnerLoop.return_value.run = MagicMock()
+
+        result = cli_runner.invoke(cli, ["connect", "--max-jobs", "5"])
+        assert result.exit_code == 0
+
+        call_kwargs = mock_loop.RunnerLoop.call_args[1]
+        assert call_kwargs["max_workers"] == 5
+
     @patch("opik.cli.connect._is_process_alive", return_value=True)
     def test_connect__runner_already_active__rejects_with_error(
         self, mock_alive, cli_runner

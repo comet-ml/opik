@@ -766,12 +766,12 @@ class TestConfigDecoratorMultiClass:
         assert p.template == "v2"
 
     def test_different_projects__separate_caches(self, mock_backend):
-        @agent_config_decorator(project="proj-a")
+        @agent_config_decorator(project_name="proj-a")
         @dataclasses.dataclass
         class ConfigA:
             val: int = 1
 
-        @agent_config_decorator(project="proj-b")
+        @agent_config_decorator(project_name="proj-b")
         @dataclasses.dataclass
         class ConfigB:
             val: int = 2

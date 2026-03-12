@@ -868,7 +868,7 @@ export class RunnersClient {
     }
 
     /**
-     * List all local runners in the current workspace
+     * List local runners owned by the current user in the workspace
      *
      * @param {OpikApi.ListRunnersRequest} request
      * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.

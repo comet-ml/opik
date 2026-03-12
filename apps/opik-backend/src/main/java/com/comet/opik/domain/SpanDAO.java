@@ -588,7 +588,7 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND entity_id IN :ids
@@ -607,7 +607,7 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND entity_id IN :ids
@@ -837,7 +837,7 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -857,7 +857,7 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
@@ -1032,6 +1032,7 @@ class SpanDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
+            <if(feedback_scores_filters || feedback_scores_empty_filters)>
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -1040,10 +1041,12 @@ class SpanDAO {
                        value,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1052,10 +1055,12 @@ class SpanDAO {
                        value,
                        last_updated_at,
                        author
-                 FROM authored_feedback_scores FINAL
+                 FROM authored_feedback_scores
                  WHERE entity_type = 'span'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+                   <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                   <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
              ), feedback_scores_with_ranking AS (
                  SELECT workspace_id,
                         project_id,
@@ -1089,6 +1094,7 @@ class SpanDAO {
                 FROM feedback_scores_combined
                 GROUP BY workspace_id, project_id, entity_id, name
             )
+            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM feedback_scores_final
@@ -1177,10 +1183,12 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
+                FROM feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1195,10 +1203,12 @@ class SpanDAO {
                        created_at,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores FINAL
+                FROM authored_feedback_scores
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,

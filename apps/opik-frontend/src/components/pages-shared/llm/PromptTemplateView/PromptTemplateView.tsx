@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Code2, MessageSquare, Type } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import PromptMessagesReadonly, {
@@ -20,6 +21,8 @@ interface PromptTemplateViewProps {
   template: unknown;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   search?: string;
+  truncate?: boolean;
+  labelClassName?: string;
   children?: React.ReactNode;
 }
 
@@ -27,6 +30,8 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
   template,
   templateStructure,
   search,
+  truncate = false,
+  labelClassName,
   children,
 }) => {
   const [showRawView, setShowRawView] = useState(false);
@@ -120,7 +125,7 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
     }
 
     if (isChatPrompt && hasMessages) {
-      return <PromptMessagesReadonly messages={messages} />;
+      return <PromptMessagesReadonly messages={messages} truncate={truncate} />;
     }
 
     if (isTextPrompt) {
@@ -146,7 +151,7 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="comet-body-s-accented">
+        <div className={cn("comet-body-s-accented", labelClassName)}>
           {isChatPrompt ? "Chat messages" : "Prompt"}
         </div>
         {renderToggleButton()}

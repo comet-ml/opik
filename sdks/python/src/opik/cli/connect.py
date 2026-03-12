@@ -23,11 +23,18 @@ LOGGER = logging.getLogger(__name__)
 @click.command()
 @click.option("--pair", "pair_code", default=None, help="Pairing code for the runner.")
 @click.option("--name", default=None, help="Runner name.")
+@click.option(
+    "--max-jobs",
+    default=None,
+    type=int,
+    help="Maximum concurrent jobs (defaults to CPU count).",
+)
 @click.pass_context
 def connect(
     ctx: click.Context,
     pair_code: Optional[str],
     name: Optional[str],
+    max_jobs: Optional[int],
 ) -> None:
     """Connect a local runner to Opik and start processing jobs."""
     runner_state = state.RunnerState.load()
@@ -85,7 +92,9 @@ def connect(
         click.echo(f"Runner connected (ID: {runner_id}). Listening for jobs...")
 
         shutdown_event = threading.Event()
-        loop = runner_loop.RunnerLoop(api, runner_id, shutdown_event)
+        loop = runner_loop.RunnerLoop(
+            api, runner_id, shutdown_event, max_workers=max_jobs
+        )
         loop.run()
     except httpx.ConnectError:
         click.echo(

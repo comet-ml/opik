@@ -362,7 +362,7 @@ class RunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> LocalRunnerPage:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------
@@ -863,7 +863,7 @@ class AsyncRunnersClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> LocalRunnerPage:
         """
-        List all local runners in the current workspace
+        List local runners owned by the current user in the workspace
 
         Parameters
         ----------
