@@ -8,20 +8,9 @@ from opik.rest_api.types.local_runner_connect_response import LocalRunnerConnect
 
 
 class TestConnect:
-    @patch("opik.cli.connect.OpikApi")
-    @patch("opik.cli.connect.httpx_client")
-    @patch("opik.cli.connect.OpikConfig")
-    def test_connect__with_pair_code__calls_connect_runner(
-        self, mock_config_cls, mock_httpx_client, mock_api_cls
-    ):
-        config = MagicMock()
-        config.url_override = "https://api.test"
-        config.api_key = "key-123"
-        config.workspace = "ws"
-        mock_config_cls.return_value = config
-
-        mock_httpx_client.get.return_value = MagicMock()
-
+    @patch("opik.cli.connect.Opik")
+    def test_connect__with_pair_code__calls_connect_runner(self, mock_opik_cls):
+        client = MagicMock()
         api = MagicMock()
         api.runners.connect_runner.return_value = LocalRunnerConnectResponse(
             runner_id="r-abc",
@@ -29,7 +18,8 @@ class TestConnect:
             project_id="p-1",
             project_name="my-project",
         )
-        mock_api_cls.return_value = api
+        client.rest_client = api
+        mock_opik_cls.return_value = client
 
         runner = CliRunner()
         result = runner.invoke(cli, ["connect", "--pair", "ABCD"])
@@ -40,26 +30,18 @@ class TestConnect:
         assert call_kwargs["pairing_code"] == "ABCD"
 
     @patch("opik.cli.connect.os.execvpe")
-    @patch("opik.cli.connect.OpikApi")
-    @patch("opik.cli.connect.httpx_client")
-    @patch("opik.cli.connect.OpikConfig")
+    @patch("opik.cli.connect.Opik")
     def test_connect__with_command__sets_env_and_execs(
-        self, mock_config_cls, mock_httpx_client, mock_api_cls, mock_execvpe
+        self, mock_opik_cls, mock_execvpe
     ):
-        config = MagicMock()
-        config.url_override = "https://api.test"
-        config.api_key = "key"
-        config.workspace = "ws"
-        mock_config_cls.return_value = config
-
-        mock_httpx_client.get.return_value = MagicMock()
-
+        client = MagicMock()
         api = MagicMock()
         api.runners.connect_runner.return_value = LocalRunnerConnectResponse(
             runner_id="r-xyz",
             project_name="proj",
         )
-        mock_api_cls.return_value = api
+        client.rest_client = api
+        mock_opik_cls.return_value = client
 
         runner = CliRunner()
         result = runner.invoke(cli, ["connect", "--pair", "CODE", "python", "myapp.py"])
@@ -74,25 +56,18 @@ class TestConnect:
         assert env["OPIK_RUNNER_ID"] == "r-xyz"
         assert env["OPIK_PROJECT_NAME"] == "proj"
 
-    @patch("opik.cli.connect.OpikApi")
-    @patch("opik.cli.connect.httpx_client")
-    @patch("opik.cli.connect.OpikConfig")
-    def test_connect__network_failure__shows_clean_error(
-        self, mock_config_cls, mock_httpx_client, mock_api_cls
-    ):
+    @patch("opik.cli.connect.Opik")
+    def test_connect__network_failure__shows_clean_error(self, mock_opik_cls):
+        client = MagicMock()
         config = MagicMock()
         config.url_override = "https://api.test"
-        config.api_key = "key"
-        config.workspace = "ws"
-        mock_config_cls.return_value = config
-
-        mock_httpx_client.get.return_value = MagicMock()
-
+        client.config = config
         api = MagicMock()
         api.runners.connect_runner.side_effect = httpx.ConnectError(
             "Connection refused"
         )
-        mock_api_cls.return_value = api
+        client.rest_client = api
+        mock_opik_cls.return_value = client
 
         runner = CliRunner()
         result = runner.invoke(cli, ["connect"])
