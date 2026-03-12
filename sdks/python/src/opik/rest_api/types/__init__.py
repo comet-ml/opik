@@ -401,6 +401,7 @@ from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
 from .local_runner import LocalRunner
+from .local_runner_connect_response import LocalRunnerConnectResponse
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
 from .local_runner_job_metadata import LocalRunnerJobMetadata
@@ -975,6 +976,7 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
+    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
     "LocalRunnerJobMetadata",

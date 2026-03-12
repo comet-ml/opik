@@ -9,7 +9,7 @@ from .param import Param
 
 class Agent(UniversalBaseModel):
     name: typing.Optional[str] = None
-    project: typing.Optional[str] = None
+    project_id: typing.Optional[str] = None
     description: typing.Optional[str] = None
     language: typing.Optional[str] = None
     executable: typing.Optional[str] = None
