@@ -5,7 +5,6 @@ import { DatasetItem } from "@/dataset/DatasetItem";
 import { EvaluationSuite } from "@/evaluation/suite/EvaluationSuite";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
-  resolveEvaluators,
   validateEvaluators,
   validateExecutionPolicy,
 } from "@/evaluation/suite_evaluators/validators";
