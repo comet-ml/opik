@@ -254,29 +254,30 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         if (projectId != null) {
             RSet<String> projectRunnerIds = redisClient.getSet(
                     projectRunnersKey(workspaceId, projectId), StringCodec.INSTANCE);
+            var projectIds = projectRunnerIds.readAll();
+
             RScoredSortedSet<String> userRunnerIds = redisClient.getScoredSortedSet(
                     workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
-            var allProjectIds = projectRunnerIds.readAll();
-            var allUserIds = userRunnerIds.readAll();
-            allProjectIds.retainAll(allUserIds);
+            var allUserIds = userRunnerIds.valueRangeReversed(0, -1);
 
-            int total = allProjectIds.size();
-            List<String> idList = new ArrayList<>(allProjectIds);
-            idList.sort(null);
-            int fromIndex = Math.min(page * size, total);
-            int toIndex = Math.min(fromIndex + size, total);
-
-            List<LocalRunner> runners = new ArrayList<>();
-            for (String runnerIdStr : idList.subList(fromIndex, toIndex)) {
+            List<LocalRunner> allMatched = new ArrayList<>();
+            for (String runnerIdStr : allUserIds) {
+                if (!projectIds.contains(runnerIdStr)) {
+                    continue;
+                }
                 UUID runnerId = UUID.fromString(runnerIdStr);
                 LocalRunner runner = loadRunner(runnerId, workspaceId);
                 if (runner != null) {
-                    runners.add(runner);
+                    allMatched.add(runner);
                 }
             }
 
+            int total = allMatched.size();
+            int fromIndex = Math.min(page * size, total);
+            int toIndex = Math.min(fromIndex + size, total);
+
             return LocalRunner.LocalRunnerPage.builder()
-                    .page(page).size(size).total(total).content(runners).build();
+                    .page(page).size(size).total(total).content(allMatched.subList(fromIndex, toIndex)).build();
         }
 
         RScoredSortedSet<String> userRunnerIds = redisClient.getScoredSortedSet(
@@ -337,7 +338,13 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
     @Override
     public LocalRunnerHeartbeatResponse heartbeat(@NonNull UUID runnerId, @NonNull String workspaceId,
             @NonNull String userName) {
-        validateRunnerOwnership(runnerId, workspaceId, userName);
+        RScoredSortedSet<String> userRunners = redisClient.getScoredSortedSet(
+                workspaceUserRunnersKey(workspaceId, userName), StringCodec.INSTANCE);
+        if (!userRunners.contains(runnerId.toString())) {
+            throw new ClientErrorException(Response.status(Response.Status.GONE)
+                    .entity(new ErrorMessage(List.of("Runner not found: " + runnerId)))
+                    .build());
+        }
 
         RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
         Map<String, String> fields = runnerMap.readAllMap();

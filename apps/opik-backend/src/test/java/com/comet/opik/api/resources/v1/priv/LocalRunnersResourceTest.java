@@ -634,20 +634,20 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void throwsNotFoundForDeletedRunner() {
+        void throwsGoneForDeletedRunner() {
             try (var response = runnersClient.callHeartbeat(randomUUID(), API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(410);
             }
         }
 
         @Test
-        void throwsNotFoundForWrongWorkspace() {
+        void throwsGoneForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithPairing("hb-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callHeartbeat(runnerId, OTHER_API_KEY, OTHER_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(410);
             }
         }
     }
