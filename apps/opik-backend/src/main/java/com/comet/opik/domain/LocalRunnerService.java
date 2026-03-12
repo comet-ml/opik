@@ -347,18 +347,19 @@ class LocalRunnerServiceImpl implements LocalRunnerService {
         }
 
         RMap<String, String> runnerMap = redisClient.getMap(runnerKey(runnerId), StringCodec.INSTANCE);
-        Map<String, String> fields = runnerMap.readAllMap();
-        String projectIdStr = fields.get(FIELD_PROJECT_ID);
-        if (projectIdStr != null) {
-            UUID projectId = UUID.fromString(projectIdStr);
-            RBucket<String> currentRunnerBucket = redisClient.getBucket(
-                    projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE);
-            String currentRunnerId = currentRunnerBucket.get();
-            if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
-                throw new ClientErrorException(Response.status(Response.Status.GONE)
-                        .entity(new ErrorMessage(List.of("Runner evicted by a newer connection")))
-                        .build());
-            }
+        String projectIdStr = runnerMap.get(FIELD_PROJECT_ID);
+        if (projectIdStr == null) {
+            throw new IllegalStateException("Runner " + runnerId + " has no project_id");
+        }
+
+        UUID projectId = UUID.fromString(projectIdStr);
+        RBucket<String> currentRunnerBucket = redisClient.getBucket(
+                projectUserRunnerKey(workspaceId, projectId, userName), StringCodec.INSTANCE);
+        String currentRunnerId = currentRunnerBucket.get();
+        if (currentRunnerId != null && !currentRunnerId.equals(runnerId.toString())) {
+            throw new ClientErrorException(Response.status(Response.Status.GONE)
+                    .entity(new ErrorMessage(List.of("Runner evicted by a newer connection")))
+                    .build());
         }
 
         setHeartbeat(runnerId);
