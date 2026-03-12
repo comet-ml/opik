@@ -1,7 +1,6 @@
 """Project export functionality."""
 
 import sys
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
@@ -15,6 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
+from opik.rest_client_configurator.retry_decorator import opik_rest_retry
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -31,11 +31,8 @@ console = Console()
 # Maximum number of concurrent workers for parallel span fetching.
 MAX_WORKERS = 10
 
-# Retry settings for 429 rate-limit responses.
-_MAX_RETRIES = 5
-_RETRY_BACKOFF_BASE = 2.0  # seconds; doubles each attempt
 
-
+@opik_rest_retry
 def _fetch_spans(
     client: opik.Opik,
     trace: Any,
@@ -43,24 +40,15 @@ def _fetch_spans(
 ) -> tuple:
     """Fetch spans for a single trace. Returns (trace, spans).
 
-    Retries up to _MAX_RETRIES times on HTTP 429 with exponential back-off.
+    Retries on transient errors (429, 5xx, network issues) via the shared
+    opik_rest_retry decorator; re-raises on permanent failures.
     """
-    delay = _RETRY_BACKOFF_BASE
-    for attempt in range(_MAX_RETRIES + 1):
-        try:
-            return trace, client.search_spans(
-                project_name=project_name,
-                trace_id=trace.id,
-                max_results=1000,
-                truncate=False,
-            )
-        except ApiError as exc:
-            if exc.status_code == 429 and attempt < _MAX_RETRIES:
-                time.sleep(delay)
-                delay *= 2
-                continue
-            raise
-    raise RuntimeError("unreachable")
+    return trace, client.search_spans(
+        project_name=project_name,
+        trace_id=trace.id,
+        max_results=1000,
+        truncate=False,
+    )
 
 
 def export_traces(
