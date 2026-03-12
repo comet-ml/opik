@@ -5,6 +5,7 @@
  *     {}
  */
 export interface ListRunnersRequest {
+    projectId?: string;
     page?: number;
     size?: number;
 }

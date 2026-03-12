@@ -37,6 +37,7 @@ def create_span_respecting_context(
     distributed_trace_headers: Optional[DistributedTraceHeadersDict],
     opik_context_storage: Optional[context_storage.OpikContextStorage] = None,
     should_create_duplicate_root_span: bool = True,
+    preset_trace_id: Optional[str] = None,
 ) -> SpanCreationResult:
     """
     Handles different span creation flows.
@@ -110,7 +111,7 @@ def create_span_respecting_context(
         # Create a trace and root span because it is
         # the first decorated function run in the current context.
         current_trace_data = trace.TraceData(
-            id=helpers.generate_id(),
+            id=preset_trace_id or helpers.generate_id(),
             start_time=datetime_helpers.local_timestamp(),
             name=start_span_arguments.name,
             input=start_span_arguments.input,
