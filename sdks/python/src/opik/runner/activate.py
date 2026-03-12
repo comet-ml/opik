@@ -82,10 +82,6 @@ def activate_runner() -> None:
 
 def _print_banner(runner_id: str, project_name: str) -> None:
     console = Console()
-    width = console.width or 80
-
-    line = Text("\u2500" * width, style="rgb(128,128,128)")
-    console.print(line)
 
     info = Text()
     info.append("   ")
