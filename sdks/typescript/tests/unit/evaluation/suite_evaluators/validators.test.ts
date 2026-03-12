@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  resolveEvaluators,
   validateEvaluators,
   validateExecutionPolicy,
+  validateSuiteItems,
 } from "@/evaluation/suite_evaluators/validators";
 import { ExactMatch } from "@/evaluation/metrics/heuristics/ExactMatch";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
@@ -107,6 +109,76 @@ describe("validateEvaluators", () => {
   });
 });
 
+describe("resolveEvaluators", () => {
+  it("should return undefined when both assertions and evaluators are undefined", () => {
+    expect(resolveEvaluators(undefined, undefined, "test")).toBeUndefined();
+  });
+
+  it("should return undefined when both assertions and evaluators are empty arrays", () => {
+    expect(resolveEvaluators([], [], "test")).toBeUndefined();
+  });
+
+  it("should return a single LLMJudge when assertions are provided", () => {
+    const result = resolveEvaluators(
+      ["Output is relevant", "Output is concise"],
+      undefined,
+      "test"
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result![0]).toBeInstanceOf(LLMJudge);
+    expect(result![0].assertions).toEqual([
+      "Output is relevant",
+      "Output is concise",
+    ]);
+  });
+
+  it("should return given evaluators when evaluators are provided", () => {
+    const judge = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: false,
+    });
+
+    const result = resolveEvaluators(undefined, [judge], "test");
+
+    expect(result).toEqual([judge]);
+  });
+
+  it("should call validateEvaluators when evaluators are provided", () => {
+    const judge = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: false,
+    });
+
+    // Should not throw (validateEvaluators passes for LLMJudge instances)
+    expect(() => resolveEvaluators(undefined, [judge], "my context")).not.toThrow();
+  });
+
+  it("should throw when both assertions and evaluators are provided", () => {
+    const judge = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: false,
+    });
+
+    expect(() =>
+      resolveEvaluators(["some assertion"], [judge], "test context")
+    ).toThrow(
+      "Cannot specify both 'assertions' and 'evaluators' for test context"
+    );
+  });
+
+  it("should include context string in error message", () => {
+    const judge = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: false,
+    });
+
+    expect(() =>
+      resolveEvaluators(["assertion"], [judge], "my custom context")
+    ).toThrow("for my custom context");
+  });
+});
+
 describe("validateExecutionPolicy", () => {
   it("should pass for valid policy { runsPerItem: 3, passThreshold: 2 }", () => {
     expect(() =>
@@ -192,5 +264,162 @@ describe("validateExecutionPolicy", () => {
     expect(() =>
       validateExecutionPolicy({ runsPerItem: 0 }, "my custom context")
     ).toThrow("for my custom context");
+  });
+});
+
+describe("validateSuiteItems", () => {
+  it("should pass for valid items with data only", () => {
+    expect(() =>
+      validateSuiteItems([{ data: { input: "hello" } }])
+    ).not.toThrow();
+  });
+
+  it("should pass for items with assertions and executionPolicy", () => {
+    expect(() =>
+      validateSuiteItems([
+        {
+          data: { input: "test" },
+          assertions: ["is correct"],
+          executionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        },
+      ])
+    ).not.toThrow();
+  });
+
+  it("should throw when item is missing required key 'data'", () => {
+    expect(() =>
+      validateSuiteItems([{ assertions: ["test"] }])
+    ).toThrow("missing required key 'data'");
+  });
+
+  it("should throw when 'data' is not an object", () => {
+    expect(() =>
+      validateSuiteItems([{ data: "string" }])
+    ).toThrow("'data' must be an object");
+  });
+
+  it("should throw when item has an unknown key", () => {
+    expect(() =>
+      validateSuiteItems([{ data: { input: "test" }, unknown: true }])
+    ).toThrow("has unknown key: 'unknown'");
+  });
+
+  it("should throw when item is not an object", () => {
+    expect(() =>
+      validateSuiteItems(["not an object"])
+    ).toThrow("must be an object");
+  });
+
+  it("should throw when executionPolicy is invalid (runsPerItem: 0)", () => {
+    expect(() =>
+      validateSuiteItems([
+        { data: { input: "test" }, executionPolicy: { runsPerItem: 0 } },
+      ])
+    ).toThrow(RangeError);
+  });
+
+  it("should throw when assertions is not an array", () => {
+    expect(() =>
+      validateSuiteItems([{ data: { input: "test" }, assertions: "not-array" }])
+    ).toThrow("'assertions' must be an array");
+  });
+
+  it("should throw when assertions contains a non-string element", () => {
+    expect(() =>
+      validateSuiteItems([{ data: { input: "test" }, assertions: ["valid", 42] }])
+    ).toThrow("'assertions[1]' must be a string");
+  });
+
+  it("should pass for items with description", () => {
+    expect(() =>
+      validateSuiteItems([{ data: { input: "test" }, description: "A test item" }])
+    ).not.toThrow();
+  });
+});
+
+describe("LLMJudge.merged", () => {
+  it("should return undefined for a single judge", () => {
+    const judge1 = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: false,
+    });
+    expect(LLMJudge.merged([judge1])).toBeUndefined();
+  });
+
+  it("should return undefined for an empty array", () => {
+    expect(LLMJudge.merged([])).toBeUndefined();
+  });
+
+  it("should merge judges with the same settings and combine unique assertions", () => {
+    const judge1 = new LLMJudge({
+      assertions: ["Output is relevant"],
+      model: "gpt-4o",
+      temperature: 0.5,
+      seed: 42,
+      track: false,
+    });
+    const judge2 = new LLMJudge({
+      assertions: ["Output is concise"],
+      model: "gpt-4o",
+      temperature: 0.5,
+      seed: 42,
+      track: false,
+    });
+
+    const merged = LLMJudge.merged([judge1, judge2]);
+
+    expect(merged).toBeInstanceOf(LLMJudge);
+    expect(merged!.assertions).toContain("Output is relevant");
+    expect(merged!.assertions).toContain("Output is concise");
+    expect(merged!.assertions).toHaveLength(2);
+  });
+
+  it("should return undefined when judges have different track settings", () => {
+    const judge1 = new LLMJudge({
+      assertions: ["Output is relevant"],
+      track: true,
+    });
+    const judge2 = new LLMJudge({
+      assertions: ["Output is concise"],
+      track: false,
+    });
+
+    expect(LLMJudge.merged([judge1, judge2])).toBeUndefined();
+  });
+
+  it("should return undefined when judges have different models", () => {
+    const judge1 = new LLMJudge({
+      assertions: ["Output is relevant"],
+      model: "gpt-4o",
+      track: false,
+    });
+    const judge2 = new LLMJudge({
+      assertions: ["Output is concise"],
+      model: "gpt-4o-mini",
+      track: false,
+    });
+
+    expect(LLMJudge.merged([judge1, judge2])).toBeUndefined();
+  });
+
+  it("should deduplicate assertions when merging judges with overlapping assertions", () => {
+    const judge1 = new LLMJudge({
+      assertions: ["Output is relevant", "Output is concise"],
+      track: false,
+    });
+    const judge2 = new LLMJudge({
+      assertions: ["Output is concise", "Output is accurate"],
+      track: false,
+    });
+
+    const merged = LLMJudge.merged([judge1, judge2]);
+
+    expect(merged).toBeInstanceOf(LLMJudge);
+    expect(merged!.assertions).toEqual([
+      "Output is relevant",
+      "Output is concise",
+      "Output is accurate",
+    ]);
+    expect(merged!.assertions).toHaveLength(3);
   });
 });

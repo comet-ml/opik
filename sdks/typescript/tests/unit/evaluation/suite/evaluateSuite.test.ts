@@ -22,6 +22,11 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
     }
 
     static fromConfig = vi.fn().mockImplementation(() => new MockLLMJudge({}));
+
+    static merged(judges: MockLLMJudge[]): MockLLMJudge | undefined {
+      if (judges.length <= 1) return undefined;
+      return undefined;
+    }
   }
 
   return { LLMJudge: MockLLMJudge };
