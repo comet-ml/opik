@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 // Aggregation value constants
 export const AGGREGATION_VALUE = {
@@ -62,6 +63,7 @@ type HeaderStatisticProps = {
   columnsStatistic?: ColumnsStatistic;
   statisticKey?: string;
   dataFormater?: (value: number) => string;
+  tooltipFormater?: (value: number) => string;
   supportsPercentiles?: boolean;
 };
 
@@ -69,8 +71,12 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   columnsStatistic,
   statisticKey,
   dataFormater = formatNumericData,
+  tooltipFormater,
   supportsPercentiles = false,
 }) => {
+  const formatTooltip = (value: number) =>
+    tooltipFormater ? tooltipFormater(value) : String(value);
+
   // Find all statistics matching the key (could have both AVG and PERCENTAGE)
   const matchingStatistics = React.useMemo(() => {
     if (!columnsStatistic || !statisticKey) return [];
@@ -102,6 +108,10 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   const [selectedValue, setSelectedValue] =
     React.useState<AggregationValue>(defaultValue);
 
+  React.useEffect(() => {
+    setSelectedValue(defaultValue);
+  }, [defaultValue]);
+
   // Check if this column should display sum
   const shouldDisplaySum =
     statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG &&
@@ -113,23 +123,28 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
     supportsPercentiles &&
     percentileStatistic?.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE;
 
-  // Calculate sum if needed: sum = count * avg
+  // Get sum value from backend stats
   let sumValue: number | null = null;
-  if (shouldDisplaySum && columnsStatistic && statistic?.value) {
-    const countStat = find(
-      columnsStatistic,
-      (s) =>
-        s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
-        (s.name === "trace_count" ||
-          s.name === "span_count" ||
-          s.name === "thread_count"),
-    );
-    if (countStat) {
-      sumValue = Number(countStat.value) * statistic.value;
+  if (shouldDisplaySum && columnsStatistic) {
+    // Map column key to its corresponding sum stat name
+    const sumStatName = statisticKey.startsWith("usage.")
+      ? statisticKey.replace("usage.", "usage_sum.")
+      : statisticKey === "total_estimated_cost"
+        ? "total_estimated_cost_sum"
+        : null;
 
-      // Round token counts to whole numbers (tokens are discrete units)
-      if (statisticKey && statisticKey.includes("tokens")) {
-        sumValue = Math.round(sumValue);
+    if (sumStatName) {
+      const sumStat = find(
+        columnsStatistic,
+        (s) =>
+          s.name === sumStatName && s.type === STATISTIC_AGGREGATION_TYPE.AVG,
+      );
+      if (sumStat) {
+        sumValue = Number(sumStat.value);
+
+        if (statisticKey.includes("tokens")) {
+          sumValue = Math.round(sumValue);
+        }
       }
     }
   }
@@ -187,9 +202,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
               <div className="flex max-w-full">
                 <span className="comet-body-s truncate text-foreground">
                   <span>{selectedValue}</span>
-                  <span className="ml-1 font-semibold">
-                    {dataFormater(displayValue)}
-                  </span>
+                  <TooltipWrapper content={formatTooltip(displayValue)}>
+                    <span className="ml-1 font-semibold">
+                      {dataFormater(displayValue)}
+                    </span>
+                  </TooltipWrapper>
                 </span>
                 <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
               </div>
@@ -235,9 +252,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
       return (
         <span className="comet-body-s truncate text-foreground">
           <span>{AGGREGATION_VALUE.AVG}</span>
-          <span className="ml-1 font-semibold">
-            {dataFormater(statistic.value)}
-          </span>
+          <TooltipWrapper content={formatTooltip(statistic.value)}>
+            <span className="ml-1 font-semibold">
+              {dataFormater(statistic.value)}
+            </span>
+          </TooltipWrapper>
         </span>
       );
     }
@@ -245,9 +264,11 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
       return (
         <span className="comet-body-s truncate text-foreground">
           <span>{statistic.type.toLowerCase()}</span>
-          <span className="ml-1 font-semibold">
-            {dataFormater(statistic.value)}
-          </span>
+          <TooltipWrapper content={formatTooltip(statistic.value)}>
+            <span className="ml-1 font-semibold">
+              {dataFormater(statistic.value)}
+            </span>
+          </TooltipWrapper>
         </span>
       );
     case STATISTIC_AGGREGATION_TYPE.PERCENTAGE:
@@ -257,9 +278,15 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground">
                 <span>{selectedValue}</span>
-                <span className="ml-1 font-semibold">
-                  {dataFormater(get(statistic.value, selectedValue, 0))}
-                </span>
+                <TooltipWrapper
+                  content={formatTooltip(
+                    get(statistic.value, selectedValue, 0),
+                  )}
+                >
+                  <span className="ml-1 font-semibold">
+                    {dataFormater(get(statistic.value, selectedValue, 0))}
+                  </span>
+                </TooltipWrapper>
               </span>
               <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
             </div>

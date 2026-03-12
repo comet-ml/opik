@@ -8,6 +8,7 @@ export interface GetTraceThreadStatsRequest {
     projectId?: string;
     projectName?: string;
     filters?: string;
+    search?: string;
     fromTime?: Date;
     toTime?: Date;
 }

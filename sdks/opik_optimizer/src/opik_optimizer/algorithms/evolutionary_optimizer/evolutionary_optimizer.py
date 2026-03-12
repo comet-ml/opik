@@ -4,8 +4,6 @@ import logging
 import random
 from typing import Any, cast
 from collections.abc import Callable
-import sys
-import warnings
 
 import numpy as np
 
@@ -35,6 +33,9 @@ creator = cast(Any, _creator)  # type: ignore[assignment]
 
 
 class EvolutionaryOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     Evolutionary Optimizer that uses genetic algorithms to evolve and improve prompts over generations.
 
@@ -212,14 +213,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         skip_perfect_score: bool = constants.DEFAULT_SKIP_PERFECT_SCORE,
         perfect_score: float = constants.DEFAULT_PERFECT_SCORE,
     ) -> None:
-        # Initialize base class first
-        if sys.version_info >= (3, 13):
-            warnings.warn(
-                "Python 3.13 is not officially supported (python_requires <3.13). "
-                "You may see asyncio teardown warnings. Prefer Python 3.12.",
-                RuntimeWarning,
-            )
-
         self._ensure_deap_available()
 
         super().__init__(
@@ -422,6 +415,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         optimizable_prompts = context.prompts
         experiment_config = context.experiment_config
         max_trials = context.max_trials
+        self._optimize_tools = context.extra_params.get("optimize_tools")
+        self._tool_names = context.extra_params.get("tool_names")
+        self._evaluation_metric = context.metric
 
         # Initialize progress tracking for display
         self._current_round = 0

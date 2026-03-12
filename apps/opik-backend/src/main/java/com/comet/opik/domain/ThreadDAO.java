@@ -62,6 +62,12 @@ public interface ThreadDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class ThreadDAOImpl implements ThreadDAO {
 
+    private static final String THREAD_SEARCH_CLAUSE = """
+            (ilike(thread_id, :search_text)
+            OR ilike(id, :search_text)
+            OR ilike(input, :search_text)
+            OR ilike(output, :search_text))""";
+
     /***
      * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
@@ -79,6 +85,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id \\<> ''
+                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                  <if(search_text)> AND <search_text> <endif>
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -396,6 +405,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   AND thread_id \\<> ''
+                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                  <if(search_text)> AND <search_text> <endif>
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -948,6 +960,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS metadata,
                 toFloat64(0) AS tags,
                 avgMap(threads.usage) as usage,
+                sumMap(threads.usage) as usage_sum,
                 avgMap(threads.feedback_scores) AS feedback_scores,
                 toFloat64(0) AS llm_span_count_avg,
                 toFloat64(0) AS span_count_avg,
@@ -965,6 +978,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id \\<> ''
+                    <if(search_text)> AND <search_text> <endif>
                     <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 ), spans_agg AS (
@@ -1229,7 +1243,8 @@ class ThreadDAOImpl implements ThreadDAO {
 
                     int offset = (page - 1) * size;
 
-                    var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+                    var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
+                            THREAD_SEARCH_CLAUSE);
 
                     template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
@@ -1291,7 +1306,8 @@ class ThreadDAOImpl implements ThreadDAO {
 
         return asyncTemplate.stream(connection -> {
 
-            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria);
+            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
+                    THREAD_SEARCH_CLAUSE);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
@@ -1319,7 +1335,7 @@ class ThreadDAOImpl implements ThreadDAO {
     public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS, criteria);
+            var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS, criteria, THREAD_SEARCH_CLAUSE);
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_id", criteria.projectId());
@@ -1338,7 +1354,8 @@ class ThreadDAOImpl implements ThreadDAO {
     }
 
     private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
-        var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria);
+        var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria,
+                THREAD_SEARCH_CLAUSE);
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId());

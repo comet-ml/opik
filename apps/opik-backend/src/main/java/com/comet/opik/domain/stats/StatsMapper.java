@@ -21,7 +21,9 @@ import static java.util.stream.Collectors.toMap;
 public class StatsMapper {
 
     public static final String USAGE = "usage";
+    public static final String USAGE_SUM = "usage_sum";
     public static final String FEEDBACK_SCORE = "feedback_scores";
+    public static final String FEEDBACK_SCORES_AVG = "feedback_scores_avg";
     public static final String SPAN_FEEDBACK_SCORE = "span_feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
@@ -30,6 +32,7 @@ public class StatsMapper {
     public static final String FEEDBACK_SCORES_PERCENTILES = "feedback_scores_percentiles";
     public static final String USAGE_TOTAL_TOKENS_PERCENTILES = "usage_total_tokens_percentiles";
     public static final String DURATION = "duration";
+    public static final String DURATION_PERCENTILES = "duration_percentiles";
     public static final String INPUT = "input";
     public static final String OUTPUT = "output";
     public static final String METADATA = "metadata";
@@ -88,6 +91,7 @@ public class StatsMapper {
         stats.add(new AvgValueStat(TOTAL_ESTIMATED_COST_SUM, totalEstimatedCostSum.doubleValue()));
 
         addMapStats(row, USAGE, stats);
+        addMapStats(row, USAGE_SUM, stats);
         addMapStats(row, FEEDBACK_SCORE, stats);
         // Only add span feedback scores statistics for traces (not spans)
         if (entityCountLabel.equals(TRACE_COUNT) && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
@@ -145,7 +149,7 @@ public class StatsMapper {
         return Optional.ofNullable(stats)
                 .map(map -> map.keySet()
                         .stream()
-                        .filter(k -> k.startsWith(USAGE))
+                        .filter(k -> k.startsWith(USAGE + "."))
                         .map(
                                 k -> Map.entry(k.substring("%s.".formatted(USAGE).length()), (Double) map.get(k)))
                         .collect(toMap(Map.Entry::getKey, Map.Entry::getValue)))
@@ -244,17 +248,18 @@ public class StatsMapper {
         // Add total_estimated_cost percentiles
         addPercentilesFromMap(row, TOTAL_ESTIMATED_COST_PERCENTILES, TOTAL_ESTIMATED_COST, stats);
 
-        @SuppressWarnings("unchecked")
-        Map<String, BigDecimal> durationMap = row.get(DURATION, Map.class);
-        if (durationMap != null) {
-            var duration = new PercentageValues(
-                    durationMap.get("p50"),
-                    durationMap.get("p90"),
-                    durationMap.get("p99"));
-            stats.add(new PercentageValueStat(DURATION, duration));
-        }
+        // Add duration percentiles (support both duration_percentiles and duration for backwards compatibility)
+        String durationColumnName = row.getMetadata().contains(DURATION_PERCENTILES)
+                ? DURATION_PERCENTILES
+                : DURATION;
+        addPercentilesFromMap(row, durationColumnName, DURATION, stats);
 
-        addMapStats(row, FEEDBACK_SCORE, stats);
+        // Add feedback scores (support both feedback_scores_avg and feedback_scores for backwards compatibility)
+        String feedbackScoresColumnName = row.getMetadata().contains(FEEDBACK_SCORES_AVG)
+                ? FEEDBACK_SCORES_AVG
+                : FEEDBACK_SCORE;
+        addMapStats(row, feedbackScoresColumnName, FEEDBACK_SCORE, stats);
+
         addMapStats(row, USAGE, stats);
 
         // Add feedback_scores percentiles (map of score_name -> {p50, p90, p99})
@@ -337,15 +342,34 @@ public class StatsMapper {
      * Converts all numeric values to doubles and sorts entries by key.
      *
      * @param row The database row containing the map field
-     * @param fieldName The field name to extract from the row (e.g., "feedback_scores", "usage")
+     * @param columnName The column name to extract from the row (e.g., "feedback_scores", "usage")
      * @param statsBuilder The builder to add stats to
      */
     @SuppressWarnings("unchecked")
     private static void addMapStats(
             Row row,
-            String fieldName,
+            String columnName,
             Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
-        Map<String, Object> map = row.get(fieldName, Map.class);
+        addMapStats(row, columnName, columnName, statsBuilder);
+    }
+
+    /**
+     * Extracts a map from a row and adds its values as AvgValueStat entries to the stats builder.
+     * Converts all numeric values to doubles and sorts entries by key.
+     * Allows using a different column name than the stat prefix for backwards compatibility.
+     *
+     * @param row The database row containing the map field
+     * @param columnName The column name to extract from the row (e.g., "feedback_scores_avg", "usage")
+     * @param statPrefix The prefix to use for stat names (e.g., "feedback_scores")
+     * @param statsBuilder The builder to add stats to
+     */
+    @SuppressWarnings("unchecked")
+    private static void addMapStats(
+            Row row,
+            String columnName,
+            String statPrefix,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, Object> map = row.get(columnName, Map.class);
         if (map != null) {
             map.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
@@ -354,7 +378,7 @@ public class StatsMapper {
                                 ? number.doubleValue()
                                 : 0.0;
                         statsBuilder.add(new AvgValueStat(
-                                "%s.%s".formatted(fieldName, entry.getKey()),
+                                "%s.%s".formatted(statPrefix, entry.getKey()),
                                 value));
                     });
         }

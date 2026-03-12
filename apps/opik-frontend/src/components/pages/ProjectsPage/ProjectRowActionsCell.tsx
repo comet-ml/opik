@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProject
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useProjectDeleteMutation from "@/api/projects/useProjectDeleteMutation";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   context,
@@ -20,6 +22,10 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
   const resetKeyRef = useRef(0);
   const project = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
+
+  const {
+    permissions: { canCreateProjects, canDeleteProjects },
+  } = usePermissions();
 
   const { mutate } = useProjectDeleteMutation();
 
@@ -60,24 +66,32 @@ export const ProjectRowActionsCell: React.FC<CellContext<Project, unknown>> = (
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {canCreateProjects && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(2);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
+          {(canCreateProjects || canDeleteProjects) && (
+            <DropdownMenuSeparator />
+          )}
+          {canDeleteProjects && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(1);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+              variant="destructive"
+            >
+              <Trash className="mr-2 size-4" />
+              Delete
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>

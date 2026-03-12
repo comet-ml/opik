@@ -31,4 +31,6 @@ export interface Span {
     totalEstimatedCostVersion?: string;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
+    /** Time to first token in milliseconds */
+    ttft?: number;
 }

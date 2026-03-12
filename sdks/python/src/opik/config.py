@@ -111,6 +111,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
+    default_llm: str = "openai/gpt-5-nano"
+    """Default LLM model name used by evaluation model factories when model is not provided."""
+
     api_key: Optional[str] = None
     """Opik API key. This is not required if you are running against open source Opik installation"""
 
@@ -212,6 +215,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.
     """
 
+    guardrails_url_override: Optional[str] = None
+    """
+    URL for the guardrails backend service.
+    When set, overrides the default guardrails URL derived from url_override.
+    """
+
     maximal_queue_size: int = 1_000_000
     """
     Specifies the maximum number of messages that can be queued for delivery when a connection error occurs or rate limiting is in effect.
@@ -236,6 +245,45 @@ class OpikConfig(pydantic_settings.BaseSettings):
     is_attachment_extraction_active: bool = True
     """
     If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
+    """
+
+    connection_monitor_ping_interval: float = 10
+    """
+    Interval in seconds between OPIK server's connection monitoring pings.
+    """
+
+    connection_monitor_check_timeout: float = 5
+    """
+    Timeout in seconds for OPIK server's connection monitoring checks.
+    """
+
+    replay_batch_size: int = 50
+    """
+    Number of failed messages to replay in a single batch after connection to the OPIK server is restored.
+    The messages are replayed in batches to avoid overwhelming the system with too many requests at once and to control memory consumption.
+    """
+    replay_batch_replay_delay: float = 0.5
+    """
+    Delay in seconds between replaying batches of failed messages after connection to the OPIK server is restored.
+    This is to control memory consumption and to avoid overwhelming the system with too many requests at once.
+    """
+
+    replay_tick_interval: float = 0.3
+    """
+    Interval in seconds between replay manager thread's ticks.
+    This is to control the frequency of replay manager thread's operations, such as checking for status of connection to the OPIK server and replaying failed messages if connection restored.
+    """
+
+    unauthorized_message_type_retry_interval: float = 10.0
+    """
+    Interval in seconds between retrying unauthorized message types.
+    This is to control the frequency of retrying unauthorized message types.
+    """
+
+    unauthorized_message_type_max_retry_count: Optional[int] = None
+    """
+    Maximum number of retries for unauthorized message types.
+    This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
     @property
@@ -265,6 +313,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def guardrails_backend_host(self) -> str:
+        if self.guardrails_url_override is not None:
+            return self.guardrails_url_override
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @pydantic.model_validator(mode="after")

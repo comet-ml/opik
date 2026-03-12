@@ -2,11 +2,16 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
+import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDashboards;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -24,6 +29,8 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +44,8 @@ public interface DashboardService {
 
     Dashboard findById(@NonNull UUID id);
 
-    DashboardPage find(int page, int size, String name, List<SortingField> sortingFields);
+    DashboardPage find(int page, int size, String name, List<SortingField> sortingFields,
+            List<? extends Filter> filters);
 
     Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
 
@@ -60,6 +68,7 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull SortingFactoryDashboards sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard) {
@@ -85,6 +94,8 @@ class DashboardServiceImpl implements DashboardService {
                     .id(dashboardId)
                     .workspaceId(workspaceId)
                     .slug(uniqueSlug)
+                    .type(Optional.ofNullable(dashboard.type()).orElse(DashboardType.MULTI_PROJECT))
+                    .scope(Optional.ofNullable(dashboard.scope()).orElse(DashboardScope.WORKSPACE))
                     .createdBy(userName)
                     .lastUpdatedBy(userName)
                     .build();
@@ -122,12 +133,21 @@ class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardPage find(int page, int size, String name, List<SortingField> sortingFields) {
+    public DashboardPage find(int page, int size, String name, List<SortingField> sortingFields,
+            List<? extends Filter> filters) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}'", workspaceId, page, size,
                 name);
+
+        String filtersSql = Optional.ofNullable(filters)
+                .flatMap(f -> filterQueryBuilder.toAnalyticsDbFilters(f, FilterStrategy.DASHBOARD))
+                .orElse(null);
+
+        Map<String, Object> filterMapping = Optional.ofNullable(filters)
+                .map(filterQueryBuilder::toStateSQLMapping)
+                .orElse(Map.of());
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DashboardDAO.class);
@@ -135,8 +155,9 @@ class DashboardServiceImpl implements DashboardService {
             String nameTerm = StringUtils.isNotBlank(name) ? name.trim() : null;
             int offset = (page - 1) * size;
 
-            long total = dao.findCount(workspaceId, nameTerm);
-            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, sortingFieldsSql, size, offset);
+            long total = dao.findCount(workspaceId, nameTerm, filtersSql, filterMapping);
+            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, filtersSql, filterMapping,
+                    sortingFieldsSql, size, offset);
 
             log.info("Found '{}' dashboards in workspace '{}'", total, workspaceId);
             return DashboardPage.builder()

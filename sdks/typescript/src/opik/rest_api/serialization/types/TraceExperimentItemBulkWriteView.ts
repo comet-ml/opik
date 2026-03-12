@@ -21,6 +21,7 @@ export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     tags: core.serialization.list(core.serialization.string()).optional(),
     errorInfo: core.serialization.property("error_info", ErrorInfoExperimentItemBulkWriteView.optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+    ttft: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
 });
 
@@ -37,6 +38,7 @@ export declare namespace TraceExperimentItemBulkWriteView {
         tags?: string[] | null;
         error_info?: ErrorInfoExperimentItemBulkWriteView.Raw | null;
         last_updated_at?: string | null;
+        ttft?: number | null;
         thread_id?: string | null;
     }
 }

@@ -8,10 +8,11 @@ import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hall
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasOpenAiApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { createEvaluationDataset, cleanupDatasets } from "./helpers/testData";
 
-const shouldRunApiTests = shouldRunIntegrationTests();
+const shouldRunApiTests = shouldRunIntegrationTests() && hasOpenAiApiKey();
 
 describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
   let client: Opik;
@@ -262,7 +263,7 @@ describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
           expect(typeof score.reason).toBe("string");
         }
       });
-    }, 90000);
+    }, 180000);
 
     it("should maintain metric independence in scoring", async () => {
       const dataset = await createEvaluationDataset(client);
@@ -293,6 +294,6 @@ describe.skipIf(!shouldRunApiTests)("Multiple Metrics Integration", () => {
         expect(relevanceScore.value).toBeDefined();
         expect(hallucinationScore.value).toBeDefined();
       }
-    }, 90000);
+    }, 180000);
   });
 });

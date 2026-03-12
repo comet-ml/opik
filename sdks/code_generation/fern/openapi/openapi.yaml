@@ -36,6 +36,8 @@ servers:
 tags:
 - name: System usage
   description: System usage related resource
+- name: Agent Configs
+  description: Agent configuration management
 - name: Alerts
   description: Alert resources
 - name: Annotation Queues
@@ -60,6 +62,8 @@ tags:
   description: Guardrails related resources
 - name: LlmProviderKey
   description: LLM Provider Key
+- name: Runners
+  description: Local runner management endpoints
 - name: Manual Evaluation
   description: "Manual evaluation resources for traces, threads, and spans"
 - name: Ollama
@@ -170,6 +174,267 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TraceCountResponse"
+  /v1/private/agent-configs/blueprints:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create optimizer config or add blueprint
+      description: "Creates a new optimizer config with initial blueprint, or adds\
+        \ a new blueprint to existing config"
+      operationId: createAgentConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigCreate_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+  /v1/private/agent-configs/blueprints/environments:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create or update environments
+      description: Creates or updates environment-to-blueprint mappings
+      operationId: createOrUpdateEnvs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfigEnvUpdate"
+      responses:
+        "204":
+          description: Environments updated
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/agent-configs/blueprints/environments/{env_name}/projects/{project_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve blueprint by environment
+      description: Retrieves the blueprint associated with a specific environment
+      operationId: getBlueprintByEnv
+      parameters:
+      - name: env_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprints/{blueprint_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve blueprint by ID
+      description: Retrieves a specific blueprint by its ID
+      operationId: getBlueprintById
+      parameters:
+      - name: blueprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprints/history/projects/{project_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Get blueprint history
+      description: Retrieves paginated blueprint history for a project
+      operationId: getBlueprintHistory
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: History retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueprintPage_History"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_History"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_History"
+  /v1/private/agent-configs/blueprints/{blueprint_id}/deltas:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve delta by blueprint ID
+      description: Retrieves only the changes (delta) introduced in a specific blueprint
+      operationId: getDeltaById
+      parameters:
+      - name: blueprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Delta retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/agent-configs/blueprints/latest/projects/{project_id}:
+    get:
+      tags:
+      - Agent Configs
+      summary: Retrieve latest blueprint
+      description: Retrieves the latest blueprint for a project
+      operationId: getLatestBlueprint
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Blueprint retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentBlueprint_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/alerts:
     get:
       tags:
@@ -1173,6 +1438,10 @@ paths:
           type: string
           description: "Filter dashboards by name (partial match, case insensitive)"
       - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
         in: query
         schema:
           type: string
@@ -2535,15 +2804,21 @@ paths:
         in: query
         schema:
           type: string
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/experiments/groups:
     get:
       tags:
@@ -3078,6 +3353,451 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "403":
           description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/logs:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner job logs
+      description: Get log entries for a local runner job
+      operationId: getJobLogs
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: offset
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LocalRunnerLogEntry"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    post:
+      tags:
+      - Runners
+      summary: Append local runner job logs
+      description: Append log entries for a running local runner job
+      operationId: appendJobLogs
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/LocalRunnerLogEntry"
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/cancel:
+    post:
+      tags:
+      - Runners
+      summary: Cancel local runner job
+      description: Cancel a pending or running local runner job
+      operationId: cancelJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/connections:
+    post:
+      tags:
+      - Runners
+      summary: Connect a local runner
+      description: Exchange a pairing code or API key for local runner credentials
+      operationId: connectRunner
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerConnectRequest"
+      responses:
+        "201":
+          description: Runner connected
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs:
+    post:
+      tags:
+      - Runners
+      summary: Create local runner job
+      description: Create a local runner job and enqueue it for execution
+      operationId: createJob
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocalRunnerJobRequest"
+      responses:
+        "201":
+          description: Job created
+          headers:
+            Location:
+              description: URI of the job
+              style: simple
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/pairs:
+    post:
+      tags:
+      - Runners
+      summary: Generate a pairing code
+      description: Generate a pairing code for a local runner in the current workspace
+      operationId: generatePairingCode
+      responses:
+        "201":
+          description: Pairing code generated
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerPairResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner job
+      description: Get a single local runner job's status and results
+      operationId: getJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}:
+    get:
+      tags:
+      - Runners
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Runner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunner"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/heartbeats:
+    post:
+      tags:
+      - Runners
+      summary: Local runner heartbeat
+      description: Refresh local runner heartbeat
+      operationId: heartbeat
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Heartbeat response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerHeartbeatResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "410":
+          description: Gone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/jobs:
+    get:
+      tags:
+      - Runners
+      summary: List local runner jobs
+      description: List jobs for a local runner
+      operationId: listJobs
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: project
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        "200":
+          description: Jobs list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJobPage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners:
+    get:
+      tags:
+      - Runners
+      summary: List local runners
+      description: List local runners owned by the current user in the workspace
+      operationId: listRunners
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        "200":
+          description: Runners list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerPage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/jobs/next:
+    post:
+      tags:
+      - Runners
+      summary: Next local runner job
+      description: Long-poll for the next pending local runner job
+      operationId: nextJob
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Job available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRunnerJob"
+        "204":
+          description: No content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/agents:
+    put:
+      tags:
+      - Runners
+      summary: Register local runner agents
+      description: Register or update the local runner's agent list
+      operationId: registerAgents
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        description: Map of agent name to agent definition
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/jobs/{jobId}/results:
+    post:
+      tags:
+      - Runners
+      summary: Report local runner job result
+      description: Report local runner job completion or failure
+      operationId: reportJobResult
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerJobResultRequest"
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Bad request
           content:
             application/json:
               schema:
@@ -4048,6 +4768,45 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/prompts/by-commit/{commit}:
+    get:
+      tags:
+      - Prompts
+      summary: Get prompt by commit
+      description: Get prompt by commit
+      operationId: getPromptByCommit
+      parameters:
+      - name: commit
+        in: path
+        required: true
+        schema:
+          pattern: "^[a-zA-Z0-9]{8}$"
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Prompt_Detail"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Detail"
   /v1/private/prompts/versions/{versionId}:
     get:
       tags:
@@ -4123,6 +4882,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PromptVersionPage_Public"
+  /v1/private/prompts/retrieve-by-commits:
+    post:
+      tags:
+      - Prompts
+      summary: Get prompts by commits
+      description: Get prompts by prompt version commits
+      operationId: getPromptsByCommits
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionCommitsRequest_Public"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PromptVersionLink_Public"
   /v1/private/prompts/{promptId}/versions/{versionId}/restore:
     post:
       tags:
@@ -4372,6 +5152,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -4553,15 +5338,21 @@ paths:
           - tool
           - llm
           - guardrail
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/spans/{spanId}/comments/{commentId}:
     get:
       tags:
@@ -4630,6 +5421,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across span fields
       - name: from_time
         in: query
         schema:
@@ -4934,6 +5730,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5151,15 +5952,21 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: exclude_category_names
+        in: query
+        schema:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            default: suite_assertion
       responses:
         "200":
           description: Feedback Scores resource
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/threads/feedback-scores/names:
     get:
       tags:
@@ -5179,9 +5986,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: "#/components/schemas/FeedbackScoreNames_Public"
   /v1/private/traces/stats:
     get:
       tags:
@@ -5203,6 +6008,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across trace fields
       - name: from_time
         in: query
         schema:
@@ -5277,6 +6087,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -5407,6 +6222,11 @@ paths:
         in: query
         schema:
           type: string
+      - name: search
+        in: query
+        schema:
+          type: string
+          description: Full-text search across thread fields
       - name: from_time
         in: query
         schema:
@@ -6036,6 +6856,79 @@ components:
         trace_count:
           type: integer
           format: int32
+    ErrorMessage_Write:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+    AgentBlueprint_Write:
+      required:
+      - type
+      - values
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        values:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_Write"
+    AgentConfigCreate_Write:
+      required:
+      - blueprint
+      type: object
+      properties:
+        project_id:
+          type: string
+          description: Project ID. Either project_id or project_name must be provided
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Project name. Either project_id or project_name must be provided
+        id:
+          type: string
+          description: Agent config ID. Generated automatically if not provided
+          format: uuid
+        blueprint:
+          $ref: "#/components/schemas/AgentBlueprint_Write"
+    AgentConfigValue_Write:
+      required:
+      - key
+      - type
+      type: object
+      properties:
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - integer
+          - float
+          - boolean
+          - prompt
+          - prompt_commit
+        description:
+          type: string
     ErrorMessage:
       type: object
       properties:
@@ -6046,6 +6939,255 @@ components:
           type: string
         details:
           type: string
+    AgentConfigEnv:
+      required:
+      - blueprint_id
+      - env_name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        env_name:
+          maxLength: 50
+          minLength: 0
+          type: string
+        blueprint_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    AgentConfigEnvUpdate:
+      required:
+      - envs
+      - project_id
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        envs:
+          maxItems: 100
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigEnv"
+    AgentBlueprint_Public:
+      required:
+      - type
+      - values
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        envs:
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        values:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_Public"
+    AgentConfigValue_Public:
+      required:
+      - key
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - integer
+          - float
+          - boolean
+          - prompt
+          - prompt_commit
+        description:
+          type: string
+        valid_from_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+        valid_to_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+    ErrorMessage_Public:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+        details:
+          type: string
+    AgentBlueprint_History:
+      required:
+      - type
+      - values
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - blueprint
+          - mask
+        description:
+          maxLength: 255
+          minLength: 0
+          type: string
+        envs:
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        values:
+          maxItems: 250
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentConfigValue_History"
+    AgentConfigValue_History:
+      required:
+      - key
+      - type
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          maxLength: 255
+          minLength: 0
+          type: string
+        value:
+          type: string
+        type:
+          type: string
+          enum:
+          - string
+          - integer
+          - float
+          - boolean
+          - prompt
+          - prompt_commit
+        description:
+          type: string
+        valid_from_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+        valid_to_blueprint_id:
+          type: string
+          format: uuid
+          readOnly: true
+    BlueprintPage_History:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentBlueprint_History"
+    ErrorMessage_History:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
     Alert:
       required:
       - webhook
@@ -6481,16 +7623,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-    ErrorMessage_Public:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        message:
-          type: string
-        details:
-          type: string
     WebhookExamples:
       type: object
       properties:
@@ -8830,6 +9962,16 @@ components:
         slug:
           type: string
           readOnly: true
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -8860,6 +10002,16 @@ components:
           maxLength: 120
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -8894,6 +10046,16 @@ components:
           minLength: 1
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        type:
+          type: string
+          enum:
+          - multi_project
+          - experiments
+        scope:
+          type: string
+          enum:
+          - workspace
+          - insights
         description:
           maxLength: 1000
           minLength: 0
@@ -8958,6 +10120,14 @@ components:
             type: string
             readOnly: true
           readOnly: true
+        evaluators:
+          type: array
+          description: Default evaluators for items in this version
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         created_at:
           type: string
           format: date-time
@@ -8972,6 +10142,41 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+      description: Default evaluators for items in this version
+      readOnly: true
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     DatasetItemChanges_Public:
       type: object
     DatasetItemBatchUpdate:
@@ -9050,14 +10255,87 @@ components:
           $ref: "#/components/schemas/JsonNode"
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          type: string
+          description: Dataset item description
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
             description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
+        evaluators:
+          type: array
+          description: Evaluators
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
+        clear_execution_policy:
+          type: boolean
+          description: "When true, clears the item-level execution policy (falls back\
+            \ to dataset-level)"
       description: Dataset item update request
+    EvaluatorItem:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode"
+    ExecutionPolicy:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     Dataset:
       required:
       - name
@@ -9069,6 +10347,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9172,6 +10455,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -9241,11 +10529,20 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         experiment_items:
           type: array
           readOnly: true
@@ -9313,6 +10610,13 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
@@ -9361,6 +10665,11 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
     FeedbackScore:
       required:
       - name
@@ -9486,11 +10795,50 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Write"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Write"
+    EvaluatorItem_Write:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    ExecutionPolicy_Write:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -9794,11 +11142,20 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Compare"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         experiment_items:
           type: array
           readOnly: true
@@ -9822,6 +11179,39 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Compare:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Compare"
+    ExecutionPolicy_Compare:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+      description: Execution policy captured from dataset item version at creation
+        time.
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -9841,6 +11231,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
@@ -9889,6 +11283,11 @@ components:
           enum:
           - default
           - hidden
+        description:
+          type: string
+          readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
       readOnly: true
     FeedbackScore_Compare:
       required:
@@ -9945,6 +11344,8 @@ components:
         items:
           type: object
       - type: string
+    JsonNode_Compare:
+      type: object
     ValueEntry_Compare:
       type: object
       properties:
@@ -10024,6 +11425,11 @@ components:
         name:
           minLength: 1
           type: string
+        type:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         visibility:
           type: string
           enum:
@@ -10236,11 +11642,20 @@ components:
           - sdk
         data:
           $ref: "#/components/schemas/JsonNode"
+        description:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         experiment_items:
           type: array
           readOnly: true
@@ -10283,6 +11698,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -10303,6 +11722,8 @@ components:
           enum:
           - default
           - hidden
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
     Column_Public:
       type: object
       properties:
@@ -10571,10 +11992,34 @@ components:
           minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
             maxLength: 100
             minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         type:
           type: string
           enum:
@@ -10633,6 +12078,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -10703,6 +12153,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     PercentageValues:
       type: object
       properties:
@@ -10771,6 +12238,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -11058,6 +12530,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace:
       required:
       - start_time
@@ -11150,6 +12626,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -11351,6 +12831,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -11387,6 +12871,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
@@ -11513,6 +13001,11 @@ components:
           - regular
           - trial
           - mini-batch
+        evaluation_method:
+          type: string
+          enum:
+          - dataset
+          - evaluation_suite
         optimization_id:
           type: string
           format: uuid
@@ -11583,6 +13076,23 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary_Public"
+        pass_rate:
+          type: number
+          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
+            for regular experiments.
+          readOnly: true
+        passed_count:
+          type: integer
+          description: Number of items that passed for evaluation suite experiments.
+            Null for regular experiments.
+          format: int64
+          readOnly: true
+        total_count:
+          type: integer
+          description: Total number of items for evaluation suite experiments. Null
+            for regular experiments.
+          format: int64
+          readOnly: true
     JsonListString_Public:
       type: object
       anyOf:
@@ -11592,23 +13102,32 @@ components:
           type: object
       - type: string
     PromptVersionLink_Public:
-      required:
-      - id
       type: object
       properties:
-        id:
+        prompt_version_id:
           type: string
           format: uuid
         commit:
           type: string
-          readOnly: true
         prompt_id:
           type: string
           format: uuid
-          readOnly: true
         prompt_name:
           type: string
-          readOnly: true
+    FeedbackScoreNames_Public:
+      type: object
+      properties:
+        scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreName_Public"
+    ScoreName_Public:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
     ExperimentGroupResponse:
       type: object
       properties:
@@ -11660,6 +13179,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
+        pass_rate_avg:
+          type: number
+        passed_count_sum:
+          type: integer
+          format: int64
+        total_count_sum:
+          type: integer
+          format: int64
     ExperimentGroupAggregationsResponse:
       type: object
       properties:
@@ -12640,6 +14167,236 @@ components:
             type: string
         base_url:
           type: string
+    LocalRunnerLogEntry:
+      required:
+      - stream
+      - text
+      type: object
+      properties:
+        stream:
+          minLength: 1
+          type: string
+        text:
+          minLength: 1
+          type: string
+    LocalRunnerConnectRequest:
+      required:
+      - runner_name
+      type: object
+      properties:
+        pairing_code:
+          type: string
+        runner_name:
+          minLength: 1
+          type: string
+    CreateLocalRunnerJobRequest:
+      required:
+      - agent_name
+      type: object
+      properties:
+        agent_name:
+          minLength: 1
+          type: string
+        inputs:
+          $ref: "#/components/schemas/JsonNode"
+        project:
+          type: string
+        runner_id:
+          type: string
+          format: uuid
+        mask_id:
+          type: string
+          format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
+    LocalRunnerJobMetadata:
+      type: object
+      properties:
+        dataset_id:
+          type: string
+          format: uuid
+        dataset_version_id:
+          type: string
+          format: uuid
+        dataset_item_version_id:
+          type: string
+          format: uuid
+        dataset_item_id:
+          type: string
+          format: uuid
+    LocalRunnerPairResponse:
+      type: object
+      properties:
+        pairing_code:
+          type: string
+        runner_id:
+          type: string
+          format: uuid
+        expires_in_seconds:
+          type: integer
+          format: int32
+    LocalRunnerJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        runner_id:
+          type: string
+          format: uuid
+        agent_name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          - cancelled
+        inputs:
+          $ref: "#/components/schemas/JsonNode"
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          type: string
+        project:
+          type: string
+        trace_id:
+          type: string
+          format: uuid
+        mask_id:
+          type: string
+          format: uuid
+        metadata:
+          $ref: "#/components/schemas/LocalRunnerJobMetadata"
+        timeout:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    Agent:
+      type: object
+      properties:
+        name:
+          type: string
+        project:
+          type: string
+        description:
+          type: string
+        language:
+          type: string
+        executable:
+          type: string
+        source_file:
+          type: string
+        params:
+          type: array
+          items:
+            $ref: "#/components/schemas/Param"
+        timeout:
+          type: integer
+          format: int32
+    LocalRunner:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - pairing
+          - connected
+          - disconnected
+        connected_at:
+          type: string
+          format: date-time
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Agent"
+    Param:
+      required:
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          minLength: 1
+          type: string
+    LocalRunnerHeartbeatResponse:
+      type: object
+      properties:
+        cancelled_job_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    LocalRunnerJobPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalRunnerJob"
+    LocalRunnerPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalRunner"
+    LocalRunnerJobResultRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          - cancelled
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          type: string
+        trace_id:
+          type: string
+          format: uuid
     ManualEvaluationResponse:
       type: object
       properties:
@@ -13408,6 +15165,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         results:
           type: array
           items:
@@ -13432,6 +15190,7 @@ components:
           - metadata
           - name
           - error_info
+          - error_type
           - model
           - provider
           - type
@@ -13464,6 +15223,7 @@ components:
           - HOURLY
           - DAILY
           - WEEKLY
+          - TOTAL
         interval_start:
           type: string
           format: date-time
@@ -13726,6 +15486,8 @@ components:
           readOnly: true
         latest_version:
           $ref: "#/components/schemas/PromptVersion"
+        requested_version:
+          $ref: "#/components/schemas/PromptVersion"
     PromptVersion:
       required:
       - template
@@ -13914,6 +15676,16 @@ components:
           enum:
           - text
           - chat
+        exclude_blueprint_update_for_projects:
+          uniqueItems: true
+          type: array
+          description: Optional set of project IDs to exclude from automatic blueprint
+            creation when this prompt version is committed.
+          items:
+            type: string
+            description: Optional set of project IDs to exclude from automatic blueprint
+              creation when this prompt version is committed.
+            format: uuid
     Prompt_Detail:
       required:
       - name
@@ -13962,6 +15734,8 @@ components:
           format: int64
           readOnly: true
         latest_version:
+          $ref: "#/components/schemas/PromptVersion_Detail"
+        requested_version:
           $ref: "#/components/schemas/PromptVersion_Detail"
     PromptVersionPage_Public:
       type: object
@@ -14099,6 +15873,18 @@ components:
           type: integer
           format: int64
           readOnly: true
+    PromptVersionCommitsRequest_Public:
+      required:
+      - commits
+      type: object
+      properties:
+        commits:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            minLength: 1
+            type: string
     PromptVersionRetrieve_Detail:
       required:
       - name
@@ -14159,6 +15945,8 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           description: |
@@ -14166,16 +15954,17 @@ components:
             - If merge_tags is true, these tags will be added to existing tags.
             - If merge_tags is false, these tags will replace all existing tags.
             - null: preserve existing tags (no change).
-            - empty set: clear all tags merge_tags is false.
+            - empty set: clear all tags when merge_tags is false.
           items:
-            minLength: 1
+            maxLength: 100
+            minLength: 0
             type: string
             description: |
               Tags to set or merge with existing tags. Follows PATCH semantics:
               - If merge_tags is true, these tags will be added to existing tags.
               - If merge_tags is false, these tags will replace all existing tags.
               - null: preserve existing tags (no change).
-              - empty set: clear all tags merge_tags is false.
+              - empty set: clear all tags when merge_tags is false.
       description: |
         Update to apply to prompt versions.
         Note: Prompt versions are immutable by design.
@@ -14183,6 +15972,7 @@ components:
         Core properties like template, metadata etc. cannot be modified after creation.
     ServiceTogglesConfig:
       required:
+      - agentConfigurationEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -14251,6 +16041,8 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
+        agentConfigurationEnabled:
+          type: boolean
     SpanBatchUpdate:
       required:
       - ids
@@ -14317,10 +16109,38 @@ components:
         provider:
           type: string
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         usage:
           type: object
           additionalProperties:
@@ -14332,6 +16152,9 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        ttft:
+          type: number
+          format: double
     ErrorInfo_Write:
       required:
       - exception_type
@@ -14410,6 +16233,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     SpanBatch:
       required:
       - spans
@@ -14598,6 +16425,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     ValueEntry_Public:
       type: object
       properties:
@@ -14783,14 +16614,45 @@ components:
         metadata:
           $ref: "#/components/schemas/JsonListString"
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
+          description: Tags
           items:
+            maxLength: 100
+            minLength: 0
             type: string
+            description: Tags
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to add
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to add
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          description: Tags to remove
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Tags to remove
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+        ttft:
+          type: number
+          format: double
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -14818,9 +16680,31 @@ components:
       type: object
       properties:
         tags:
+          maxItems: 50
+          minItems: 0
           uniqueItems: true
           type: array
           items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_add:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        tags_to_remove:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
             type: string
     TraceThreadBatchIdentifier:
       type: object
@@ -14876,6 +16760,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
     TraceBatch:
@@ -15097,6 +16985,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -15486,6 +17378,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

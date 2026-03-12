@@ -182,7 +182,7 @@ jobs:
       comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
-      
+
   create-git-tag:
     if: |
       always() &&

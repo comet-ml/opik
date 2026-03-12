@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import {
   GripHorizontal,
   MoreHorizontal,
-  Trash2,
+  Trash,
   ArrowUp,
   ArrowDown,
   ChevronDown,
@@ -137,9 +137,9 @@ const DashboardSectionHeader: React.FunctionComponent<
             <DropdownMenuItem
               onClick={handleDeleteClick}
               disabled={isLastSection}
-              className="text-destructive focus:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+              variant="destructive"
             >
-              <Trash2 className="mr-2 size-4" />
+              <Trash className="mr-2 size-4" />
               Delete section
             </DropdownMenuItem>
           </DropdownMenuContent>

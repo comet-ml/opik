@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Set;
@@ -48,6 +49,8 @@ public interface CommentDAO {
     Mono<Long> deleteByEntityId(EntityType entityType, UUID entityId);
 
     Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+
+    Flux<CommentEntityRef> getEntityRefsByCommentIds(Set<UUID> commentIds);
 }
 
 @Singleton
@@ -126,6 +129,16 @@ class CommentDAOImpl implements CommentDAO {
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String SELECT_ENTITY_REFS_BY_COMMENT_IDS = """
+            SELECT id, entity_id, entity_type
+            FROM comments
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
             ;
             """;
 
@@ -214,6 +227,33 @@ class CommentDAOImpl implements CommentDAO {
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
+    }
+
+    @Override
+    public Flux<CommentEntityRef> getEntityRefsByCommentIds(@NonNull Set<UUID> commentIds) {
+        if (commentIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_ENTITY_REFS_BY_COMMENT_IDS)
+                    .bind("ids", commentIds.toArray(UUID[]::new));
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> Flux.from(result.map((row, rowMetadata) -> new CommentEntityRef(
+                            row.get("id", UUID.class),
+                            row.get("entity_id", UUID.class),
+                            parseEntityType(row.get("entity_type", String.class))))))
+                    .collectList();
+        }).flatMapMany(Flux::fromIterable);
+    }
+
+    private EntityType parseEntityType(String type) {
+        return switch (type) {
+            case "trace" -> EntityType.TRACE;
+            case "span" -> EntityType.SPAN;
+            case "thread" -> EntityType.THREAD;
+            default -> throw new IllegalArgumentException("Unknown entity type: '" + type + "'");
+        };
     }
 
     private void bindParameters(UUID commentId, UUID entityId, EntityType entityType, UUID projectId, Comment comment,

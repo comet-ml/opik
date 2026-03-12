@@ -7,9 +7,11 @@ export interface ExperimentItemPublic {
     experimentId: string;
     datasetItemId: string;
     traceId: string;
+    projectId?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemPublicTraceVisibilityMode;
+    executionPolicy?: OpikApi.ExecutionPolicyPublic;
 }

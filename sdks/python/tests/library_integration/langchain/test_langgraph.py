@@ -1,15 +1,19 @@
 from typing import Dict, Any, Annotated, Optional, Literal
-from pydantic import BaseModel
 
+import langchain_openai
+import pytest
 from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph import message as langgraph_message
 from langgraph.types import interrupt, Command
-from langgraph.checkpoint.memory import MemorySaver
+from pydantic import BaseModel
 from typing_extensions import TypedDict
-import langchain_openai
 
 import opik
+from opik import jsonable_encoder, context_storage
+from opik.api_objects import opik_client
+from opik.api_objects import span, trace
 from opik.integrations.langchain import (
     OpikTracer,
     extract_current_langgraph_span_data,
@@ -17,11 +21,11 @@ from opik.integrations.langchain import (
     LANGGRAPH_RESUME_INPUT_KEY,
     LANGGRAPH_INTERRUPT_METADATA_KEY,
 )
-from opik import jsonable_encoder, context_storage
-from opik.api_objects import span, trace
-from opik.api_objects import opik_client
 from opik.types import DistributedTraceHeadersDict
-
+from .constants import (
+    EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
+    OPENAI_MODEL_FOR_TESTS,
+)
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_LIST,
@@ -31,12 +35,6 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-from .constants import (
-    EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
-    OPENAI_MODEL_FOR_TESTS,
-)
-
-import pytest
 
 
 def test_langgraph__happyflow(

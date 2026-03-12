@@ -62,21 +62,6 @@ def test_threads_client__log_threads_feedback_scores__happy_path(
     active_threads, temporary_project_name = active_threads_and_project
     threads_client = opik_client.get_threads_client()
 
-    # close threads before logging scores - otherwise backend will return 409 error
-    for thread_id in active_threads:
-        opik_client.rest_client.traces.close_trace_thread(
-            project_name=temporary_project_name, thread_id=thread_id
-        )
-
-    def check_threads_closed() -> bool:
-        threads = threads_client.search_threads(
-            project_name=temporary_project_name, filter_string='status = "active"'
-        )
-        return len(threads) == 0
-
-    # wait for closed threads to propagate
-    synchronization.wait_for_done(lambda: check_threads_closed(), timeout=30)
-
     # log feedback scores
     scores = [
         BatchFeedbackScoreDict(
@@ -170,20 +155,6 @@ def test_threads_client__search_threads__filter_by_feedback_score(
     )
 
     opik_client.flush()
-
-    # Close threads before logging scores
-    for thread_id in [thread_with_score, thread_without_score]:
-        opik_client.rest_client.traces.close_trace_thread(
-            project_name=temporary_project_name, thread_id=thread_id
-        )
-
-    def check_threads_closed() -> bool:
-        threads = threads_client.search_threads(
-            project_name=temporary_project_name, filter_string='status = "active"'
-        )
-        return len(threads) == 0
-
-    synchronization.wait_for_done(lambda: check_threads_closed(), timeout=30)
 
     # Log feedback score to one thread
     threads_client.log_threads_feedback_scores(

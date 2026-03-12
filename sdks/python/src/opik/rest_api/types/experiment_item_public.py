@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .execution_policy_public import ExecutionPolicyPublic
 from .experiment_item_public_trace_visibility_mode import ExperimentItemPublicTraceVisibilityMode
 
 
@@ -13,11 +14,13 @@ class ExperimentItemPublic(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
+    project_id: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     trace_visibility_mode: typing.Optional[ExperimentItemPublicTraceVisibilityMode] = None
+    execution_policy: typing.Optional[ExecutionPolicyPublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

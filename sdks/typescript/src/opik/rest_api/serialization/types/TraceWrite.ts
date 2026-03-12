@@ -19,6 +19,7 @@ export const TraceWrite: core.serialization.ObjectSchema<serializers.TraceWrite.
         tags: core.serialization.list(core.serialization.string()).optional(),
         errorInfo: core.serialization.property("error_info", ErrorInfoWrite.optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+        ttft: core.serialization.number().optional(),
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     });
 
@@ -35,6 +36,7 @@ export declare namespace TraceWrite {
         tags?: string[] | null;
         error_info?: ErrorInfoWrite.Raw | null;
         last_updated_at?: string | null;
+        ttft?: number | null;
         thread_id?: string | null;
     }
 }

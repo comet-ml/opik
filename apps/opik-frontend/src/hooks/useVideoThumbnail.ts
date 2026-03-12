@@ -22,7 +22,7 @@ const DEFAULT_CONFIG: ThumbnailConfig = {
   timeoutMs: 10000,
 };
 
-// Global cache to store generated thumbnails
+// Global cache to store generated thumbnails (empty string = failed)
 const thumbnailCache = new Map<string, string>();
 
 export const useVideoThumbnail = (
@@ -47,11 +47,12 @@ export const useVideoThumbnail = (
     }
 
     // Check cache first (always check cache regardless of shouldLoad)
-    const cachedUrl = thumbnailCache.get(videoUrl);
-    if (cachedUrl) {
-      setThumbnailUrl(cachedUrl);
+    if (thumbnailCache.has(videoUrl)) {
+      const cachedUrl = thumbnailCache.get(videoUrl)!;
+      const failed = cachedUrl === "";
+      setThumbnailUrl(failed ? null : cachedUrl);
       setIsLoading(false);
-      setHasError(false);
+      setHasError(failed);
       return;
     }
 
@@ -210,11 +211,21 @@ export const useVideoThumbnail = (
       if (isCancelledRef.current) return;
 
       const target = event.target as HTMLVideoElement;
-      console.error("Error loading video:", {
-        code: target?.error?.code,
+      const errorCode = target?.error?.code;
+      console.warn("Video thumbnail failed:", {
+        code: errorCode,
         message: target?.error?.message,
         url: videoUrl,
       });
+
+      // Only cache permanent failures (format/decode errors), not network errors
+      // MediaError codes: 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
+      if (
+        errorCode === MediaError.MEDIA_ERR_DECODE ||
+        errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+      ) {
+        thumbnailCache.set(videoUrl, "");
+      }
 
       setHasError(true);
       setIsLoading(false);
@@ -223,7 +234,7 @@ export const useVideoThumbnail = (
 
     const onTimeout = () => {
       if (!isCancelledRef.current) {
-        console.error("Video thumbnail generation timed out");
+        console.warn("Video thumbnail generation timed out");
         setHasError(true);
         setIsLoading(false);
         cleanup();

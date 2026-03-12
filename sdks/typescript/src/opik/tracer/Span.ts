@@ -49,7 +49,7 @@ export class Span {
 
     this.opik.spanBatchQueue.update(this.data.id, spanUpdates);
 
-    this.data = { ...this.data, ...updates };
+    this.data = { ...this.data, ...spanUpdates };
 
     return this;
   };

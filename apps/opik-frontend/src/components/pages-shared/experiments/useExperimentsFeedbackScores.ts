@@ -7,7 +7,7 @@ import {
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
-import { buildScoreColumnId, buildScoreLabel } from "./scoresUtils";
+import { buildScoreColumnId, buildScoreLabel } from "@/lib/feedback-scores";
 
 interface UseExperimentsFeedbackScoresOptions {
   experimentIds?: string[];

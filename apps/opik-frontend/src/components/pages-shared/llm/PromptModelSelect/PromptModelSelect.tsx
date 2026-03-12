@@ -10,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, Settings2 } from "lucide-react";
+import { ListAction } from "@/components/ui/list-action";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/components/ui/input";
 
@@ -30,6 +30,7 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import { parseComposedProviderType } from "@/lib/provider";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useModelOptions } from "./useModelOptions";
 
 interface PromptModelSelectProps {
@@ -66,6 +67,10 @@ const PromptModelSelect = ({
   const [openProviderMenu, setOpenProviderMenu] =
     useState<COMPOSED_PROVIDER_TYPE | null>(null);
   const { getProviderModels } = useLLMProviderModelsData();
+
+  const {
+    permissions: { canUpdateAIProviders },
+  } = usePermissions();
 
   const { data } = useProviderKeys(
     {
@@ -321,28 +326,33 @@ const PromptModelSelect = ({
             </div>
             <SelectSeparator />
             <div className="flex-1 overflow-y-auto py-1">{renderOptions()}</div>
-            <SelectSeparator />
-            <Button
-              variant="link"
-              className="h-10 w-full"
-              onClick={() => {
-                resetDialogKeyRef.current += 1;
-                setOpenConfigDialog(true);
-              }}
-            >
-              Manage AI providers
-            </Button>
+            {canUpdateAIProviders && (
+              <>
+                <SelectSeparator />
+                <ListAction
+                  onClick={() => {
+                    resetDialogKeyRef.current += 1;
+                    setOpenConfigDialog(true);
+                  }}
+                >
+                  <Settings2 className="size-3.5 shrink-0" />
+                  Manage AI providers
+                </ListAction>
+              </>
+            )}
           </div>
         </SelectContent>
       </Select>
-      <ManageAIProviderDialog
-        key={resetDialogKeyRef.current}
-        configuredProvidersList={configuredProvidersList}
-        open={openConfigDialog}
-        setOpen={setOpenConfigDialog}
-        onAddProvider={onAddProvider}
-        onDeleteProvider={onDeleteProvider}
-      />
+      {canUpdateAIProviders && (
+        <ManageAIProviderDialog
+          key={resetDialogKeyRef.current}
+          configuredProvidersList={configuredProvidersList}
+          open={openConfigDialog}
+          setOpen={setOpenConfigDialog}
+          onAddProvider={onAddProvider}
+          onDeleteProvider={onDeleteProvider}
+        />
+      )}
     </>
   );
 };

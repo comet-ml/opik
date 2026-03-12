@@ -20,15 +20,15 @@ import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceC
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { getJSONPaths } from "@/lib/utils";
-import { formatDate } from "@/lib/date";
-import { parseScoreColumnId } from "@/components/pages-shared/experiments/scoresUtils";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import { parseScoreColumnId } from "@/lib/feedback-scores";
 import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
 export {
   parseScoreColumnId,
   getExperimentScore,
   buildScoreLabel,
-} from "@/components/pages-shared/experiments/scoresUtils";
+} from "@/lib/feedback-scores";
 
 export const isSelectExperimentsMode = (dataSource: EXPERIMENT_DATA_SOURCE) =>
   dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
@@ -83,7 +83,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -92,7 +92,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "duration.p50",
-    label: "Duration (avg.)",
+    label: "Avg duration",
     type: COLUMN_TYPE.duration,
     accessorFn: (row) => row.duration?.p50,
     cell: DurationCell as never,
@@ -143,7 +143,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
   {
     id: "total_estimated_cost_avg",
-    label: "Cost per trace (avg.)",
+    label: "Avg cost",
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
   },

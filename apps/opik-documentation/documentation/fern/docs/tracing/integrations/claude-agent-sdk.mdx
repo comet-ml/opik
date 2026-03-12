@@ -1,0 +1,107 @@
+---
+description: Configure Claude Code telemetry and OTLP export settings with clear signal and compatibility expectations for Opik.
+headline: Claude Agent SDK | Opik Documentation
+og:description: Claude telemetry is configured with environment variables; this guide clarifies Opik endpoint modes and signal caveats.
+og:site_name: Opik Documentation
+og:title: Claude Agent SDK Integration - Opik
+title: Observability for Claude Agent SDK with Opik
+---
+
+Claude Code telemetry is configured through environment variables.
+
+## When this guide applies
+
+Use this guide when you want to configure Claude Code's official OpenTelemetry settings and align endpoint/header values with your Opik deployment mode.
+
+<Callout type="warning">
+Claude Code's monitoring docs currently describe OTel <b>metrics</b> and <b>events/logs</b> exporters. Opik tracing views are span-based. Verify your pipeline emits spans if your goal is trace visualization in Opik.
+</Callout>
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName` (recommended for deterministic routing)
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - `Authorization`
+        - `Comet-Workspace`
+
+        Optional headers:
+        - `projectName`
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+        Required headers:
+        - none by default (depends on your auth setup)
+
+        Optional headers:
+        - `projectName` (recommended)
+        - auth headers if your instance enforces auth
+    </Tab>
+</Tabs>
+
+## Claude telemetry configuration (official pattern)
+
+Intent:
+Enable Claude Code telemetry and route supported OTel signals to your collector/backend.
+
+Applies when:
+You run Claude Code with telemetry enabled via environment variables.
+
+Required fields:
+- `CLAUDE_CODE_ENABLE_TELEMETRY=1`
+- at least one exporter (`OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER`)
+
+Optional fields:
+- `OTEL_EXPORTER_OTLP_PROTOCOL`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_HEADERS`
+- per-signal overrides such as `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`
+
+Minimal valid setup:
+
+```bash wordWrap
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_LOGS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# Optional if your collector/export path requires auth
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <token>"
+claude
+```
+
+## Validation
+
+1. Start Claude with telemetry enabled.
+2. Confirm your OTLP backend receives `claude_code.*` metrics/events.
+3. If targeting Opik trace views, verify spans are emitted by your pipeline; metrics/logs alone will not appear as traces.
+
+## Source references
+
+- [Claude Code monitoring (official)](https://code.claude.com/docs/en/monitoring-usage)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)
+- [OpenTelemetry SDK environment variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)

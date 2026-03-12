@@ -69,6 +69,7 @@ class BaseTrackDecorator(abc.ABC):
         flush: bool = False,
         project_name: Optional[str] = None,
         create_duplicate_root_span: bool = True,
+        entrypoint: bool = False,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -130,10 +131,13 @@ class BaseTrackDecorator(abc.ABC):
         track_options.name = name
 
         def decorator(func: Callable) -> Callable:
-            return self._decorate(
+            wrapped = self._decorate(
                 func=func,
                 track_options=track_options,
             )
+            if entrypoint:
+                _apply_entrypoint(func, wrapped, track_options)
+            return wrapped
 
         return decorator
 
@@ -609,6 +613,27 @@ class BaseTrackDecorator(abc.ABC):
         pass
 
 
+def _apply_entrypoint(
+    original_func: Callable,
+    wrapped_func: Callable,
+    track_options: "arguments_helpers.TrackOptions",
+) -> None:
+    from ..runner.registry import extract_params, register
+
+    agent_name = track_options.name or original_func.__name__
+    agent_project = track_options.project_name or "default"
+    params = extract_params(original_func)
+    docstring = inspect.getdoc(original_func) or ""
+
+    register(
+        name=agent_name,
+        func=wrapped_func,
+        project=agent_project,
+        params=params,
+        docstring=docstring,
+    )
+
+
 def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     """
     Pops span and trace (if trace exists) data created by @track decorator
@@ -681,10 +706,15 @@ def add_start_candidates(
     Returns:
         The result of the span creation, including the span and trace data.
     """
+    preset_trace_id = None
+    if opik_args_data and opik_args_data.trace_args and opik_args_data.trace_args.id:
+        preset_trace_id = opik_args_data.trace_args.id
+
     span_creation_result = span_creation_handler.create_span_respecting_context(
         start_span_arguments=start_span_parameters,
         distributed_trace_headers=opik_distributed_trace_headers,
         should_create_duplicate_root_span=create_duplicate_root_span,
+        preset_trace_id=preset_trace_id,
     )
     if span_creation_result.should_process_span_data:
         context_storage.add_span_data(span_creation_result.span_data)

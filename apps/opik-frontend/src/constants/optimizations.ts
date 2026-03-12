@@ -23,6 +23,7 @@ export const OPTIMIZATION_STUDIO_SUPPORTED_MODELS: Record<
     PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
   ],
   [PROVIDER_TYPE.ANTHROPIC]: [
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
     PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
     PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
     PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
@@ -84,6 +85,10 @@ export const DEFAULT_G_EVAL_METRIC_CONFIGS = {
 
 export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
+  REFERENCE_KEY: "",
+};
+
+export const DEFAULT_NUMERICAL_SIMILARITY_METRIC_CONFIGS = {
   REFERENCE_KEY: "",
 };
 
@@ -153,6 +158,12 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     value: METRIC_TYPE.LEVENSHTEIN,
     label: "Levenshtein",
     description: "Measures edit distance between output and expected text.",
+  },
+  {
+    value: METRIC_TYPE.NUMERICAL_SIMILARITY,
+    label: "Numerical Similarity",
+    description:
+      "Compares numeric output against a reference value. Closer values score higher.",
   },
 ];
 

@@ -266,6 +266,8 @@ public class StatsUtils {
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
 
+        stats.addAll(calculateUsageSum(usages));
+
         feedback.keySet()
                 .stream()
                 .sorted()
@@ -289,6 +291,25 @@ public class StatsUtils {
         stats.add(new CountValueStat(StatsMapper.ERROR_COUNT, errorCount));
 
         return stats;
+    }
+
+    public static List<AvgValueStat> calculateUsageSum(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> (AvgValueStat) AvgValueStat.builder()
+                        .name("%s.%s".formatted(StatsMapper.USAGE_SUM, e.getKey()))
+                        .value(e.getValue().stream().mapToDouble(Long::doubleValue).sum())
+                        .type(ProjectStats.StatsType.AVG)
+                        .build())
+                .toList();
     }
 
     public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
@@ -379,6 +400,13 @@ public class StatsUtils {
 
             return 1;
         };
+    }
+
+    public static int compareDoubles(Double d1, Double d2) {
+        if (d1 == null && d2 == null) return 0;
+        if (d1 == null) return -1;
+        if (d2 == null) return 1;
+        return Math.abs(d1 - d2) < 1e-6 ? 0 : Double.compare(d1, d2);
     }
 
     public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {

@@ -1,4 +1,4 @@
-﻿# opik.ps1
+# opik.ps1
 
 [CmdletBinding()]
 param (
@@ -662,7 +662,7 @@ function Get-StartCommand {
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
     }
-    
+
     return $cmd
 }
 
@@ -681,7 +681,7 @@ function Get-VerifyCommand {
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
     }
-    
+
     return "$cmd --verify"
 }
 

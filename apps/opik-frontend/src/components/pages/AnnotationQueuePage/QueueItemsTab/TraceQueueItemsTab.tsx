@@ -63,13 +63,16 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
@@ -97,13 +100,19 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "input",
@@ -131,6 +140,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: COLUMN_METADATA_ID,
@@ -182,6 +192,9 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "llm_span_count",
@@ -237,11 +250,31 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "name",
+  "input",
+  "output",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "name",
   "input",
   "output",
-  "comments",
+  COLUMN_COMMENTS_ID,
+  "start_time",
+  "end_time",
+  "error_info",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  "llm_span_count",
+  "thread_id",
+  COLUMN_METADATA_ID,
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
@@ -321,7 +354,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 
@@ -440,6 +473,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
             statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+            statisticDataFormater: formatScoreDisplay,
           }) as ColumnData<Trace>,
       ),
     ];

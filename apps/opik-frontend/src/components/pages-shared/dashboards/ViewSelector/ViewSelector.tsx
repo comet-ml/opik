@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Table, ChartLine } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -6,20 +6,27 @@ import {
   useDashboardStore,
   selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { VIEW_TYPE } from "@/types/dashboard";
 
-export enum VIEW_TYPE {
-  DETAILS = "details",
-  DASHBOARDS = "dashboards",
-}
-
-interface ViewSelectorProps {
+export interface ViewSelectorProps {
   value: VIEW_TYPE;
   onChange: (value: VIEW_TYPE) => void;
 }
 
 const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
+  const {
+    permissions: { canViewDashboards },
+  } = usePermissions();
+
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const disabled = value === VIEW_TYPE.DASHBOARDS && hasUnsavedChanges;
+
+  useEffect(() => {
+    if (value === VIEW_TYPE.DASHBOARDS && !canViewDashboards) {
+      onChange(VIEW_TYPE.DETAILS);
+    }
+  }, [canViewDashboards, value, onChange]);
 
   const content = (
     <ToggleGroup
@@ -49,6 +56,10 @@ const ViewSelector: React.FC<ViewSelectorProps> = ({ value, onChange }) => {
       </ToggleGroupItem>
     </ToggleGroup>
   );
+
+  if (!canViewDashboards) {
+    return null;
+  }
 
   if (disabled) {
     return (

@@ -1,13 +1,18 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Opik } from "@/index";
 import { AnswerRelevance } from "@/evaluation/metrics/llmJudges/answerRelevance/AnswerRelevance";
+import { GEval } from "@/evaluation/metrics/llmJudges/gEval/GEval";
+import { QARelevanceJudge } from "@/evaluation/metrics/llmJudges/gEval/judges";
 import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hallucination";
 import { Moderation } from "@/evaluation/metrics/llmJudges/moderation/Moderation";
 import { Usefulness } from "@/evaluation/metrics/llmJudges/usefulness/Usefulness";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasAnthropicApiKey,
+  hasOpenAiApiKey,
 } from "../../api/shouldRunIntegrationTests";
+import { logger } from "@/utils/logger";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
 
@@ -31,7 +36,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("AnswerRelevance Metric", () => {
-    it("should score high relevance answer with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score high relevance answer with context", async () => {
       const metric = new AnswerRelevance();
 
       const result = await metric.score({
@@ -53,7 +58,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       }
     }, 30000);
 
-    it("should score low relevance answer with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score low relevance answer with context", async () => {
       const metric = new AnswerRelevance();
 
       const result = await metric.score({
@@ -71,7 +76,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work without context when requireContext is false", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work without context when requireContext is false", async () => {
       const metric = new AnswerRelevance({ requireContext: false });
 
       const result = await metric.score({
@@ -85,7 +90,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should throw error when context required but not provided", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should throw error when context required but not provided", async () => {
       const metric = new AnswerRelevance(); // requireContext defaults to true
 
       await expect(
@@ -98,7 +103,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Hallucination Metric", () => {
-    it("should detect no hallucination for factual output with context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect no hallucination for factual output with context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -114,7 +119,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect hallucination when output contradicts context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect hallucination when output contradicts context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -130,7 +135,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect no hallucination for factual common knowledge without context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect no hallucination for factual common knowledge without context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -142,7 +147,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect hallucination for obviously false statement without context", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect hallucination for obviously false statement without context", async () => {
       const metric = new Hallucination();
 
       const result = await metric.score({
@@ -156,7 +161,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Moderation Metric", () => {
-    it("should score benign content as 0.0", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score benign content as 0.0", async () => {
       const metric = new Moderation();
 
       const result = await metric.score({
@@ -168,7 +173,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should detect content with potential moderation issues", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should detect content with potential moderation issues", async () => {
       const metric = new Moderation();
 
       const result = await metric.score({
@@ -184,7 +189,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("Usefulness Metric", () => {
-    it("should score useful response highly", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score useful response highly", async () => {
       const metric = new Usefulness();
 
       const result = await metric.score({
@@ -199,7 +204,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should score not useful response lowly", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should score not useful response lowly", async () => {
       const metric = new Usefulness();
 
       const result = await metric.score({
@@ -214,10 +219,97 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
     }, 30000);
   });
 
+  describe("GEval Metric", () => {
+    it.skipIf(!hasOpenAiApiKey())("should score high quality output with custom task and use logprobs", async () => {
+      const loggerDebugSpy = vi.spyOn(logger, "debug");
+
+      const metric = new GEval({
+        taskIntroduction:
+          "You evaluate how well a response answers a factual question.",
+        evaluationCriteria:
+          "Score from 0 (incorrect) to 10 (correct and complete).",
+        model: "gpt-4o", // This model supports logprobs
+      });
+
+      const result = await metric.score({
+        output: "The capital of France is Paris.",
+      });
+
+      expect(result.value).toBeGreaterThanOrEqual(0.0);
+      expect(result.value).toBeLessThanOrEqual(1.0);
+      expect(result.value).toBeGreaterThan(0.5);
+      expect(result.reason).toBeDefined();
+      if (result.reason) {
+        expect(typeof result.reason).toBe("string");
+        expect(result.reason.length).toBeGreaterThan(0);
+      }
+
+      // Verify that logprobs were used (logger.debug should not have been called with fallback messages)
+      expect(loggerDebugSpy).not.toHaveBeenCalledWith(
+        expect.stringMatching(/No logprobs found|failed to use logprobs/)
+      );
+
+      loggerDebugSpy.mockRestore();
+    }, 60000);
+
+    it.skipIf(!hasAnthropicApiKey())(
+      "should score high quality output with Anthropic model",
+      async () => {
+        const loggerDebugSpy = vi.spyOn(logger, "debug");
+
+        const metric = new GEval({
+          taskIntroduction:
+            "You evaluate how well a response answers a factual question.",
+          evaluationCriteria:
+            "Score from 0 (incorrect) to 10 (correct and complete).",
+          model: "claude-haiku-4-5-20251001",
+        });
+
+        const result = await metric.score({
+          output: "The capital of France is Paris.",
+        });
+
+        expect(result.value).toBeGreaterThanOrEqual(0.0);
+        expect(result.value).toBeLessThanOrEqual(1.0);
+        expect(result.value).toBeGreaterThan(0.5);
+        expect(result.reason).toBeDefined();
+        if (result.reason) {
+          expect(typeof result.reason).toBe("string");
+          expect(result.reason.length).toBeGreaterThan(0);
+        }
+
+        // Verify that logprobs fallback occurred (expected for Anthropic models)
+        expect(loggerDebugSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/No logprobs found|failed to use logprobs/)
+        );
+
+        loggerDebugSpy.mockRestore();
+      },
+      60000
+    );
+
+    it.skipIf(!hasOpenAiApiKey())("should score using QARelevanceJudge", async () => {
+      const metric = new QARelevanceJudge();
+
+      const result = await metric.score({
+        output:
+          "Paris is the capital and most populous city of France, located in the north-central part of the country.",
+      });
+
+      expect(result.value).toBeGreaterThanOrEqual(0.0);
+      expect(result.value).toBeLessThanOrEqual(1.0);
+      expect(result.reason).toBeDefined();
+      if (result.reason) {
+        expect(typeof result.reason).toBe("string");
+        expect(result.reason.length).toBeGreaterThan(0);
+      }
+    }, 120000);
+  });
+
   describe("Metric Configuration", () => {
-    it("should work with custom model configuration", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with custom model configuration", async () => {
       const metric = new AnswerRelevance({
-        model: "gpt-4o",
+        model: "gpt-5-nano",
         temperature: 0.3,
         requireContext: false,
       });
@@ -233,7 +325,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.reason).toBeDefined();
     }, 30000);
 
-    it("should work with seed for reproducibility", async () => {
+    it.skipIf(!hasOpenAiApiKey())("should work with seed for reproducibility", async () => {
       const metric1 = new AnswerRelevance({
         seed: 42,
         temperature: 0.0,

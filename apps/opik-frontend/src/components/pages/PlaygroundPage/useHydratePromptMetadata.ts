@@ -5,7 +5,7 @@ import {
   PlaygroundPromptType,
   PromptLibraryMetadata,
 } from "@/types/playground";
-import { PromptVersion } from "@/types/prompts";
+import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
 import { parsePromptVersionContent } from "@/lib/llm";
 import { useFetchPrompt } from "@/api/prompts/usePromptById";
 import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
@@ -34,11 +34,14 @@ interface VersionData {
 }
 
 const buildMetadata = (
-  promptData: { name: string; id: string },
+  promptData: { name: string; id: string; template_structure?: string },
   versionData: VersionData,
 ): PromptLibraryMetadata => ({
   name: promptData.name,
   id: promptData.id,
+  template_structure:
+    (promptData.template_structure as PROMPT_TEMPLATE_STRUCTURE) ??
+    PROMPT_TEMPLATE_STRUCTURE.TEXT,
   version: {
     template: parseTemplateJson(versionData.template),
     id: versionData.id,

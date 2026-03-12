@@ -5,6 +5,7 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+import { isAggregatedScore, getTrialAvgTooltip } from "@/lib/trials";
 import { MessageSquareMore } from "lucide-react";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import {
@@ -23,12 +24,12 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 > = (context) => {
   const experimentCompare = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { feedbackKey, colorMap } = (custom ?? {}) as CustomMeta &
+  const { scoreName, colorMap } = (custom ?? {}) as CustomMeta &
     FeedbackScoreCustomMeta;
   const experimentItem = experimentCompare.experiment_items[0];
 
   const feedbackScore = experimentItem?.feedback_scores?.find(
-    (f) => f.name === feedbackKey,
+    (f) => f.name === scoreName,
   );
 
   const traceId = experimentItem?.trace_id;
@@ -50,7 +51,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
-      (f) => f.name === feedbackKey,
+      (f) => f.name === scoreName,
     );
 
     if (!feedbackScore) {
@@ -81,7 +82,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
       reasons = extractReasonsFromValueByAuthor(feedbackScore.value_by_author);
     }
 
-    const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
+    const color = scoreName && colorMap ? colorMap[scoreName] : undefined;
 
     return (
       <div
@@ -98,6 +99,14 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           color={color}
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
+          tooltipSuffix={
+            isAggregatedScore(feedbackScore)
+              ? getTrialAvgTooltip(
+                  feedbackScore.trialValues.length,
+                  feedbackScore.stdDev,
+                )
+              : undefined
+          }
         />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>

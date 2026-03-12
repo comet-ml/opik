@@ -43,6 +43,7 @@ import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EMPTY_DATASETS: Dataset[] = [];
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -100,6 +101,10 @@ const PlaygroundOutputActions = ({
   const queryClient = useQueryClient();
   const createProjectMutation = useProjectCreateMutation();
 
+  const {
+    permissions: { canViewExperiments, canViewDatasets, canCreateProjects },
+  } = usePermissions();
+
   // Define filters column data - includes all dataset columns and tags
   const filtersColumnData = useMemo(() => {
     // Add each data column as a separate filter option with field prefix "data."
@@ -126,7 +131,6 @@ const PlaygroundOutputActions = ({
     data: playgroundProject,
     isError: isProjectError,
     error: projectError,
-    isLoading: isLoadingProject,
   } = useProjectByName(
     {
       projectName: PLAYGROUND_PROJECT_NAME,
@@ -160,11 +164,16 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
-    workspaceName,
-    page: 1,
-    size: DEFAULT_LOADED_DATASETS,
-  });
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
+    {
+      workspaceName,
+      page: 1,
+      size: DEFAULT_LOADED_DATASETS,
+    },
+    {
+      enabled: canViewDatasets,
+    },
+  );
 
   const datasets = datasetsData?.content || EMPTY_DATASETS;
   // Parse datasetId to extract plain ID (handles both "id" and "id::hash" formats)
@@ -172,6 +181,8 @@ const PlaygroundOutputActions = ({
   const plainDatasetId = parsedDatasetId?.datasetId || datasetId;
   const datasetName =
     datasets?.find((ds) => ds.id === plainDatasetId)?.name || null;
+
+  const canUsePlayground = !!playgroundProject?.id || canCreateProjects;
 
   const { stopAll, runAll, isRunning, createdExperiments } =
     useActionButtonActions({
@@ -219,16 +230,8 @@ const PlaygroundOutputActions = ({
     try {
       let projectId: string | undefined = playgroundProject?.id;
 
-      // If project is still loading, wait a bit (shouldn't normally happen, but just in case)
-      if (isLoadingProject) {
-        // Wait a moment and try to get the project again
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        projectId = (playgroundProject as any)?.id;
-      }
-
       // If project doesn't exist (404), create it
-      if (!projectId && isProjectNotFound) {
+      if (!projectId && isProjectNotFound && canCreateProjects) {
         const result = await createProjectMutation.mutateAsync({
           project: { name: PLAYGROUND_PROJECT_NAME },
         });
@@ -252,9 +255,9 @@ const PlaygroundOutputActions = ({
   }, [
     playgroundProject,
     isProjectNotFound,
-    isLoadingProject,
     createProjectMutation,
     queryClient,
+    canCreateProjects,
   ]);
 
   const renderActionButton = () => {
@@ -295,6 +298,7 @@ const PlaygroundOutputActions = ({
       !datasets.find((d) => d.id === plainDatasetId);
 
     const isDisabledButton =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       loadingDatasetItems ||
@@ -304,6 +308,7 @@ const PlaygroundOutputActions = ({
       hasMediaCompatibilityIssues;
 
     const shouldTooltipAppear =
+      !canUsePlayground ||
       !allPromptsHaveModels ||
       !allMessagesNotEmpty ||
       isDatasetEmpty ||
@@ -316,6 +321,10 @@ const PlaygroundOutputActions = ({
     const getTooltipMessage = () => {
       if (!isDisabledButton) {
         return promptCount === 1 ? "Run your prompt" : "Run your prompts";
+      }
+
+      if (!canUsePlayground) {
+        return "Playground project does not exist and you don't have permission to create it";
       }
 
       if (hasMediaCompatibilityIssues) {
@@ -425,24 +434,28 @@ const PlaygroundOutputActions = ({
       <div className="sticky flex items-center justify-between gap-2">
         {createdExperiments.length > 0 && plainDatasetId && (
           <div className="flex gap-2">
-            <div className="mt-2.5">
-              <NavigationTag
-                resource={RESOURCE_TYPE.experiment}
-                id={plainDatasetId}
-                name={
-                  createdExperiments.length === 1 ? "Experiment" : "Experiments"
-                }
-                className="h-8"
-                search={{
-                  experiments: createdExperiments.map((e) => e.id),
-                }}
-                tooltipContent={
-                  createdExperiments.length === 1
-                    ? "Your run was stored in this experiment. Explore your results to find insights."
-                    : "Your run was stored in experiments. Explore comparison results to get insights."
-                }
-              />
-            </div>
+            {canViewExperiments && (
+              <div className="mt-2.5">
+                <NavigationTag
+                  resource={RESOURCE_TYPE.experiment}
+                  id={plainDatasetId}
+                  name={
+                    createdExperiments.length === 1
+                      ? "Go to experiment"
+                      : "Go to experiments"
+                  }
+                  className="h-8"
+                  search={{
+                    experiments: createdExperiments.map((e) => e.id),
+                  }}
+                  tooltipContent={
+                    createdExperiments.length === 1
+                      ? "Your run was stored in this experiment. Explore your results to find insights."
+                      : "Your run was stored in experiments. Explore comparison results to get insights."
+                  }
+                />
+              </div>
+            )}
             {createdExperiments.length === 1 &&
               playgroundProject?.id &&
               createdExperiments[0]?.id && (
@@ -450,7 +463,7 @@ const PlaygroundOutputActions = ({
                   <NavigationTag
                     resource={RESOURCE_TYPE.traces}
                     id={playgroundProject.id}
-                    name="Traces"
+                    name="Go to traces"
                     className="h-8"
                     search={{
                       traces_filters: generateExperimentIdFilter(
@@ -464,66 +477,75 @@ const PlaygroundOutputActions = ({
           </div>
         )}
         <div className="ml-auto flex gap-2">
-          <div className="mt-2.5">
-            {isVersioningEnabled ? (
-              <DatasetVersionSelectBox
-                value={datasetId}
-                versionName={versionName}
-                onChange={handleDatasetVersionChange}
-                workspaceName={workspaceName}
-              />
-            ) : (
-              <DatasetSelectBox
-                value={datasetId ?? ""}
-                onChange={onChangeDatasetId}
-                workspaceName={workspaceName}
-                onDatasetChangeExtra={handleDatasetChangeExtra}
-              />
-            )}
-          </div>
-          {datasetId && (
-            <div className="mt-2.5 flex">
-              <FiltersButton
-                columns={filtersColumnData}
-                filters={filters}
-                onChange={onFiltersChange}
-                layout="icon"
-              />
-            </div>
+          {canViewDatasets && (
+            <>
+              <div className="mt-2.5">
+                {isVersioningEnabled ? (
+                  <DatasetVersionSelectBox
+                    value={datasetId}
+                    versionName={versionName}
+                    onChange={handleDatasetVersionChange}
+                    workspaceName={workspaceName}
+                  />
+                ) : (
+                  <DatasetSelectBox
+                    value={datasetId ?? ""}
+                    onChange={onChangeDatasetId}
+                    workspaceName={workspaceName}
+                    onDatasetChangeExtra={handleDatasetChangeExtra}
+                  />
+                )}
+              </div>
+              {datasetId && (
+                <div className="mt-2.5 flex">
+                  <FiltersButton
+                    columns={filtersColumnData}
+                    filters={filters}
+                    onChange={onFiltersChange}
+                    layout="icon"
+                  />
+                </div>
+              )}
+              {(canUsePlayground || !!rules.length) && (
+                <div className="mt-2.5 flex">
+                  <MetricSelector
+                    rules={rules}
+                    selectedRuleIds={selectedRuleIds}
+                    onSelectionChange={setSelectedRuleIds}
+                    datasetId={datasetId}
+                    onCreateRuleClick={handleCreateRuleClick}
+                    workspaceName={workspaceName}
+                    canCreateRules={canUsePlayground}
+                  />
+                </div>
+              )}
+              {datasetId && (
+                <div className="mt-2.5 flex h-8 items-center justify-center">
+                  <Separator orientation="vertical" className="mr-2 h-4" />
+                  <DataTablePagination
+                    page={page}
+                    pageChange={onChangePage}
+                    size={size}
+                    sizeChange={onChangeSize}
+                    total={total}
+                    variant="minimal"
+                    itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+                    disabled={isRunning}
+                    isLoadingTotal={isLoadingTotal}
+                  />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </div>
+              )}
+              <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
+                <ExplainerIcon
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.what_does_the_dataset_do_here
+                  ]}
+                />
+                <Separator orientation="vertical" className="mx-2 h-4" />
+              </div>
+            </>
           )}
-          <div className="mt-2.5 flex">
-            <MetricSelector
-              rules={rules}
-              selectedRuleIds={selectedRuleIds}
-              onSelectionChange={setSelectedRuleIds}
-              datasetId={datasetId}
-              onCreateRuleClick={handleCreateRuleClick}
-              workspaceName={workspaceName}
-            />
-          </div>
-          {datasetId && (
-            <div className="mt-2.5 flex h-8 items-center justify-center">
-              <Separator orientation="vertical" className="mr-2 h-4" />
-              <DataTablePagination
-                page={page}
-                pageChange={onChangePage}
-                size={size}
-                sizeChange={onChangeSize}
-                total={total}
-                variant="minimal"
-                itemsPerPage={[10, 50, 100, 200, 500, 1000]}
-                disabled={isRunning}
-                isLoadingTotal={isLoadingTotal}
-              />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </div>
-          )}
-          <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
-            <ExplainerIcon
-              {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}
-            />
-            <Separator orientation="vertical" className="mx-2 h-4" />
-          </div>
           {renderActionButton()}
         </div>
       </div>

@@ -133,7 +133,12 @@ public class ChatCompletionsClient {
         try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
             String chunk;
             while ((chunk = inputStream.read()) != null) {
-                entities.add(JsonUtils.readValue(chunk, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
+                // Strip "data: " prefix if present (SSE format)
+                String jsonChunk = chunk.startsWith("data: ") ? chunk.substring(6) : chunk;
+                // Skip [DONE] marker
+                if (!"[DONE]".equals(jsonChunk)) {
+                    entities.add(JsonUtils.readValue(jsonChunk, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
+                }
             }
         }
         return entities;
@@ -144,7 +149,12 @@ public class ChatCompletionsClient {
         try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
             String chunk;
             while ((chunk = inputStream.read()) != null) {
-                errorMessages.add(JsonUtils.readValue(chunk, ERROR_MESSAGE_TYPE_REFERENCE));
+                // Strip "data: " prefix if present (SSE format)
+                String jsonChunk = chunk.startsWith("data: ") ? chunk.substring(6) : chunk;
+                // Skip [DONE] marker
+                if (!"[DONE]".equals(jsonChunk)) {
+                    errorMessages.add(JsonUtils.readValue(jsonChunk, ERROR_MESSAGE_TYPE_REFERENCE));
+                }
             }
         }
         return errorMessages;

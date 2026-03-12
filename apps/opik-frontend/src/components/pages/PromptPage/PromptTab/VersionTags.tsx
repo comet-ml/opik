@@ -3,24 +3,39 @@ import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import TagListTooltipContent from "@/components/shared/TagListTooltipContent/TagListTooltipContent";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useVisibleTags } from "@/hooks/useVisibleTags";
+import { cn } from "@/lib/utils";
 
 interface VersionTagsProps {
   tags: string[];
+  containerClassName?: string;
+  maxVisibleTags?: number;
 }
 
-const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
-  const { visibleItems, hasMoreItems, remainingCount } = useVisibleTags(tags);
+const VersionTags: React.FC<VersionTagsProps> = ({
+  tags,
+  containerClassName,
+  maxVisibleTags,
+}) => {
+  const { visibleItems, hasMoreItems, remainingCount } = useVisibleTags(
+    tags,
+    maxVisibleTags,
+  );
 
   if (!tags || tags.length === 0) return null;
 
   return (
-    <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-0.5 overflow-hidden">
+    <div
+      className={cn(
+        "flex max-w-[200px] shrink flex-nowrap items-center gap-1 overflow-hidden",
+        containerClassName,
+      )}
+    >
       {visibleItems.map((tag) => (
         <ColoredTag
           key={tag}
           label={tag}
           size="sm"
-          className="min-w-0 max-w-[65px] shrink origin-left scale-[0.85] truncate"
+          className="min-w-0 max-w-[80px] shrink truncate"
         />
       ))}
       {hasMoreItems && (

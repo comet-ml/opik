@@ -6,10 +6,11 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
@@ -22,7 +23,12 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   experiments,
   experimentsIds,
 }) => {
+  const {
+    permissions: { canViewDatasets },
+  } = usePermissions();
+
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
+  const { getColor } = useWorkspaceColorMap();
 
   const isCompare = experimentsIds.length > 1;
 
@@ -101,17 +107,21 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
             resource={RESOURCE_TYPE.trial}
           />
         )}
-        <NavigationTag
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
-          resource={RESOURCE_TYPE.dataset}
-        />
+        {canViewDatasets && (
+          <NavigationTag
+            id={experiment?.dataset_id}
+            name={
+              experiment?.dataset_name && `Go to ${experiment.dataset_name}`
+            }
+            resource={RESOURCE_TYPE.dataset}
+          />
+        )}
         {scores.map((score) => (
           <FeedbackScoreTag
             key={score.name + score.value}
             label={score.name}
-            value={formatNumericData(score.value)}
-            color={colorMap[score.name]}
+            value={score.value}
+            color={getColor(score.name, colorMap)}
           />
         ))}
       </div>

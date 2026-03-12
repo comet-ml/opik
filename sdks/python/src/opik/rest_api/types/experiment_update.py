@@ -13,7 +13,21 @@ from .json_node import JsonNode
 class ExperimentUpdate(UniversalBaseModel):
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonNode] = None
-    tags: typing.Optional[typing.List[str]] = None
+    tags: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags
+    """
+
+    tags_to_add: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to add
+    """
+
+    tags_to_remove: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
+    """
+    Tags to remove
+    """
+
     type: typing.Optional[ExperimentUpdateType] = None
     status: typing.Optional[ExperimentUpdateStatus] = pydantic.Field(default=None)
     """

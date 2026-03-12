@@ -11,7 +11,7 @@ import isNumber from "lodash/isNumber";
 import { formatNumericData } from "@/lib/utils";
 
 import { TransformedData } from "@/types/projects";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import useChartConfig from "@/hooks/useChartConfig";
 import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
@@ -19,19 +19,18 @@ import useProjectMetric, {
 import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/components/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import { COLOR_VARIANTS_MAP } from "@/constants/colorVariants";
 import { Filter } from "@/types/filters";
 import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 import { BreakdownConfig } from "@/types/dashboard";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 import { BREAKDOWN_GROUP_NAMES } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
-
-const MAX_DECIMAL_PLACES = 4;
 
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
   if (isNumber(value)) {
-    return formatNumericData(value, MAX_DECIMAL_PLACES);
+    return formatNumericData(value);
   }
   return value;
 };
@@ -55,18 +54,20 @@ interface MetricContainerChartProps {
   filterLineCallback?: (lineName: string) => boolean;
   chartOnly?: boolean;
   breakdown?: BreakdownConfig;
+  getLabelAction?: (label: string) => LegendLabelAction | undefined;
+  isAggregateTotal?: boolean;
 }
 
-const predefinedColorMap = {
-  traces: TAG_VARIANTS_COLOR_MAP.purple,
-  cost: TAG_VARIANTS_COLOR_MAP.purple,
-  "duration.p50": TAG_VARIANTS_COLOR_MAP.turquoise,
-  "duration.p90": TAG_VARIANTS_COLOR_MAP.burgundy,
-  "duration.p99": TAG_VARIANTS_COLOR_MAP.purple,
-  completion_tokens: TAG_VARIANTS_COLOR_MAP.turquoise,
-  prompt_tokens: TAG_VARIANTS_COLOR_MAP.burgundy,
-  total_tokens: TAG_VARIANTS_COLOR_MAP.purple,
-  failed: TAG_VARIANTS_COLOR_MAP.pink,
+const customColorMap = {
+  traces: COLOR_VARIANTS_MAP.purple.css,
+  cost: COLOR_VARIANTS_MAP.purple.css,
+  "duration.p50": COLOR_VARIANTS_MAP.turquoise.css,
+  "duration.p90": COLOR_VARIANTS_MAP.burgundy.css,
+  "duration.p99": COLOR_VARIANTS_MAP.purple.css,
+  completion_tokens: COLOR_VARIANTS_MAP.turquoise.css,
+  prompt_tokens: COLOR_VARIANTS_MAP.burgundy.css,
+  total_tokens: COLOR_VARIANTS_MAP.purple.css,
+  failed: COLOR_VARIANTS_MAP.pink.css,
 };
 
 const METRIC_CHART_TYPE = {
@@ -93,6 +94,8 @@ const MetricContainerChart = ({
   filterLineCallback,
   chartOnly = false,
   breakdown,
+  getLabelAction,
+  isAggregateTotal = false,
 }: MetricContainerChartProps) => {
   const { data: response, isPending } = useProjectMetric(
     {
@@ -166,14 +169,22 @@ const MetricContainerChart = ({
     return data.every((record) => lines.every((line) => isNil(record[line])));
   }, [data, lines, isPending]);
 
-  const config = useMemo(() => {
-    // Use predefined colors for non-breakdown charts (legacy behavior)
-    return getDefaultHashedColorsChartConfig(
-      lines,
-      labelsMap,
-      predefinedColorMap,
-    );
-  }, [lines, labelsMap]);
+  const config = useChartConfig(lines, labelsMap, customColorMap);
+
+  const labelActions = useMemo(() => {
+    if (!getLabelAction) return undefined;
+
+    const actions: Record<string, LegendLabelAction> = {};
+    for (const line of lines) {
+      const configEntry = config[line];
+      const displayLabel = (configEntry?.label as string) ?? line;
+      const action = getLabelAction(displayLabel);
+      if (action) {
+        actions[displayLabel] = action;
+      }
+    }
+    return Object.keys(actions).length > 0 ? actions : undefined;
+  }, [getLabelAction, lines, config]);
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
@@ -191,6 +202,8 @@ const MetricContainerChart = ({
       chartId={chartId}
       isPending={isPending}
       data={data}
+      labelActions={labelActions}
+      isAggregateTotal={isAggregateTotal}
     />
   );
 

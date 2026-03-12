@@ -5,12 +5,17 @@
 import { QueryTokenizer } from "../tokenizer";
 import { validateOperator } from "../validators";
 import type { OperatorToken } from "../types";
+import type { OQLConfig } from "../configs";
 
 /**
  * Parses an operator (symbolic or word-based)
  */
 export class OperatorParser {
-  static parse(tokenizer: QueryTokenizer, field: string): OperatorToken {
+  static parse(
+    tokenizer: QueryTokenizer,
+    field: string,
+    config: OQLConfig
+  ): OperatorToken {
     tokenizer.skipWhitespace();
 
     const currentChar = tokenizer.peekChar();
@@ -21,13 +26,13 @@ export class OperatorParser {
       currentChar
     );
     if (symbolicOperator) {
-      validateOperator(field, symbolicOperator);
+      validateOperator(field, symbolicOperator, config);
       return { operator: symbolicOperator };
     }
 
     // Parse word operators (contains, not_contains, starts_with, ends_with)
     const wordOperator = this.parseWordOperator(tokenizer);
-    validateOperator(field, wordOperator);
+    validateOperator(field, wordOperator, config);
 
     return { operator: wordOperator };
   }

@@ -5,13 +5,18 @@ import {
 } from "@/components/ui/hover-card";
 import { TraceFeedbackScore } from "@/types/traces";
 import React from "react";
+import isNumber from "lodash/isNumber";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 import { cn } from "@/lib/utils";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+
+type ScoreWithColorKey = TraceFeedbackScore & { colorKey?: string };
 
 type FeedbackScoreHoverCardProps = {
   title?: string;
   areAggregatedScores?: boolean;
-  scores: TraceFeedbackScore[];
+  scores: ScoreWithColorKey[];
   children: React.ReactNode;
   hidden?: boolean;
 };
@@ -61,13 +66,21 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                 >
                   <ColoredTagNew
                     label={tag.name}
+                    colorKey={tag.colorKey}
                     className="min-w-0 flex-1"
                     size="sm"
+                    readOnly
                   />
 
-                  <div className="comet-body-xs-accented pr-2 text-foreground">
-                    {tag.value}
-                  </div>
+                  <TooltipWrapper
+                    content={
+                      isNumber(tag.value) ? String(tag.value) : undefined
+                    }
+                  >
+                    <div className="comet-body-xs-accented pr-2 text-foreground">
+                      {formatScoreDisplay(tag.value)}
+                    </div>
+                  </TooltipWrapper>
                 </div>
               );
             })}

@@ -1,8 +1,10 @@
 import React from "react";
 import * as RechartsPrimitive from "recharts";
 import { OnChangeFn } from "@/types/shared";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import { useChart } from "@/components/ui/chart";
+import LegendItem from "@/components/shared/Charts/LegendItem/LegendItem";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 
 type ChartHorizontalLegendProps = React.ComponentProps<
   typeof RechartsPrimitive.Legend
@@ -11,69 +13,69 @@ type ChartHorizontalLegendProps = React.ComponentProps<
     setActiveLine: OnChangeFn<string | null>;
     chartId: string;
     containerClassName?: string;
+    labelActions?: Record<string, LegendLabelAction>;
   };
 
 const ChartHorizontalLegend = React.forwardRef<
   HTMLDivElement,
   ChartHorizontalLegendProps
->(({ payload, color, setActiveLine, containerClassName }, ref) => {
-  const handleMouseEnter = (id: string) => {
-    setActiveLine(id);
-  };
+>(
+  (
+    { payload, color, setActiveLine, containerClassName, labelActions },
+    ref,
+  ) => {
+    const { config } = useChart();
 
-  const handleMouseLeave = () => {
-    setActiveLine(null);
-  };
+    const handleMouseEnter = (id: string) => {
+      setActiveLine(id);
+    };
 
-  if (!payload?.length) {
-    return null;
-  }
+    const handleMouseLeave = () => {
+      setActiveLine(null);
+    };
 
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "-mt-2.5 w-full max-w-full pt-6 text-center",
-        containerClassName,
-      )}
-      onMouseLeave={handleMouseLeave}
-    >
+    if (!payload?.length) {
+      return null;
+    }
+
+    return (
       <div
-        className={
-          "group inline-flex max-h-20 max-w-full flex-wrap items-center justify-center gap-y-1 space-x-2 overflow-y-auto"
-        }
+        ref={ref}
+        className={cn(
+          "-mt-2.5 w-full max-w-full pt-6 text-center",
+          containerClassName,
+        )}
+        onMouseLeave={handleMouseLeave}
       >
-        {payload.map((item, idx) => {
-          const key = `${item.value || "value"}`;
-          const indicatorColor = color || item.color;
+        <div
+          className={
+            "group inline-flex max-h-20 max-w-full flex-wrap items-center justify-center gap-y-1 space-x-2 overflow-y-auto"
+          }
+        >
+          {payload.map((item, idx) => {
+            const key = `${item.value || "value"}`;
+            const indicatorColor = color || item.color;
+            const configEntry = config[item.value as string];
+            const displayLabel = (configEntry?.label as string) ?? item.value;
 
-          return (
-            <div
-              key={key + idx}
-              className="relative min-w-0 pl-3 duration-200 group-hover-except-self:opacity-60"
-              onMouseEnter={() => handleMouseEnter(item.value)}
-            >
-              <TooltipWrapper content={item.value}>
-                <div className="comet-body-xs truncate text-foreground">
-                  {item.value}
-                </div>
-              </TooltipWrapper>
-              <div
-                className="absolute left-0 top-[5px] size-1.5 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
-                style={
-                  {
-                    "--color-bg": indicatorColor,
-                    "--color-border": indicatorColor,
-                  } as React.CSSProperties
-                }
+            return (
+              <LegendItem
+                key={key + idx}
+                itemValue={item.value ?? ""}
+                displayLabel={displayLabel}
+                indicatorColor={indicatorColor ?? ""}
+                action={labelActions?.[displayLabel]}
+                onMouseEnter={() => handleMouseEnter(item.value)}
+                className="min-w-0 pl-3"
+                dotClassName="absolute left-0 top-[5px] shrink-0"
               />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 ChartHorizontalLegend.displayName = "ChartHorizontalLegend";
 
 export default ChartHorizontalLegend;

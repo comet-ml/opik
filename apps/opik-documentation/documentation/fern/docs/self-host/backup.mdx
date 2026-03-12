@@ -227,7 +227,7 @@ clickhouse:
 
 ```bash
 # Port-forward to access the backup server
-kubectl port-forward svc/clickhouse-opik-clickhouse 7171:7171
+kubectl port-forward svc/chi-opik-clickhouse-cluster-0-0 7171:7171
 
 # Create a backup
 curl -X POST "http://localhost:7171/backup/create?name=backup-$(date +%Y%m%d-%H%M%S)"

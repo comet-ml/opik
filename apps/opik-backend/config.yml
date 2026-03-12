@@ -221,6 +221,66 @@ batchOperations:
     # Description: The batch size for processing CSV files. Dataset items are saved to the database in batches of this size.
     csvBatchSize: ${BATCH_OPERATIONS_CSV_BATCH_SIZE:-1000}
 
+# Configuration for experiment aggregates population
+experimentAggregates:
+  # Default: 1000
+  # Description: Number of experiment items processed per batch when populating experiment_item_aggregates table. Higher values improve performance but increase memory usage. Recommended range: 100-5000.
+  batchSize: ${EXPERIMENT_AGGREGATES_BATCH_SIZE:-1000}
+
+# Configuration for experiment denormalization (debounced re-computation of experiment aggregates)
+experimentDenormalization:
+  # Default: false
+  # Description: Whether the experiment denormalization job and subscriber are enabled
+  enabled: ${EXPERIMENT_DENORMALIZATION_ENABLED:-false}
+  # Default: experiment_denormalization_stream
+  # Description: The name of the Redis Stream used for experiment aggregates recomputation
+  streamName: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_NAME:-'experiment_denormalization_stream'}
+  # Default: experiment_denormalization
+  # Description: A consumer group name so multiple instances can share the stream load
+  consumerGroupName: ${OPIK_REDIS_EXPERIMENT_DENORM_CONSUMER_GROUP_NAME:-'experiment_denormalization'}
+  # Default: 100
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${OPIK_REDIS_EXPERIMENT_DENORM_CONSUMER_BATCH_SIZE:-100}
+  # Default: 500ms
+  # Description: How often the experiment denormalization consumer will check Redis for new messages
+  poolingInterval: ${OPIK_REDIS_EXPERIMENT_DENORM_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling duration)
+  longPollingDuration: ${OPIK_REDIS_EXPERIMENT_DENORM_LONG_POLLING_DURATION:-5s}
+  # Default: 1m
+  # Description: Debounce delay before an experiment is published to the denormalization stream. Each new write resets the timer.
+  debounceDelay: ${OPIK_EXPERIMENT_DENORM_DEBOUNCE_DELAY:-1m}
+  # Default: 4s
+  # Description: The time to wait for the denormalization scan job to finish before releasing the lock
+  jobLockTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_TIME:-4s}
+  # Default: 300ms
+  # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
+  jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
+  # Default: 1m
+  # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Time before a message is considered orphaned and eligible for claiming
+  pendingMessageDuration: ${OPIK_REDIS_EXPERIMENT_DENORM_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed messages (1-10)
+  maxRetries: ${OPIK_REDIS_EXPERIMENT_DENORM_MAX_RETRIES:-3}
+  # Default: 100
+  # Description: Maximum number of ZSET entries to read per page when flushing pending experiments (10-1000)
+  jobBatchSize: ${OPIK_EXPERIMENT_DENORM_JOB_BATCH_SIZE:-100}
+  # Default: 5s
+  # Description: Interval at which the denormalization job runs to flush pending experiments (min 1s)
+  jobInterval: ${OPIK_EXPERIMENT_DENORM_JOB_INTERVAL:-5s}
+  # Default: 10000
+  # Description: Maximum length of the Redis stream. Older entries are trimmed when this limit is exceeded.
+  streamMaxLen: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Number of entries to trim in a single operation when streamMaxLen is exceeded.
+  streamTrimLimit: ${OPIK_REDIS_EXPERIMENT_DENORM_STREAM_TRIM_LIMIT:-100}
+
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
 # prompts, feedback definitions, experiments, datasets and dataset items
@@ -348,6 +408,12 @@ onlineScoring:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10, global default)
   maxRetries: ${REDIS_SCORING_MAX_RETRIES:-3}
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: ${REDIS_SCORING_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: ${REDIS_SCORING_STREAM_TRIM_LIMIT:-100}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -357,6 +423,8 @@ onlineScoring:
   ## claimIntervalRatio: (optional) per stream claim interval ratio, overrides global value
   ## pendingMessageDuration: (optional) per stream pending message duration, overrides global value
   ## maxRetries: (optional) per stream max retries, overrides global value
+  ## streamMaxLen: (optional) per stream max length, overrides global streamMaxLen value
+  ## streamTrimLimit: (optional) per stream trim limit, overrides global streamTrimLimit value
   streams:
     - scorer: llm_as_judge
       streamName: stream_scoring_llm_as_judge
@@ -368,6 +436,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_LLM_AS_JUDGE_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_LLM_AS_JUDGE_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_LLM_AS_JUDGE_STREAM_TRIM_LIMIT:-}
     - scorer: user_defined_metric_python
       streamName: stream_scoring_user_defined_metric_python
       codec: java
@@ -378,6 +448,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
     - scorer: trace_thread_llm_as_judge
       streamName: stream_scoring_trace_thread_llm_as_judge
       codec: java
@@ -388,6 +460,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_TRACE_THREAD_LLM_AS_JUDGE_STREAM_TRIM_LIMIT:-}
     - scorer: trace_thread_user_defined_metric_python
       streamName: stream_scoring_trace_thread_user_defined_metric_python
       codec: java
@@ -398,6 +472,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
     - scorer: span_llm_as_judge
       streamName: stream_scoring_span_llm_as_judge
       codec: java
@@ -408,6 +484,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_STREAM_TRIM_LIMIT:-}
     - scorer: span_user_defined_metric_python
       streamName: stream_scoring_span_user_defined_metric_python
       codec: java
@@ -418,6 +496,8 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
+      streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
+      streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
 # Configuration for Dataset Export
 datasetExport:
@@ -448,6 +528,12 @@ datasetExport:
   # Default: 5m
   # Description: Time before export job message considered orphaned and eligible for claiming
   pendingMessageDuration: ${DATASET_EXPORT_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: ${DATASET_EXPORT_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: ${DATASET_EXPORT_STREAM_TRIM_LIMIT:-100}
   # Default: 24h
   # Description: Default time-to-live for exported CSV files before automatic cleanup
   defaultTtl: ${DATASET_EXPORT_DEFAULT_TTL:-24h}
@@ -684,6 +770,22 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Agent Configuration feature is enabled
+  agentConfigurationEnabled: ${TOGGLE_AGENT_CONFIGURATION_ENABLED:-"false"}
+
+# Local Runner configuration
+localRunner:
+  enabled: ${TOGGLE_RUNNERS_ENABLED:-false}
+  jobTimeout: ${OPIK_RUNNER_JOB_TIMEOUT:-30m}
+  maxPendingJobsPerRunner: ${OPIK_RUNNER_MAX_PENDING:-100}
+  heartbeatTtl: ${OPIK_RUNNER_HEARTBEAT_TTL:-15s}
+  nextJobPollTimeout: ${OPIK_RUNNER_NEXT_JOB_POLL_TIMEOUT:-10s}
+  deadRunnerPurgeTime: ${OPIK_RUNNER_DEAD_PURGE_HOURS:-24h}
+  completedJobTtl: ${OPIK_RUNNER_COMPLETED_JOB_TTL:-7d}
+  reaperLockDuration: ${OPIK_RUNNER_REAPER_LOCK_DURATION:-55s}
+  reaperLockWait: ${OPIK_RUNNER_REAPER_LOCK_WAIT:-5s}
+  nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -729,6 +831,12 @@ traceThreadConfig:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10)
   maxRetries: ${OPIK_REDIS_TRACE_THREAD_MAX_RETRIES:-3}
+  # Default: 100000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: ${OPIK_REDIS_TRACE_THREAD_STREAM_MAX_LEN:-100000}
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: ${OPIK_REDIS_TRACE_THREAD_STREAM_TRIM_LIMIT:-100}
 
 # Job timeout configuration
 jobTimeout:
@@ -801,6 +909,12 @@ webhook:
   # Default: 10m
   # Description: Time before message considered orphaned and eligible for claiming
   pendingMessageDuration: ${WEBHOOK_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 10000
+  # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
+  streamMaxLen: ${WEBHOOK_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
+  streamTrimLimit: ${WEBHOOK_STREAM_TRIM_LIMIT:-100}
   debouncing:
     # Default: true
     # Description: Whether or not webhook event debouncing is enabled

@@ -1,10 +1,15 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.events.ExperimentItemsCreated;
+import com.comet.opik.api.events.ExperimentItemsDeleted;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
@@ -18,9 +23,17 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.toSet;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -31,7 +44,10 @@ public class ExperimentItemService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull TraceDAO traceDAO;
+    private final @NonNull ProjectService projectService;
     private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull EventBus eventBus;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentItems),
@@ -45,9 +61,142 @@ public class ExperimentItemService {
                     userName);
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
-            return experimentItemDAO.insert(experimentItemsWithValidIds)
+
+            var experimentIds = experimentItemsWithValidIds.stream()
+                    .map(ExperimentItem::experimentId)
+                    .collect(Collectors.toUnmodifiableSet());
+
+            return resolveProjectIdFromProjectName(experimentItemsWithValidIds)
+                    .flatMap(this::populateProjectIdFromTraces)
+                    .flatMap(this::populateExecutionPolicy)
+                    .flatMap(experimentItemDAO::insert)
+                    .doOnSuccess(__ -> eventBus.post(new ExperimentItemsCreated(experimentIds, workspaceId, userName)))
                     .then();
         });
+    }
+
+    private Mono<Set<ExperimentItem>> resolveProjectIdFromProjectName(Set<ExperimentItem> experimentItems) {
+
+        // Extract project names from items that have projectName
+        var projectNames = experimentItems.stream()
+                .map(ExperimentItem::projectName)
+                .filter(Objects::nonNull)
+                .collect(toSet());
+
+        if (projectNames.isEmpty()) {
+            return Mono.just(experimentItems);
+        }
+
+        log.info("Resolving project_id for '{}' project names", projectNames.size());
+
+        return projectService.retrieveByNamesOrCreate(projectNames)
+                .map(projects -> {
+                    // Create case-insensitive map: projectName -> projectId
+                    var projectNameToIdMap = new TreeMap<String, UUID>(String.CASE_INSENSITIVE_ORDER);
+                    projects.forEach(project -> projectNameToIdMap.put(project.name(), project.id()));
+
+                    // Only update items that have a projectName in the map
+                    return experimentItems.stream()
+                            .map(item -> {
+                                if (item.projectName() != null
+                                        && projectNameToIdMap.containsKey(item.projectName())) {
+
+                                    UUID projectId = projectNameToIdMap.get(item.projectName());
+
+                                    log.debug("Resolved project_id '{}' for experiment item with project_name '{}'",
+                                            projectId, item.projectName());
+
+                                    return item.toBuilder()
+                                            .projectId(projectId)
+                                            .build();
+                                }
+                                return item;
+                            })
+                            .collect(toSet());
+                });
+    }
+
+    private Mono<Set<ExperimentItem>> populateProjectIdFromTraces(Set<ExperimentItem> experimentItems) {
+
+        // Find experiment items without project_id (and without projectName)
+        var itemsWithoutProjectId = experimentItems.stream()
+                .filter(item -> item.projectId() == null)
+                .toList();
+
+        if (itemsWithoutProjectId.isEmpty()) {
+            log.debug("All experiment items have project_id set, skipping trace lookup");
+            return Mono.just(experimentItems);
+        }
+
+        // Extract trace IDs that need project_id lookup
+        List<UUID> traceIds = itemsWithoutProjectId.stream()
+                .map(ExperimentItem::traceId)
+                .distinct()
+                .toList();
+
+        log.info("Looking up project_id for '{}' traces to populate '{}' experiment items",
+                traceIds.size(), itemsWithoutProjectId.size());
+
+        // Query traces to get their project IDs
+        return traceDAO.getProjectIdsByTraceIds(traceIds)
+                .map(traceToProjectMap -> {
+                    // Update experiment items with project_id from traces
+                    return experimentItems.stream()
+                            .map(item -> {
+                                if (isProjectResolved(traceToProjectMap, item)) {
+                                    UUID projectId = traceToProjectMap.get(item.traceId());
+
+                                    log.debug("Resolved project_id '{}' for experiment item with trace_id '{}'",
+                                            projectId, item.traceId());
+
+                                    return item.toBuilder()
+                                            .projectId(projectId)
+                                            .build();
+                                }
+                                return item;
+                            })
+                            .collect(toSet());
+                });
+    }
+
+    private Mono<Set<ExperimentItem>> populateExecutionPolicy(Set<ExperimentItem> experimentItems) {
+        var experimentIds = experimentItems.stream()
+                .map(ExperimentItem::experimentId)
+                .collect(toSet());
+
+        var datasetItemIds = experimentItems.stream()
+                .map(ExperimentItem::datasetItemId)
+                .collect(toSet());
+
+        return experimentService.getExecutionPolicies(experimentIds)
+                .flatMap(experimentInfoMap -> {
+                    var datasetVersionIds = experimentInfoMap.values().stream()
+                            .map(ExperimentDAO.ExperimentPolicyInfo::datasetVersionId)
+                            .filter(Objects::nonNull)
+                            .collect(toSet());
+
+                    return fetchItemPolicies(datasetItemIds, datasetVersionIds)
+                            .map(policiesByVersion -> experimentItems.stream()
+                                    .map(item -> ExecutionPolicyMapper.resolvePolicy(
+                                            item, experimentInfoMap, policiesByVersion))
+                                    .collect(toSet()));
+                });
+    }
+
+    private Mono<Map<UUID, Map<UUID, ExecutionPolicy>>> fetchItemPolicies(
+            Set<UUID> datasetItemIds, Set<UUID> datasetVersionIds) {
+        if (!featureFlags.isDatasetVersioningEnabled() || datasetVersionIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+        return datasetItemVersionDAO
+                .getExecutionPoliciesByDatasetItemIds(datasetItemIds, datasetVersionIds)
+                .collect(HashMap::new, (map, entry) -> map
+                        .computeIfAbsent(entry.datasetVersionId(), k -> new HashMap<>())
+                        .put(entry.datasetItemId(), entry.policy()));
+    }
+
+    private boolean isProjectResolved(Map<UUID, UUID> traceToProjectMap, ExperimentItem item) {
+        return item.projectId() == null && traceToProjectMap.containsKey(item.traceId());
     }
 
     private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
@@ -71,7 +220,7 @@ public class ExperimentItemService {
         Set<UUID> experimentIds = experimentItems
                 .stream()
                 .map(ExperimentItem::experimentId)
-                .collect(Collectors.toSet());
+                .collect(toSet());
 
         boolean allExperimentsBelongToWorkspace = Boolean.TRUE
                 .equals(experimentService.validateExperimentWorkspace(workspaceId, experimentIds)
@@ -92,7 +241,7 @@ public class ExperimentItemService {
         Set<UUID> datasetItemIds = experimentItems
                 .stream()
                 .map(ExperimentItem::datasetItemId)
-                .collect(Collectors.toSet());
+                .collect(toSet());
 
         boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
                 .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
@@ -152,6 +301,53 @@ public class ExperimentItemService {
                 "Argument 'ids' must not be empty");
 
         log.info("Deleting experiment items, count '{}'", ids.size());
-        return experimentItemDAO.delete(ids).then();
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+
+            return experimentItemDAO.getExperimentRefsByItemIds(ids, EnumSet.allOf(ExperimentStatus.class))
+                    .map(ExperimentTraceRef::experimentId)
+                    .collect(Collectors.toUnmodifiableSet())
+                    .flatMap(experimentIds -> experimentItemDAO.delete(ids)
+                            .doOnSuccess(__ -> {
+                                if (!experimentIds.isEmpty()) {
+                                    eventBus.post(new ExperimentItemsDeleted(experimentIds, workspaceId, userName));
+                                }
+                            }))
+                    .then();
+        });
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (traceIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsByTraceIds(traceIds, statuses);
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (itemIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsByItemIds(itemIds, statuses);
+    }
+
+    public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (spanIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.getExperimentRefsBySpanIds(spanIds, statuses);
+    }
+
+    public Flux<UUID> filterExperimentIdsByStatus(@NonNull Set<UUID> experimentIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (experimentIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return experimentItemDAO.filterExperimentIdsByStatus(experimentIds, statuses);
     }
 }

@@ -77,7 +77,7 @@ vi.mock("@/evaluation/models/modelsFactory", async (importOriginal) => {
       // For string IDs or undefined, return a new MockModel instance
       if (MockModelForFactory) {
         return new MockModelForFactory(
-          typeof model === "string" ? model : "gpt-4o"
+          typeof model === "string" ? model : "gpt-5-nano"
         );
       }
       // Fallback for edge cases
@@ -142,11 +142,21 @@ describe("evaluatePrompt", () => {
     };
 
     // Setup mock client
+    const createMockSpan = () => ({
+      data: { id: "span-123" },
+      update: vi.fn(),
+      end: vi.fn(),
+      span: vi.fn().mockImplementation(createMockSpan),
+      score: vi.fn(),
+    });
+
     mockClient = {
       createExperiment: vi.fn().mockResolvedValue(mockExperiment),
       trace: vi.fn().mockReturnValue({
         data: { id: "trace-123" },
         update: vi.fn(),
+        span: vi.fn().mockImplementation(createMockSpan),
+        score: vi.fn(),
       }),
       flush: vi.fn().mockResolvedValue(undefined),
     } as unknown as Opik;

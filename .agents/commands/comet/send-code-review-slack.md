@@ -4,7 +4,7 @@
 
 ## Overview
 
-Send a formatted Slack message to the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch.
+Send a formatted Slack message to the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python, TypeScript). Automatically extracts information from the GitHub PR for the current branch.
 
 - **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and sends it via Slack MCP.
 
@@ -13,7 +13,7 @@ This workflow will:
 - Find the GitHub PR for the current branch
 - Extract Jira ticket from PR title
 - Extract test environment link from PR description
-- Extract component summaries (FE, BE, Python) from PR description
+- Extract component summaries (FE, BE, Python, TypeScript) from PR description
 - Prompt only for missing information
 - Allow user to customize the message slightly
 - Format the message according to the code review template
@@ -33,12 +33,13 @@ This workflow will:
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
+- **TypeScript summary**: Extracted from PR description (looks for TypeScript/TypeScript SDK/TS mentions) or prompted if not found
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
 - **Slack MCP**: Required - uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`)
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
-  - See `.agents/SLACK_MCP_SETUP.md` for complete setup instructions
+  - See `.agents/docs/SLACK_MCP_SETUP.md` for complete setup instructions
   - Requires Docker to be installed and running
 
 ---
@@ -48,7 +49,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check GitHub MCP**: Test GitHub MCP availability by attempting to fetch repository info using `get_file_contents` for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs GitHub MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
@@ -59,7 +60,7 @@ This workflow will:
   - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
   - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
   - If Slack MCP is not available or tool call fails: 
-    > "Slack MCP is not available. Please configure Slack MCP according to `.agents/SLACK_MCP_SETUP.md` and restart Cursor IDE."
+    > "Slack MCP is not available. Please configure Slack MCP according to `.agents/docs/SLACK_MCP_SETUP.md` and restart Cursor IDE."
     > Stop here.
 
 ---
@@ -83,7 +84,7 @@ This workflow will:
 
 - **Extract Jira ticket from PR title**:
   - Parse PR title for pattern `[OPIK-\d+]` or `[issue-\d+]` or `[NA]`
-  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] Add endpoint`)
+  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`)
   - If not found in title, check PR description "## Issues" section for `OPIK-\d+` pattern
   - If still not found, prompt: "Jira ticket not found in PR. Enter Jira ticket number (e.g., OPIK-1234):"
   - Validate format and store
@@ -97,6 +98,15 @@ This workflow will:
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
+    ```bash
+    # Issue comments (general PR comments, including deployment bot messages)
+    gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
+
+    # Review comments (inline code comments)
+    gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+    ```
+    > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the deployment bot comment with the test environment link may end up on page 2 and get silently missed.
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
@@ -116,10 +126,15 @@ This workflow will:
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
   
-  - **Python summary**: 
+  - **Python summary**:
     - Look for mentions of "Python", "Python SDK", "SDK", or Python-related changes in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip):"
+
+  - **TypeScript summary**:
+    - Look for mentions of "TypeScript", "TypeScript SDK", "TS", "TS SDK", or `[TS]` tag in PR description
+    - Extract relevant one-line summary from "## Details" section or component-specific mentions
+    - If not found, prompt: "TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip):"
 
 - **Store extracted information**: Keep all extracted and prompted values for message formatting
 
@@ -154,6 +169,7 @@ This workflow will:
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
+  :typescript: typescript summary (optional): {{description_in_one_line}}
   ```
 
 - **Message structure**:
@@ -177,6 +193,7 @@ This workflow will:
   :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
+  :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
   ```
 
 - **Note about videos**: Slack has limitations on sending videos directly. Videos should be added to the PR description, and the link can be shared in Slack. For easier communication with the product team, consider using the `cursor generate-code-review-slack-command` command to generate a copiable Slack command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing).
@@ -186,7 +203,7 @@ This workflow will:
 ### 6. Send Slack Message
 
 - **Use Slack MCP tool `conversations_add_message`** from `ghcr.io/korotovsky/slack-mcp-server`
-- This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.agents/SLACK_MCP_SETUP.md`
+- This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.agents/docs/SLACK_MCP_SETUP.md`
 - The server must be configured with:
   - `mcp-server --transport stdio` in the Docker args (required for MCP protocol)
   - `SLACK_MCP_ADD_MESSAGE_TOOL=true` environment variable (required to enable the tool - disabled by default for safety)
@@ -199,12 +216,12 @@ This workflow will:
   - If successful: Show success message with message timestamp/ID if provided
   - If failed: Show error message and stop
   - Common errors:
-    - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.agents/SLACK_MCP_SETUP.md`)
-    - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.agents/SLACK_MCP_SETUP.md`
+    - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.agents/docs/SLACK_MCP_SETUP.md`)
+    - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.agents/docs/SLACK_MCP_SETUP.md`
     - Channel not found: Verify channel name `#code-review` exists and you have access
-    - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
+    - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.agents/docs/SLACK_MCP_SETUP.md`)
     - Docker errors: Ensure Docker is running and can pull the image `ghcr.io/korotovsky/slack-mcp-server:latest`
-    - MCP not configured: Verify Slack MCP is properly configured according to `.agents/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
+    - MCP not configured: Verify Slack MCP is properly configured according to `.agents/docs/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
 
 ---
 
@@ -223,29 +240,29 @@ This workflow will:
 ### **Slack MCP Errors**
 
 - **Slack MCP unavailable**: 
-  - Check if Slack MCP server is properly configured according to `.agents/SLACK_MCP_SETUP.md`
+  - Check if Slack MCP server is properly configured according to `.agents/docs/SLACK_MCP_SETUP.md`
   - Verify Docker is installed and running (`docker --version`)
   - Verify the Docker image can be pulled: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Restart Cursor IDE after configuring MCP
 - **Slack MCP tool not found**: 
   - Verify `conversations_add_message` tool is available from `ghcr.io/korotovsky/slack-mcp-server`
-  - Ensure `mcp-server --transport stdio` is included in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
-  - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
+  - Ensure `mcp-server --transport stdio` is included in Docker args (see `.agents/docs/SLACK_MCP_SETUP.md`)
+  - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.agents/docs/SLACK_MCP_SETUP.md`)
   - Check Cursor Settings > Features > MCP for error messages
   - Ensure MCP server is running and properly configured
   - Check Docker logs if the container fails to start
 - **MCP authentication errors**: 
-  - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.agents/SLACK_MCP_SETUP.md`
+  - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.agents/docs/SLACK_MCP_SETUP.md`
   - Verify token is not expired
   - Reinstall Slack app to workspace if needed
-  - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.agents/SLACK_MCP_SETUP.md`
+  - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.agents/docs/SLACK_MCP_SETUP.md`
 - **Docker errors**: 
   - Ensure Docker is running: `docker ps`
   - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Verify Docker has network access to reach Slack API
 - **Channel access errors**: 
   - Verify channel name `#code-review` exists
-  - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
+  - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/docs/SLACK_MCP_SETUP.md`)
   - Check that you are a member of the channel (join it if needed)
   - Try using channel ID instead of name if issues persist
 
@@ -290,7 +307,7 @@ The command is successful when:
 
 - **GitHub MCP Required**: Uses GitHub MCP to fetch PR information automatically
 - **Slack MCP Required**: Uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`) for sending messages
-  - Configure according to `.agents/SLACK_MCP_SETUP.md`
+  - Configure according to `.agents/docs/SLACK_MCP_SETUP.md`
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) - messages are posted as your authenticated user account
   - Uses `conversations_add_message` tool with `channel_id` and `payload` parameters
   - Uses `channels_list` tool to verify MCP availability
@@ -305,7 +322,7 @@ The command is successful when:
 - **Channel**: Message is always sent to `#code-review` channel
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
-- **MCP Configuration**: Slack MCP must be configured before using this command (see `.agents/SLACK_MCP_SETUP.md` for detailed setup)
+- **MCP Configuration**: Slack MCP must be configured before using this command (see `.agents/docs/SLACK_MCP_SETUP.md` for detailed setup)
 - **Video limitations**: Slack cannot send videos directly. Use `cursor generate-code-review-slack-command` to generate a copiable command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing)
 
 ---
@@ -315,7 +332,7 @@ The command is successful when:
 ### Setup and Usage
 
 ```bash
-# 1. Configure Slack MCP according to .agents/SLACK_MCP_SETUP.md
+# 1. Configure Slack MCP according to .agents/docs/SLACK_MCP_SETUP.md
 #    - Follow the complete setup guide for configuring the Slack MCP server
 #    - Add your User OAuth Token (xoxp-...) to the Docker args
 #    - Ensure 'mcp-server --transport stdio' is included in Docker args
@@ -330,12 +347,13 @@ cursor send-code-review-slack
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
-# 2. Extract Jira ticket from PR title: [OPIK-1234] [BE] [FE] Add metrics dashboard
+# 2. Extract Jira ticket from PR title: [OPIK-1234] [BE] feat(api): add metrics dashboard
 # 3. Extract test env from PR comments or description: https://pr-1234.dev.comet.com (from PR comments or Testing section)
 # 4. Extract summaries from PR description:
 #    - FE: Added new metrics dashboard UI (from Details section)
 #    - BE: Implemented metrics aggregation endpoint (from Details section)
 #    - Python: (not found, prompts user)
+#    - TypeScript: (not found, prompts user)
 # 5. Prompt for message customization (optional)
 # 6. Format message according to template (with greeting and Jira link)
 # 7. Send formatted message to Slack via conversations_add_message MCP tool (posts as user account)
@@ -349,6 +367,7 @@ cursor send-code-review-slack
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
+# :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
 ```
 
 ### Example with Missing Information
@@ -364,10 +383,10 @@ cursor send-code-review-slack
 # Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip): Implemented metrics endpoint
 # Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
+# TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): [Enter pressed - using default]
 ```
 
 ---
 
 **End Command**
-

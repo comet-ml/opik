@@ -1,6 +1,5 @@
 """Smoke test functionality for Opik CLI."""
 
-import os
 import random
 import string
 import tempfile
@@ -16,6 +15,7 @@ from rich.console import Console
 
 import opik
 from opik import Attachment, opik_context, track
+from . import rich_representation
 
 from .opik_logo import OPIK_LOGO_PNG
 
@@ -171,10 +171,9 @@ def run_smoke_test(
     trace_name = f"smoke-test-{uuid.uuid4().hex[:8]}"
 
     try:
-        console.print("[green]Starting Opik smoke test...[/green]")
+        rich_representation.print_header("Starting Opik smoke test...")
 
         # Create Opik client
-        os.environ["OPIK_PROJECT_NAME"] = project_name
         client = opik.Opik(
             project_name=project_name,
             workspace=workspace,

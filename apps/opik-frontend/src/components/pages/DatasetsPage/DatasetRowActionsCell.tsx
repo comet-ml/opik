@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DatasetRowActionsCell: React.FunctionComponent<
   CellContext<Dataset, unknown>
@@ -38,6 +40,10 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   const isDatasetExportEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_EXPORT_ENABLED,
   );
+
+  const {
+    permissions: { canDeleteDatasets },
+  } = usePermissions();
 
   const deleteDatasetHandler = useCallback(() => {
     deleteDataset({
@@ -84,16 +90,18 @@ export const DatasetRowActionsCell: React.FunctionComponent<
         setOpen={setOpen}
         dataset={dataset}
       />
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 1}
-        setOpen={setOpen}
-        onConfirm={deleteDatasetHandler}
-        title="Delete dataset"
-        description="Deleting this dataset will also remove all its items. Any experiments linked to it will be moved to a “Deleted dataset” group. This action can’t be undone. Are you sure you want to continue?"
-        confirmText="Delete dataset"
-        confirmButtonVariant="destructive"
-      />
+      {canDeleteDatasets && (
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 1}
+          setOpen={setOpen}
+          onConfirm={deleteDatasetHandler}
+          title="Delete dataset"
+          description="Deleting this dataset will also remove all its items. Any experiments linked to it will be moved to a “Deleted dataset” group. This action can’t be undone. Are you sure you want to continue?"
+          confirmText="Delete dataset"
+          confirmButtonVariant="destructive"
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="minimal" size="icon" className="-mr-2.5">
@@ -120,15 +128,21 @@ export const DatasetRowActionsCell: React.FunctionComponent<
               Download
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {canDeleteDatasets && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(1);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>

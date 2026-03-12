@@ -3,12 +3,12 @@ import floor from "lodash/floor";
 import isNull from "lodash/isNull";
 import { formatNumberInK } from "@/lib/utils";
 
-const MIN_DISPLAYED_COST = 0.001;
+const MIN_DISPLAYED_COST = 0.01;
 const CURRENCY = "$";
-const PRECISION = 3;
+const PRECISION = 2;
 
 export type FormatCostOptions = {
-  modifier?: "short" | "kFormat";
+  modifier?: "short" | "kFormat" | "full";
   noValue?: string;
   precision?: number;
 };
@@ -23,6 +23,10 @@ export const formatCost = (
 
   const numValue = Number(value);
 
+  if (modifier === "full") {
+    return `${CURRENCY}${value}`;
+  }
+
   if (numValue < MIN_DISPLAYED_COST) {
     return `<${CURRENCY}${MIN_DISPLAYED_COST}`;
   }
@@ -31,9 +35,5 @@ export const formatCost = (
     return `${CURRENCY}${formatNumberInK(numValue, precision)}`;
   }
 
-  if (modifier === "short") {
-    return `${CURRENCY}${floor(numValue, precision)}`;
-  }
-
-  return `${CURRENCY}${value}`;
+  return `${CURRENCY}${floor(numValue, precision)}`;
 };

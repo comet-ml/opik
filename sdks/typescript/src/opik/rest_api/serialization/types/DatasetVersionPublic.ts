@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { EvaluatorItemPublic } from "./EvaluatorItemPublic.js";
+import { ExecutionPolicyPublic } from "./ExecutionPolicyPublic.js";
 
 export const DatasetVersionPublic: core.serialization.ObjectSchema<
     serializers.DatasetVersionPublic.Raw,
@@ -20,6 +22,8 @@ export const DatasetVersionPublic: core.serialization.ObjectSchema<
     itemsDeleted: core.serialization.property("items_deleted", core.serialization.number().optional()),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
+    evaluators: core.serialization.list(EvaluatorItemPublic).optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyPublic.optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -40,6 +44,8 @@ export declare namespace DatasetVersionPublic {
         items_deleted?: number | null;
         change_description?: string | null;
         metadata?: Record<string, string> | null;
+        evaluators?: EvaluatorItemPublic.Raw[] | null;
+        execution_policy?: ExecutionPolicyPublic.Raw | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

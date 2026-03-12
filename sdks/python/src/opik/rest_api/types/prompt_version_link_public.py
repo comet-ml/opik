@@ -7,7 +7,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
 class PromptVersionLinkPublic(UniversalBaseModel):
-    id: str
+    prompt_version_id: typing.Optional[str] = None
     commit: typing.Optional[str] = None
     prompt_id: typing.Optional[str] = None
     prompt_name: typing.Optional[str] = None

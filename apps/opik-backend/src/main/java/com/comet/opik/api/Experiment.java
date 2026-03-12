@@ -35,6 +35,7 @@ public record Experiment(
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags") @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) ExperimentType type,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) EvaluationMethod evaluationMethod,
         @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) UUID optimizationId,
         @JsonView({
                 Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScoreAverage> feedbackScores,
@@ -64,7 +65,13 @@ public record Experiment(
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(description = "ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version.") UUID datasetVersionId,
         @JsonView({
-                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the dataset version this experiment is linked to.") DatasetVersionSummary datasetVersionSummary){
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Summary of the dataset version this experiment is linked to.") DatasetVersionSummary datasetVersionSummary,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.") BigDecimal passRate,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items that passed for evaluation suite experiments. Null for regular experiments.") Long passedCount,
+        @JsonView({
+                Experiment.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items for evaluation suite experiments. Null for regular experiments.") Long totalCount){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(

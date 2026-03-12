@@ -5,10 +5,15 @@ from .api_objects.annotation_queue import (
 )
 from .api_objects.attachment import Attachment
 from .api_objects.dataset import Dataset
+from .api_objects.dataset.evaluation_suite import EvaluationSuite
+from .api_objects.dataset.evaluation_suite.types import EvaluationSuiteResult
 from .api_objects.experiment.experiment_item import (
     ExperimentItemContent,
     ExperimentItemReferences,
 )
+from .api_objects.agent_config import AgentConfig, Blueprint
+from .api_objects.agent_config.decorator import agent_config_decorator as agent_config
+from .api_objects.agent_config.context import agent_config_context
 from .api_objects.opik_client import Opik
 from .api_objects.prompt import Prompt, ChatPrompt
 from .api_objects.prompt.types import PromptType
@@ -58,6 +63,8 @@ __all__ = [
     "Trace",
     "Span",
     "Dataset",
+    "EvaluationSuite",
+    "EvaluationSuiteResult",
     "llm_unit",
     "configure",
     "Prompt",
@@ -72,6 +79,10 @@ __all__ = [
     "SimulatedUser",
     "run_simulation",
     "record_traces_locally",
+    "AgentConfig",
+    "Blueprint",
+    "agent_config",
+    "agent_config_context",
 ]
 
 sagemaker_auth.setup_aws_sagemaker_session_hook()

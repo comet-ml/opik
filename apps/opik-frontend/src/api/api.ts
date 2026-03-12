@@ -37,6 +37,7 @@ export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
 export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
   "/v1/private/playground/evaluations/";
 export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
+export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
@@ -47,6 +48,7 @@ export const PROVIDERS_KEYS_KEY = "provider-keys";
 export const ALERTS_KEY = "alerts";
 export const AUTOMATIONS_KEY = "automations";
 export const PROJECTS_KEY = "projects";
+export const PROJECT_KEY = "project";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
 export const OPTIMIZATIONS_KEY = "optimizations";
 export const OPTIMIZATION_KEY = "optimization";
@@ -56,6 +58,7 @@ export const WORKSPACE_CONFIG_KEY = "workspace-config";
 export const TRACE_AI_ASSISTANT_KEY = "trace-analyzer-history";
 export const DASHBOARDS_KEY = "dashboards";
 export const DASHBOARD_KEY = "dashboard";
+export const AGENT_CONFIGS_KEY = "agent-configs";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

@@ -67,10 +67,12 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
@@ -119,6 +121,7 @@ public class SpansResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -151,6 +154,7 @@ public class SpansResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(sortingFields)
                 .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
@@ -354,6 +358,7 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
             @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
             @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
@@ -369,6 +374,7 @@ public class SpansResource {
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(List.of())
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -388,11 +394,12 @@ public class SpansResource {
     @GET
     @Path("/feedback-scores/names")
     @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
-            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
-            @QueryParam("type") SpanType type) {
+            @QueryParam("type") SpanType type,
+            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
 
         if (projectId == null) {
             throw new BadRequestException("project_id must be provided");
@@ -403,7 +410,7 @@ public class SpansResource {
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
                 projectId, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getSpanFeedbackScoreNames(projectId, type)
+                .getSpanFeedbackScoreNames(projectId, type, excludeCategoryNames)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by project_id '{}', on workspaceId '{}'",
@@ -544,4 +551,5 @@ public class SpansResource {
 
         return Response.noContent().build();
     }
+
 }

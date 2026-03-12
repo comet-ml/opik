@@ -32,10 +32,20 @@ const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  COLUMN_ID_ID,
   "prompt",
   "objective_name",
   "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  "optimizer",
+  "prompt",
+  "examples",
+  "objective_name",
+  "created_at",
+  "created_by",
 ];
 
 const DEFAULT_SORTING: ColumnSort[] = [{ id: COLUMN_ID_ID, desc: false }];
@@ -74,7 +84,7 @@ export const useCompareOptimizationsData = () => {
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

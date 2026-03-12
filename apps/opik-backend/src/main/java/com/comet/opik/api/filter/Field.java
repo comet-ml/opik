@@ -26,6 +26,7 @@ public interface Field {
     String SPAN_FEEDBACK_SCORES_QUERY_PARAM = "span_feedback_scores";
     String EXPERIMENT_SCORES_QUERY_PARAM = "experiment_scores";
     String DURATION_QUERY_PARAM = "duration";
+    String TTFT_QUERY_PARAM = "ttft";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String DATASET_ID_QUERY_PARAM = "dataset_id";
     String PROJECT_ID_QUERY_PARAM = "project_id";
@@ -42,6 +43,7 @@ public interface Field {
     String GUARDRAILS_QUERY_PARAM = "guardrails";
     String VISIBILITY_MODE_QUERY_PARAM = "visibility_mode";
     String ERROR_INFO_QUERY_PARAM = "error_info";
+    String ERROR_TYPE_QUERY_PARAM = "error_type";
     String STATUS_QUERY_PARAM = "status";
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
@@ -62,6 +64,7 @@ public interface Field {
     String COMMIT_QUERY_PARAM = "commit";
     String TEMPLATE_QUERY_PARAM = "template";
     String CHANGE_DESCRIPTION_QUERY_PARAM = "change_description";
+    String SCOPE_QUERY_PARAM = "scope";
 
     @JsonValue
     String getQueryParamField();

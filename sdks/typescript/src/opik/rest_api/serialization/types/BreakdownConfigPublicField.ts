@@ -7,8 +7,27 @@ import type * as serializers from "../index.js";
 export const BreakdownConfigPublicField: core.serialization.Schema<
     serializers.BreakdownConfigPublicField.Raw,
     OpikApi.BreakdownConfigPublicField
-> = core.serialization.enum_(["none", "tags", "metadata", "name", "error_info", "model", "provider", "type"]);
+> = core.serialization.enum_([
+    "none",
+    "tags",
+    "metadata",
+    "name",
+    "error_info",
+    "error_type",
+    "model",
+    "provider",
+    "type",
+]);
 
 export declare namespace BreakdownConfigPublicField {
-    export type Raw = "none" | "tags" | "metadata" | "name" | "error_info" | "model" | "provider" | "type";
+    export type Raw =
+        | "none"
+        | "tags"
+        | "metadata"
+        | "name"
+        | "error_info"
+        | "error_type"
+        | "model"
+        | "provider"
+        | "type";
 }

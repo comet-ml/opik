@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .dataset_public_status import DatasetPublicStatus
+from .dataset_public_type import DatasetPublicType
 from .dataset_public_visibility import DatasetPublicVisibility
 from .dataset_version_summary_public import DatasetVersionSummaryPublic
 
@@ -13,6 +14,7 @@ from .dataset_version_summary_public import DatasetVersionSummaryPublic
 class DatasetPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: str
+    type: typing.Optional[DatasetPublicType] = None
     visibility: typing.Optional[DatasetPublicVisibility] = None
     tags: typing.Optional[typing.List[str]] = None
     description: typing.Optional[str] = None

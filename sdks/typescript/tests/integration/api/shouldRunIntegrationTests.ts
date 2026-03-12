@@ -63,3 +63,17 @@ export function getIntegrationTestStatus(): string {
 
   return "✅ Running integration tests with real API key against cloud";
 }
+
+/**
+ * Check if OpenAI API key is available for tests that require it.
+ */
+export function hasOpenAiApiKey(): boolean {
+  return !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.length > 0;
+}
+
+/**
+ * Check if Anthropic API key is available for tests that require it.
+ */
+export function hasAnthropicApiKey(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY;
+}

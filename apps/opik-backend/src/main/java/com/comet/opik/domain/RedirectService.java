@@ -31,7 +31,7 @@ public interface RedirectService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class RedirectServiceImpl implements RedirectService {
 
-    private static final String PROJECT_REDIRECT_URL = "%s/%s/projects/%s/traces";
+    private static final String TRACE_REDIRECT_URL = "%s/%s/projects/%s/traces?tab=logs&logsType=traces&trace=%s";
     private static final String DATASET_REDIRECT_URL = "%s/%s/datasets/%s/items";
     private static final String EXPERIMENT_REDIRECT_URL = "%s/%s/experiments/%s/compare?experiments=%s";
     private static final String OPTIMIZATION_REDIRECT_URL = "%s/%s/optimizations/%s/compare?optimizations=%s";
@@ -48,8 +48,8 @@ class RedirectServiceImpl implements RedirectService {
                 .orElseGet(() -> workspaceNameService.getWorkspaceName(
                         traceDetails.workspaceId(), getReactBaseUrl(opikBEPath)));
 
-        return PROJECT_REDIRECT_URL.formatted(feBaseUrl(opikBEPath), resolvedWorkspaceName,
-                traceDetails.projectId());
+        return TRACE_REDIRECT_URL.formatted(feBaseUrl(opikBEPath), resolvedWorkspaceName,
+                traceDetails.projectId(), traceId);
     }
 
     @Override

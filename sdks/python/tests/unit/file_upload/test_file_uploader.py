@@ -20,7 +20,9 @@ from . import conftest
 
 @pytest.fixture
 def file_to_upload(attachment):
-    return upload_options.file_upload_options_from_attachment(attachment)
+    return upload_options.file_upload_options_from_attachment(
+        attachment, on_upload_failed=None, on_upload_success=None
+    )
 
 
 def test_upload_attachment__s3(file_to_upload, rest_client_s3, respx_mock):
@@ -105,7 +107,9 @@ def test_upload_attachment__file_deleted_after_upload_if_requested(
     attachment_to_be_deleted, rest_client_local, respx_mock
 ):
     file_to_upload = upload_options.file_upload_options_from_attachment(
-        attachment_to_be_deleted
+        attachment_to_be_deleted,
+        on_upload_failed=None,
+        on_upload_success=None,
     )
 
     rx_url = re.compile("https://localhost:8080/bucket/*")

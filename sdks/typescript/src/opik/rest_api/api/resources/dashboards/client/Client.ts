@@ -46,12 +46,13 @@ export class DashboardsClient {
         request: OpikApi.FindDashboardsRequest = {},
         requestOptions?: DashboardsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPagePublic>> {
-        const { page, size, name, sorting } = request;
+        const { page, size, name, sorting, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
             name,
             sorting,
+            filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,

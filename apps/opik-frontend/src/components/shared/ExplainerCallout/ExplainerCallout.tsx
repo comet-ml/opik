@@ -1,5 +1,5 @@
 import React from "react";
-import { Info, SquareArrowOutUpRight, X } from "lucide-react";
+import { ExternalLink, Info, X } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ const ExplainerCallout: React.FC<ExplainerCalloutProps> = ({
               rel="noreferrer"
             >
               Read more
-              <SquareArrowOutUpRight className="ml-0.5 size-3 shrink-0" />
+              <ExternalLink className="ml-0.5 size-3 shrink-0" />
             </a>
           </Button>
         )}

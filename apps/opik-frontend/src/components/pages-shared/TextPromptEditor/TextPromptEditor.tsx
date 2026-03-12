@@ -12,6 +12,7 @@ interface TextPromptEditorProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  labelClassName?: string;
   placeholder?: string;
   showDescription?: boolean;
   currentImages?: string[];
@@ -23,6 +24,7 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
   value,
   onChange,
   label = "Prompt",
+  labelClassName,
   placeholder = "Prompt",
   showDescription = true,
   currentImages = [],
@@ -34,7 +36,9 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
   return (
     <div className="flex flex-col gap-2 pb-4">
       <div className="flex items-center justify-between gap-0.5">
-        <Label htmlFor="template">{label}</Label>
+        <Label htmlFor="template" className={labelClassName}>
+          {label}
+        </Label>
         <Button
           variant="ghost"
           size="sm"

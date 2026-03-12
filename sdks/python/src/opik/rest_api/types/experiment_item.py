@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
+from .execution_policy import ExecutionPolicy
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .feedback_score import FeedbackScore
 from .json_list_string import JsonListString
@@ -16,6 +17,8 @@ class ExperimentItem(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
+    project_id: typing.Optional[str] = None
+    project_name: typing.Optional[str] = None
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
@@ -28,6 +31,8 @@ class ExperimentItem(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     trace_visibility_mode: typing.Optional[ExperimentItemTraceVisibilityMode] = None
+    description: typing.Optional[str] = None
+    execution_policy: typing.Optional[ExecutionPolicy] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

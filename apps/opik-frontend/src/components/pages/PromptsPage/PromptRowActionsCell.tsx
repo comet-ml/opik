@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Prompt } from "@/types/prompts";
 import usePromptDeleteMutation from "@/api/prompts/usePromptDeleteMutation";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const EDIT_KEY = 1;
 const DELETE_KEY = 2;
@@ -23,6 +25,10 @@ export const PromptRowActionsCell: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const prompt = context.row.original;
   const [open, setOpen] = useState<number | boolean>(false);
+
+  const {
+    permissions: { canDeletePrompts },
+  } = usePermissions();
 
   const promptDeleteMutation = usePromptDeleteMutation();
 
@@ -74,16 +80,21 @@ export const PromptRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(DELETE_KEY);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {canDeletePrompts && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(DELETE_KEY);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>

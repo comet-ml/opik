@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic.js";
+import { ExperimentPublicEvaluationMethod } from "./ExperimentPublicEvaluationMethod.js";
 import { ExperimentPublicStatus } from "./ExperimentPublicStatus.js";
 import { ExperimentPublicType } from "./ExperimentPublicType.js";
 import { ExperimentScorePublic } from "./ExperimentScorePublic.js";
@@ -26,6 +27,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     metadata: JsonListStringPublic.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
     type: ExperimentPublicType.optional(),
+    evaluationMethod: core.serialization.property("evaluation_method", ExperimentPublicEvaluationMethod.optional()),
     optimizationId: core.serialization.property("optimization_id", core.serialization.string().optional()),
     feedbackScores: core.serialization.property(
         "feedback_scores",
@@ -59,6 +61,9 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
         "dataset_version_summary",
         DatasetVersionSummaryPublic.optional(),
     ),
+    passRate: core.serialization.property("pass_rate", core.serialization.number().optional()),
+    passedCount: core.serialization.property("passed_count", core.serialization.number().optional()),
+    totalCount: core.serialization.property("total_count", core.serialization.number().optional()),
 });
 
 export declare namespace ExperimentPublic {
@@ -72,6 +77,7 @@ export declare namespace ExperimentPublic {
         metadata?: JsonListStringPublic.Raw | null;
         tags?: string[] | null;
         type?: ExperimentPublicType.Raw | null;
+        evaluation_method?: ExperimentPublicEvaluationMethod.Raw | null;
         optimization_id?: string | null;
         feedback_scores?: FeedbackScoreAveragePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
@@ -90,5 +96,8 @@ export declare namespace ExperimentPublic {
         prompt_versions?: PromptVersionLinkPublic.Raw[] | null;
         dataset_version_id?: string | null;
         dataset_version_summary?: DatasetVersionSummaryPublic.Raw | null;
+        pass_rate?: number | null;
+        passed_count?: number | null;
+        total_count?: number | null;
     }
 }

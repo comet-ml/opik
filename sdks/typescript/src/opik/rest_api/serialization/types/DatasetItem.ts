@@ -4,6 +4,8 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { DatasetItemSource } from "./DatasetItemSource.js";
+import { EvaluatorItem } from "./EvaluatorItem.js";
+import { ExecutionPolicy } from "./ExecutionPolicy.js";
 import { ExperimentItem } from "./ExperimentItem.js";
 import { JsonNode } from "./JsonNode.js";
 
@@ -15,7 +17,10 @@ export const DatasetItem: core.serialization.ObjectSchema<serializers.DatasetIte
         spanId: core.serialization.property("span_id", core.serialization.string().optional()),
         source: DatasetItemSource,
         data: JsonNode,
+        description: core.serialization.string().optional(),
         tags: core.serialization.list(core.serialization.string()).optional(),
+        evaluators: core.serialization.list(EvaluatorItem).optional(),
+        executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
         experimentItems: core.serialization.property(
             "experiment_items",
             core.serialization.list(ExperimentItem).optional(),
@@ -35,7 +40,10 @@ export declare namespace DatasetItem {
         span_id?: string | null;
         source: DatasetItemSource.Raw;
         data: JsonNode.Raw;
+        description?: string | null;
         tags?: string[] | null;
+        evaluators?: EvaluatorItem.Raw[] | null;
+        execution_policy?: ExecutionPolicy.Raw | null;
         experiment_items?: ExperimentItem.Raw[] | null;
         dataset_id?: string | null;
         created_at?: string | null;

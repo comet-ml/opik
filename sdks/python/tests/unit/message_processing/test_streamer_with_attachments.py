@@ -17,7 +17,7 @@ from opik.message_processing.preprocessing import constants
 
 
 @pytest.fixture
-def streamer_with_attachments_enabled(fake_file_upload_preprocessor):
+def streamer_with_attachments_enabled(fake_file_upload_manager):
     """Create a streamer with attachment extraction enabled."""
     tested = None
     try:
@@ -27,8 +27,9 @@ def streamer_with_attachments_enabled(fake_file_upload_preprocessor):
             n_consumers=1,
             use_batching=True,
             use_attachment_extraction=True,
-            upload_preprocessor=fake_file_upload_preprocessor,
+            file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=mock.Mock(),
         )
 
         yield tested, mock_message_processor
@@ -38,7 +39,7 @@ def streamer_with_attachments_enabled(fake_file_upload_preprocessor):
 
 
 @pytest.fixture
-def streamer_with_attachments_disabled(fake_file_upload_preprocessor):
+def streamer_with_attachments_disabled(fake_file_upload_manager):
     """Create a streamer with attachment extraction disabled."""
     tested = None
     try:
@@ -48,8 +49,9 @@ def streamer_with_attachments_disabled(fake_file_upload_preprocessor):
             n_consumers=1,
             use_batching=True,
             use_attachment_extraction=False,
-            upload_preprocessor=fake_file_upload_preprocessor,
+            file_uploader=fake_file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=mock.Mock(),
         )
 
         yield tested, mock_message_processor

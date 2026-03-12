@@ -123,6 +123,7 @@ jobs:
       - name: "🔨 Build and start Opik server"
         env:
           OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
         run: |
           echo "::group::Building Opik from branch: ${{ github.ref_name }}"
           cd ${{ github.workspace }}

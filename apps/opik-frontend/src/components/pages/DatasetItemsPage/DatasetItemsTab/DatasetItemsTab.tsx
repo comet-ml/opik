@@ -53,7 +53,8 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import Loader from "@/components/shared/Loader/Loader";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
   generateActionsColumDef,
@@ -385,14 +386,14 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
+      cell: TimeCell as never,
     });
 
     retVal.push({
       id: "last_updated_at",
       label: "Last updated",
       type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.last_updated_at),
+      cell: TimeCell as never,
     });
 
     retVal.push({
@@ -526,7 +527,11 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     selectedRows.length < totalCount;
 
   if (isPending) {
-    return null;
+    return (
+      <div className="flex items-center justify-center pt-12">
+        <Loader />
+      </div>
+    );
   }
 
   return (

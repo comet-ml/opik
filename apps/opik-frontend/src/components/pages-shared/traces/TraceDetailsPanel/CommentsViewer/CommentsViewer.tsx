@@ -1,20 +1,16 @@
 import React from "react";
 import { Span, Trace } from "@/types/traces";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import UserCommentForm from "../../UserComment/UserCommentForm";
 import useTraceCommentsBatchDeleteMutation from "@/api/traces/useTraceCommentsBatchDeleteMutation";
 import useSpanCommentsBatchDeleteMutation from "@/api/traces/useSpanCommentsBatchDeleteMutation";
 import useCreateSpanCommentMutation from "@/api/traces/useCreateSpanCommentMutation";
 import useCreateTraceCommentMutation from "@/api/traces/useCreateTraceCommentMutation";
 import useUpdateSpanCommentMutation from "@/api/traces/useUpdateSpanCommentMutation";
 import useUpdateTraceCommentMutation from "@/api/traces/useUpdateTraceCommentMutation";
-import UserComment from "../../UserComment/UserComment";
-import { orderBy } from "lodash";
-import { useLoggedInUserName } from "@/store/AppStore";
 import {
   DetailsActionSectionValue,
   DetailsActionSectionLayout,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import CommentsSection from "../../UserComment/CommentsSection";
 
 export type CommentsViewerProps = {
   data: Trace | Span;
@@ -41,8 +37,6 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
 
   const updateSpanMutation = useUpdateSpanCommentMutation();
   const updateTraceMutation = useUpdateTraceCommentMutation();
-
-  const userName = useLoggedInUserName();
 
   const onSubmit = (text: string) => {
     if (!spanId) {
@@ -99,51 +93,15 @@ const CommentsViewer: React.FC<CommentsViewerProps> = ({
       setActiveSection={setActiveSection}
       activeSection={activeSection}
     >
-      <UserCommentForm
-        onSubmit={(data) => onSubmit(data.commentText)}
-        className="mt-4 px-6"
-        actions={
-          <>
-            <TooltipWrapper content={"Submit"} hotkeys={["⌘", "⏎"]}>
-              <UserCommentForm.SubmitButton />
-            </TooltipWrapper>
-          </>
-        }
-      >
-        <UserCommentForm.TextareaField placeholder="Add a comment..." />
-      </UserCommentForm>
-      <div className="mt-3 h-full overflow-auto pb-3">
-        {data.comments?.length ? (
-          orderBy(data.comments, "created_at", "desc").map((comment) => (
-            <UserComment
-              key={comment.id}
-              comment={comment}
-              avatar={<UserComment.Avatar />}
-              actions={
-                <UserComment.Menu>
-                  <UserComment.MenuEditItem />
-                  <UserComment.MenuDeleteItem onDelete={onDelete} />
-                </UserComment.Menu>
-              }
-              userName={userName}
-              header={
-                <>
-                  <UserComment.Username />
-                  <UserComment.CreatedAt />
-                </>
-              }
-              className="px-6 hover:bg-soft-background"
-            >
-              <UserComment.Text />
-              <UserComment.Form onSubmit={onEditSubmit} />
-            </UserComment>
-          ))
-        ) : (
-          <div className="comet-body-s py-3 text-center text-muted-slate">
-            No comments yet
-          </div>
-        )}
-      </div>
+      <CommentsSection
+        comments={data.comments ?? []}
+        onSubmit={onSubmit}
+        onEditSubmit={onEditSubmit}
+        onDelete={onDelete}
+        formClassName="mt-4 px-6"
+        listClassName="mt-3 h-full overflow-auto pb-3"
+        commentClassName="px-6 hover:bg-soft-background"
+      />
     </DetailsActionSectionLayout>
   );
 };

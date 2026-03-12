@@ -15,5 +15,7 @@ export interface TraceWrite {
     tags?: string[];
     errorInfo?: OpikApi.ErrorInfoWrite;
     lastUpdatedAt?: Date;
+    /** Time to first token in milliseconds */
+    ttft?: number;
     threadId?: string;
 }

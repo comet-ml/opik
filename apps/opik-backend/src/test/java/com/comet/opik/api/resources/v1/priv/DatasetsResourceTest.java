@@ -14,6 +14,7 @@ import com.comet.opik.api.DatasetItemUpdate;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
@@ -202,7 +203,7 @@ class DatasetsResourceTest {
     private static final String URL_TEMPLATE_TRACES = "%s/v1/private/traces";
 
     public static final String[] IGNORED_FIELDS_LIST = {"feedbackScores", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments"};
+            "lastUpdatedBy", "comments", "projectName"};
     public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
@@ -1388,6 +1389,31 @@ class DatasetsResourceTest {
             createAndAssert(dataset);
         }
 
+        @Test
+        @DisplayName("when type is evaluation_suite, then create and return type in response")
+        void create__whenTypeIsEvaluationSuite__thenReturnTypeInResponse() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            getAndAssertEquals(id, dataset, TEST_WORKSPACE, API_KEY);
+        }
+
+        @Test
+        @DisplayName("when type is null, then default to dataset")
+        void create__whenTypeIsNull__thenDefaultToDataset() {
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .type(null)
+                    .build();
+
+            var id = createAndAssert(dataset);
+            var expectedDataset = dataset.toBuilder().type(DatasetType.DATASET).build();
+            getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);
+        }
+
         private Stream<Arguments> invalidDataset() {
             return Stream.of(
                     arguments(factory.manufacturePojo(Dataset.class).toBuilder().name(null).build(),
@@ -2293,7 +2319,27 @@ class DatasetsResourceTest {
                                     .operator(Operator.LESS_THAN)
                                     .value(Instant.now().toString())
                                     .build(),
-                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets));
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets),
+
+                    // TYPE field tests
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() == datasets.getFirst().type())
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Dataset>, DatasetFilter>) datasets -> DatasetFilter.builder()
+                                    .field(DatasetField.TYPE)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(datasets.getFirst().type().getValue())
+                                    .build(),
+                            (Function<List<Dataset>, List<Dataset>>) datasets -> datasets.stream()
+                                    .filter(d -> d.type() != datasets.getFirst().type())
+                                    .toList()));
         }
 
         @Test
@@ -2920,6 +2966,87 @@ class DatasetsResourceTest {
             return Stream.of(
                     arguments(10, 0),
                     arguments(10, 5));
+        }
+
+        Stream<Arguments> filterByType() {
+            return Stream.of(
+                    arguments(DatasetType.DATASET, "dataset"),
+                    arguments(DatasetType.EVALUATION_SUITE, "evaluation_suite"));
+        }
+
+        @Test
+        @DisplayName("when no type filter, then return all datasets regardless of type")
+        void getDatasets__whenNoTypeFilter__thenReturnAllDatasets() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 2, 2, 1, List.of(evaluationSuite, regularDataset));
+        }
+
+        @ParameterizedTest
+        @MethodSource("filterByType")
+        @DisplayName("when filtering by type via generic filters, then return only datasets of that type")
+        void getDatasets__whenFilteringByTypeViaGenericFilters__thenReturnOnlyMatchingType(DatasetType filterType,
+                String queryValue) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var regularDataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.DATASET)
+                    .build();
+            var evaluationSuite = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .type(DatasetType.EVALUATION_SUITE)
+                    .build();
+
+            createAndAssert(regularDataset, apiKey, workspaceName);
+            createAndAssert(evaluationSuite, apiKey, workspaceName);
+
+            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+
+            var typeFilter = DatasetFilter.builder()
+                    .field(DatasetField.TYPE)
+                    .operator(Operator.EQUAL)
+                    .value(queryValue)
+                    .build();
+
+            var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .queryParam("size", 100)
+                    .queryParam("filters", toURLEncodedQueryParam(List.of(typeFilter)))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+
+            findAndAssertPage(actualEntity, 1, 1, 1, List.of(expected));
         }
     }
 
@@ -5915,6 +6042,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
 
@@ -5933,6 +6061,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
 
@@ -5950,6 +6079,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
 
@@ -6123,6 +6253,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
 
@@ -6140,6 +6271,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
 
@@ -6318,7 +6450,9 @@ class DatasetsResourceTest {
                             .totalEstimatedCost(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
-                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id()).build())
+                            .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .description(datasetItemBatchWithImage.items().get(i).description())
+                            .build())
                     .toList();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -6655,6 +6789,7 @@ class DatasetsResourceTest {
                     .totalEstimatedCost(null) // API returns null for totalEstimatedCost in this context
                     .usage(null) // API returns null for usage in this context
                     // Don't set duration - let it be compared as-is from the API response
+                    .description(null) // NULL because dataset item was hard-deleted
                     .build();
 
             // Query for dataset items with experiment items using assertion helper
@@ -6692,6 +6827,7 @@ class DatasetsResourceTest {
                                 : Stream.of(score)
                                         .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                                         .toList())
+                        .description(item.description())
                         .build();
 
                 experimentItems.add(experimentItem);
@@ -9158,22 +9294,19 @@ class DatasetsResourceTest {
     class ExperimentItemsSortingAndFiltering {
 
         @Test
-        @DisplayName("should sort experiment items by total_estimated_cost in descending order")
-        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSorted() {
+        @DisplayName("should sort experiment items by avg(total_estimated_cost) across trials in descending order: OPIK-4611")
+        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSortedByAverage() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create project name for traces
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
-            // Create dataset
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            // Create 3 dataset items
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
@@ -9183,50 +9316,61 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
             var datasetItems = datasetItemBatch.items();
 
-            // Create traces and spans with costs
-            var costValues = List.of(
-                    BigDecimal.valueOf(10.50),
-                    BigDecimal.valueOf(25.75),
-                    BigDecimal.valueOf(5.25));
-
-            // Create traces using PodamFactoryUtils
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .limit(3)
-                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+            // 6 traces (2 trials per dataset item)
+            var traces = IntStream.range(0, 6)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName).build())
                     .toList();
-
             var traceIds = traces.stream()
                     .map(trace -> createTrace(trace, apiKey, workspaceName))
                     .toList();
 
-            // Create spans in batch
-            var spans = IntStream.range(0, 3)
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            // Batch 1 (earlier trials): A=40, B=10, C=30
+            var batch1Costs = List.of(BigDecimal.valueOf(40), BigDecimal.valueOf(10), BigDecimal.valueOf(30));
+            var batch1Spans = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(traceIds.get(i))
-                            .totalEstimatedCost(costValues.get(i))
+                            .totalEstimatedCost(batch1Costs.get(i))
                             .build())
                     .toList();
+            spanResourceClient.batchCreateSpans(batch1Spans, apiKey, workspaceName);
 
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            // Create experiment items linked to traces
-            var experimentItems = IntStream.range(0, 3)
+            var batch1Items = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentId)
                             .datasetItemId(datasetItems.get(i).id())
                             .traceId(traceIds.get(i))
                             .build())
                     .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch1Items)).build(), apiKey, workspaceName);
 
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(new HashSet<>(experimentItems))
-                    .build();
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+            // Batch 2 (later trials): A=5, B=30, C=2
+            // avg: A=(40+5)/2=22.5, B=(10+30)/2=20, C=(30+2)/2=16
+            // DESC by avg: A(22.5), B(20), C(16)
+            var batch2Costs = List.of(BigDecimal.valueOf(5), BigDecimal.valueOf(30), BigDecimal.valueOf(2));
+            var batch2Spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i + 3))
+                            .totalEstimatedCost(batch2Costs.get(i))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(batch2Spans, apiKey, workspaceName);
 
-            // Query with sorting by total_estimated_cost DESC
+            var batch2Items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i + 3))
+                            .build())
+                    .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch2Items)).build(), apiKey, workspaceName);
+
             var sorting = toURLEncodedQueryParam(
                     List.of(new SortingField("total_estimated_cost", Direction.DESC)));
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
@@ -9244,37 +9388,30 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.content()).hasSize(3);
-
-                // Verify sorting order: 25.75, 10.50, 5.25
-                var costs = actualPage.content().stream()
-                        .map(item -> item.experimentItems().get(0).totalEstimatedCost())
-                        .toList();
-
-                assertThat(costs).hasSize(3);
-                assertThat(costs.get(0)).isEqualByComparingTo(BigDecimal.valueOf(25.75));
-                assertThat(costs.get(1)).isEqualByComparingTo(BigDecimal.valueOf(10.50));
-                assertThat(costs.get(2)).isEqualByComparingTo(BigDecimal.valueOf(5.25));
+                // Verify sorted by avg cost DESC: A(22.5), B(20), C(16)
+                assertThat(actualPage.content())
+                        .extracting(DatasetItem::id)
+                        .containsExactly(
+                                datasetItems.get(0).id(),
+                                datasetItems.get(1).id(),
+                                datasetItems.get(2).id());
             }
         }
 
         @Test
-        @DisplayName("should sort experiment items by usage.total_tokens in ascending order")
-        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSorted() {
+        @DisplayName("should sort experiment items by avgMap(usage.total_tokens) across trials in ascending order: OPIK-4611")
+        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSortedByAverage() {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Create project name for traces
             var projectName = RandomStringUtils.randomAlphanumeric(10);
 
-            // Create dataset
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = createAndAssert(dataset, apiKey, workspaceName);
 
-            // Create 3 dataset items
             var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .datasetId(datasetId)
                     .items(IntStream.range(0, 3)
@@ -9284,50 +9421,67 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
             var datasetItems = datasetItemBatch.items();
 
-            // Create traces and spans with usage data
-            var usageValues = List.of(
-                    Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
-                    Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
-                    Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
-
-            // Create traces using PodamFactoryUtils
-            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .limit(3)
-                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+            // 6 traces (2 trials per dataset item)
+            var traces = IntStream.range(0, 6)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(projectName).build())
                     .toList();
-
             var traceIds = traces.stream()
                     .map(trace -> createTrace(trace, apiKey, workspaceName))
                     .toList();
 
-            // Create spans in batch
-            var spans = IntStream.range(0, 3)
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            // Batch 1 (earlier trials): A=200, B=40, C=120
+            var batch1Usage = List.of(
+                    Map.of("total_tokens", 200, "prompt_tokens", 100, "completion_tokens", 100),
+                    Map.of("total_tokens", 40, "prompt_tokens", 20, "completion_tokens", 20),
+                    Map.of("total_tokens", 120, "prompt_tokens", 60, "completion_tokens", 60));
+            var batch1Spans = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
                             .projectName(projectName)
                             .traceId(traceIds.get(i))
-                            .usage(usageValues.get(i))
+                            .usage(batch1Usage.get(i))
                             .build())
                     .toList();
+            spanResourceClient.batchCreateSpans(batch1Spans, apiKey, workspaceName);
 
-            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
-
-            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
-
-            // Create experiment items linked to traces
-            var experimentItems = IntStream.range(0, 3)
+            var batch1Items = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                             .experimentId(experimentId)
                             .datasetItemId(datasetItems.get(i).id())
                             .traceId(traceIds.get(i))
                             .build())
                     .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch1Items)).build(), apiKey, workspaceName);
 
-            var experimentItemsBatch = ExperimentItemsBatch.builder()
-                    .experimentItems(new HashSet<>(experimentItems))
-                    .build();
-            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+            // Batch 2 (later trials): A=20, B=160, C=10
+            // avgMap: A=(200+20)/2=110, B=(40+160)/2=100, C=(120+10)/2=65
+            // ASC by avgMap: C(65), B(100), A(110)
+            var batch2Usage = List.of(
+                    Map.of("total_tokens", 20, "prompt_tokens", 10, "completion_tokens", 10),
+                    Map.of("total_tokens", 160, "prompt_tokens", 80, "completion_tokens", 80),
+                    Map.of("total_tokens", 10, "prompt_tokens", 5, "completion_tokens", 5));
+            var batch2Spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i + 3))
+                            .usage(batch2Usage.get(i))
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(batch2Spans, apiKey, workspaceName);
 
-            // Query with sorting by usage.total_tokens ASC
+            var batch2Items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i + 3))
+                            .build())
+                    .toList();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(batch2Items)).build(), apiKey, workspaceName);
+
             var sorting = toURLEncodedQueryParam(
                     List.of(new SortingField("usage.total_tokens", Direction.ASC)));
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
@@ -9345,14 +9499,13 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
 
-                assertThat(actualPage.content()).hasSize(3);
-
-                // Verify sorting order: 50, 100, 150
-                var tokens = actualPage.content().stream()
-                        .map(item -> item.experimentItems().get(0).usage().get("total_tokens"))
-                        .toList();
-
-                assertThat(tokens).containsExactly(50L, 100L, 150L);
+                // Verify sorted by avg usage ASC: C(65), B(100), A(110)
+                assertThat(actualPage.content())
+                        .extracting(DatasetItem::id)
+                        .containsExactly(
+                                datasetItems.get(2).id(),
+                                datasetItems.get(1).id(),
+                                datasetItems.get(0).id());
             }
         }
 

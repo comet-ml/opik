@@ -171,10 +171,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   );
 
   const breakdown = useMemo(
-    () =>
-      config.breakdown || {
-        field: BREAKDOWN_FIELD.NONE,
-      },
+    () => ({
+      field: BREAKDOWN_FIELD.NONE,
+      aggregateTotal: !config.breakdown,
+      ...config.breakdown,
+    }),
     [config.breakdown],
   );
 

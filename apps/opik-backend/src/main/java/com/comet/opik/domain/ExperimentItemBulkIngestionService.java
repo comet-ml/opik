@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -20,6 +21,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple3;
 
@@ -27,7 +29,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -55,6 +60,7 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
     private final @NonNull ExperimentService experimentService;
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
 
     /**
@@ -78,30 +84,47 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         log.info("Using experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                                 experimentId, experiment.name(), experiment.datasetName(), workspaceId);
 
-                        Set<ExperimentItem> experimentItems = new HashSet<>();
-                        List<Trace> traces = new ArrayList<>();
-                        List<Span> spans = new ArrayList<>();
-                        List<FeedbackScoreBatchItem> feedbackScores = new ArrayList<>();
+                        // Collect unique project names from all traces
+                        List<String> projectNames = items.stream()
+                                .map(ExperimentItemBulkRecord::trace)
+                                .filter(Objects::nonNull)
+                                .map(Trace::projectName)
+                                .distinct()
+                                .toList();
 
-                        this.splitBatches(
-                                items,
-                                traces,
-                                experimentId,
-                                experimentItems,
-                                spans,
-                                feedbackScores);
+                        // Resolve project names to project IDs upfront
+                        return Flux.fromIterable(projectNames)
+                                .flatMap(projectService::getOrCreate)
+                                .collectMap(Project::name, Project::id,
+                                        () -> new TreeMap<>(String.CASE_INSENSITIVE_ORDER))
+                                .flatMap(projectNameToIdMap -> {
+                                    Set<ExperimentItem> experimentItems = new HashSet<>();
+                                    List<Trace> traces = new ArrayList<>();
+                                    List<Span> spans = new ArrayList<>();
+                                    List<FeedbackScoreBatchItem> feedbackScores = new ArrayList<>();
 
-                        return experimentItemService.create(experimentItems)
-                                .then(saveAll(traces, spans, feedbackScores))
-                                .flatMap(tuple -> {
+                                    this.splitBatches(
+                                            items,
+                                            traces,
+                                            experimentId,
+                                            experimentItems,
+                                            spans,
+                                            feedbackScores,
+                                            projectNameToIdMap);
 
-                                    log.info(
-                                            "Recorded experiment items in bulk, experiment items count '{}', traces count '{}', spans count '{}' and feedback scores count '{}'",
-                                            experimentItems.size(), traces.size(), spans.size(), feedbackScores.size());
+                                    return experimentItemService.create(experimentItems)
+                                            .then(saveAll(traces, spans, feedbackScores))
+                                            .flatMap(tuple -> {
 
-                                    return Mono.just(tuple);
-                                })
-                                .then();
+                                                log.info(
+                                                        "Recorded experiment items in bulk, experiment items count '{}', traces count '{}', spans count '{}' and feedback scores count '{}'",
+                                                        experimentItems.size(), traces.size(), spans.size(),
+                                                        feedbackScores.size());
+
+                                                return Mono.just(tuple);
+                                            })
+                                            .then();
+                                });
                     });
         });
     }
@@ -160,7 +183,8 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             List<Trace> traces, UUID experimentId,
             Set<ExperimentItem> experimentItems,
             List<Span> spans,
-            List<FeedbackScoreBatchItem> feedbackScores) {
+            List<FeedbackScoreBatchItem> feedbackScores,
+            Map<String, UUID> projectNameToIdMap) {
 
         for (ExperimentItemBulkRecord item : items) {
             Trace trace;
@@ -182,11 +206,15 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
 
             traces.add(trace);
 
+            // Resolve project_id from projectName using the pre-built map
+            UUID projectId = projectNameToIdMap.get(trace.projectName());
+
             ExperimentItem build = ExperimentItem.builder()
                     .id(idGenerator.generateId())
                     .experimentId(experimentId)
                     .datasetItemId(item.datasetItemId())
                     .traceId(trace.id())
+                    .projectId(projectId)
                     .build();
 
             experimentItems.add(build);

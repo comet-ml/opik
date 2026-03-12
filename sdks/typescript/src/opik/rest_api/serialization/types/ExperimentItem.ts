@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Comment } from "./Comment.js";
+import { ExecutionPolicy } from "./ExecutionPolicy.js";
 import { ExperimentItemTraceVisibilityMode } from "./ExperimentItemTraceVisibilityMode.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { JsonListString } from "./JsonListString.js";
@@ -14,6 +15,8 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
         experimentId: core.serialization.property("experiment_id", core.serialization.string()),
         datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
         traceId: core.serialization.property("trace_id", core.serialization.string()),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+        projectName: core.serialization.property("project_name", core.serialization.string().optional()),
         input: JsonListString.optional(),
         output: JsonListString.optional(),
         feedbackScores: core.serialization.property(
@@ -32,6 +35,8 @@ export const ExperimentItem: core.serialization.ObjectSchema<serializers.Experim
             "trace_visibility_mode",
             ExperimentItemTraceVisibilityMode.optional(),
         ),
+        description: core.serialization.string().optional(),
+        executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
     });
 
 export declare namespace ExperimentItem {
@@ -40,6 +45,8 @@ export declare namespace ExperimentItem {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
+        project_id?: string | null;
+        project_name?: string | null;
         input?: JsonListString.Raw | null;
         output?: JsonListString.Raw | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
@@ -52,5 +59,7 @@ export declare namespace ExperimentItem {
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemTraceVisibilityMode.Raw | null;
+        description?: string | null;
+        execution_policy?: ExecutionPolicy.Raw | null;
     }
 }

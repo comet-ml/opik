@@ -587,6 +587,7 @@ export class TracesClient {
             stripAttachments,
             sorting,
             exclude,
+            search,
             fromTime,
             toTime,
         } = request;
@@ -600,6 +601,7 @@ export class TracesClient {
             strip_attachments: stripAttachments,
             sorting,
             exclude,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };
@@ -1367,17 +1369,18 @@ export class TracesClient {
     public findFeedbackScoreNames2(
         request: OpikApi.FindFeedbackScoreNames2Request = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findFeedbackScoreNames2(request, requestOptions));
     }
 
     private async __findFeedbackScoreNames2(
         request: OpikApi.FindFeedbackScoreNames2Request = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
-        const { projectId } = request;
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
+        const { projectId, excludeCategoryNames } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
+            exclude_category_names: excludeCategoryNames,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -1405,7 +1408,7 @@ export class TracesClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.traces.findFeedbackScoreNames2.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
@@ -1444,14 +1447,14 @@ export class TracesClient {
     public findTraceThreadsFeedbackScoreNames(
         request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): core.HttpResponsePromise<string[]> {
+    ): core.HttpResponsePromise<OpikApi.FeedbackScoreNamesPublic> {
         return core.HttpResponsePromise.fromPromise(this.__findTraceThreadsFeedbackScoreNames(request, requestOptions));
     }
 
     private async __findTraceThreadsFeedbackScoreNames(
         request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: TracesClient.RequestOptions,
-    ): Promise<core.WithRawResponse<string[]>> {
+    ): Promise<core.WithRawResponse<OpikApi.FeedbackScoreNamesPublic>> {
         const { projectId } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
@@ -1482,7 +1485,7 @@ export class TracesClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.traces.findTraceThreadsFeedbackScoreNames.Response.parseOrThrow(_response.body, {
+                data: serializers.FeedbackScoreNamesPublic.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
@@ -1529,11 +1532,12 @@ export class TracesClient {
         request: OpikApi.GetTraceStatsRequest = {},
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, filters, fromTime, toTime } = request;
+        const { projectId, projectName, filters, search, fromTime, toTime } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             project_name: projectName,
             filters,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };
@@ -1693,11 +1697,12 @@ export class TracesClient {
         request: OpikApi.GetTraceThreadStatsRequest = {},
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
-        const { projectId, projectName, filters, fromTime, toTime } = request;
+        const { projectId, projectName, filters, search, fromTime, toTime } = request;
         const _queryParams: Record<string, unknown> = {
             project_id: projectId,
             project_name: projectName,
             filters,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };
@@ -1950,8 +1955,19 @@ export class TracesClient {
         request: OpikApi.GetTraceThreadsRequest = {},
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.TraceThreadPage>> {
-        const { page, size, projectName, projectId, truncate, stripAttachments, filters, sorting, fromTime, toTime } =
-            request;
+        const {
+            page,
+            size,
+            projectName,
+            projectId,
+            truncate,
+            stripAttachments,
+            filters,
+            sorting,
+            search,
+            fromTime,
+            toTime,
+        } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
@@ -1961,6 +1977,7 @@ export class TracesClient {
             strip_attachments: stripAttachments,
             filters,
             sorting,
+            search,
             from_time: fromTime?.toISOString(),
             to_time: toTime?.toISOString(),
         };

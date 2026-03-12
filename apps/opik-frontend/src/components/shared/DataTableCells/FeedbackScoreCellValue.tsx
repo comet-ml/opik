@@ -1,22 +1,28 @@
-import { generateTagVariant } from "@/lib/traces";
 import MultiValueFeedbackScoreHoverCard from "../FeedbackScoreTag/MultiValueFeedbackScoreHoverCard";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { TraceFeedbackScore } from "@/types/traces";
 import { useState } from "react";
 import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
-import CellTooltipWrapper from "./CellTooltipWrapper";
+import {
+  formatScoreDisplay,
+  getIsMultiValueFeedbackScore,
+} from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const FeedbackScoreCellValue = ({
   isUserFeedbackColumn = false,
   feedbackScore,
   color: customColor,
   onValueChange,
+  tooltipSuffix,
 }: {
   isUserFeedbackColumn?: boolean;
   feedbackScore?: TraceFeedbackScore;
   color?: string;
   onValueChange?: (name: string, value: number) => void;
+  tooltipSuffix?: string;
 }) => {
+  const { getColor } = useWorkspaceColorMap();
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
   // If no feedback score and not editable, show dash
@@ -41,13 +47,20 @@ const FeedbackScoreCellValue = ({
 
   // Feedback score exists, show it with optional edit button
   const label = feedbackScore.name;
-  const color =
-    customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
+  const color = customColor || getColor(label);
   const valueByAuthor = feedbackScore.value_by_author;
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;
 
-  const displayText = category ? `${category} (${value})` : String(value);
+  const formattedValue = formatScoreDisplay(value);
+  const displayText = category
+    ? `${category} (${formattedValue})`
+    : String(formattedValue);
+  const fullPrecisionText = category ? `${category} (${value})` : String(value);
+  const tooltipContent = tooltipSuffix
+    ? `${fullPrecisionText} | ${tooltipSuffix}`
+    : fullPrecisionText;
+  const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
 
   return (
     <div className="flex min-w-0 items-center gap-1 overflow-hidden">
@@ -66,9 +79,13 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        <CellTooltipWrapper content={displayText}>
+        {showTooltip ? (
+          <TooltipWrapper content={tooltipContent}>
+            <div className="truncate">{displayText}</div>
+          </TooltipWrapper>
+        ) : (
           <div className="truncate">{displayText}</div>
-        </CellTooltipWrapper>
+        )}
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );

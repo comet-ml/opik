@@ -4,7 +4,7 @@
 
 ## Overview
 
-Generate a formatted, copiable Slack command for the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
+Generate a formatted, copiable Slack command for the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python, TypeScript). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
 
 - **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and outputs a copiable Slack command (does NOT send automatically).
 
@@ -13,7 +13,7 @@ This workflow will:
 - Find the GitHub PR for the current branch
 - Extract Jira ticket from PR title
 - Extract test environment link from PR description
-- Extract component summaries (FE, BE, Python) from PR description
+- Extract component summaries (FE, BE, Python, TypeScript) from PR description
 - Prompt only for missing information
 - Allow user to customize the message slightly
 - Format the message according to the code review template
@@ -33,6 +33,7 @@ This workflow will:
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
+- **TypeScript summary**: Extracted from PR description (looks for TypeScript/TypeScript SDK/TS mentions) or prompted if not found
 - **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
@@ -46,7 +47,7 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check GitHub MCP**: Test GitHub MCP availability by attempting to fetch repository info using `get_file_contents` for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs GitHub MCP configured. Set MCP config/env, run `make cursor` (Cursor) or `make claude` (Claude CLI), then retry."  
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
@@ -72,7 +73,7 @@ This workflow will:
 
 - **Extract Jira ticket from PR title**:
   - Parse PR title for pattern `[OPIK-\d+]` or `[issue-\d+]` or `[NA]`
-  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] Add endpoint`)
+  - Extract ticket number (e.g., `OPIK-1234` from `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`)
   - If not found in title, check PR description "## Issues" section for `OPIK-\d+` pattern
   - If still not found, prompt: "Jira ticket not found in PR. Enter Jira ticket number (e.g., OPIK-1234):"
   - Validate format and store
@@ -86,6 +87,15 @@ This workflow will:
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - When fetching PR comments via `gh api`, **always** use `--paginate` to ensure all results are fetched:
+    ```bash
+    # Issue comments (general PR comments, including deployment bot messages)
+    gh api repos/comet-ml/opik/issues/{pr_number}/comments --paginate
+
+    # Review comments (inline code comments)
+    gh api repos/comet-ml/opik/pulls/{pr_number}/comments --paginate
+    ```
+    > **Why pagination is required**: GitHub API returns 30 items per page by default. Opik PRs regularly exceed this — 17 CI test group comments + deployment bot comments + reviewer comments can push past 30 total. Without `--paginate`, the deployment bot comment with the test environment link may end up on page 2 and get silently missed.
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
@@ -105,10 +115,15 @@ This workflow will:
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
   
-  - **Python summary**: 
+  - **Python summary**:
     - Look for mentions of "Python", "Python SDK", "SDK", or Python-related changes in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip):"
+
+  - **TypeScript summary**:
+    - Look for mentions of "TypeScript", "TypeScript SDK", "TS", "TS SDK", or `[TS]` tag in PR description
+    - Extract relevant one-line summary from "## Details" section or component-specific mentions
+    - If not found, prompt: "TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip):"
 
 - **Store extracted information**: Keep all extracted and prompted values for message formatting
 
@@ -143,6 +158,7 @@ This workflow will:
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
+  :typescript: typescript summary (optional): {{description_in_one_line}}
   ```
 
 - **Message structure**:
@@ -165,6 +181,7 @@ This workflow will:
   :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
+  :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
   ```
 
 ---
@@ -262,12 +279,13 @@ cursor generate-code-review-slack-command
 
 # Command execution flow:
 # 1. Find PR for current branch: https://github.com/comet-ml/opik/pull/1234
-# 2. Extract Jira ticket from PR title: [OPIK-1234] [BE] [FE] Add metrics dashboard
+# 2. Extract Jira ticket from PR title: [OPIK-1234] [FE] feat(api): add metrics dashboard
 # 3. Extract test env from PR comments or description: https://pr-1234.dev.comet.com (from PR comments or Testing section)
 # 4. Extract summaries from PR description:
 #    - FE: Added new metrics dashboard UI (from Details section)
 #    - BE: Implemented metrics aggregation endpoint (from Details section)
 #    - Python: (not found, prompts user)
+#    - TypeScript: (not found, prompts user)
 # 5. Prompt for message customization (optional)
 # 6. Format message according to template (with greeting and Jira link)
 # 7. Generate and display copiable Slack command
@@ -293,6 +311,7 @@ cursor generate-code-review-slack-command
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
+# :typescript: typescript summary (optional): Added TypeScript SDK support for metrics
 # ```
 # 
 # **To send in Slack:**
@@ -314,6 +333,7 @@ cursor generate-code-review-slack-command
 # Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip): Implemented metrics endpoint
 # Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
+# TypeScript summary not found in PR. Enter TypeScript summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): [Enter pressed - using default]
 ```
 

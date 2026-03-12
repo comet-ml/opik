@@ -4,6 +4,8 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { DatasetItemWriteSource } from "./DatasetItemWriteSource.js";
+import { EvaluatorItemWrite } from "./EvaluatorItemWrite.js";
+import { ExecutionPolicyWrite } from "./ExecutionPolicyWrite.js";
 import { JsonNode } from "./JsonNode.js";
 
 export const DatasetItemWrite: core.serialization.ObjectSchema<
@@ -15,7 +17,10 @@ export const DatasetItemWrite: core.serialization.ObjectSchema<
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemWriteSource,
     data: JsonNode,
+    description: core.serialization.string().optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
+    evaluators: core.serialization.list(EvaluatorItemWrite).optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyWrite.optional()),
 });
 
 export declare namespace DatasetItemWrite {
@@ -25,6 +30,9 @@ export declare namespace DatasetItemWrite {
         span_id?: string | null;
         source: DatasetItemWriteSource.Raw;
         data: JsonNode.Raw;
+        description?: string | null;
         tags?: string[] | null;
+        evaluators?: EvaluatorItemWrite.Raw[] | null;
+        execution_policy?: ExecutionPolicyWrite.Raw | null;
     }
 }

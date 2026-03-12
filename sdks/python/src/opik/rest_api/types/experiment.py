@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
 from .dataset_version_summary import DatasetVersionSummary
+from .experiment_evaluation_method import ExperimentEvaluationMethod
 from .experiment_score import ExperimentScore
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
@@ -26,6 +27,7 @@ class Experiment(UniversalBaseModel):
     metadata: typing.Optional[JsonListString] = None
     tags: typing.Optional[typing.List[str]] = None
     type: typing.Optional[ExperimentType] = None
+    evaluation_method: typing.Optional[ExperimentEvaluationMethod] = None
     optimization_id: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None
     comments: typing.Optional[typing.List[Comment]] = None
@@ -48,6 +50,20 @@ class Experiment(UniversalBaseModel):
     """
 
     dataset_version_summary: typing.Optional[DatasetVersionSummary] = None
+    pass_rate: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.
+    """
+
+    passed_count: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Number of items that passed for evaluation suite experiments. Null for regular experiments.
+    """
+
+    total_count: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Total number of items for evaluation suite experiments. Null for regular experiments.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

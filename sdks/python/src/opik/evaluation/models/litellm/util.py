@@ -42,13 +42,27 @@ def apply_model_specific_filters(
     - GPT-5: only honours temperature=1 and does not return log probabilities.
     - DashScope Qwen: enforces constraints for logprobs / top_logprobs
     """
-    if model_name.startswith("gpt-5"):
+    normalized_model_name = _normalize_model_name(model_name)
+
+    if normalized_model_name.startswith("gpt-5"):
         _apply_gpt5_filters(params, already_warned, warn)
         return
 
-    if model_name.startswith("dashscope/"):
+    if normalized_model_name.startswith("dashscope/"):
         _apply_qwen_dashscope_filters(params, already_warned, warn)
         return
+
+
+def _normalize_model_name(model_name: str) -> str:
+    """Normalize provider-prefixed model names for capability checks."""
+    if "/" not in model_name:
+        return model_name
+
+    provider, model_without_provider = model_name.split("/", 1)
+    if provider in ("openai", "anthropic"):
+        return model_without_provider
+
+    return model_name
 
 
 def _apply_gpt5_filters(

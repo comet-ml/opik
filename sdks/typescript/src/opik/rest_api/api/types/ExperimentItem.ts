@@ -7,6 +7,8 @@ export interface ExperimentItem {
     experimentId: string;
     datasetItemId: string;
     traceId: string;
+    projectId?: string;
+    projectName?: string;
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
     feedbackScores?: OpikApi.FeedbackScore[];
@@ -19,4 +21,6 @@ export interface ExperimentItem {
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemTraceVisibilityMode;
+    description?: string;
+    executionPolicy?: OpikApi.ExecutionPolicy;
 }

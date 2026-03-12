@@ -201,4 +201,60 @@ describe("Opik client batching", () => {
     expect(updateCall[1].body).toHaveProperty("endTime");
     expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
   });
+
+  it("should merge metadata from update() with initial metadata", async () => {
+    const trace = client.trace({
+      name: "test",
+      metadata: { initial: "yes" },
+    });
+    await client.flush();
+
+    trace.update({ metadata: { updated: "yes" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({
+      initial: "yes",
+      updated: "yes",
+    });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should persist metadata set only via update() on trace", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush();
+
+    trace.update({ metadata: { source: "from_update" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({ source: "from_update" });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should merge metadata from update() with initial metadata on span", async () => {
+    const trace = client.trace({ name: "test" });
+    const span = trace.span({
+      name: "test-span",
+      type: "llm",
+      metadata: { initial: "yes" },
+    });
+    await client.flush();
+
+    span.update({ metadata: { updated: "yes" } });
+    span.end();
+    await client.flush();
+
+    expect(updateSpansSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateSpansSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({
+      initial: "yes",
+      updated: "yes",
+    });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
 });

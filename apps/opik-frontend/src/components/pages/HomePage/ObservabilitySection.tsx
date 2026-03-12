@@ -21,12 +21,13 @@ import {
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { ProjectWithStatistic } from "@/types/projects";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { convertColumnDataToColumn } from "@/lib/table";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { get } from "lodash";
-import { formatNumericData } from "@/lib/utils";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -48,18 +49,15 @@ export const SHARED_COLUMNS = [
     label: "Last updated",
     type: COLUMN_TYPE.time,
     accessorFn: (row: ProjectWithStatistic) =>
-      formatDate(row.last_updated_trace_at ?? row.last_updated_at),
+      row.last_updated_trace_at ?? row.last_updated_at,
+    cell: TimeCell as never,
     sortable: true,
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores",
+    label: "Avg feedback scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row: ProjectWithStatistic) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: (row: ProjectWithStatistic) => get(row, "feedback_scores", []),
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: ProjectWithStatistic) => row.name,
@@ -81,6 +79,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const ObservabilitySection: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -141,6 +143,8 @@ const ObservabilitySection: React.FunctionComponent = () => {
                   workspaceName,
                 },
                 search: {
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {
                       operator: "is_not_empty",
@@ -194,9 +198,11 @@ const ObservabilitySection: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            <Button variant="link" onClick={handleNewProjectClick}>
-              Create new project
-            </Button>
+            {canCreateProjects && (
+              <Button variant="link" onClick={handleNewProjectClick}>
+                Create new project
+              </Button>
+            )}
           </DataTableNoData>
         }
       />

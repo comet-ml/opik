@@ -4,15 +4,19 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -86,11 +90,54 @@ public class PromptResourceClient {
         }
     }
 
+    public Prompt getPromptByCommit(String commit, String apiKey, String workspaceName) {
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path("by-commit")
+                .path(commit)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(Prompt.class);
+        }
+    }
+
+    public List<PromptVersionLink> getPromptsByCommits(List<String> commits, String apiKey,
+            String workspaceName) {
+
+        var request = PromptVersionCommitsRequest.builder()
+                .commits(commits)
+                .build();
+
+        try (var response = client.target(PROMPT_PATH.formatted(baseURI))
+                .path("retrieve-by-commits")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            return response.readEntity(new GenericType<>() {
+            });
+        }
+    }
+
     public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName) {
+        return createPromptVersion(prompt, apiKey, workspaceName, null);
+    }
+
+    public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName,
+            Set<UUID> excludeBlueprintUpdateForProjects) {
 
         var request = CreatePromptVersion.builder()
                 .name(prompt.name())
                 .version(podamFactory.manufacturePojo(PromptVersion.class))
+                .excludeBlueprintUpdateForProjects(excludeBlueprintUpdateForProjects)
                 .build();
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")

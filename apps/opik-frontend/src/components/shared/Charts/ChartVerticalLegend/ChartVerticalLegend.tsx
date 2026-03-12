@@ -1,8 +1,9 @@
 import React from "react";
 import * as RechartsPrimitive from "recharts";
-import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { useChart } from "@/components/ui/chart";
+import LegendItem from "@/components/shared/Charts/LegendItem/LegendItem";
+import type { LegendLabelAction } from "@/components/shared/Charts/LegendItem/LegendItem";
 
 type ChartVerticalLegendProps = React.ComponentProps<
   typeof RechartsPrimitive.Legend
@@ -10,12 +11,15 @@ type ChartVerticalLegendProps = React.ComponentProps<
   React.ComponentProps<"div"> & {
     setActiveLine: OnChangeFn<string | null>;
     chartId: string;
+    labelActions?: Record<string, LegendLabelAction>;
   };
 
 const ChartVerticalLegend = React.forwardRef<
   HTMLDivElement,
   ChartVerticalLegendProps
->(({ payload, color, setActiveLine }, ref) => {
+>(({ payload, color, setActiveLine, labelActions }, ref) => {
+  const { config } = useChart();
+
   const handleMouseEnter = (id: string) => {
     setActiveLine(id);
   };
@@ -37,30 +41,20 @@ const ChartVerticalLegend = React.forwardRef<
       {payload.map((item) => {
         const key = `${item.value || "value"}`;
         const indicatorColor = color || item.color;
+        const configEntry = config[item.value as string];
+        const displayLabel = (configEntry?.label as string) ?? item.value;
 
         return (
-          <div
+          <LegendItem
             key={key}
-            className={cn(
-              "h-4 w-full pl-8 relative cursor-pointer pb-1 group-hover-except-self:opacity-60 duration-200",
-            )}
+            itemValue={item.value ?? ""}
+            displayLabel={displayLabel}
+            indicatorColor={indicatorColor ?? ""}
+            action={labelActions?.[displayLabel]}
             onMouseEnter={() => handleMouseEnter(item.value)}
-          >
-            <TooltipWrapper content={item.value}>
-              <div className="comet-body-xs truncate font-light text-foreground">
-                {item.value}
-              </div>
-            </TooltipWrapper>
-            <div
-              className="absolute left-[20px] top-[5px] size-1.5 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
-              style={
-                {
-                  "--color-bg": indicatorColor,
-                  "--color-border": indicatorColor,
-                } as React.CSSProperties
-              }
-            />
-          </div>
+            className="h-4 w-full pl-8"
+            dotClassName="absolute left-[20px] top-[5px] shrink-0"
+          />
         );
       })}
     </div>

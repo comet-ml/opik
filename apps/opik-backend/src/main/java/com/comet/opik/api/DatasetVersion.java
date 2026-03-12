@@ -29,6 +29,8 @@ public record DatasetVersion(
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items deleted since last version") Integer itemsDeleted,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String changeDescription,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Map<String, String> metadata,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Default evaluators for items in this version") List<EvaluatorItem> evaluators,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Default execution policy for items in this version") ExecutionPolicy executionPolicy,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,

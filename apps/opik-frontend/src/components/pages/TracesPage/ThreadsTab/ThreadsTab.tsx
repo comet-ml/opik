@@ -60,22 +60,21 @@ import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPa
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import {
-  USER_FEEDBACK_COLUMN_ID,
-  USER_FEEDBACK_NAME,
-} from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
@@ -113,24 +112,12 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
   },
   {
-    id: "created_at",
-    label: "Created at",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
-  },
-  {
-    id: "last_updated_at",
-    label: "Last updated",
-    type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
-    sortable: true,
-  },
-  {
     id: "duration",
     label: "Duration",
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
-    statisticDataFormater: (value) => formatDuration(value),
+    statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
     supportsPercentiles: true,
   },
   {
@@ -144,13 +131,19 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
 ];
 
@@ -201,6 +194,9 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
     size: 160,
     statisticKey: "total_estimated_cost",
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "created_by",
@@ -240,16 +236,31 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_ID_ID,
   "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
-  "created_at",
-  "last_updated_at",
   "duration",
-  "status",
-  USER_FEEDBACK_COLUMN_ID,
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "start_time",
+  "end_time",
+  "first_message",
+  "last_message",
+  "number_of_messages",
+  "duration",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  `${COLUMN_USAGE_ID}.prompt_tokens`,
+  `${COLUMN_USAGE_ID}.completion_tokens`,
+  "total_estimated_cost",
+  "tags",
+  COLUMN_COMMENTS_ID,
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
@@ -291,6 +302,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       updateType: "replaceIn",
     },
   );
+  const trimmedSearch = (search as string).trim().toLowerCase();
 
   const { data: feedbackScoresNames, isPending: isFeedbackScoresNamesPending } =
     useThreadsFeedbackScoresNames({
@@ -375,7 +387,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         filters,
         page: page as number,
         size: size as number,
-        search: search as string,
+        search: trimmedSearch,
         truncate: truncationEnabled,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -448,19 +460,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   }, [feedbackScoresNames]);
 
   const scoresColumnsData = useMemo(() => {
-    // Always include "User feedback" column, even if it has no data
-    const userFeedbackColumn: DynamicColumn = {
-      id: USER_FEEDBACK_COLUMN_ID,
-      label: USER_FEEDBACK_NAME,
-      columnType: COLUMN_TYPE.number,
-    };
-
-    // Filter out "User feedback" from dynamic columns to avoid duplicates
-    const otherDynamicColumns = dynamicScoresColumns.filter(
-      (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
-    );
-
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    return dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -471,6 +471,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
         }) as ColumnData<Thread>,
     );
   }, [dynamicScoresColumns]);
@@ -501,7 +502,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_THREADS_COLUMNS_ORDER,
     },
   );
 
@@ -650,10 +651,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
-            placeholder="Search by ID"
+            placeholder="Search threads..."
             className="w-[320px]"
             dimension="sm"
-          ></SearchInput>
+          />
           <FiltersButton
             columns={FILTER_COLUMNS}
             filters={filters}

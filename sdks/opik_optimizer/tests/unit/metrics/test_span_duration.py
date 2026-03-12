@@ -28,7 +28,7 @@ class TestSpanDuration:
 
         # Assert
         assert result.value == pytest.approx(2.5, abs=0.001)
-        assert result.name == "total_span_duration"
+        assert result.name == "span_duration"
 
     def test_raises_error_when_end_time_is_none(self) -> None:
         """Test that MetricComputationError is raised when end_time is None"""
@@ -48,7 +48,8 @@ class TestSpanDuration:
         with pytest.raises(opik.exceptions.MetricComputationError) as exc_info:
             metric.score(task_span=span)
 
-        assert "end time or start time is not set" in str(exc_info.value)
+        assert "SpanDuration cannot compute duration" in str(exc_info.value)
+        assert "end_time" in str(exc_info.value)
 
     def test_raises_error_when_start_time_is_none(self) -> None:
         """Test that MetricComputationError is raised when start_time is None"""
@@ -68,4 +69,5 @@ class TestSpanDuration:
         with pytest.raises(opik.exceptions.MetricComputationError) as exc_info:
             metric.score(task_span=span)
 
-        assert "end time or start time is not set" in str(exc_info.value)
+        assert "SpanDuration cannot compute duration" in str(exc_info.value)
+        assert "start_time" in str(exc_info.value)

@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentCompare } from "./CommentCompare.js";
+import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode.js";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare.js";
 import { JsonListStringCompare } from "./JsonListStringCompare.js";
@@ -16,6 +17,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
     experimentId: core.serialization.property("experiment_id", core.serialization.string()),
     datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
     traceId: core.serialization.property("trace_id", core.serialization.string()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     input: JsonListStringCompare.optional(),
     output: JsonListStringCompare.optional(),
     feedbackScores: core.serialization.property(
@@ -34,6 +36,8 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         "trace_visibility_mode",
         ExperimentItemCompareTraceVisibilityMode.optional(),
     ),
+    description: core.serialization.string().optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
 });
 
 export declare namespace ExperimentItemCompare {
@@ -42,6 +46,7 @@ export declare namespace ExperimentItemCompare {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
+        project_id?: string | null;
         input?: JsonListStringCompare.Raw | null;
         output?: JsonListStringCompare.Raw | null;
         feedback_scores?: FeedbackScoreCompare.Raw[] | null;
@@ -54,5 +59,7 @@ export declare namespace ExperimentItemCompare {
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
+        description?: string | null;
+        execution_policy?: ExecutionPolicyCompare.Raw | null;
     }
 }

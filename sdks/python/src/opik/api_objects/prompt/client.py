@@ -3,9 +3,10 @@ import json
 import dataclasses
 
 import opik.exceptions
-from opik.rest_api import client as rest_client
+from opik.rest_api import client as rest_client, PromptVersionUpdate
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
+from opik.api_objects import opik_query_language
 from . import types as prompt_types
 
 
@@ -230,16 +231,60 @@ class PromptClient:
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id
     def get_all_prompt_versions(
-        self, name: str
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            List[PromptVersionDetail]: A list of prompt versions for the given name.
+
+        Example:
+            # Get all versions of a prompt
+            versions = prompt_client.get_all_prompt_versions(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search and filtering
+            versions = prompt_client.get_all_prompt_versions(
+                name="my-prompt",
+                search="customer",
+                filter_string='tags contains "production"'
+            )
         """
         try:
             prompts_matching_name_string = self._rest_client.prompts.get_prompts(
@@ -257,8 +302,17 @@ class PromptClient:
             if len(filtered_prompt_list) == 0:
                 raise ValueError("No prompts found for name: " + name)
 
+            filters: Optional[str] = None
+            if filter_string:
+                oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
+                    filter_string
+                )
+                filters = oql.parsed_filters
+
             prompt_id = filtered_prompt_list[0]
-            return self._get_prompt_versions_by_id_paginated(prompt_id)
+            return self._get_prompt_versions_by_id_paginated(
+                prompt_id, search=search, filters=filters
+            )
 
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
@@ -267,14 +321,21 @@ class PromptClient:
         return []
 
     def _get_prompt_versions_by_id_paginated(
-        self, prompt_id: str
+        self,
+        prompt_id: str,
+        search: Optional[str] = None,
+        filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         page = 1
         size = 100
         prompts: List[prompt_version_detail.PromptVersionDetail] = []
         while True:
             prompt_versions_page = self._rest_client.prompts.get_prompt_versions(
-                id=prompt_id, page=page, size=size
+                id=prompt_id,
+                page=page,
+                size=size,
+                search=search,
+                filters=filters,
             ).content
 
             versions = prompt_versions_page or []
@@ -291,6 +352,7 @@ class PromptClient:
                         commit=version.commit,
                         created_at=version.created_at,
                         created_by=version.created_by,
+                        tags=version.tags,
                     )
                     for version in versions
                 ]
@@ -392,3 +454,48 @@ class PromptClient:
             if e.status_code != 404:
                 raise e
             return []
+
+    def batch_update_prompt_version_tags(
+        self,
+        version_ids: List[str],
+        tags: Optional[List[str]] = None,
+        merge: Optional[bool] = None,
+    ) -> None:
+        """
+        Update tags for one or more prompt versions in a single batch operation.
+
+        Parameters:
+            version_ids: List of prompt version IDs to update.
+            tags: Tags to set or merge. Semantics:
+                - None: No change to tags (preserves existing tags).
+                - []: Clear all tags (when merge is False or None).
+                - ['tag1', 'tag2']: Set or merge tags (based on merge parameter).
+            merge: Controls tag update behavior. Semantics:
+                - None: Use backend default behavior (replace mode).
+                - False: Replace all existing tags (replace mode).
+                - True: Merge new tags with existing tags (union).
+
+        Example:
+            # Replace tags on multiple versions (default behavior)
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+
+            # Merge new tags with existing tags
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=["hotfix"],
+                merge=True
+            )
+
+            # Clear all tags
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=[]
+            )
+        """
+        update = PromptVersionUpdate(tags=tags)
+        self._rest_client.prompts.update_prompt_versions(
+            ids=version_ids, update=update, merge_tags=merge
+        )

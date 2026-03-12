@@ -3,13 +3,17 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -34,7 +38,7 @@ import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toMap;
 
-class DatasetItemResultMapper {
+public class DatasetItemResultMapper {
 
     private static final int COMMENT_INDEX = 11;
 
@@ -69,6 +73,10 @@ class DatasetItemResultMapper {
                                 .map(Object::toString)
                                 .filter(StringUtils::isNotBlank)
                                 .flatMap(VisibilityMode::fromString)
+                                .orElse(null))
+                        .description(Optional.ofNullable(experimentItem.get(17))
+                                .map(Object::toString)
+                                .filter(StringUtils::isNotBlank)
                                 .orElse(null))
                         .build())
                 .toList();
@@ -129,50 +137,87 @@ class DatasetItemResultMapper {
                 .toArray(ColumnType[]::new);
     }
 
-    static Publisher<DatasetItem> mapItem(Result results) {
-        return results.map((row, rowMetadata) -> {
+    public static Publisher<DatasetItem> mapItem(Result results) {
+        return results.map(DatasetItemResultMapper::buildItemFromRow);
+    }
 
-            Map<String, JsonNode> data = getData(row);
+    public static DatasetItem buildItemFromRow(Row row, RowMetadata rowMetadata) {
 
-            // Check if dataset_item_id column exists in the result (only present for versioned items)
-            UUID datasetItemId = null;
-            if (rowMetadata.contains("dataset_item_id")) {
-                datasetItemId = Optional.ofNullable(row.get("dataset_item_id", String.class))
+        Map<String, JsonNode> data = getData(row);
+
+        // Check if dataset_item_id column exists in the result (only present for versioned items)
+        UUID datasetItemId = null;
+        if (rowMetadata.contains("dataset_item_id")) {
+            datasetItemId = Optional.ofNullable(row.get("dataset_item_id", String.class))
+                    .filter(s -> !s.isBlank())
+                    .map(UUID::fromString)
+                    .orElse(null);
+        }
+
+        return DatasetItem.builder()
+                .id(row.get("id", UUID.class))
+                .data(data)
+                .description(getDescription(row, rowMetadata))
+                .source(Optional.ofNullable(row.get("source", String.class))
+                        .map(DatasetItemSource::fromString)
+                        .orElse(null))
+                .traceId(Optional.ofNullable(row.get("trace_id", String.class))
                         .filter(s -> !s.isBlank())
                         .map(UUID::fromString)
-                        .orElse(null);
-            }
+                        .orElse(null))
+                .spanId(Optional.ofNullable(row.get("span_id", String.class))
+                        .filter(s -> !s.isBlank())
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .datasetId(Optional.ofNullable(row.get("dataset_id", String.class))
+                        .filter(s -> !s.isBlank())
+                        .map(UUID::fromString)
+                        .orElse(null))
+                .tags(Optional.ofNullable(row.get("tags", String[].class))
+                        .map(Arrays::asList)
+                        .map(Set::copyOf)
+                        .orElse(null))
+                .evaluators(getEvaluators(row, rowMetadata))
+                .executionPolicy(getExecutionPolicy(row, rowMetadata))
+                .datasetItemId(datasetItemId)
+                .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
+                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
+                .createdAt(row.get("created_at", Instant.class))
+                .createdBy(row.get("created_by", String.class))
+                .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .build();
+    }
 
-            return DatasetItem.builder()
-                    .id(row.get("id", UUID.class))
-                    .data(data)
-                    .source(Optional.ofNullable(row.get("source", String.class))
-                            .map(DatasetItemSource::fromString)
-                            .orElse(null))
-                    .traceId(Optional.ofNullable(row.get("trace_id", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(UUID::fromString)
-                            .orElse(null))
-                    .spanId(Optional.ofNullable(row.get("span_id", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(UUID::fromString)
-                            .orElse(null))
-                    .datasetId(Optional.ofNullable(row.get("dataset_id", String.class))
-                            .filter(s -> !s.isBlank())
-                            .map(UUID::fromString)
-                            .orElse(null))
-                    .tags(Optional.ofNullable(row.get("tags", String[].class))
-                            .map(Arrays::asList)
-                            .map(Set::copyOf)
-                            .orElse(null))
-                    .datasetItemId(datasetItemId)
-                    .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
-                    .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                    .createdAt(row.get("created_at", Instant.class))
-                    .createdBy(row.get("created_by", String.class))
-                    .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .build();
-        });
+    private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
+    };
+
+    static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("evaluators")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("evaluators", String.class))
+                .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
+                .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .orElse(null);
+    }
+
+    static String getDescription(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("description")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("description", String.class))
+                .filter(s -> !s.isBlank())
+                .orElse(null);
+    }
+
+    static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("execution_policy")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("execution_policy", String.class))
+                .filter(s -> !s.isBlank())
+                .map(s -> JsonUtils.readValue(s, ExecutionPolicy.class))
+                .orElse(null);
     }
 
     private static Map<String, JsonNode> getData(Row row) {

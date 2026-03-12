@@ -78,6 +78,7 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
                 key != null ? extractFeedbackScore(span.feedbackScores(), key) : span.feedbackScores();
             case DURATION ->
                 span.duration() != null ? span.duration() : calculateDuration(span.startTime(), span.endTime());
+            case TTFT -> span.ttft();
             case ERROR_INFO -> key != null ? extractErrorInfoField(span.errorInfo(), key) : span.errorInfo();
             case CUSTOM -> extractCustomFieldValue(key, span);
             default -> {

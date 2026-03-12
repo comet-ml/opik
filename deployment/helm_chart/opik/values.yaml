@@ -43,6 +43,7 @@ chartMigration:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []
 
 caCerts:
   # -- (list) Additional Certificate Authority Certificates to trust.
@@ -89,6 +90,20 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: true
     run_migration: true
@@ -194,6 +209,20 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: true
     podDisruptionBudget:
@@ -270,17 +299,33 @@ component:
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
-
+      enabled: false
+      annotations: {}
+      additionalRules: []
+      # example networks to block
+      # # Allow egress to public internet, excluding private / reserved ranges
+      #   - to:
+      #     - ipBlock:
+      #         cidr: 0.0.0.0/0
+      #         except:
+      #           # Standard RFC1918 Private Ranges
+      #           - 10.0.0.0/8
+      #           - 172.16.0.0/12
+      #           - 192.168.0.0/16
+      #           # EKS / Carrier Grade NAT
+      #           - 100.64.0.0/10
+      #           # AWS Metadata & Link Local (Very Important)
+      #           - 169.254.0.0/16
+      #           # Loopback range
+      #           - 127.0.0.0/8
+      #           # Reserved / Protocol Ranges
+      #           - 192.0.0.0/24
+      #           - 198.18.0.0/15
+      #           # Multicast ranges
+      #           - 224.0.0.0/4
+      #           # Broadcast address
+      #           - 255.255.255.255/32
+      
     service:
       type: ClusterIP
       ports:
@@ -312,6 +357,20 @@ component:
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: false
     resources:
@@ -332,6 +391,12 @@ component:
         # - host: opik.example.com
         #   paths:
         #     - path: /
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /api
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /opik-ai
         #       port: 5173
         #       pathType: Prefix
       tls:
@@ -413,6 +478,8 @@ component:
       # Media (audio/video) allowed to load
       media-src:
         - "'self'"
+        - "data:"
+        - "blob:"
         - "https:"
         - "http:"
       # Fonts allowed to load
@@ -481,8 +548,8 @@ minio:
   enabled: true
   image:
     registry: docker.io
-    repository: minio/minio
-    tag: "RELEASE.2025-03-12T18-04-18Z"
+    repository: cloudpirates/image-minio
+    tag: "RELEASE.2025-10-15T17-29-55Z-hardened"
     imagePullPolicy: IfNotPresent
   replicaCount: 1
   config:
@@ -541,7 +608,7 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
+  image: altinity/clickhouse-server:25.3.8.10041.altinitystable
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
@@ -640,6 +707,20 @@ clickhouse:
   extraServiceTemplates: []
   extraPodTemplates: []
   extraVolumeClaimTemplates: []
+  # -- (list) Additional volume mounts for the ClickHouse server container.
+  # Use this to mount volumes that ClickHouse server needs direct access to,
+  # such as a backup disk for embedded backups (BACKUP TO Disk(...)).
+  # The mount name can reference a CHI volumeClaimTemplate defined in
+  # `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by
+  # the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`.
+  extraVolumeMounts: []
+  # -- (list) Additional pod-level volumes for the ClickHouse pod, independent
+  # of the backup server sidecar. Use this for non-PVC volume types (configMap,
+  # secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse
+  # server container. For persistent storage, prefer defining a CHI-managed PVC
+  # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
+  # `extraVolumeMounts` above.
+  extraVolumes: []
   adminUser:
     useSecret:
       enabled: false
@@ -669,7 +750,7 @@ clickhouse:
         clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
   backupServer:
     enabled: false
-    image: altinity/clickhouse-backup:2.6.23
+    image: altinity/clickhouse-backup:2.6.39
     port: 7171
     monitoring:
       enabled: false
@@ -693,6 +774,22 @@ clickhouse:
         metricRelabelings: []
         podTargetLabels: []
         honorLabels: false
+    # -- (list) Additional volumes to add to the ClickHouse pod when the backup
+    # server is enabled. Use this for non-PVC volume types (emptyDir, configMap,
+    # secret, hostPath, etc.). For persistent storage, prefer using
+    # `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and
+    # reference its name directly in `extraVolumeMounts` below (the clickhouse
+    # operator matches volumeMount names to volumeClaimTemplate names
+    # automatically). Note that `clickhouse-backup` writes local backups to
+    # `/var/lib/clickhouse/backup/` by default (on the same filesystem as
+    # ClickHouse data to preserve hard links). Mounting a separate volume at
+    # that path will cause backups to use full copies instead of hard links.
+    extraVolumes: []
+    # -- (list) Additional volume mounts for the `clickhouse-backup` container.
+    # The mount name can reference a CHI `volumeClaimTemplate` defined in
+    # `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume
+    # defined in `extraVolumes` above.
+    extraVolumeMounts: []
     env:
       LOG_LEVEL: info
       ALLOW_EMPTY_BACKUPS: true
@@ -760,9 +857,8 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
-  selectorLabels:
-    name: zookeeper-opik
-    instance: opik
+  commonLabels:
+    app.kubernetes.io/name: zookeeper-opik
 
     # resources:
     #   requests:

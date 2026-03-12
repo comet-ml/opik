@@ -9,6 +9,9 @@ import {
 } from "@tanstack/react-router";
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
+import ExperimentsPageGuard from "@/components/layout/ExperimentsPageGuard";
+import DatasetsPageGuard from "@/components/layout/DatasetsPageGuard";
+import DashboardsPageGuard from "@/components/layout/DashboardsPageGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
@@ -41,7 +44,7 @@ import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPa
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
-import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import AlertEditPageGuard from "@/components/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
@@ -161,6 +164,7 @@ const homeRouteNew = createRoute({
 const dashboardsRoute = createRoute({
   path: "/dashboards",
   getParentRoute: () => workspaceRoute,
+  component: DashboardsPageGuard,
   staticData: {
     title: "Dashboards",
   },
@@ -215,6 +219,7 @@ const tracesRoute = createRoute({
 const experimentsRoute = createRoute({
   path: "/experiments",
   getParentRoute: () => workspaceRoute,
+  component: ExperimentsPageGuard,
   staticData: {
     title: "Experiments",
   },
@@ -231,6 +236,7 @@ const compareExperimentsRoute = createRoute({
   getParentRoute: () => experimentsRoute,
   component: CompareExperimentsPage,
   staticData: {
+    title: "Compare",
     param: "compare",
     paramValue: "compare",
   },
@@ -298,6 +304,7 @@ const compareTrialsRoute = createRoute({
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
+  component: DatasetsPageGuard,
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",
@@ -420,7 +427,7 @@ const alertNewRoute = createRoute({
   staticData: {
     title: "New alert",
   },
-  component: AddEditAlertPage,
+  component: AlertEditPageGuard,
 });
 
 const alertEditRoute = createRoute({
@@ -429,7 +436,7 @@ const alertEditRoute = createRoute({
   staticData: {
     param: "alertId",
   },
-  component: AddEditAlertPage,
+  component: AlertEditPageGuard,
 });
 
 // --------- production

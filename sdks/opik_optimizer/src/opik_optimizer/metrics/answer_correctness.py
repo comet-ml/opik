@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from opik.evaluation.metrics import base_metric, score_result
 from opik.evaluation import models
 import json
+from .. import constants
 
 
 # Define structured output for LLM judge
@@ -27,7 +28,7 @@ class AnswerCorrectnessMetric(base_metric.BaseMetric):
     def __init__(
         self,
         name: str = "answer_correctness",
-        model: str = "openai/gpt-4o-mini",
+        model: str = constants.DEFAULT_MODEL,
     ):
         super().__init__(name=name)
         self.model_name = model

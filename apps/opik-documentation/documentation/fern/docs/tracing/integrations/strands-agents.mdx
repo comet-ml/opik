@@ -34,7 +34,7 @@ configure the OpenTelemetry integration:
     <Tab value="Opik Cloud" title="Opik Cloud">
         If you are using Opik Cloud, you will need to set the following
         environment variables:
-            
+
         ```bash wordWrap
         export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
         export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
@@ -104,6 +104,10 @@ The example below shows how to use the Strands Agents integration with Opik:
 ```python
 from strands import Agent
 from strands.models.bedrock import BedrockModel
+from strands.telemetry import StrandsTelemetry
+
+# Required: Strands does not configure OTLP by default. Without this, traces stay in-process.
+StrandsTelemetry().setup_otlp_exporter()
 
 # Define the system prompt for the agent
 system_prompt = """You are \"Restaurant Helper\", a restaurant assistant helping customers reserving tables in
@@ -149,6 +153,11 @@ agent = Agent(
 
 results = agent("Hi, where can I eat in San Francisco?")
 ```
+
+<Warning>
+  Strands Agents does not configure OTLP by default. Configure an OTLP exporter (for example via `StrandsTelemetry().setup_otlp_exporter()`) before you start operations that send traces, otherwise traces may remain in-process and not be exported.
+</Warning>
+
 
 ## Further improvements
 

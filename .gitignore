@@ -73,6 +73,7 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
+sdks/python/uv.lock
 # Track Python version pin to avoid accidental environment drift.
 # Remove this exclusion so changes to the version file are committed.
 
@@ -83,6 +84,9 @@ pip-log.txt
 .claude/
 .mcp.json
 CLAUDE.md
+.codex
+AGENTS.override.md
+.agents/generated/
 
 # Cursor
 .cursor
@@ -104,3 +108,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 *~
+
+# Generated diagrams (local artifacts from /share-diagram command)
+/diagrams/

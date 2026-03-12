@@ -1,6 +1,7 @@
 package com.comet.opik.podam;
 
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
@@ -14,6 +15,7 @@ import com.comet.opik.api.validation.InRange;
 import com.comet.opik.podam.manufacturer.BigDecimalTypeManufacturer;
 import com.comet.opik.podam.manufacturer.CategoricalFeedbackDetailTypeManufacturer;
 import com.comet.opik.podam.manufacturer.DatasetItemTypeManufacturer;
+import com.comet.opik.podam.manufacturer.ExperimentItemTypeManufacturer;
 import com.comet.opik.podam.manufacturer.GuardrailCheckTypeManufacturer;
 import com.comet.opik.podam.manufacturer.JsonNodeTypeManufacturer;
 import com.comet.opik.podam.manufacturer.LlmAsJudgeMessageContentManufacturer;
@@ -74,6 +76,7 @@ public class PodamFactoryUtils {
                 new CategoricalFeedbackDetailTypeManufacturer());
         strategy.addOrReplaceTypeManufacturer(JsonNode.class, JsonNodeTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(DatasetItem.class, DatasetItemTypeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(ExperimentItem.class, ExperimentItemTypeManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(PromptVersion.class, PromptVersionManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(ProviderApiKey.class, ProviderApiKeyManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(ProviderApiKeyUpdate.class, ProviderApiKeyUpdateManufacturer.INSTANCE);

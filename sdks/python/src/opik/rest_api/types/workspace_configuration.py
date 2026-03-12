@@ -17,6 +17,11 @@ class WorkspaceConfiguration(UniversalBaseModel):
     Enable or disable data truncation in table views. When disabled, the frontend will limit pagination to prevent performance issues. Default: true (truncation enabled).
     """
 
+    color_map: typing.Optional[typing.Dict[str, str]] = pydantic.Field(default=None)
+    """
+    Workspace-level color map. Maps label names to hex color values (e.g. #FF0000). Max 10000 entries.
+    """
+
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
     else:

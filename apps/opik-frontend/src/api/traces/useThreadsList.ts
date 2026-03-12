@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
-import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
+import { processFilters } from "@/lib/filters";
 import { Thread } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
@@ -44,8 +44,9 @@ const getThreadList = async (
       signal,
       params: {
         project_id: projectId,
-        ...processFilters(filters, generateSearchByIDFilters(search)),
+        ...processFilters(filters),
         ...processSorting(sorting),
+        ...(search && { search }),
         size,
         page,
         truncate,

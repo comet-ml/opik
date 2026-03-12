@@ -26,7 +26,7 @@ RUN printf '{"version": "%s"}\n' "$VITE_APP_VERSION" > dist/version.json
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.29.4-alpine-otel AS nginx
+FROM nginx:1.29.5-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production

@@ -37,8 +37,8 @@ yarn add opik-openai openai
 ### Requirements
 
 - Node.js ≥ 18
-- OpenAI SDK (`openai` ≥ 4.0.0)
-- Opik SDK (automatically installed as a dependency)
+- OpenAI SDK (`openai` ≥ 6.0.1)
+- Opik SDK (`opik` peer dependency)
 
 ## Basic Usage
 
@@ -60,7 +60,7 @@ const trackedOpenAI = trackOpenAI(openai);
 
 // Use the tracked client just like the original
 const completion = await trackedOpenAI.chat.completions.create({
-  model: "gpt-4",
+  model: "gpt-5",
   messages: [{ role: "user", content: "Hello, how can you help me today?" }],
 });
 
@@ -84,7 +84,7 @@ const trackedOpenAI = trackOpenAI(openai);
 async function streamingExample() {
   // Create a streaming chat completion
   const stream = await trackedOpenAI.chat.completions.create({
-    model: "gpt-3.5-turbo",
+    model: "gpt-5-nano",
     messages: [{ role: "user", content: "What is streaming?" }],
     stream: true,
     // Include usage in the stream

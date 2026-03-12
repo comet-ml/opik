@@ -52,6 +52,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -59,7 +60,7 @@ import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueI
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useThreadsList from "@/api/traces/useThreadsList";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import useAppStore from "@/store/AppStore";
@@ -101,13 +102,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
   {
@@ -127,13 +128,19 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
   },
 ];
 
@@ -195,10 +202,27 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "first_message",
+  "last_message",
+  "number_of_messages",
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   "first_message",
   "last_message",
-  "comments",
+  "number_of_messages",
+  COLUMN_COMMENTS_ID,
+  "start_time",
+  "end_time",
+  "duration",
+  `${COLUMN_USAGE_ID}.total_tokens`,
+  "total_estimated_cost",
+  "tags",
+  "created_at",
+  "last_updated_at",
+  "created_by",
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
@@ -342,6 +366,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
             statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+            statisticDataFormater: formatScoreDisplay,
           }) as ColumnData<Thread>,
       ),
     ];
@@ -368,7 +393,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     COLUMNS_ORDER_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_COLUMNS_ORDER,
     },
   );
 

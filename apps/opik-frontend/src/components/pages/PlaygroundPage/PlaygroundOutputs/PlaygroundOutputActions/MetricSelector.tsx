@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ListAction } from "@/components/ui/list-action";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EvaluatorsRule } from "@/types/automations";
@@ -21,8 +22,9 @@ interface MetricSelectorProps {
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
   datasetId: string | null;
-  onCreateRuleClick?: () => void;
+  onCreateRuleClick: () => void;
   workspaceName: string;
+  canCreateRules: boolean;
 }
 
 const MetricSelector: React.FC<MetricSelectorProps> = ({
@@ -32,6 +34,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   datasetId,
   onCreateRuleClick,
   workspaceName,
+  canCreateRules,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -216,10 +219,12 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               <div className="comet-body-s-accented pb-1 text-foreground">
                 No metrics available
               </div>
-              <div className="comet-body-s text-muted-slate">
-                Create an online evaluation rule for the Playground project to
-                generate metrics for your outputs.
-              </div>
+              {canCreateRules && (
+                <div className="comet-body-s text-muted-slate">
+                  Create an online evaluation rule for the Playground project to
+                  generate metrics for your outputs.
+                </div>
+              )}
             </div>
           ) : filteredRules.length > 0 ? (
             <>
@@ -287,21 +292,18 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               </div>
             </>
           )}
-          {onCreateRuleClick && (
+          {canCreateRules && (
             <>
               <Separator className="my-1" />
-              <div
-                className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
+              <ListAction
                 onClick={() => {
                   setOpen(false);
                   onCreateRuleClick();
                 }}
               >
-                <div className="comet-body-s flex items-center gap-2 text-primary">
-                  <Plus className="size-3.5 shrink-0" />
-                  <span>Create a new rule</span>
-                </div>
-              </div>
+                <Plus className="size-3.5 shrink-0" />
+                Add new
+              </ListAction>
             </>
           )}
         </div>

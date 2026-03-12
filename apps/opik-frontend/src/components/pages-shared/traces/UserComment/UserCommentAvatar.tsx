@@ -1,7 +1,7 @@
 import React from "react";
 import { cva, VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import { getRandomColorByLabel } from "@/constants/colorVariants";
+import { resolveColor } from "@/lib/colorVariants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const userCommentAvatarVariants = cva(
@@ -49,7 +49,7 @@ const UserCommentAvatar: Components & React.FC<UserCommentAvatarProps> = ({
     <Avatar
       style={
         {
-          "--bg-avatar-color": getRandomColorByLabel(username),
+          "--bg-avatar-color": resolveColor(username),
         } as React.CSSProperties
       }
       className={cn(userCommentAvatarVariants({ size }), className)}

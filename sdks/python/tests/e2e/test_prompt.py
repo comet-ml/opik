@@ -4,7 +4,22 @@ import pytest
 import opik
 from opik.api_objects.prompt import PromptType
 from . import verifiers
-import opik.exceptions
+
+
+def _generate_random_suffix():
+    return str(uuid.uuid4())[-6:]
+
+
+def _generate_random_prompt_name():
+    return f"some-prompt-name-{_generate_random_suffix()}"
+
+
+def _generate_random_tag():
+    return f"tag-{_generate_random_suffix()}"
+
+
+def _generate_random_tags(n=2):
+    return [_generate_random_tag() for _ in range(n)]
 
 
 def test_prompt__create__happyflow(opik_client: opik.Opik):
@@ -768,3 +783,377 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
     assert set(filtered_prompts[0].tags) == set(tags)
+
+
+def test_prompt__filter_versions(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    shared_tag = _generate_random_tag()
+    v1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v1.version_id],
+        tags=[shared_tag, _generate_random_tag()],
+    )
+    v2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v2.version_id],
+        tags=_generate_random_tags(),
+    )
+    v3 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v3-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v3.version_id],
+        tags=[_generate_random_tag(), shared_tag],
+    )
+
+    filtered_versions = opik_client.get_prompt_history(
+        name=prompt_name,
+        filter_string=f'tags contains "{shared_tag}"',
+    )
+
+    assert len(filtered_versions) == 2
+    version_ids = {v.version_id for v in filtered_versions}
+    assert v1.version_id in version_ids
+    assert v3.version_id in version_ids
+    assert v2.version_id not in version_ids
+
+
+def test_prompt__search_versions(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    search_term = f"unique-search-term-{_generate_random_suffix()}"
+    v1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"This template contains {search_term} for testing",
+    )
+    v2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"This template has different content {_generate_random_suffix()} for testing",
+    )
+    v3 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Another template with {search_term} included",
+    )
+
+    search_results = opik_client.get_prompt_history(
+        name=prompt_name, search=search_term
+    )
+
+    assert len(search_results) == 2
+    version_ids = {v.version_id for v in search_results}
+    assert v1.version_id in version_ids
+    assert v3.version_id in version_ids
+    assert v2.version_id not in version_ids
+
+
+def test_chat_prompt__filter_versions(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    shared_tag = _generate_random_tag()
+    v1 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Message v1-{_generate_random_suffix()}"}
+        ],
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v1.version_id],
+        tags=[shared_tag, _generate_random_tag()],
+    )
+    v2 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Message v2-{_generate_random_suffix()}"}
+        ],
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v2.version_id],
+        tags=_generate_random_tags(),
+    )
+    v3 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Message v3-{_generate_random_suffix()}"}
+        ],
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v3.version_id],
+        tags=[_generate_random_tag(), shared_tag],
+    )
+
+    filtered_versions = opik_client.get_chat_prompt_history(
+        name=prompt_name,
+        filter_string=f'tags contains "{shared_tag}"',
+    )
+
+    assert len(filtered_versions) == 2
+    version_ids = {v.version_id for v in filtered_versions}
+    assert v1.version_id in version_ids
+    assert v3.version_id in version_ids
+    assert v2.version_id not in version_ids
+
+
+def test_chat_prompt__search_versions(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    search_term = f"unique-search-term-{_generate_random_suffix()}"
+    v1 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {
+                "role": "user",
+                "content": f"This message contains {search_term} for testing",
+            }
+        ],
+    )
+    v2 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {
+                "role": "user",
+                "content": f"This message has different content {_generate_random_suffix()} for testing",
+            }
+        ],
+    )
+    v3 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Another message with {search_term} included"}
+        ],
+    )
+
+    search_results = opik_client.get_chat_prompt_history(
+        name=prompt_name, search=search_term
+    )
+
+    assert len(search_results) == 2
+    version_ids = {v.version_id for v in search_results}
+    assert v1.version_id in version_ids
+    assert v3.version_id in version_ids
+    assert v2.version_id not in version_ids
+
+
+def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id],
+        tags=_generate_random_tags(),
+        merge=False,
+    )
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version2.version_id],
+        tags=_generate_random_tags(),
+        merge=False,
+    )
+
+    new_tags = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=new_tags,
+        merge=False,
+    )
+
+    history = opik_client.get_prompt_history(name=prompt_name)
+    assert len(history) == 2
+    v1_in_history = next(
+        (v for v in history if v.version_id == version1.version_id), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.version_id == version2.version_id), None
+    )
+    assert set(v1_in_history.tags) == set(new_tags)
+    assert set(v2_in_history.tags) == set(new_tags)
+
+
+def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id],
+        tags=_generate_random_tags(),
+    )
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version2.version_id],
+        tags=_generate_random_tags(),
+    )
+
+    new_tags = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=new_tags,
+    )
+
+    history = opik_client.get_prompt_history(name=prompt_name)
+    v1_in_history = next(
+        (v for v in history if v.version_id == version1.version_id), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.version_id == version2.version_id), None
+    )
+    assert set(v1_in_history.tags) == set(new_tags)
+    assert set(v2_in_history.tags) == set(new_tags)
+
+
+def test_prompt__update_version_tags__clear_with_empty_array(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=_generate_random_tags(),
+    )
+
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=[],
+    )
+
+    history = opik_client.get_prompt_history(name=prompt_name)
+    assert len(history) == 2
+    v1_in_history = next(
+        (v for v in history if v.version_id == version1.version_id), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.version_id == version2.version_id), None
+    )
+    assert v1_in_history.tags == []
+    assert v2_in_history.tags == []
+
+
+@pytest.mark.parametrize("merge_param", [False, True, None])
+def test_prompt__update_version_tags__preserve_with_none(
+    opik_client: opik.Opik, merge_param
+):
+    prompt_name = _generate_random_prompt_name()
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    initial_tags_v1 = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id],
+        tags=initial_tags_v1,
+    )
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    initial_tags_v2 = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version2.version_id],
+        tags=initial_tags_v2,
+    )
+
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=None,
+        merge=merge_param,
+    )
+
+    history = opik_client.get_prompt_history(name=prompt_name)
+    assert len(history) == 2
+    v1_in_history = next(
+        (v for v in history if v.version_id == version1.version_id), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.version_id == version2.version_id), None
+    )
+    assert set(v1_in_history.tags) == set(initial_tags_v1)
+    assert set(v2_in_history.tags) == set(initial_tags_v2)
+
+
+def test_prompt__update_version_tags__merge_mode(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    version1 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v1-{_generate_random_suffix()}",
+    )
+    initial_tags_v1 = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id],
+        tags=initial_tags_v1,
+        merge=False,
+    )
+    version2 = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=f"Template v2-{_generate_random_suffix()}",
+    )
+    initial_tags_v2 = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version2.version_id],
+        tags=initial_tags_v2,
+        merge=False,
+    )
+
+    additional_tags = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[version1.version_id, version2.version_id],
+        tags=additional_tags,
+        merge=True,
+    )
+
+    history = opik_client.get_prompt_history(name=prompt_name)
+    assert len(history) == 2
+    v1_in_history = next(
+        (v for v in history if v.version_id == version1.version_id), None
+    )
+    v2_in_history = next(
+        (v for v in history if v.version_id == version2.version_id), None
+    )
+    assert set(v1_in_history.tags) == set(initial_tags_v1 + additional_tags)
+    assert set(v2_in_history.tags) == set(initial_tags_v2 + additional_tags)
+
+
+def test_chat_prompt__update_version_tags(opik_client: opik.Opik):
+    prompt_name = _generate_random_prompt_name()
+    v1 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Message v1 {_generate_random_suffix()}"}
+        ],
+    )
+    v2 = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "user", "content": f"Message v2 {_generate_random_suffix()}"}
+        ],
+    )
+
+    new_tags = _generate_random_tags()
+    opik_client.get_prompts_client().batch_update_prompt_version_tags(
+        version_ids=[v1.version_id, v2.version_id],
+        tags=new_tags,
+        merge=False,
+    )
+
+    history = opik_client.get_chat_prompt_history(name=prompt_name)
+    assert len(history) == 2
+    v1_in_history = next((v for v in history if v.version_id == v1.version_id), None)
+    v2_in_history = next((v for v in history if v.version_id == v2.version_id), None)
+    assert set(v1_in_history.tags) == set(new_tags)
+    assert set(v2_in_history.tags) == set(new_tags)

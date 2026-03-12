@@ -3,7 +3,7 @@ import api, { QueryConfig, SPANS_REST_ENDPOINT } from "@/api/api";
 import { SPAN_TYPE } from "@/types/traces";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
+import { processFilters } from "@/lib/filters";
 
 type UseSpansStatisticParams = {
   projectId: string;
@@ -37,7 +37,8 @@ const getSpansStatistic = async (
       project_id: projectId,
       ...(traceId && { trace_id: traceId }),
       ...(type && { type }),
-      ...processFilters(filters, generateSearchByIDFilters(search)),
+      ...processFilters(filters),
+      ...(search && { search }),
       ...(fromTime && { from_time: fromTime }),
       ...(toTime && { to_time: toTime }),
     },

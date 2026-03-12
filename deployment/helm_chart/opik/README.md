@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.10](https://img.shields.io/badge/Version-1.10.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.10](https://img.shields.io/badge/AppVersion-1.10.10-informational?style=flat-square)
+![Version: 1.10.32](https://img.shields.io/badge/Version-1.10.32-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.32](https://img.shields.io/badge/AppVersion-1.10.32-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -82,10 +82,10 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
-| oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
-| oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.10.0 |
+| oci://registry-1.docker.io/cloudpirates | redis | 0.23.0 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.6.0 |
 
 ## Values
 
@@ -126,7 +126,9 @@ Call opik api on http://localhost:5173/api
 | clickhouse.backupServer.env.API_CREATE_INTEGRATION_TABLES | bool | `true` |  |
 | clickhouse.backupServer.env.API_LISTEN | string | `"0.0.0.0:7171"` |  |
 | clickhouse.backupServer.env.LOG_LEVEL | string | `"info"` |  |
-| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.23"` |  |
+| clickhouse.backupServer.extraVolumeMounts | list | `[]` | Additional volume mounts for the `clickhouse-backup` container. The mount name can reference a CHI `volumeClaimTemplate` defined in `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume defined in `extraVolumes` above. |
+| clickhouse.backupServer.extraVolumes | list | `[]` | Additional volumes to add to the ClickHouse pod when the backup server is enabled. Use this for non-PVC volume types (emptyDir, configMap, secret, hostPath, etc.). For persistent storage, prefer using `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and reference its name directly in `extraVolumeMounts` below (the clickhouse operator matches volumeMount names to volumeClaimTemplate names automatically). Note that `clickhouse-backup` writes local backups to `/var/lib/clickhouse/backup/` by default (on the same filesystem as ClickHouse data to preserve hard links). Mounting a separate volume at that path will cause backups to use full copies instead of hard links. |
+| clickhouse.backupServer.image | string | `"altinity/clickhouse-backup:2.6.39"` |  |
 | clickhouse.backupServer.monitoring.additionalLabels | object | `{}` |  |
 | clickhouse.backupServer.monitoring.annotations | object | `{}` |  |
 | clickhouse.backupServer.monitoring.enabled | bool | `false` |  |
@@ -153,7 +155,9 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.extraVolumeMounts | list | `[]` | Additional volume mounts for the ClickHouse server container. Use this to mount volumes that ClickHouse server needs direct access to, such as a backup disk for embedded backups (BACKUP TO Disk(...)). The mount name can reference a CHI volumeClaimTemplate defined in `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`. |
+| clickhouse.extraVolumes | list | `[]` | Additional pod-level volumes for the ClickHouse pod, independent of the backup server sidecar. Use this for non-PVC volume types (configMap, secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse server container. For persistent storage, prefer defining a CHI-managed PVC via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in `extraVolumeMounts` above. |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
@@ -202,6 +206,15 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.backend.autoscaling.enabled | bool | `false` |  |
 | component.backend.backendConfigMap.enabled | bool | `true` |  |
 | component.backend.enabled | bool | `true` |  |
@@ -276,6 +289,15 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.frontend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.frontend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.frontend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
@@ -308,8 +330,10 @@ Call opik api on http://localhost:5173/api
 | component.frontend.contentSecurityPolicy.img-src[4] | string | `"http:"` |  |
 | component.frontend.contentSecurityPolicy.manifest-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.media-src[0] | string | `"'self'"` |  |
-| component.frontend.contentSecurityPolicy.media-src[1] | string | `"https:"` |  |
-| component.frontend.contentSecurityPolicy.media-src[2] | string | `"http:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[1] | string | `"data:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[2] | string | `"blob:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[3] | string | `"https:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[4] | string | `"http:"` |  |
 | component.frontend.contentSecurityPolicy.object-src[0] | string | `"'none'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.script-src[1] | string | `"'unsafe-inline'"` |  |
@@ -347,6 +371,15 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
+| component.python-backend.autoscaling.behavior.scaleDown.stabilizationWindowSeconds | int | `300` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].periodSeconds | int | `60` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].type | string | `"Pods"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.policies[0].value | int | `2` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.selectPolicy | string | `"Max"` |  |
+| component.python-backend.autoscaling.behavior.scaleUp.stabilizationWindowSeconds | int | `60` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
@@ -377,14 +410,9 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
-| component.python-backend.networkPolicy.enabled | bool | `true` |  |
-| component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[2] | string | `"172.16.0.0/12"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[3] | string | `"192.0.0.0/24"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[4] | string | `"198.18.0.0/15"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
-| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
+| component.python-backend.networkPolicy.additionalRules | list | `[]` |  |
+| component.python-backend.networkPolicy.annotations | object | `{}` |  |
+| component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
@@ -411,8 +439,8 @@ Call opik api on http://localhost:5173/api
 | minio.fullnameOverride | string | `"opik-minio"` |  |
 | minio.image.imagePullPolicy | string | `"IfNotPresent"` |  |
 | minio.image.registry | string | `"docker.io"` |  |
-| minio.image.repository | string | `"minio/minio"` |  |
-| minio.image.tag | string | `"RELEASE.2025-03-12T18-04-18Z"` |  |
+| minio.image.repository | string | `"cloudpirates/image-minio"` |  |
+| minio.image.tag | string | `"RELEASE.2025-10-15T17-29-55Z-hardened"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
 | minio.replicaCount | int | `1` |  |
@@ -447,6 +475,8 @@ Call opik api on http://localhost:5173/api
 | serviceAccount.name | string | `""` |  |
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
+| topologySpreadConstraints | list | `[]` |  |
+| zookeeper.commonLabels."app.kubernetes.io/name" | string | `"zookeeper-opik"` |  |
 | zookeeper.enabled | bool | `true` |  |
 | zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
 | zookeeper.extraEnvVars[0].value | string | `"512M"` |  |
@@ -464,8 +494,6 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
-| zookeeper.selectorLabels.instance | string | `"opik"` |  |
-| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------

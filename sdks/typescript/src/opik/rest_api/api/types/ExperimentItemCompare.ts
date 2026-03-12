@@ -7,6 +7,7 @@ export interface ExperimentItemCompare {
     experimentId: string;
     datasetItemId: string;
     traceId: string;
+    projectId?: string;
     input?: OpikApi.JsonListStringCompare;
     output?: OpikApi.JsonListStringCompare;
     feedbackScores?: OpikApi.FeedbackScoreCompare[];
@@ -19,4 +20,6 @@ export interface ExperimentItemCompare {
     createdBy?: string;
     lastUpdatedBy?: string;
     traceVisibilityMode?: OpikApi.ExperimentItemCompareTraceVisibilityMode;
+    description?: string;
+    executionPolicy?: OpikApi.ExecutionPolicyCompare;
 }

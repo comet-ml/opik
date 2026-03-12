@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
@@ -18,6 +19,7 @@ import { AnnotationQueue } from "@/types/annotation-queues";
 import useAnnotationQueueDeleteMutation from "@/api/annotation-queues/useAnnotationQueueBatchDeleteMutation";
 import useAppStore from "@/store/AppStore";
 import { generateSMEURL } from "@/lib/annotation-queues";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import AddEditAnnotationQueueDialog from "./AddEditAnnotationQueueDialog";
 
 const AnnotationQueueRowActionsCell: React.FunctionComponent<
@@ -29,6 +31,10 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
   const [open, setOpen] = useState<number | boolean>(false);
   const { toast } = useToast();
   const { mutate } = useAnnotationQueueDeleteMutation();
+
+  const {
+    permissions: { canDeleteAnnotationQueues },
+  } = usePermissions();
 
   const handleCopySMELink = useCallback(() => {
     copy(generateSMEURL(workspaceName, queue.id));
@@ -57,16 +63,18 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
       className="justify-end p-0"
       stopClickPropagation
     >
-      <ConfirmDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={open === 1}
-        setOpen={setOpen}
-        onConfirm={deleteQueueHandler}
-        title="Delete annotation queue?"
-        description="Deleting an annotation queue will permanently remove it from the system. All associated data and configurations will be lost. This action can't be undone. Are you sure you want to continue?"
-        confirmText="Delete"
-        confirmButtonVariant="destructive"
-      />
+      {canDeleteAnnotationQueues && (
+        <ConfirmDialog
+          key={`delete-${resetKeyRef.current}`}
+          open={open === 1}
+          setOpen={setOpen}
+          onConfirm={deleteQueueHandler}
+          title="Delete annotation queue?"
+          description="Deleting an annotation queue will permanently remove it from the system. All associated data and configurations will be lost. This action can't be undone. Are you sure you want to continue?"
+          confirmText="Delete"
+          confirmButtonVariant="destructive"
+        />
+      )}
       <AddEditAnnotationQueueDialog
         key={`edit-${resetKeyRef.current}`}
         queue={queue}
@@ -91,15 +99,21 @@ const AnnotationQueueRowActionsCell: React.FunctionComponent<
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {canDeleteAnnotationQueues && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  setOpen(1);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>

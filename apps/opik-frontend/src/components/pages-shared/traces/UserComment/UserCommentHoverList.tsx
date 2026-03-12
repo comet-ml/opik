@@ -9,6 +9,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type UserCommentHoverListProps = {
   commentsList: CommentItems;
@@ -22,8 +23,12 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   className,
   children,
 }) => {
+  const {
+    permissions: { canWriteComments },
+  } = usePermissions();
+
   const [isOpen, setIsOpen] = useState(false);
-  const showReply = isFunction(onReply);
+  const showReply = canWriteComments && isFunction(onReply);
   const onRefCreated = useCallback((ref: HTMLDivElement | null) => {
     if (!ref) return;
 

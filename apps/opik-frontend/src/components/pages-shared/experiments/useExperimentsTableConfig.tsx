@@ -23,7 +23,11 @@ import {
   COLUMN_NAME_ID,
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
-import { getExperimentScore, RowWithScores } from "./scoresUtils";
+import {
+  getExperimentScore,
+  parseScoreColumnId,
+  RowWithScores,
+} from "@/lib/feedback-scores";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -43,7 +47,6 @@ import {
   generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
-import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
@@ -51,6 +54,7 @@ export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
   defaultColumns: ColumnData<T>[];
   defaultSelectedColumns: string[];
+  defaultColumnsOrder?: string[];
   groups: Groups;
   sortableBy: string[];
   dynamicScoresColumns: DynamicColumn[];
@@ -70,6 +74,7 @@ export const useExperimentsTableConfig = <
   storageKeyPrefix,
   defaultColumns,
   defaultSelectedColumns,
+  defaultColumnsOrder = [],
   groups,
   sortableBy,
   dynamicScoresColumns,
@@ -93,7 +98,7 @@ export const useExperimentsTableConfig = <
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-columns-order`,
     {
-      defaultValue: [],
+      defaultValue: defaultColumnsOrder,
     },
   );
 
@@ -107,17 +112,6 @@ export const useExperimentsTableConfig = <
     Record<string, number>
   >(`${storageKeyPrefix}-columns-width`, {
     defaultValue: {},
-  });
-
-  const dynamicColumnsIds = useMemo(
-    () => dynamicScoresColumns.map((c) => c.id),
-    [dynamicScoresColumns],
-  );
-
-  useDynamicColumnsCache({
-    dynamicColumnsKey: `${storageKeyPrefix}-dynamic-columns`,
-    dynamicColumnsIds,
-    setSelectedColumns,
   });
 
   /**
@@ -159,6 +153,7 @@ export const useExperimentsTableConfig = <
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+          const scoreName = parseScoreColumnId(id)?.scoreName;
 
           const columnData: ColumnData<T> = {
             id,
@@ -172,6 +167,7 @@ export const useExperimentsTableConfig = <
             customMeta: {
               accessorFn: (aggregation: ExperimentsAggregations) =>
                 getExperimentScore(id, aggregation)?.value,
+              scoreName,
             },
           };
 

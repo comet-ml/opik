@@ -35,6 +35,7 @@ set_containers_for_profile() {
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     CONTAINERS+=("${GUARDRAILS_CONTAINERS[@]}")
   fi
+  
 }
 
 get_verify_cmd() {
@@ -106,6 +107,11 @@ log_worktree_config() {
 
 setup_buildx_bake() {
   if [[ "${BUILD_MODE}" = "true" ]]; then
+    if [[ "${COMPOSE_BAKE:-}" = "false" ]]; then
+      echo "ℹ️ COMPOSE_BAKE is explicitly disabled. Skipping Bake-enabled builds"
+      return
+    fi
+
     if docker buildx bake --help >/dev/null 2>&1; then
       echo "ℹ️ Bake is available on Docker Buildx. Exporting COMPOSE_BAKE=true"
       export COMPOSE_BAKE=true
@@ -195,7 +201,7 @@ get_docker_compose_cmd() {
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
-
+  
   echo "$cmd"
 }
 

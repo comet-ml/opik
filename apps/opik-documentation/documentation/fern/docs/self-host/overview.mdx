@@ -78,6 +78,10 @@ os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
 
 To learn more about how to manage you local Opik deployment, you can refer to our [local deployment guide](/self-host/local_deployment).
 
+## SDK version compatibility
+
+For self-hosted deployments, we recommend keeping the Opik server and SDKs on the latest versions for best compatibility. The Python SDK (`opik`), TypeScript SDK (`opik`), and Opik Agent Optimizer SDK (`opik-optimizer`) are designed to work with the latest Opik server release. Older SDK versions may not support newer server features, and newer SDK versions may require a minimum server version. Check the [changelog](https://www.comet.com/docs/opik/changelog) for version-specific compatibility notes.
+
 ## Advanced deployment options
 
 If you would like to deploy Opik on a Kubernetes cluster, we recommend following our Kubernetes deployment guide [here](/self-host/kubernetes).

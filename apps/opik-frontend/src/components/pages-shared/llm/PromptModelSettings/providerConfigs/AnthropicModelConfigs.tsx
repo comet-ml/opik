@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useCallback } from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import {
@@ -17,6 +17,7 @@ import { supportsAnthropicThinkingEffort } from "@/lib/modelUtils";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Label } from "@/components/ui/label";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import isNil from "lodash/isNil";
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
@@ -29,83 +30,39 @@ const AnthropicModelConfigs = ({
   onChange,
   model,
 }: AnthropicModelConfigsProps) => {
-  const isExclusiveParamModel = useMemo(() => {
-    return (
-      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6 ||
-      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5 ||
-      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
-      model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
-      model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5
-    );
-  }, [model]);
-
-  const supportsThinkingEffort = useMemo(() => {
-    return supportsAnthropicThinkingEffort(model);
-  }, [model]);
-
-  const hasTemperatureValue = useMemo(() => {
-    return configs.temperature !== null && configs.temperature !== undefined;
-  }, [configs.temperature]);
-
-  const hasTopPValue = useMemo(() => {
-    return configs.topP !== null && configs.topP !== undefined;
-  }, [configs.topP]);
-
-  const temperatureDisabled = useMemo(() => {
-    return isExclusiveParamModel && hasTopPValue && !hasTemperatureValue;
-  }, [isExclusiveParamModel, hasTopPValue, hasTemperatureValue]);
-
-  const topPDisabled = useMemo(() => {
-    return isExclusiveParamModel && hasTemperatureValue && !hasTopPValue;
-  }, [isExclusiveParamModel, hasTemperatureValue, hasTopPValue]);
+  const showThinkingEffort = supportsAnthropicThinkingEffort(model);
+  const hasTemperatureValue = !isNil(configs.temperature);
+  const hasTopPValue = !isNil(configs.topP);
+  const temperatureDisabled = hasTopPValue && !hasTemperatureValue;
+  const topPDisabled = hasTemperatureValue && !hasTopPValue;
 
   const handleTemperatureChange = useCallback(
     (v: number) => {
-      if (isExclusiveParamModel && hasTopPValue) {
-        // Clear topP when setting temperature for models that require exclusive params
-        onChange({ temperature: v, topP: undefined });
-      } else {
-        onChange({ temperature: v });
-      }
+      onChange({ temperature: v, topP: undefined });
     },
-    [isExclusiveParamModel, hasTopPValue, onChange],
+    [onChange],
   );
 
   const handleTopPChange = useCallback(
     (v: number) => {
-      if (isExclusiveParamModel && hasTemperatureValue) {
-        // Clear temperature when setting topP for models that require exclusive params
-        onChange({ topP: v, temperature: undefined });
-      } else {
-        onChange({ topP: v });
-      }
+      onChange({ topP: v, temperature: undefined });
     },
-    [isExclusiveParamModel, hasTemperatureValue, onChange],
+    [onChange],
   );
 
   const handleClearTemperature = useCallback(() => {
-    if (isExclusiveParamModel) {
-      // For models requiring exclusive params, clearing temperature should enable topP by setting a default
-      onChange({
-        temperature: undefined,
-        topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
-      });
-    } else {
-      onChange({ temperature: undefined });
-    }
-  }, [isExclusiveParamModel, onChange]);
+    onChange({
+      temperature: undefined,
+      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+    });
+  }, [onChange]);
 
   const handleClearTopP = useCallback(() => {
-    if (isExclusiveParamModel) {
-      // For models requiring exclusive params, clearing topP should enable temperature by setting a default
-      onChange({
-        topP: undefined,
-        temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
-      });
-    } else {
-      onChange({ topP: undefined });
-    }
-  }, [isExclusiveParamModel, onChange]);
+    onChange({
+      topP: undefined,
+      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+    });
+  }, [onChange]);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -130,17 +87,11 @@ const AnthropicModelConfigs = ({
             defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
             label="Temperature"
             tooltip={
-              <PromptModelConfigsTooltipContent
-                text={`Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive.${
-                  isExclusiveParamModel
-                    ? " Note: This model requires using either Temperature OR Top P, not both."
-                    : ""
-                }`}
-              />
+              <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive. Note: Anthropic models require using either Temperature OR Top P, not both." />
             }
           />
         </div>
-        {isExclusiveParamModel && hasTemperatureValue && (
+        {hasTemperatureValue && (
           <div className="flex justify-end">
             <Button
               variant="ghost"
@@ -187,17 +138,11 @@ const AnthropicModelConfigs = ({
             defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
             label="Top P"
             tooltip={
-              <PromptModelConfigsTooltipContent
-                text={`Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered.${
-                  isExclusiveParamModel
-                    ? " Note: This model requires using either Temperature OR Top P, not both."
-                    : ""
-                }`}
-              />
+              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. Note: Anthropic models require using either Temperature OR Top P, not both." />
             }
           />
         </div>
-        {isExclusiveParamModel && hasTopPValue && (
+        {hasTopPValue && (
           <div className="flex justify-end">
             <Button
               variant="ghost"
@@ -243,7 +188,7 @@ const AnthropicModelConfigs = ({
         }
       />
 
-      {supportsThinkingEffort && (
+      {showThinkingEffort && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingEffort" className="text-sm font-medium">

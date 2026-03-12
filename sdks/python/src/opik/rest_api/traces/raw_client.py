@@ -21,6 +21,7 @@ from ..types.error_info import ErrorInfo
 from ..types.error_info_write import ErrorInfoWrite
 from ..types.feedback_score_batch_item import FeedbackScoreBatchItem
 from ..types.feedback_score_batch_item_thread import FeedbackScoreBatchItemThread
+from ..types.feedback_score_names_public import FeedbackScoreNamesPublic
 from ..types.feedback_score_source import FeedbackScoreSource
 from ..types.json_list_string import JsonListString
 from ..types.json_list_string_write import JsonListStringWrite
@@ -491,6 +492,7 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -518,6 +520,8 @@ class RawTracesClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -543,6 +547,7 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -577,6 +582,7 @@ class RawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -607,6 +613,9 @@ class RawTracesClient:
         error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
+
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
 
         thread_id : typing.Optional[str]
 
@@ -640,6 +649,7 @@ class RawTracesClient:
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
+                "ttft": ttft,
                 "thread_id": thread_id,
             },
             headers={
@@ -745,8 +755,11 @@ class RawTracesClient:
         output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -773,10 +786,19 @@ class RawTracesClient:
         metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         error_info : typing.Optional[ErrorInfo]
 
         thread_id : typing.Optional[str]
+
+        ttft : typing.Optional[float]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -803,10 +825,13 @@ class RawTracesClient:
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
                 "thread_id": thread_id,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -1083,8 +1108,12 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_feedback_score_names2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[typing.List[str]]:
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -1092,12 +1121,14 @@ class RawTracesClient:
         ----------
         project_id : typing.Optional[str]
 
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        HttpResponse[typing.List[str]]
+        HttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -1105,15 +1136,16 @@ class RawTracesClient:
             method="GET",
             params={
                 "project_id": project_id,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1125,7 +1157,7 @@ class RawTracesClient:
 
     def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[typing.List[str]]:
+    ) -> HttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Trace Threads Feedback Score names
 
@@ -1138,7 +1170,7 @@ class RawTracesClient:
 
         Returns
         -------
-        HttpResponse[typing.List[str]]
+        HttpResponse[FeedbackScoreNamesPublic]
             Find Trace Threads Feedback Score names
         """
         _response = self._client_wrapper.httpx_client.request(
@@ -1152,9 +1184,9 @@ class RawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1170,6 +1202,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1184,6 +1217,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1204,6 +1239,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1281,6 +1317,7 @@ class RawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1295,6 +1332,8 @@ class RawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -1315,6 +1354,7 @@ class RawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1468,6 +1508,7 @@ class RawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1493,6 +1534,8 @@ class RawTracesClient:
 
         sorting : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -1517,6 +1560,7 @@ class RawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -1893,6 +1937,8 @@ class RawTracesClient:
         thread_model_id: str,
         *,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1903,6 +1949,10 @@ class RawTracesClient:
         thread_model_id : str
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1916,6 +1966,8 @@ class RawTracesClient:
             method="PATCH",
             json={
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
             },
             headers={
                 "content-type": "application/json",
@@ -2542,6 +2594,7 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         exclude: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2569,6 +2622,8 @@ class AsyncRawTracesClient:
 
         exclude : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -2594,6 +2649,7 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "sorting": sorting,
                 "exclude": exclude,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -2628,6 +2684,7 @@ class AsyncRawTracesClient:
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfoWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -2658,6 +2715,9 @@ class AsyncRawTracesClient:
         error_info : typing.Optional[ErrorInfoWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
+
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
 
         thread_id : typing.Optional[str]
 
@@ -2691,6 +2751,7 @@ class AsyncRawTracesClient:
                     object_=error_info, annotation=ErrorInfoWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
+                "ttft": ttft,
                 "thread_id": thread_id,
             },
             headers={
@@ -2796,8 +2857,11 @@ class AsyncRawTracesClient:
         output: typing.Optional[JsonListString] = OMIT,
         metadata: typing.Optional[JsonListString] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2824,10 +2888,19 @@ class AsyncRawTracesClient:
         metadata : typing.Optional[JsonListString]
 
         tags : typing.Optional[typing.Sequence[str]]
+            Tags
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Tags to add
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
+            Tags to remove
 
         error_info : typing.Optional[ErrorInfo]
 
         thread_id : typing.Optional[str]
+
+        ttft : typing.Optional[float]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2854,10 +2927,13 @@ class AsyncRawTracesClient:
                     object_=metadata, annotation=JsonListString, direction="write"
                 ),
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
                 "thread_id": thread_id,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -3134,8 +3210,12 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_feedback_score_names2(
-        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[typing.List[str]]:
+        self,
+        *,
+        project_id: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Feedback Score names
 
@@ -3143,12 +3223,14 @@ class AsyncRawTracesClient:
         ----------
         project_id : typing.Optional[str]
 
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        AsyncHttpResponse[typing.List[str]]
+        AsyncHttpResponse[FeedbackScoreNamesPublic]
             Feedback Scores resource
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -3156,15 +3238,16 @@ class AsyncRawTracesClient:
             method="GET",
             params={
                 "project_id": project_id,
+                "exclude_category_names": exclude_category_names,
             },
             request_options=request_options,
         )
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -3176,7 +3259,7 @@ class AsyncRawTracesClient:
 
     async def find_trace_threads_feedback_score_names(
         self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[typing.List[str]]:
+    ) -> AsyncHttpResponse[FeedbackScoreNamesPublic]:
         """
         Find Trace Threads Feedback Score names
 
@@ -3189,7 +3272,7 @@ class AsyncRawTracesClient:
 
         Returns
         -------
-        AsyncHttpResponse[typing.List[str]]
+        AsyncHttpResponse[FeedbackScoreNamesPublic]
             Find Trace Threads Feedback Score names
         """
         _response = await self._client_wrapper.httpx_client.request(
@@ -3203,9 +3286,9 @@ class AsyncRawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    typing.List[str],
+                    FeedbackScoreNamesPublic,
                     parse_obj_as(
-                        type_=typing.List[str],  # type: ignore
+                        type_=FeedbackScoreNamesPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -3221,6 +3304,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3235,6 +3319,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -3255,6 +3341,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3332,6 +3419,7 @@ class AsyncRawTracesClient:
         project_id: typing.Optional[str] = None,
         project_name: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3346,6 +3434,8 @@ class AsyncRawTracesClient:
         project_name : typing.Optional[str]
 
         filters : typing.Optional[str]
+
+        search : typing.Optional[str]
 
         from_time : typing.Optional[dt.datetime]
 
@@ -3366,6 +3456,7 @@ class AsyncRawTracesClient:
                 "project_id": project_id,
                 "project_name": project_name,
                 "filters": filters,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3519,6 +3610,7 @@ class AsyncRawTracesClient:
         strip_attachments: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        search: typing.Optional[str] = None,
         from_time: typing.Optional[dt.datetime] = None,
         to_time: typing.Optional[dt.datetime] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3544,6 +3636,8 @@ class AsyncRawTracesClient:
 
         sorting : typing.Optional[str]
 
+        search : typing.Optional[str]
+
         from_time : typing.Optional[dt.datetime]
 
         to_time : typing.Optional[dt.datetime]
@@ -3568,6 +3662,7 @@ class AsyncRawTracesClient:
                 "strip_attachments": strip_attachments,
                 "filters": filters,
                 "sorting": sorting,
+                "search": search,
                 "from_time": serialize_datetime(from_time) if from_time is not None else None,
                 "to_time": serialize_datetime(to_time) if to_time is not None else None,
             },
@@ -3946,6 +4041,8 @@ class AsyncRawTracesClient:
         thread_model_id: str,
         *,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        tags_to_remove: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3956,6 +4053,10 @@ class AsyncRawTracesClient:
         thread_model_id : str
 
         tags : typing.Optional[typing.Sequence[str]]
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+
+        tags_to_remove : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3969,6 +4070,8 @@ class AsyncRawTracesClient:
             method="PATCH",
             json={
                 "tags": tags,
+                "tags_to_add": tags_to_add,
+                "tags_to_remove": tags_to_remove,
             },
             headers={
                 "content-type": "application/json",

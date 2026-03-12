@@ -101,7 +101,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         />
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content="Manage tags">
         <Button
           variant="outline"
           size="icon-sm"

@@ -19,6 +19,8 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.evaluator_item_write import EvaluatorItemWrite
+from ..types.execution_policy_write import ExecutionPolicyWrite
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -26,6 +28,7 @@ from ..types.span_enrichment_options import SpanEnrichmentOptions
 from ..types.trace_enrichment_options import TraceEnrichmentOptions
 from .raw_client import AsyncRawDatasetsClient, RawDatasetsClient
 from .types.dataset_update_visibility import DatasetUpdateVisibility
+from .types.dataset_write_type import DatasetWriteType
 from .types.dataset_write_visibility import DatasetWriteVisibility
 
 # this is used as the default value for optional parameters
@@ -211,6 +214,7 @@ class DatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -224,6 +228,8 @@ class DatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -245,7 +251,13 @@ class DatasetsClient:
         client.datasets.create_dataset(name='name', )
         """
         _response = self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -908,7 +920,10 @@ class DatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -928,7 +943,13 @@ class DatasetsClient:
 
         span_id : typing.Optional[str]
 
+        description : typing.Optional[str]
+
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -951,7 +972,10 @@ class DatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data
@@ -1563,6 +1587,7 @@ class AsyncDatasetsClient:
         *,
         name: str,
         id: typing.Optional[str] = OMIT,
+        type: typing.Optional[DatasetWriteType] = OMIT,
         visibility: typing.Optional[DatasetWriteVisibility] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         description: typing.Optional[str] = OMIT,
@@ -1576,6 +1601,8 @@ class AsyncDatasetsClient:
         name : str
 
         id : typing.Optional[str]
+
+        type : typing.Optional[DatasetWriteType]
 
         visibility : typing.Optional[DatasetWriteVisibility]
 
@@ -1600,7 +1627,13 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dataset(
-            name=name, id=id, visibility=visibility, tags=tags, description=description, request_options=request_options
+            name=name,
+            id=id,
+            type=type,
+            visibility=visibility,
+            tags=tags,
+            description=description,
+            request_options=request_options,
         )
         return _response.data
 
@@ -2322,7 +2355,10 @@ class AsyncDatasetsClient:
         id: typing.Optional[str] = OMIT,
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
+        description: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2342,7 +2378,13 @@ class AsyncDatasetsClient:
 
         span_id : typing.Optional[str]
 
+        description : typing.Optional[str]
+
         tags : typing.Optional[typing.Sequence[str]]
+
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2368,7 +2410,10 @@ class AsyncDatasetsClient:
             id=id,
             trace_id=trace_id,
             span_id=span_id,
+            description=description,
             tags=tags,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
             request_options=request_options,
         )
         return _response.data

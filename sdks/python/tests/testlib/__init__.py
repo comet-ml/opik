@@ -6,6 +6,7 @@ from .assert_helpers import (
     assert_equal,
 )
 from .backend_emulator_message_processor import BackendEmulatorMessageProcessor
+from .concurrency_helpers import ThreadSafeCounter
 from .models import AttachmentModel, FeedbackScoreModel, SpanModel, TraceModel
 from .patch_helpers import patch_environ
 
@@ -17,6 +18,7 @@ __all__ = [
     "ANY_STRING",
     "AttachmentModel",
     "BackendEmulatorMessageProcessor",
+    "ThreadSafeCounter",
     "FeedbackScoreModel",
     "SpanModel",
     "TraceModel",

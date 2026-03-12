@@ -41,6 +41,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     totalEstimatedCost: core.serialization.property("total_estimated_cost", core.serialization.number().optional()),
     spanCount: core.serialization.property("span_count", core.serialization.number().optional()),
     duration: core.serialization.number().optional(),
+    ttft: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     visibilityMode: core.serialization.property("visibility_mode", TraceVisibilityMode.optional()),
     llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
@@ -74,6 +75,7 @@ export declare namespace Trace {
         total_estimated_cost?: number | null;
         span_count?: number | null;
         duration?: number | null;
+        ttft?: number | null;
         thread_id?: string | null;
         visibility_mode?: TraceVisibilityMode.Raw | null;
         llm_span_count?: number | null;

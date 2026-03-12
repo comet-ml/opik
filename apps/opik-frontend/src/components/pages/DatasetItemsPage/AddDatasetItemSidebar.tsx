@@ -7,6 +7,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DATASET_ITEM_SOURCE, DatasetItemColumn } from "@/types/datasets";
 import { useDatasetItemData } from "./DatasetItemEditor/hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./DatasetItemEditor/hooks/useDatasetItemFormState";
+import { prepareFormDataForSave } from "./DatasetItemEditor/hooks/useDatasetItemFormHelpers";
 import DatasetItemEditorForm from "./DatasetItemEditor/DatasetItemEditorForm";
 import { useAddItem } from "@/store/DatasetDraftStore";
 
@@ -46,8 +47,9 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
 
   const handleSave = useCallback(
     (data: Record<string, unknown>) => {
+      const preparedData = prepareFormDataForSave(data, columns);
       addItem({
-        data,
+        data: preparedData,
         source: DATASET_ITEM_SOURCE.manual,
         tags: [],
         created_at: new Date().toISOString(),
@@ -56,7 +58,7 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
       setHasUnsavedChanges(false);
       handleClose();
     },
-    [addItem, handleClose, setHasUnsavedChanges],
+    [addItem, handleClose, setHasUnsavedChanges, columns],
   );
 
   const handleDiscard = useCallback(() => {

@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
 import api, {
+  AUTOMATIONS_KEY,
+  PROJECT_KEY,
   PROJECT_STATISTICS_KEY,
   PROJECTS_KEY,
   PROJECTS_REST_ENDPOINT,
@@ -41,6 +43,12 @@ const useProjectBatchDeleteMutation = () => {
       });
       queryClient.invalidateQueries({
         queryKey: [PROJECTS_KEY],
+      });
+      queryClient.removeQueries({
+        queryKey: [PROJECT_KEY],
+      });
+      queryClient.removeQueries({
+        queryKey: [AUTOMATIONS_KEY],
       });
     },
   });

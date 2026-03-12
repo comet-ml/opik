@@ -76,7 +76,9 @@ class LegacyOpikTracer:
 
     def _end_current_trace(self) -> None:
         trace_data = self._context_storage.pop_trace_data()
-        assert trace_data is not None
+        if trace_data is None:
+            LOGGER.warning("No trace data found when attempting to end current trace")
+            return
         trace_data.init_end_time()
         if opik.is_tracing_active():
             self._opik_client.trace(**trace_data.as_parameters)
@@ -85,7 +87,9 @@ class LegacyOpikTracer:
         self,
     ) -> None:
         span_data = self._context_storage.pop_span_data()
-        assert span_data is not None
+        if span_data is None:
+            LOGGER.warning("No span data found when attempting to end current span")
+            return
         span_data.init_end_time()
         if opik.is_tracing_active():
             self._opik_client.span(**span_data.as_parameters)
@@ -184,7 +188,13 @@ class LegacyOpikTracer:
                     self._opik_created_spans.discard(span_data.id)
             else:
                 trace_data = self._context_storage.get_trace_data()
-                assert trace_data is not None
+                if trace_data is None:
+                    LOGGER.warning(
+                        "No current trace found in context for agent output update"
+                    )
+                    self._current_trace_created_by_opik_tracer.set(None)
+                    self._last_model_output = None
+                    return
 
                 if trace_data.id == self._current_trace_created_by_opik_tracer.get():
                     trace_data.update(output=output)
@@ -254,7 +264,12 @@ class LegacyOpikTracer:
 
         try:
             span_data = self._context_storage.top_span_data()
-            assert span_data is not None
+            if span_data is None:
+                self._last_model_output = None
+                LOGGER.warning(
+                    "No current span found in context for model output update"
+                )
+                return
 
             try:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
@@ -326,7 +341,11 @@ class LegacyOpikTracer:
     ) -> None:
         try:
             current_span_data = self._context_storage.top_span_data()
-            assert current_span_data is not None
+            if current_span_data is None:
+                LOGGER.warning(
+                    f"No current span found in context for tool output update: {tool.name}"
+                )
+                return
 
             output = (
                 tool_response

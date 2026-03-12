@@ -47,6 +47,11 @@ class Span(UniversalBaseModel):
     Duration in milliseconds as a decimal number to support sub-millisecond precision
     """
 
+    ttft: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Time to first token in milliseconds
+    """
+
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
     else:

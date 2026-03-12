@@ -63,7 +63,7 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
   const { input } = datasetItem;
 
   const response = await client.responses.create({
-    model: "gpt-4o",
+    model: "gpt-5-nano",
     instructions: "You are a coding assistant that talks like a pirate",
     input,
   });
@@ -168,7 +168,7 @@ const llmTask: EvaluationTask<DatasetItem> = async (datasetItem) => {
   const { input } = datasetItem;
 
   const response = await client.responses.create({
-    model: "gpt-4o", // Use any model you need to evaluate
+    model: "gpt-5-nano", // Use any model you need to evaluate
     instructions: "You are a coding assistant that talks like a pirate",
     input,
   });

@@ -634,10 +634,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.last_updated_at AS last_updated_at,
                 di.created_by AS created_by,
                 di.last_updated_by AS last_updated_by,
-                argMax(tfs.duration, ei.created_at) AS duration,
-                argMax(tfs.total_estimated_cost, ei.created_at) AS total_estimated_cost,
-                argMax(tfs.usage, ei.created_at) AS usage,
-                argMax(tfs.feedback_scores, ei.created_at) AS feedback_scores,
+                avg(tfs.duration) AS duration,
+                avg(tfs.total_estimated_cost) AS total_estimated_cost,
+                avgMap(tfs.usage) AS usage,
+                avgMap(tfs.feedback_scores) AS feedback_scores,
                 argMax(tfs.input, ei.created_at) AS input,
                 argMax(tfs.output, ei.created_at) AS output,
                 argMax(tfs.metadata, ei.created_at) AS metadata,
@@ -851,7 +851,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+                """ + TagOperations.tagUpdateFragment("s.tags") + """
+                as tags
             FROM dataset_items AS s
             WHERE s.workspace_id = :workspace_id
             <if(ids)> AND s.id IN :ids <endif>
@@ -859,7 +860,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id
-            SETTINGS log_comment = '<log_comment>';
+            SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
@@ -1670,11 +1671,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> template.add("data", data.toString()));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        TagOperations.configureTagTemplate(template, update, mergeTags);
 
         return template;
     }
@@ -1688,8 +1686,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        TagOperations.bindTagParams(statement, update);
     }
 
     @Override

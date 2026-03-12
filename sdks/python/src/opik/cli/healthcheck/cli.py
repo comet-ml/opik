@@ -4,8 +4,12 @@ from typing import Optional
 
 import click
 
-import opik.healthcheck as opik_healthcheck
 from opik.cli.healthcheck.smoke_test import run_smoke_test
+from opik.cli.healthcheck import (
+    check_user_permissions,
+    standard_check,
+    rich_representation,
+)
 
 
 @click.command(context_settings={"ignore_unknown_options": True})
@@ -28,12 +32,20 @@ from opik.cli.healthcheck.smoke_test import run_smoke_test
     default=None,
     help="Project name for the smoke test (only used when --smoke-test is provided). Defaults to 'smoke-test-project'.",
 )
+@click.option(
+    "--check-permissions",
+    type=str,
+    default=None,
+    help="Allows to check user permissions in specific workspace using API key either provided using --api-key or from config file. Requires WORKSPACE value.",
+    metavar="WORKSPACE",
+)
 @click.pass_context
 def healthcheck(
     ctx: click.Context,
     show_installed_packages: bool,
     smoke_test: Optional[str],
     project_name: Optional[str],
+    check_permissions: Optional[str],
 ) -> None:
     """
     Performs a health check of the application, including validation of configuration,
@@ -60,7 +72,14 @@ def healthcheck(
       Run smoke test with custom project name:
 
         opik healthcheck --smoke-test my-workspace --project-name my-test-project
+
+      Run healthcheck with specific workspace permissions check:
+
+        opik healthcheck --check-permissions my-workspace
     """
+    # Always run the standard healthcheck
+    standard_check.run(show_installed_packages)
+
     # Validate that --project-name is only used with --smoke-test
     if project_name is not None and smoke_test is None:
         raise click.BadParameter(
@@ -74,11 +93,7 @@ def healthcheck(
             project_name = "smoke-test-project"
 
         # Validate that workspace is not empty
-        if smoke_test == "":
-            raise click.BadParameter(
-                "--smoke-test requires a non-empty workspace name",
-                param_hint="--smoke-test",
-            )
+        _check_workspace(smoke_test, "--smoke-test")
 
         # Get API key and debug flag from context
         api_key = ctx.obj.get("api_key") if ctx.obj else None
@@ -99,5 +114,19 @@ def healthcheck(
                 click.echo("Traceback:", err=True)
                 click.echo(traceback.format_exc(), err=True)
 
-    # Always run the standard healthcheck
-    opik_healthcheck.run(show_installed_packages)
+    if check_permissions is not None:
+        # Validate that the workspace is not empty
+        _check_workspace(check_permissions, "--check-permissions")
+
+        api_key = ctx.obj.get("api_key") if ctx.obj else None
+        check_user_permissions.run(api_key=api_key, workspace=check_permissions)
+
+    rich_representation.print_header("healthcheck completed")
+
+
+def _check_workspace(workspace: str, param_hint: str) -> None:
+    if workspace == "":
+        click.echo("---------------------------------------------------------")
+        raise click.BadParameter(
+            f"{param_hint} requires a non-empty workspace name", param_hint=param_hint
+        )

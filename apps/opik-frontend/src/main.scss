@@ -70,9 +70,13 @@
     --codemirror-gutter: #94a3b8;
     --codemirror-line-highlight: #e6e6fe;
     --codemirror-syntax-blue: #005cc5;
+    --codemirror-syntax-string: #032f62;
+    --codemirror-syntax-bool: #e36209;
+    --codemirror-syntax-keyword: #d73a49;
+    --codemirror-syntax-punctuation: #6a737d;
 
     /* Chart colors */
-    --chart-tick-stroke: #373d4d;
+    --chart-tick-stroke: #94a3b8;
     --chart-grid-stroke: #f1f5f8;
 
     /* Template icon colors */
@@ -110,9 +114,19 @@
     --feature-experiment-management: #6c6ff7;
     --feature-llm: #52aea4;
 
+    /* Config link icon color */
+    --color-fuchsia: #db46ef;
+
     /* Error indicator colors */
     --error-indicator-background: #ffd2d2;
     --error-indicator-text: #822c45;
+
+    /* Edit badge colors */
+    --edit-badge-bg: #ff5a3c;
+    --edit-badge-text: #ffffff;
+
+    /* Timeline connector colors */
+    --timeline-connector: #cfd0ff;
 
     /* Search highlight colors */
     --search-highlight: #ffdf20;
@@ -121,8 +135,10 @@
     /* Diff colors */
     --diff-removed-bg: #fde2e7;
     --diff-removed-text: #931a32;
+    --diff-removed-border: #fecdd3;
     --diff-added-bg: #e2fde6;
     --diff-added-text: #1d6728;
+    --diff-added-border: #bbf7d0;
 
     /* Upload field colors */
     --upload-icon-bg: 213 26.8% 83.9%;
@@ -148,6 +164,7 @@
     --color-orange: #f97316;
     --color-yellow: #eab308;
     --color-green: #10b981;
+    --color-lime: #a3e635;
     --color-turquoise: #06b6d4;
     --color-blue: #3b82f6;
     --color-primary: #6366f1;
@@ -173,6 +190,9 @@
     --tag-yellow-text: #675523;
     --tag-green-bg: #dafbf0;
     --tag-green-text: #295747;
+
+    --tag-lime-bg: #a3e635;
+    --tag-lime-text: #1a2e05;
     --tag-turquoise-bg: #cdf5f9;
     --tag-turquoise-text: #15545b;
     --tag-blue-bg: #e2effd;
@@ -271,6 +291,16 @@
     --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
 
+    /* Config link icon color - Dark Mode */
+    --color-fuchsia: #c850c0;
+
+    /* Edit badge colors - Dark Mode */
+    --edit-badge-bg: #cc4730;
+    --edit-badge-text: #ffffff;
+
+    /* Timeline connector colors - Dark Mode */
+    --timeline-connector: #3b3d6b;
+
     /* Muted colors - Dark Mode */
     --muted: 0, 0%, 11%;
 
@@ -289,6 +319,10 @@
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+    --codemirror-syntax-string: #a5d6ff;
+    --codemirror-syntax-bool: #ffab70;
+    --codemirror-syntax-keyword: #ff7b72;
+    --codemirror-syntax-punctuation: #8b949e;
 
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
@@ -303,8 +337,10 @@
     /* Diff colors - Dark Mode */
     --diff-removed-bg: #7f1d1d;
     --diff-removed-text: #fef2f2;
+    --diff-removed-border: #991b1b;
     --diff-added-bg: #14532d;
     --diff-added-text: #bbf7d0;
+    --diff-added-border: #166534;
 
     /* DataTable colors - Dark Mode */
     --table-best-row-bg: #29322f;
@@ -340,6 +376,9 @@
     --tag-yellow-text: #ebad00;
     --tag-green-bg: #29322f;
     --tag-green-text: #14bb83;
+
+    --tag-lime-bg: #3d5a0a;
+    --tag-lime-text: #d9f99d;
     --tag-turquoise-bg: #293232;
     --tag-turquoise-text: #0fbfd2;
     --tag-blue-bg: #292e32;
@@ -369,6 +408,66 @@
 
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Static Lezer code highlighting (used in PrettyLLMMessageCodeBlock) */
+  .static-code-highlight {
+    font-family:
+      Ubuntu Mono,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      "Liberation Mono",
+      "Courier New",
+      monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    color: hsl(var(--foreground));
+    background: transparent;
+
+    .tok-propertyName,
+    .tok-className {
+      color: var(--codemirror-syntax-blue);
+    }
+    .tok-string {
+      color: var(--codemirror-syntax-string);
+    }
+    .tok-number {
+      color: var(--codemirror-syntax-blue);
+    }
+    .tok-bool {
+      color: var(--codemirror-syntax-bool);
+    }
+    .tok-keyword {
+      color: var(--codemirror-syntax-keyword);
+    }
+    .tok-punctuation {
+      color: var(--codemirror-syntax-punctuation);
+    }
+  }
+
+  .static-code-gutter {
+    color: var(--codemirror-gutter);
+    background: transparent;
+  }
+
+  .dark .static-code-highlight {
+    .tok-string {
+      color: var(--codemirror-syntax-string);
+    }
+    .tok-bool {
+      color: var(--codemirror-syntax-bool);
+    }
+    .tok-keyword {
+      color: var(--codemirror-syntax-keyword);
+    }
+    .tok-punctuation {
+      color: var(--codemirror-syntax-punctuation);
+    }
   }
 
   .dark thead th {
@@ -684,9 +783,20 @@
   overflow-wrap: break-word;
   word-break: break-word;
 
+  pre {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    overflow-x: auto;
+  }
+
   pre code {
-    font-size: 0.875rem !important;
-    white-space: preserve-breaks;
+    @apply comet-code;
+    font-size: 0.9375rem !important;
+    line-height: 1.2;
+    white-space: pre-wrap;
     overflow-wrap: break-word;
     word-break: break-word;
   }

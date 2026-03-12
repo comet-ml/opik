@@ -1,0 +1,100 @@
+---
+description: Install and configure the OpenClaw community plugin to export LLM,
+  tool, and agent traces to Opik.
+headline: OpenClaw | Opik Documentation
+og:description: Connect OpenClaw to Opik with the @opik/opik-openclaw plugin.
+og:site_name: Opik Documentation
+og:title: OpenClaw Integration - Opik
+title: Observability for OpenClaw with Opik
+---
+
+[OpenClaw](https://github.com/openclaw/openclaw) can send trace data to Opik through the community plugin package `@opik/opik-openclaw`.
+
+This integration captures:
+
+- LLM spans (`llm_input`, `llm_output`)
+- Tool spans (`before_tool_call`, `after_tool_call`)
+- Agent-level run metadata (`agent_end`, usage/cost diagnostics)
+
+## Prerequisites
+
+- [OpenClaw](https://github.com/openclaw/openclaw) version `2026.3.2` or newer.
+- Opik project/workspace details (for cloud or enterprise deployments).
+
+## Setup
+
+<Steps>
+  <Step title="1. Install the plugin">
+    ```bash
+    openclaw plugins install @opik/opik-openclaw
+    ```
+  </Step>
+  <Step title="2. Configure the plugin">
+    ```bash
+    openclaw opik configure
+    ```
+
+    This command validates your Opik URL, validates API key access (when required), enables the plugin, and writes plugin-scoped config.
+  </Step>
+  <Step title="3. Check status and restart the OpenClaw gateway">
+    ```bash
+    openclaw opik status
+    openclaw gateway restart
+    ```
+  </Step>
+</Steps>
+
+## Advanced configuration (manual JSON)
+
+Use this only when you need explicit checked-in or templated plugin configuration.
+For the latest plugin-specific options, see [opik-openclaw](https://github.com/comet-ml/opik-openclaw).
+
+Add this to your OpenClaw config:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "opik": {
+        "enabled": true,
+        "config": {
+          "enabled": true,
+          "apiUrl": "https://www.comet.com/opik/api",
+          "apiKey": "your-api-key",
+          "projectName": "openclaw",
+          "workspaceName": "default",
+          "tags": ["openclaw"]
+        }
+      }
+    }
+  }
+}
+```
+
+Environment variable fallbacks are also supported:
+
+- `OPIK_API_KEY`
+- `OPIK_URL_OVERRIDE`
+- `OPIK_PROJECT_NAME`
+- `OPIK_WORKSPACE`
+
+## Validate setup
+
+<Steps>
+  <Step title="1. Check plugin status">
+    ```bash
+    openclaw opik status
+    ```
+  </Step>
+  <Step title="2. Send a message and verify traces in Opik">
+    Send a message through OpenClaw and verify traces appear in the configured Opik project dashboard.
+  </Step>
+</Steps>
+
+## Known limitation
+
+Some OpenClaw embedded execution paths currently emit `after_tool_call` without a `sessionKey`. The plugin uses a best-effort fallback (single active trace or most recent active session), which can mis-correlate tool spans when multiple sessions run concurrently.
+
+## Next step
+
+For OTEL-native pipelines, see [OpenTelemetry integration](/docs/opik/integrations/opentelemetry).

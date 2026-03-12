@@ -4,7 +4,7 @@ from unittest import mock
 
 import opik
 from opik.api_objects import rest_stream_parser
-from opik.evaluation.engine import engine
+from opik.evaluation import evaluator as evaluator_module
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
@@ -87,7 +87,7 @@ def test_streaming_starts_evaluation_before_complete_download(
             side_effect=tracked_read_and_parse_stream,
         ),
         mock.patch.object(
-            engine, "EVALUATION_STREAM_DATASET_BATCH_SIZE", TEST_BATCH_SIZE
+            evaluator_module, "EVALUATION_STREAM_DATASET_BATCH_SIZE", TEST_BATCH_SIZE
         ),
     ):
         # Run evaluation with streaming

@@ -29,6 +29,8 @@ export interface Trace {
     spanCount?: number;
     /** Duration in milliseconds as a decimal number to support sub-millisecond precision */
     duration?: number;
+    /** Time to first token in milliseconds */
+    ttft?: number;
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
     llmSpanCount?: number;

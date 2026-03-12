@@ -19,6 +19,7 @@ export const PromptDetail: core.serialization.ObjectSchema<serializers.PromptDet
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
         versionCount: core.serialization.property("version_count", core.serialization.number().optional()),
         latestVersion: core.serialization.property("latest_version", PromptVersionDetail.optional()),
+        requestedVersion: core.serialization.property("requested_version", PromptVersionDetail.optional()),
     });
 
 export declare namespace PromptDetail {
@@ -34,5 +35,6 @@ export declare namespace PromptDetail {
         last_updated_by?: string | null;
         version_count?: number | null;
         latest_version?: PromptVersionDetail.Raw | null;
+        requested_version?: PromptVersionDetail.Raw | null;
     }
 }

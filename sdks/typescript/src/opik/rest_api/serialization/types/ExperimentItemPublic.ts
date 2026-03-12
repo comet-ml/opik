@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ExecutionPolicyPublic } from "./ExecutionPolicyPublic.js";
 import { ExperimentItemPublicTraceVisibilityMode } from "./ExperimentItemPublicTraceVisibilityMode.js";
 
 export const ExperimentItemPublic: core.serialization.ObjectSchema<
@@ -13,6 +14,7 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
     experimentId: core.serialization.property("experiment_id", core.serialization.string()),
     datasetItemId: core.serialization.property("dataset_item_id", core.serialization.string()),
     traceId: core.serialization.property("trace_id", core.serialization.string()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -21,6 +23,7 @@ export const ExperimentItemPublic: core.serialization.ObjectSchema<
         "trace_visibility_mode",
         ExperimentItemPublicTraceVisibilityMode.optional(),
     ),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyPublic.optional()),
 });
 
 export declare namespace ExperimentItemPublic {
@@ -29,10 +32,12 @@ export declare namespace ExperimentItemPublic {
         experiment_id: string;
         dataset_item_id: string;
         trace_id: string;
+        project_id?: string | null;
         created_at?: string | null;
         last_updated_at?: string | null;
         created_by?: string | null;
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemPublicTraceVisibilityMode.Raw | null;
+        execution_policy?: ExecutionPolicyPublic.Raw | null;
     }
 }

@@ -28,7 +28,11 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
+import {
+  transformExperimentScores,
+  getScoreDisplayName,
+} from "@/lib/feedback-scores";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
@@ -39,6 +43,7 @@ import {
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -91,12 +96,32 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
-  COLUMN_PROJECT_ID,
-  "created_at",
-  "duration.p50",
   "trace_count",
+  "duration.p50",
+  "total_estimated_cost_avg",
   COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+];
+
+const DEFAULT_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  COLUMN_DATASET_ID,
+  "dataset_version",
+  "trace_count",
+  "duration.p50",
+  "duration.p90",
+  "duration.p99",
+  "total_estimated_cost_avg",
+  "total_estimated_cost",
+  COLUMN_FEEDBACK_SCORES_ID,
+  "created_at",
+  COLUMN_PROJECT_ID,
+  "prompt",
   COLUMN_COMMENTS_ID,
+  "tags",
+  COLUMN_METADATA_ID,
+  "created_by",
 ];
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
@@ -209,7 +234,7 @@ const ExperimentsPage: React.FC = () => {
         id: "created_at",
         label: "Created",
         type: COLUMN_TYPE.time,
-        accessorFn: (row) => formatDate(row.created_at),
+        cell: TimeCell as never,
       },
       {
         id: "created_by",
@@ -218,7 +243,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "duration.p50",
-        label: "Duration (avg.)",
+        label: "Avg duration",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
         cell: DurationCell as never,
@@ -288,7 +313,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: "total_estimated_cost_avg",
-        label: "Cost per trace (avg.)",
+        label: "Avg cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell as never,
         aggregatedCell: CostCell.Aggregation as never,
@@ -298,7 +323,7 @@ const ExperimentsPage: React.FC = () => {
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
-        label: "Feedback Scores",
+        label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
         cell: FeedbackScoreListCell as never,
@@ -414,6 +439,7 @@ const ExperimentsPage: React.FC = () => {
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
     defaultSelectedColumns: DEFAULT_SELECTED_COLUMNS,
+    defaultColumnsOrder: DEFAULT_COLUMNS_ORDER,
     groups,
     sortableBy,
     dynamicScoresColumns,
@@ -553,55 +579,37 @@ const ExperimentsPage: React.FC = () => {
           name: group.name,
           data: [],
           lines: [],
+          labelsMap: {},
         };
       }
 
-      const createScoresMap = (
-        scores: Array<{ name: string; value: number }> | undefined,
-        addAvgSuffix: boolean,
-      ): Record<string, number> =>
-        (scores || []).reduce<Record<string, number>>((acc, score) => {
-          const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
-          acc[key] = score.value;
-          return acc;
-        }, {});
-
-      const getScoreNames = (
-        scores: Array<{ name: string }> | undefined,
-        addAvgSuffix: boolean,
-      ): string[] =>
-        (scores || []).map((s) => (addAvgSuffix ? `${s.name} (avg)` : s.name));
-
       groupExperiments.forEach((experiment) => {
-        const feedbackScoresMap = createScoresMap(
-          experiment.feedback_scores,
-          true,
-        );
-        const experimentScoresMap = createScoresMap(
-          experiment.experiment_scores,
-          false,
-        );
+        const scores: Record<string, number> = {};
+        (experiment.feedback_scores ?? []).forEach((s) => {
+          scores[s.name] = s.value;
+        });
+        (experiment.experiment_scores ?? []).forEach((s) => {
+          scores[s.name] = s.value;
+        });
 
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
-          scores: { ...feedbackScoresMap, ...experimentScoresMap },
+          scores,
         });
 
-        const feedbackScoreNames = getScoreNames(
-          experiment.feedback_scores,
-          true,
-        );
-        const experimentScoreNames = getScoreNames(
-          experiment.experiment_scores,
-          false,
-        );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
-          ...feedbackScoreNames,
-          ...experimentScoreNames,
+          ...Object.keys(scores),
         ]);
+
+        (experiment.feedback_scores || []).forEach((score) => {
+          groupsMap[groupKey].labelsMap![score.name] = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_FEEDBACK,
+          );
+        });
       });
     });
 

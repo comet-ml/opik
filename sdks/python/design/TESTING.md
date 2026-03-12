@@ -521,7 +521,7 @@ def patch_streamer():
         message_processor=fake_processor,
         n_consumers=1,
         use_batching=True,
-        upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(fake_upload_manager),
+        file_uploader=fake_upload_manager,
         max_queue_size=None
     )
     yield streamer, fake_processor
@@ -1030,5 +1030,5 @@ For more information, see:
 - [API and Data Flow](API_AND_DATA_FLOW.md) - Core architecture and data flow
 - [Integrations](INTEGRATIONS.md) - Integration patterns and testing
 - [Evaluation](EVALUATION.md) - Evaluation framework architecture
-- [Test Organization Rules](../../../.agents/rules/sdks/python/test-organization.mdc)
-- [Test Implementation Rules](../../../.agents/rules/sdks/python/test-implementation.mdc)
+- [Test Organization Rules](../../../.agents/skills/python-sdk/testing.md)
+- [Test Implementation Rules](../../../.agents/skills/python-sdk/good-code.md)
