@@ -698,17 +698,18 @@ class AnnotationQueuesResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var queue = AnnotationQueue.builder()
-                    .name("test-queue-" + UUID.randomUUID())
+            var queue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
                     .projectId(projectId)
+                    .projectName(project.name())
                     .build();
-            var queueId = annotationQueuesResourceClient.createAnnotationQueue(queue, apiKey, workspaceName,
-                    HttpStatus.SC_CREATED);
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
             wireMock.server().resetRequests();
-            annotationQueuesResourceClient.getAnnotationQueueById(queueId, apiKey, workspaceName, HttpStatus.SC_OK);
+            annotationQueuesResourceClient.getAnnotationQueueById(queue.id(), apiKey, workspaceName, HttpStatus.SC_OK);
 
             wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
