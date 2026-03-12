@@ -150,6 +150,10 @@ class LocalRunnersResourceTest {
                 .runnerName(name)
                 .build();
         LocalRunnerConnectResponse resp = runnersClient.connect(req, apiKey, workspace);
+        LocalRunner.Agent agent = LocalRunner.Agent.builder()
+                .name(AGENT_NAME)
+                .build();
+        runnersClient.registerAgents(resp.runnerId(), Map.of(AGENT_NAME, agent), apiKey, workspace);
         runnersClient.heartbeat(resp.runnerId(), apiKey, workspace);
         return resp.runnerId();
     }
@@ -278,7 +282,7 @@ class LocalRunnersResourceTest {
         UUID runnerId = connectRunnerWithPairing("cancel-runner", projectId, API_KEY, TEST_WORKSPACE);
 
         CreateLocalRunnerJobRequest request = CreateLocalRunnerJobRequest.builder()
-                .agentName("agent-x")
+                .agentName(AGENT_NAME)
                 .projectId(projectId)
                 .build();
         UUID jobId = runnersClient.createJob(request, API_KEY, TEST_WORKSPACE);
@@ -630,9 +634,9 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void throwsGoneForDeletedRunner() {
+        void throwsNotFoundForDeletedRunner() {
             try (var response = runnersClient.callHeartbeat(randomUUID(), API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(410);
+                assertThat(response.getStatus()).isEqualTo(404);
             }
         }
 
