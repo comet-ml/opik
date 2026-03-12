@@ -600,7 +600,7 @@ class LocalRunnerServiceImplTest {
         LocalRunner.Agent agentMeta = LocalRunner.Agent.builder().build();
         runnerService.registerAgents(runnerId, WORKSPACE_ID, USER_NAME, Map.of(AGENT_NAME, agentMeta));
 
-        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, null, 0, 25);
+        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(WORKSPACE_ID, USER_NAME, PROJECT_ID, 0, 25);
         assertThat(runnerPage.content()).hasSize(1);
         assertThat(runnerPage.content().get(0).agents()).hasSize(1);
 
@@ -657,7 +657,7 @@ class LocalRunnerServiceImplTest {
         void listRunners_excludesOtherUsersRunners() {
             pairAndConnect(WORKSPACE_ID, USER_NAME, RUNNER_NAME);
 
-            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, null, 0, 25);
+            LocalRunner.LocalRunnerPage page = runnerService.listRunners(WORKSPACE_ID, OTHER_USER, PROJECT_ID, 0, 25);
             assertThat(page.content()).isEmpty();
             assertThat(page.total()).isZero();
         }

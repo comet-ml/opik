@@ -112,7 +112,7 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "200", description = "Runners list", content = @Content(schema = @Schema(implementation = LocalRunner.LocalRunnerPage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response listRunners(
-            @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_id") @NotNull UUID projectId,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
         ensureEnabled();

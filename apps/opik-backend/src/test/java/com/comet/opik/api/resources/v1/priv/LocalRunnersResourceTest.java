@@ -193,7 +193,7 @@ class LocalRunnersResourceTest {
         assertThat(runnerId).isEqualTo(pairResponse.runnerId());
         assertThat(connectResp.projectId()).isEqualTo(projectId);
 
-        LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(API_KEY, TEST_WORKSPACE);
+        LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(projectId, API_KEY, TEST_WORKSPACE);
         assertThat(runnerPage.content()).extracting(LocalRunner::id).contains(runnerId);
         LocalRunner listedRunner = runnerPage.content().stream()
                 .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
@@ -366,7 +366,7 @@ class LocalRunnersResourceTest {
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
             UUID runnerId = connectRunnerWithPairing("list-runner-1", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().get(0).id()).isEqualTo(runnerId);
             assertThat(page.content().get(0).status().getValue()).isEqualTo("connected");
@@ -379,7 +379,7 @@ class LocalRunnersResourceTest {
             UUID runnerId = connectRunnerWithPairing("list-runner-disconnect", projectId, ctx.apiKey, ctx.workspace);
             waitForHeartbeatExpiry();
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             LocalRunner runner = page.content().stream()
                     .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
             assertThat(runner.status().getValue()).isEqualTo("disconnected");
@@ -394,15 +394,16 @@ class LocalRunnersResourceTest {
             UUID runnerId = connectRunnerWithPairing("list-runner-mine", projectId1, ctx1.apiKey, ctx1.workspace);
             connectRunnerWithPairing("other-ws-runner", projectId2, ctx2.apiKey, ctx2.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx2.apiKey, ctx2.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId2, ctx2.apiKey, ctx2.workspace);
             assertThat(page.content()).extracting(LocalRunner::id).doesNotContain(runnerId);
         }
 
         @Test
         void emptyWhenNoRunners() {
             var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             assertThat(page.content()).isEmpty();
         }
 
@@ -428,11 +429,11 @@ class LocalRunnersResourceTest {
                 connectRunnerWithPairing("paginate-runner-" + i, projectId, ctx.apiKey, ctx.workspace);
             }
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(null, 0, 2, ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(projectId, 0, 2, ctx.apiKey, ctx.workspace);
             assertThat(page0.content()).hasSize(2);
             assertThat(page0.total()).isEqualTo(3);
 
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(null, 1, 2, ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(projectId, 1, 2, ctx.apiKey, ctx.workspace);
             assertThat(page1.content()).hasSize(1);
         }
     }

@@ -59,18 +59,16 @@ public class LocalRunnersResourceClient {
         }
     }
 
-    public LocalRunner.LocalRunnerPage listRunners(String apiKey, String workspaceName) {
-        return listRunners(null, 0, 25, apiKey, workspaceName);
+    public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
+        return listRunners(projectId, 0, 25, apiKey, workspaceName);
     }
 
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, int page, int size, String apiKey,
             String workspaceName) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
-                .queryParam("size", size);
-        if (projectId != null) {
-            target = target.queryParam("project_id", projectId);
-        }
+                .queryParam("size", size)
+                .queryParam("project_id", projectId);
         try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
