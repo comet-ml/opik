@@ -935,8 +935,46 @@ class AgentConfigsResourceTest {
             var historyPage = agentConfigsResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_OK);
             assertThat(historyPage.content()).hasSize(2);
-            assertThat(historyPage.content().getFirst().envs()).containsExactly("prod");
-            assertThat(historyPage.content().getLast().envs()).isNull();
+
+            var expectedBlueprints = List.of(
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("Second blueprint")
+                            .envs(List.of("prod"))
+                            .build(),
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("First blueprint")
+                            .envs(null)
+                            .build());
+
+            assertThat(historyPage.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(GetBlueprintHistory.BLUEPRINT_IGNORED_FIELDS)
+                    .isEqualTo(expectedBlueprints);
+        }
+
+        @Test
+        @DisplayName("when request contains duplicate env names, then return 400")
+        void createOrUpdateEnvs__whenDuplicateEnvNames__thenReturn400() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(UUID.randomUUID())
+                                    .build(),
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(UUID.randomUUID())
+                                    .build()))
+                    .build();
+
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
         }
     }
 

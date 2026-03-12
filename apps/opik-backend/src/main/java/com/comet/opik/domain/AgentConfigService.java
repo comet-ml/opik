@@ -8,6 +8,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -341,6 +342,14 @@ class AgentConfigServiceImpl implements AgentConfigService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID projectId = request.projectId();
+
+        long distinctEnvNames = request.envs().stream()
+                .map(AgentConfigEnv::envName)
+                .distinct()
+                .count();
+        if (distinctEnvNames != request.envs().size()) {
+            throw new BadRequestException("Duplicate env names in request");
+        }
 
         log.info("Creating or updating {} environments for project '{}' in workspace '{}'",
                 request.envs().size(), projectId, workspaceId);
