@@ -81,6 +81,7 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
         with:
+          action_fail: true
           check_name: "TS SDK E2E Tests - Node ${{matrix.node_version}}"
           files: ${{ github.workspace }}/test_results_node${{matrix.node_version}}.xml
 

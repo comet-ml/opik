@@ -93,7 +93,7 @@ jobs:
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
-          if: failure()
+          if: always()
           with:
             action_fail: true
             check_name: Python SDK E2E Tests Results (Python ${{matrix.python_version}})
