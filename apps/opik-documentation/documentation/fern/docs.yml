@@ -1089,6 +1089,28 @@ redirects:
     permanent: true
   - source: "/docs/opik/prompt_engineering/prompt_optimization"
     destination: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
+  # Common guessed paths for TypeScript SDK and integrations
+  - source: "/docs/opik/typescript-sdk"
+    destination: "/docs/opik/reference/typescript-sdk/overview"
+    permanent: true
+  - source: "/docs/opik/ts-sdk"
+    destination: "/docs/opik/reference/typescript-sdk/overview"
+    permanent: true
+  - source: "/docs/opik/ts-sdk/get-started"
+    destination: "/docs/opik/reference/typescript-sdk/overview"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openai/nodejs"
+    destination: "/docs/opik/integrations/openai-typescript"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/openai/typescript"
+    destination: "/docs/opik/integrations/openai-typescript"
+    permanent: true
+  - source: "/docs/opik/integrations/openai/nodejs"
+    destination: "/docs/opik/integrations/openai-typescript"
+    permanent: true
+  - source: "/docs/opik/integrations/openai/typescript"
+    destination: "/docs/opik/integrations/openai-typescript"
+    permanent: true
   # TypeScript SDK integration redirects
   - source: "/docs/opik/reference/typescript-sdk/integrations/vercel-ai-sdk"
     destination: "/docs/opik/integrations/vercel-ai-sdk"

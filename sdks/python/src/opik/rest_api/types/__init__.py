@@ -207,6 +207,8 @@ from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
+from .dashboard_public_scope import DashboardPublicScope
+from .dashboard_public_type import DashboardPublicType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -786,6 +788,8 @@ __all__ = [
     "CountValueStatPublic",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",

@@ -437,6 +437,8 @@ experimentDenormalization:
   claimIntervalRatio: 10
   pendingMessageDuration: 10m
   maxRetries: 3
+  jobBatchSize: 100
+  jobInterval: 5s
   streamMaxLen: 10000
   streamTrimLimit: 100
 

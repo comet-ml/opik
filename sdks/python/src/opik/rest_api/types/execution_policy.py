@@ -7,6 +7,10 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 
 class ExecutionPolicy(UniversalBaseModel):
+    """
+    Execution policy captured from dataset item version at creation time.
+    """
+
     runs_per_item: typing.Optional[int] = None
     pass_threshold: typing.Optional[int] = None
 

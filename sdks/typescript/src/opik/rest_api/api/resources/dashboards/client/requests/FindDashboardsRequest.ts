@@ -9,4 +9,5 @@ export interface FindDashboardsRequest {
     size?: number;
     name?: string;
     sorting?: string;
+    filters?: string;
 }

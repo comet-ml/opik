@@ -2,3 +2,6 @@
 
 # isort: skip_file
 
+from .types import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
+
+__all__ = ["DashboardUpdatePublicScope", "DashboardUpdatePublicType", "DashboardWriteScope", "DashboardWriteType"]

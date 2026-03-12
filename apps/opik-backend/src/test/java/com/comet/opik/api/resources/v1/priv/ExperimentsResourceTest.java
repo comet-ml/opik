@@ -4,8 +4,11 @@ import com.comet.opik.api.Comment;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemChanges;
+import com.comet.opik.api.DatasetItemEdit;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.EvaluationMethod;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
@@ -7446,6 +7449,501 @@ class ExperimentsResourceTest {
             // then - verify the second update (should replace first update tags)
             expectedExperiment = experiment.toBuilder().tags(secondUpdateTags).build();
             getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+    }
+
+    @Nested
+    @DisplayName("Pass Rate for Evaluation Suite Experiments:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PassRate {
+
+        @BeforeEach
+        void setUp() {
+            Mockito.reset(defaultEventBus);
+        }
+
+        private FeedbackScoreBatchItem score(Trace trace, String name, BigDecimal value) {
+            return FeedbackScoreBatchItem.builder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name(name)
+                    .value(value)
+                    .source(ScoreSource.SDK)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("when experiment is evaluation_suite with assertion scores, then return pass rate")
+        void findEvaluationSuiteExperiment__thenReturnPassRate() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace1.id())
+                    .build();
+            var item2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace2.id())
+                    .build();
+            var item3 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace3.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item1, item2, item3)), apiKey, workspaceName);
+
+            // trace1: assertion passes (1.0), trace2: assertion fails (0.0), trace3: assertion passes (1.0)
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName, BigDecimal.ONE),
+                    score(trace2, scoreName, BigDecimal.ZERO),
+                    score(trace3, scoreName, BigDecimal.ONE));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .passedCount(2L)
+                    .totalCount(3L)
+                    .passRate(BigDecimal.valueOf(2).divide(BigDecimal.valueOf(3), 9, RoundingMode.HALF_UP))
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when experiment is regular (not evaluation_suite), then pass rate is null")
+        void findRegularExperiment__thenPassRateIsNull() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item)), apiKey, workspaceName);
+
+            var scoreName = UUID.randomUUID().toString();
+            createScoreAndAssert(FeedbackScoreBatch.builder()
+                    .scores(List.of(score(trace, scoreName, BigDecimal.ONE))).build(), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when evaluation_suite has multiple assertions per run, then all must pass for run to pass")
+        void findEvaluationSuiteExperiment__multipleAssertions__thenAllMustPass() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+            var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace1.id())
+                    .build();
+            var item2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace2.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item1, item2)), apiKey, workspaceName);
+
+            // trace1: both assertions pass → run passes → item passes
+            // trace2: one assertion passes, one fails → run fails → item fails
+            var scoreName1 = UUID.randomUUID().toString();
+            var scoreName2 = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName1, BigDecimal.ONE),
+                    score(trace1, scoreName2, BigDecimal.ONE),
+                    score(trace2, scoreName1, BigDecimal.ONE),
+                    score(trace2, scoreName2, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .passedCount(1L)
+                    .totalCount(2L)
+                    .passRate(BigDecimal.valueOf(0.5))
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when evaluation_suite experiment has no items, then pass rate is null")
+        void findEvaluationSuiteExperiment__noItems__thenPassRateIsNull() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            getAndAssert(experiment.id(), experiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when evaluation_suite has items but no scores, then all runs pass and pass_rate=1.0")
+        void findEvaluationSuiteExperiment__itemsNoScores__thenAllPass() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+            var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace1.id())
+                    .build();
+            var item2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace2.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item1, item2)), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .passedCount(2L)
+                    .totalCount(2L)
+                    .passRate(BigDecimal.ONE)
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when suite-level pass_threshold=2 and 2 of 3 runs pass, then item passes and pass_rate=1.0")
+        void findEvaluationSuiteExperiment__suiteThreshold__passThresholdMet() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset with one item
+            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+            var datasetItemId = datasetItem.id();
+
+            // Create version 2 with execution_policy pass_threshold=2
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            var version1 = versions.content().getFirst();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .executionPolicy(new ExecutionPolicy(3, 2))
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, apiKey, workspaceName);
+
+            // Create experiment linked to same dataset (auto-resolves to latest version = version2 with pass_threshold=2)
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create 3 traces (3 runs for the same dataset item)
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            // Create 3 experiment items all pointing to the same dataset_item_id
+            var item1 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace1.id())
+                    .build();
+            var item2 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace2.id())
+                    .build();
+            var item3 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace3.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item1, item2, item3), apiKey, workspaceName);
+
+            // Score: 2 runs pass, 1 fails → runs_passed=2 >= pass_threshold=2 → item passes
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName, BigDecimal.ONE),
+                    score(trace2, scoreName, BigDecimal.ONE),
+                    score(trace3, scoreName, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .datasetVersionId(actual.datasetVersionId())
+                    .datasetVersionSummary(actual.datasetVersionSummary())
+                    .passedCount(1L)
+                    .totalCount(1L)
+                    .passRate(BigDecimal.ONE)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when suite-level pass_threshold=2 and only 1 of 3 runs pass, then item fails and pass_rate=0.0")
+        void findEvaluationSuiteExperiment__suiteThreshold__passThresholdNotMet() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset with one item
+            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var datasetItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
+                    workspaceName, apiKey);
+            var datasetItemId = datasetItem.id();
+
+            // Create version 2 with execution_policy pass_threshold=2
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            var version1 = versions.content().getFirst();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .executionPolicy(new ExecutionPolicy(3, 2))
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, apiKey, workspaceName);
+
+            // Create experiment linked to same dataset (auto-resolves to latest version = version2 with pass_threshold=2)
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create 3 traces (3 runs for the same dataset item)
+            var trace1 = podamFactory.manufacturePojo(Trace.class);
+            var trace2 = podamFactory.manufacturePojo(Trace.class);
+            var trace3 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), apiKey, workspaceName);
+
+            // Create 3 experiment items all pointing to the same dataset_item_id
+            var item1 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace1.id())
+                    .build();
+            var item2 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace2.id())
+                    .build();
+            var item3 = ExperimentItem.builder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItemId)
+                    .traceId(trace3.id())
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(item1, item2, item3), apiKey, workspaceName);
+
+            // Score: only 1 run passes, 2 fail → runs_passed=1 < pass_threshold=2 → item fails
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName, BigDecimal.ONE),
+                    score(trace2, scoreName, BigDecimal.ZERO),
+                    score(trace3, scoreName, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .datasetVersionId(actual.datasetVersionId())
+                    .datasetVersionSummary(actual.datasetVersionSummary())
+                    .passedCount(0L)
+                    .totalCount(1L)
+                    .passRate(BigDecimal.ZERO)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when item-level pass_threshold=3 overrides suite default, then only that item requires 3 passing runs")
+        void findEvaluationSuiteExperiment__itemThreshold__overridesSuiteDefault() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset with two items
+            var dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var datasetItemA = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            var datasetItemB = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItemA, datasetItemB))
+                            .build(),
+                    workspaceName, apiKey);
+
+            // Create version 2: set item-level pass_threshold=3 on itemA only, itemB keeps default (1)
+            var versions = datasetResourceClient.listVersions(datasetId, apiKey, workspaceName);
+            var version1 = versions.content().getFirst();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(
+                            DatasetItemEdit.builder()
+                                    .id(datasetItemA.id())
+                                    .executionPolicy(new ExecutionPolicy(3, 3))
+                                    .build()))
+                    .build();
+            datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, apiKey, workspaceName);
+
+            // Create experiment linked to same dataset
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // 3 runs per item (6 traces total)
+            var traceA1 = podamFactory.manufacturePojo(Trace.class);
+            var traceA2 = podamFactory.manufacturePojo(Trace.class);
+            var traceA3 = podamFactory.manufacturePojo(Trace.class);
+            var traceB1 = podamFactory.manufacturePojo(Trace.class);
+            var traceB2 = podamFactory.manufacturePojo(Trace.class);
+            var traceB3 = podamFactory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(
+                    List.of(traceA1, traceA2, traceA3, traceB1, traceB2, traceB3), apiKey, workspaceName);
+
+            // Experiment items: 3 runs for itemA, 3 runs for itemB
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemA.id()).traceId(traceA1.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemA.id()).traceId(traceA2.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemA.id()).traceId(traceA3.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemB.id()).traceId(traceB1.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemB.id()).traceId(traceB2.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentId)
+                            .datasetItemId(datasetItemB.id()).traceId(traceB3.id()).build()),
+                    apiKey, workspaceName);
+
+            // Score: 2 of 3 runs pass for each item
+            // ItemA: 2 pass < pass_threshold=3 → item FAILS
+            // ItemB: 2 pass >= default threshold=1 → item PASSES
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(traceA1, scoreName, BigDecimal.ONE),
+                    score(traceA2, scoreName, BigDecimal.ONE),
+                    score(traceA3, scoreName, BigDecimal.ZERO),
+                    score(traceB1, scoreName, BigDecimal.ONE),
+                    score(traceB2, scoreName, BigDecimal.ONE),
+                    score(traceB3, scoreName, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            // ItemA fails (2 < 3), ItemB passes (2 >= 1) → passedCount=1, totalCount=2, passRate=0.5
+            var actual = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .datasetVersionId(actual.datasetVersionId())
+                    .datasetVersionSummary(actual.datasetVersionSummary())
+                    .passedCount(1L)
+                    .totalCount(2L)
+                    .passRate(BigDecimal.valueOf(0.5))
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, workspaceName, apiKey);
         }
     }
 }

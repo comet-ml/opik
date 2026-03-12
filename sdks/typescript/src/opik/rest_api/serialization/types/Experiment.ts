@@ -56,6 +56,9 @@ export const Experiment: core.serialization.ObjectSchema<serializers.Experiment.
         ),
         datasetVersionId: core.serialization.property("dataset_version_id", core.serialization.string().optional()),
         datasetVersionSummary: core.serialization.property("dataset_version_summary", DatasetVersionSummary.optional()),
+        passRate: core.serialization.property("pass_rate", core.serialization.number().optional()),
+        passedCount: core.serialization.property("passed_count", core.serialization.number().optional()),
+        totalCount: core.serialization.property("total_count", core.serialization.number().optional()),
     });
 
 export declare namespace Experiment {
@@ -88,5 +91,8 @@ export declare namespace Experiment {
         prompt_versions?: PromptVersionLink.Raw[] | null;
         dataset_version_id?: string | null;
         dataset_version_summary?: DatasetVersionSummary.Raw | null;
+        pass_rate?: number | null;
+        passed_count?: number | null;
+        total_count?: number | null;
     }
 }

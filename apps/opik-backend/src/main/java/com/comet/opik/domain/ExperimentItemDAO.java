@@ -57,7 +57,8 @@ class ExperimentItemDAO {
                 workspace_id,
                 project_id,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                execution_policy
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -70,7 +71,8 @@ class ExperimentItemDAO {
                         :workspace_id,
                         :project_id<item.index>,
                         :created_by<item.index>,
-                        :last_updated_by<item.index>
+                        :last_updated_by<item.index>,
+                        :execution_policy<item.index>
                     )
                      <if(item.hasNext)>
                         ,
@@ -464,6 +466,7 @@ class ExperimentItemDAO {
 
                 statement.bind("created_by" + index, userName);
                 statement.bind("last_updated_by" + index, userName);
+                statement.bind("execution_policy" + index, ExecutionPolicyMapper.serialize(item.executionPolicy()));
                 index++;
             }
 

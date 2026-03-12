@@ -1,5 +1,5 @@
-name: SDK E2E Tests
-run-name: "SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: Python SDK E2E Tests
+run-name: "Python SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
   contents: read
   checks: write
@@ -10,14 +10,14 @@ on:
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
-          - '.github/workflows/sdk-e2e-tests.yaml'
+          - '.github/workflows/python_sdk_e2e_tests.yml'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
-          - '.github/workflows/sdk-e2e-tests.yaml'
+          - '.github/workflows/python_sdk_e2e_tests.yml'
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -28,7 +28,7 @@ env:
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
     run-e2e:
-        name: SDK E2E Tests ${{matrix.python_version}}
+        name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest-m
         timeout-minutes: 30   
         strategy:
@@ -93,10 +93,10 @@ jobs:
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
-          if: failure()
+          if: always()
           with:
             action_fail: true
-            check_name: SDK E2E Tests Results
+            check_name: Python SDK E2E Tests Results (Python ${{matrix.python_version}})
             files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Keep BE log in case of failure

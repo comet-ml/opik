@@ -196,6 +196,7 @@ public class ExperimentResponseBuilder {
         BigDecimal p50Sum = BigDecimal.ZERO;
         BigDecimal p90Sum = BigDecimal.ZERO;
         BigDecimal p99Sum = BigDecimal.ZERO;
+        boolean hasDuration = false;
 
         // For feedback scores - group by name and calculate weighted averages
         Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
@@ -223,6 +224,7 @@ public class ExperimentResponseBuilder {
 
             // For duration percentiles (weighted average)
             if (childAgg.duration() != null) {
+                hasDuration = true;
                 if (childAgg.duration().p50() != null) {
                     p50Sum = p50Sum.add(childAgg.duration().p50().multiply(BigDecimal.valueOf(expCount)));
                 }
@@ -246,7 +248,7 @@ public class ExperimentResponseBuilder {
                 ? weightedCostSum.divide(BigDecimal.valueOf(totalExperimentCount), 9, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
-        PercentageValues avgDuration = totalExperimentCount > 0
+        PercentageValues avgDuration = hasDuration && totalExperimentCount > 0
                 ? new PercentageValues(
                         p50Sum.divide(BigDecimal.valueOf(totalExperimentCount), 9, RoundingMode.HALF_UP),
                         p90Sum.divide(BigDecimal.valueOf(totalExperimentCount), 9, RoundingMode.HALF_UP),
@@ -257,6 +259,29 @@ public class ExperimentResponseBuilder {
         List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums,
                 experimentScoreCounts);
 
+        // Aggregate pass rate from children
+        long totalPassedCount = 0;
+        long totalTotalCount = 0;
+        BigDecimal passRateWeightedSum = BigDecimal.ZERO;
+        long passRateContributors = 0;
+        for (GroupContentWithAggregations child : childGroups.values()) {
+            AggregationData childAgg = child.aggregations();
+            if (childAgg.passedCountSum() != null) {
+                totalPassedCount += childAgg.passedCountSum();
+            }
+            if (childAgg.totalCountSum() != null) {
+                totalTotalCount += childAgg.totalCountSum();
+            }
+            if (childAgg.passRateAvg() != null) {
+                passRateWeightedSum = passRateWeightedSum.add(
+                        childAgg.passRateAvg().multiply(BigDecimal.valueOf(childAgg.experimentCount())));
+                passRateContributors += childAgg.experimentCount();
+            }
+        }
+        BigDecimal passRateAvg = passRateContributors > 0
+                ? passRateWeightedSum.divide(BigDecimal.valueOf(passRateContributors), 9, RoundingMode.HALF_UP)
+                : null;
+
         // Build updated aggregation data
         return AggregationData.builder()
                 .experimentCount(totalExperimentCount)
@@ -266,6 +291,9 @@ public class ExperimentResponseBuilder {
                 .duration(avgDuration)
                 .feedbackScores(avgFeedbackScores)
                 .experimentScores(avgExperimentScores)
+                .passRateAvg(passRateAvg)
+                .passedCountSum(totalTotalCount > 0 ? totalPassedCount : null)
+                .totalCountSum(totalTotalCount > 0 ? totalTotalCount : null)
                 .build();
     }
 
@@ -322,6 +350,9 @@ public class ExperimentResponseBuilder {
                 .duration(item.duration())
                 .feedbackScores(item.feedbackScores())
                 .experimentScores(item.experimentScores())
+                .passRateAvg(item.passRateAvg())
+                .passedCountSum(item.passedCountSum())
+                .totalCountSum(item.totalCountSum())
                 .build();
     }
 
