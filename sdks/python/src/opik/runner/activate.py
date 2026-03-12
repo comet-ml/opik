@@ -7,9 +7,9 @@ import threading
 from rich.console import Console
 from rich.text import Text
 
-from .. import httpx_client
-from ..config import OpikConfig
-from ..rest_api.client import OpikApi
+from .. import Opik
+from ..rest_api.types.agent import Agent
+from ..rest_api.types.param import Param
 from . import registry
 from .in_process_loop import InProcessRunnerLoop
 
@@ -34,33 +34,20 @@ def activate_runner() -> None:
 
     prefixed_output.install()
 
-    config = OpikConfig()
-
-    http_client = httpx_client.get(
-        workspace=config.workspace,
-        api_key=config.api_key,
-        check_tls_certificate=True,
-        compress_json_requests=False,
-    )
-
-    api = OpikApi(
-        base_url=config.url_override,
-        api_key=config.api_key,
-        workspace_name=config.workspace,
-        httpx_client=http_client,
-    )
+    client = Opik(_show_misconfiguration_message=False)
+    api = client.rest_client
 
     entrypoints = registry.get_all()
     if entrypoints:
         payload = {
-            name: {
-                "description": entry.get("docstring", ""),
-                "language": "python",
-                "params": [
-                    {"name": p.name, "type": p.type} for p in entry.get("params", [])
+            name: Agent(
+                description=entry.get("docstring", ""),
+                language="python",
+                params=[
+                    Param(name=p.name, type=p.type) for p in entry.get("params", [])
                 ],
-                "timeout": 0,
-            }
+                timeout=0,
+            ).dict()
             for name, entry in entrypoints.items()
         }
         api.runners.register_agents(runner_id, request=payload)
@@ -77,7 +64,7 @@ def activate_runner() -> None:
     try:
         loop.run()
     finally:
-        http_client.close()
+        client.end()
 
 
 def _print_banner(runner_id: str, project_name: str) -> None:

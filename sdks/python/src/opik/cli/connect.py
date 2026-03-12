@@ -1,4 +1,3 @@
-import logging
 import os
 import platform
 import uuid
@@ -7,12 +6,8 @@ from typing import Optional, Tuple
 import click
 import httpx
 
-from opik import httpx_client
+from opik import Opik
 from opik.rest_api.core.api_error import ApiError
-from opik.config import OpikConfig
-from opik.rest_api.client import OpikApi
-
-LOGGER = logging.getLogger(__name__)
 
 
 @click.command(context_settings={"ignore_unknown_options": True})
@@ -27,22 +22,10 @@ def connect(
     command: Tuple[str, ...],
 ) -> None:
     """Connect a local runner to Opik and exec the user command."""
-    config = OpikConfig()
     api_key = ctx.obj.get("api_key") if ctx.obj else None
 
-    http_client = httpx_client.get(
-        workspace=config.workspace,
-        api_key=api_key or config.api_key,
-        check_tls_certificate=True,
-        compress_json_requests=False,
-    )
-
-    api = OpikApi(
-        base_url=config.url_override,
-        api_key=api_key or config.api_key,
-        workspace_name=config.workspace,
-        httpx_client=http_client,
-    )
+    client = Opik(api_key=api_key, _show_misconfiguration_message=False)
+    api = client.rest_client
 
     try:
         runner_name = name or f"{platform.node()}-{uuid.uuid4().hex[:6]}"
@@ -56,7 +39,10 @@ def connect(
             click.echo("Error: server did not return a runner_id")
             raise SystemExit(1)
 
-        project_name = resp.project_name or ""
+        project_name = resp.project_name
+        if not project_name:
+            click.echo("Error: server did not return a project_name")
+            raise SystemExit(1)
 
         click.echo(f"Runner connected (ID: {runner_id}).")
 
@@ -71,12 +57,13 @@ def connect(
             "OPIK_PROJECT_NAME": project_name,
         }
 
-        http_client.close()
+        client.end()
         os.execvpe(command[0], list(command), env)
     except ApiError as e:
         click.echo(f"Error: {e.body}" if e.body else f"Error: {e.status_code}")
         raise SystemExit(1)
     except httpx.ConnectError:
+        config = client.config
         click.echo(
             f"Error: Could not connect to Opik at {config.url_override}. "
             "Check that the backend is running."
@@ -86,4 +73,4 @@ def connect(
         click.echo(f"Error: Could not execute command '{command[0]}': {e}")
         raise SystemExit(1)
     finally:
-        http_client.close()
+        client.end()
