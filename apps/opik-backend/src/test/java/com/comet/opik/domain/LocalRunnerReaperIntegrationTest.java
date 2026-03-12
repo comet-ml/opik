@@ -117,6 +117,10 @@ class LocalRunnerReaperIntegrationTest {
                 .runnerName(runnerName)
                 .build();
         LocalRunnerConnectResponse resp = runnerService.connect(workspaceId, userName, req);
+        LocalRunner.Agent agent = LocalRunner.Agent.builder()
+                .name(AGENT_NAME)
+                .build();
+        runnerService.registerAgents(resp.runnerId(), workspaceId, userName, Map.of(AGENT_NAME, agent));
         return resp.runnerId();
     }
 
