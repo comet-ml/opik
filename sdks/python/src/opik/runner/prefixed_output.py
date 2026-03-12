@@ -46,7 +46,7 @@ class PrefixedStream(io.TextIOBase):
                 _shared_line_count += 1
             if part and self._at_line_start:
                 color = _color_for_line(_shared_line_count)
-                out.append(f"{color} \u2503{_RESET}")
+                out.append(f"{color} \u2503  {_RESET}")
                 self._at_line_start = False
             out.append(part)
         result = "".join(out)
