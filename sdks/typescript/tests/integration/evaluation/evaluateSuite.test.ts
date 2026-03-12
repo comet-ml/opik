@@ -15,6 +15,7 @@ const shouldRunApiTests = shouldRunIntegrationTests();
 const WAIT_OPTIONS = { timeout: 15000, interval: 1000 };
 
 const echoTask = async (item: Record<string, unknown>) => ({
+  input: item.input,
   output: `Echo: ${item.input}`,
 });
 
