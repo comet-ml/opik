@@ -47,6 +47,7 @@ class StreamingExecutor(Generic[T]):
         self._score_totals: Dict[str, float] = defaultdict(float)
         self._score_counts: Dict[str, int] = defaultdict(int)
         self._group_completed: Dict[str, int] = defaultdict(int)
+        self._first_update_done = False
 
     def __enter__(self) -> "StreamingExecutor[T]":
         self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
@@ -57,7 +58,7 @@ class StreamingExecutor(Generic[T]):
         _tqdm = get_tqdm_for_current_environment()
         self._progress_bar = _tqdm(
             disable=(self._verbose < 1),
-            desc=self._desc,
+            desc=f"{self._desc} (there might be a delay before the first items are processed)",
             total=self._total,
         )
         return self
@@ -128,12 +129,19 @@ class StreamingExecutor(Generic[T]):
 
             # Update progress bar
             if self._progress_bar is not None:
+                should_update = False
                 if future in self._future_to_group:
                     gid = self._future_to_group[future]
                     self._group_completed[gid] += 1
                     if self._group_completed[gid] == self._group_sizes[gid]:
-                        self._progress_bar.update(1)
+                        should_update = True
                 else:
+                    should_update = True
+
+                if should_update:
+                    if not self._first_update_done:
+                        self._first_update_done = True
+                        self._progress_bar.set_description(self._desc)
                     self._progress_bar.update(1)
 
     def get_results(self) -> List[T]:

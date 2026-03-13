@@ -384,7 +384,11 @@ def evaluate_suite(
 
     if verbose >= 1:
         report.display_suite_results(
-            dataset.name, total_time, suite_result, verbose=verbose
+            dataset.name,
+            total_time,
+            suite_result,
+            verbose=verbose,
+            experiment_url=suite_result.experiment_url,
         )
 
     return suite_result
@@ -549,9 +553,6 @@ def _evaluate_suite_task(
         trial_count=1,
         experiment_scores=[],
     )
-
-    if verbose >= 1:
-        report.display_experiment_link(experiment_url=experiment_url)
 
     client.flush()
 
