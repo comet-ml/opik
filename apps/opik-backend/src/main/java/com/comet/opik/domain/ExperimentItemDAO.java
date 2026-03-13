@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
+import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -106,31 +108,6 @@ class ExperimentItemDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
-    private static final String SELECT_AGGREGATED_EXPERIMENT_IDS = """
-            SELECT
-                count() AS total,
-                countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
-            FROM (
-                SELECT
-                    e.id,
-                    notEmpty(agg.experiment_id) AS has_aggregated
-                FROM experiments e FINAL
-                LEFT JOIN (
-                    SELECT
-                        id,
-                        toString(id) AS experiment_id
-                    FROM experiment_aggregates
-                    WHERE workspace_id = :workspace_id
-                    AND id IN :experiment_ids
-                ) agg ON e.id = agg.id
-                WHERE e.workspace_id = :workspace_id
-                AND e.id IN :experiment_ids
-            )
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -567,6 +544,7 @@ class ExperimentItemDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -667,7 +645,12 @@ class ExperimentItemDAO {
                     criteria.limit(), criteria.lastRetrievedId());
             return Flux.empty();
         }
-        return Mono.zip(getAggregationBranchCounts(experimentIds), getTargetProjectIds(experimentIds))
+        var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                .experimentIds(experimentIds)
+                .build();
+
+        return Mono.zip(getAggregationBranchCounts(aggregationCriteria),
+                getTargetProjectIds(experimentIds))
                 .flatMapMany(tuple -> {
                     var counts = tuple.getT1();
                     var targetProjectIds = tuple.getT2();
@@ -678,22 +661,9 @@ class ExperimentItemDAO {
                 });
     }
 
-    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(Set<UUID> experimentIds) {
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> {
-                    var template = TemplateUtils.newST(SELECT_AGGREGATED_EXPERIMENT_IDS);
-                    template.add("log_comment", "get_aggregation_branch_counts_experiment_items");
-
-                    var statement = connection.createStatement(template.render())
-                            .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
-                            .next()
-                            .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                });
+    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
+        return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
     private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {

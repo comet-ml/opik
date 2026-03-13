@@ -2,9 +2,10 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Generator, Optional, Dict, List
 
+import opik.context_storage as context_storage
 from opik import datetime_helpers
 from opik.api_objects import trace, opik_client, helpers
-from .. import base_track_decorator, error_info_collector
+from .. import error_info_collector
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,11 +54,12 @@ def start_as_current_trace(
         project_name=project_name,
         thread_id=thread_id,
     )
-    base_track_decorator.add_start_trace_candidate(
-        trace_data=trace_data,
-        opik_args_data=None,
-        tracing_active=True,
-    )
+
+    context_storage.set_trace_data(trace_data)
+
+    client = opik_client.get_client_cached()
+    if client.config.log_start_trace_span:
+        client.trace(**trace_data.as_start_parameters)
 
     try:
         yield trace_data
@@ -71,12 +73,11 @@ def start_as_current_trace(
         trace_data.output = None
         raise
     finally:
-        # save trace data at the end of the context manager
-        client = opik_client.get_client_cached()
-        client.trace(**trace_data.init_end_time().as_parameters)
+        try:
+            client = opik_client.get_client_cached()
+            client.trace(**trace_data.init_end_time().as_parameters)
 
-        # Clean up trace from context
-        base_track_decorator.pop_end_candidate_trace_data()
-
-        if flush:
-            client.flush()
+            if flush:
+                client.flush()
+        finally:
+            context_storage.pop_trace_data(ensure_id=trace_data.id)

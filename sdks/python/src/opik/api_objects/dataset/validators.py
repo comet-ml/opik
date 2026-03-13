@@ -45,20 +45,86 @@ def resolve_evaluators(
         ValueError: If both assertions and evaluators are provided.
         TypeError: If any evaluator is not an LLMJudge instance.
     """
-    if assertions and evaluators:
+    if assertions is not None and evaluators is not None:
         raise ValueError(
             f"Cannot specify both 'assertions' and 'evaluators' for {context}. "
             f"Use 'assertions' for a shorthand or 'evaluators' for full control, "
             f"but not both."
         )
 
-    if assertions:
+    if assertions is not None:
+        if not assertions:
+            return []
         from opik.evaluation.suite_evaluators import llm_judge
 
         return [llm_judge.LLMJudge(assertions=assertions)]
 
-    if evaluators:
+    if evaluators is not None:
         validate_evaluators(evaluators, context)
         return evaluators
 
     return None
+
+
+_VALID_ITEM_KEYS = {"data", "assertions", "description", "execution_policy"}
+_VALID_EXECUTION_POLICY_KEYS = {"runs_per_item", "pass_threshold"}
+
+
+def validate_execution_policy(ep: Any, context: str = "execution_policy") -> None:
+    if not isinstance(ep, dict):
+        raise TypeError(f"'{context}' must be a dict, got {type(ep).__name__}")
+    unknown_keys = set(ep.keys()) - _VALID_EXECUTION_POLICY_KEYS
+    if unknown_keys:
+        raise ValueError(
+            f"'{context}' has unknown keys: {unknown_keys}. "
+            f"Valid keys are: {_VALID_EXECUTION_POLICY_KEYS}"
+        )
+    missing_keys = _VALID_EXECUTION_POLICY_KEYS - set(ep.keys())
+    if missing_keys:
+        raise ValueError(
+            f"'{context}' is missing required keys: {missing_keys}. "
+            f"Both 'runs_per_item' and 'pass_threshold' must be provided."
+        )
+    for key in ep:
+        if not isinstance(ep[key], int):
+            raise TypeError(
+                f"'{context}.{key}' must be an int, got {type(ep[key]).__name__}"
+            )
+
+
+def validate_suite_items(items: List[Any]) -> None:
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise TypeError(
+                f"Item at index {i} must be a dict, got {type(item).__name__}"
+            )
+
+        unknown_keys = set(item.keys()) - _VALID_ITEM_KEYS
+        if unknown_keys:
+            raise ValueError(
+                f"Item at index {i} has unknown keys: {unknown_keys}. "
+                f"Valid keys are: {_VALID_ITEM_KEYS}"
+            )
+
+        if "data" not in item:
+            raise ValueError(f"Item at index {i} is missing required key 'data'")
+        if not isinstance(item["data"], dict):
+            raise TypeError(
+                f"Item at index {i} 'data' must be a dict, "
+                f"got {type(item['data']).__name__}"
+            )
+
+        if "assertions" in item:
+            assertions = item["assertions"]
+            if not isinstance(assertions, list) or not all(
+                isinstance(a, str) for a in assertions
+            ):
+                raise TypeError(
+                    f"Item at index {i} 'assertions' must be a list of strings"
+                )
+
+        if "execution_policy" in item:
+            validate_execution_policy(
+                item["execution_policy"],
+                context=f"Item at index {i} 'execution_policy'",
+            )

@@ -8,13 +8,13 @@ export const LocalRunnerConnectRequest: core.serialization.Schema<
     serializers.LocalRunnerConnectRequest.Raw,
     OpikApi.LocalRunnerConnectRequest
 > = core.serialization.object({
-    pairingCode: core.serialization.property("pairing_code", core.serialization.string().optional()),
+    pairingCode: core.serialization.property("pairing_code", core.serialization.string()),
     runnerName: core.serialization.property("runner_name", core.serialization.string()),
 });
 
 export declare namespace LocalRunnerConnectRequest {
     export interface Raw {
-        pairing_code?: string | null;
+        pairing_code: string;
         runner_name: string;
     }
 }

@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Callable, Optional
 
 import google.genai as genai
+from google.genai import types as genai_types
 
 from . import (
     generate_content_decorator,
@@ -19,6 +20,9 @@ def track_genai(
     client: genai.Client,
     project_name: Optional[str] = None,
     upload_videos: bool = True,
+    cost_callback: Optional[
+        Callable[[genai_types.GenerateContentResponse], Optional[float]]
+    ] = None,
 ) -> genai.Client:
     """
     Adds Opik tracking to an genai.Client.
@@ -40,6 +44,10 @@ def track_genai(
         project_name: The name of the project to log data.
         upload_videos: Whether to upload generated videos as attachments
             when video.save is called. Defaults to True.
+        cost_callback: An optional callable that receives the GenerateContentResponse
+            and returns the cost in USD as a float, or None to use automatic cost
+            calculation. Use this for models with complex pricing (e.g., different
+            rates for thinking tokens) where automatic cost tracking is insufficient.
 
     Returns:
         The modified genai.Client with Opik tracking enabled.
@@ -52,7 +60,7 @@ def track_genai(
 
     provider = _get_provider(client)
 
-    _patch_generate_content(client, provider, project_name)
+    _patch_generate_content(client, provider, project_name, cost_callback)
     _patch_generate_videos(client, provider, project_name, upload_videos)
 
     return client
@@ -62,10 +70,14 @@ def _patch_generate_content(
     client: genai.Client,
     provider: str,
     project_name: Optional[str],
+    cost_callback: Optional[
+        Callable[[genai_types.GenerateContentResponse], Optional[float]]
+    ] = None,
 ) -> None:
     """Patch generate_content methods with Opik tracking."""
     decorator_factory = generate_content_decorator.GenerateContentTrackDecorator(
-        provider=provider
+        provider=provider,
+        cost_callback=cost_callback,
     )
 
     client.models.generate_content = decorator_factory.track(
