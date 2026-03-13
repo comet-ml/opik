@@ -21,6 +21,7 @@ class OpikArgsTrace(pydantic.BaseModel):
     Configuration for trace updates passed via opik_args parameter.
     """
 
+    id: Optional[str] = None
     thread_id: Optional[str] = None
     tags: Optional[List[str]] = None
     metadata: Optional[Dict[str, Any]] = None
@@ -61,6 +62,7 @@ class OpikArgs(pydantic.BaseModel):
             trace_data = config_dict["trace"]
             if isinstance(trace_data, dict):
                 trace_args = OpikArgsTrace(
+                    id=trace_data.get("id"),
                     thread_id=trace_data.get("thread_id"),
                     tags=trace_data.get("tags"),
                     metadata=trace_data.get("metadata"),

@@ -118,7 +118,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces },
+    permissions: { canDeleteTraces, canViewExperiments },
   } = usePermissions();
 
   const { toast } = useToast();
@@ -128,6 +128,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const hasThread = Boolean(setThreadId && threadId);
   const experiment: ExperimentItemReference | undefined = (treeData[0] as Trace)
     ?.experiment;
+
+  const showExperimentButton = !!experiment && canViewExperiments;
 
   const minPanelWidth = useMemo(() => {
     const elements = [
@@ -384,10 +386,10 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
   return (
     <div ref={ref} className="flex flex-auto items-center justify-between">
-      {hasThread || experiment ? (
+      {hasThread || showExperimentButton ? (
         <div className="flex items-center">
           <Separator orientation="vertical" className="mx-3 h-4" />
-          {experiment && (
+          {showExperimentButton && (
             <NavigationTag
               id={experiment.dataset_id}
               name="View in experiment"

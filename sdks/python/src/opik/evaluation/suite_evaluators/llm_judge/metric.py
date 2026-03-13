@@ -135,6 +135,48 @@ class LLMJudge(base.BaseSuiteEvaluator):
         """The assertions this evaluator checks (read-only copy)."""
         return list(self._assertions)
 
+    def _has_same_settings(self, other: "LLMJudge") -> bool:
+        return (
+            self._model_name == other._model_name
+            and self._temperature == other._temperature
+            and self._seed == other._seed
+            and self.track == other.track
+        )
+
+    @classmethod
+    def merged(cls, judges: List["LLMJudge"]) -> Optional["LLMJudge"]:
+        """Create a single LLMJudge by merging assertions from multiple judges.
+
+        Uses settings (model, temperature, seed, track) from the first judge.
+        Duplicate assertions are removed while preserving order.
+
+        Returns None if fewer than 2 judges are provided or if their settings
+        (model, temperature, seed, track) differ.
+        """
+        if len(judges) <= 1:
+            return None
+
+        first = judges[0]
+        if not all(first._has_same_settings(j) for j in judges[1:]):
+            return None
+
+        seen: set = set()
+        merged_assertions: List[str] = []
+        for judge in judges:
+            for assertion in judge._assertions:
+                if assertion not in seen:
+                    seen.add(assertion)
+                    merged_assertions.append(assertion)
+
+        return cls(
+            assertions=merged_assertions,
+            name=first.name,
+            model=first._model_name,
+            track=first.track,
+            seed=first._seed,
+            temperature=first._temperature,
+        )
+
     def _init_model(
         self,
         temperature: Optional[float],

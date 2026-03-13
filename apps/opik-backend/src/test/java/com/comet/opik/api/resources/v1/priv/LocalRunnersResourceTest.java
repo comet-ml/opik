@@ -12,9 +12,11 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobMetadata;
@@ -24,6 +26,7 @@ import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.redis.testcontainers.RedisContainer;
@@ -102,6 +105,7 @@ class LocalRunnersResourceTest {
     }
 
     private LocalRunnersResourceClient runnersClient;
+    private ProjectResourceClient projectClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -111,6 +115,7 @@ class LocalRunnersResourceTest {
         mockTargetWorkspace(OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, OTHER_USER);
 
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
+        this.projectClient = new ProjectResourceClient(client, baseURI, PodamFactoryUtils.newPodamFactory());
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
@@ -134,36 +139,29 @@ class LocalRunnersResourceTest {
         return new WorkspaceContext(apiKey, workspace);
     }
 
-    private UUID connectRunner(String name) {
-        return connectRunner(name, API_KEY, TEST_WORKSPACE);
+    private UUID createProject(String apiKey, String workspace) {
+        return projectClient.createProject("test-project-" + randomUUID(), apiKey, workspace);
     }
 
-    private UUID connectRunner(String name, String apiKey, String workspace) {
-        LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                .runnerName(name)
-                .build();
-        UUID runnerId = runnersClient.connect(req, apiKey, workspace);
-        runnersClient.heartbeat(runnerId, apiKey, workspace);
-        return runnerId;
-    }
-
-    private UUID connectRunnerWithPairing(String name) {
-        LocalRunnerPairResponse pair = runnersClient.generatePairingCode(API_KEY, TEST_WORKSPACE);
+    private UUID connectRunnerWithPairing(String name, UUID projectId, String apiKey, String workspace) {
+        LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, apiKey, workspace);
         LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                 .pairingCode(pair.pairingCode())
                 .runnerName(name)
                 .build();
-        return runnersClient.connect(req, API_KEY, TEST_WORKSPACE);
+        LocalRunnerConnectResponse resp = runnersClient.connect(req, apiKey, workspace);
+        LocalRunner.Agent agent = LocalRunner.Agent.builder()
+                .name(AGENT_NAME)
+                .build();
+        runnersClient.registerAgents(resp.runnerId(), Map.of(AGENT_NAME, agent), apiKey, workspace);
+        runnersClient.heartbeat(resp.runnerId(), apiKey, workspace);
+        return resp.runnerId();
     }
 
-    private UUID createRunningJob(UUID runnerId, String agentName) {
-        return createRunningJob(runnerId, agentName, API_KEY, TEST_WORKSPACE);
-    }
-
-    private UUID createRunningJob(UUID runnerId, String agentName, String apiKey, String workspace) {
+    private UUID createRunningJob(UUID runnerId, String agentName, UUID projectId, String apiKey, String workspace) {
         CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                 .agentName(agentName)
-                .runnerId(runnerId)
+                .projectId(projectId)
                 .build();
         UUID jobId = runnersClient.createJob(req, apiKey, workspace);
         try (var response = runnersClient.callNextJob(runnerId, apiKey, workspace)) {
@@ -179,7 +177,9 @@ class LocalRunnersResourceTest {
     @Test
     @DisplayName("Happy path: pair, connect, register agents, heartbeat, create job, poll next, logs, report result, get job")
     void happyPath() {
-        LocalRunnerPairResponse pairResponse = runnersClient.generatePairingCode(API_KEY, TEST_WORKSPACE);
+        UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+
+        LocalRunnerPairResponse pairResponse = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
         assertThat(pairResponse.pairingCode()).isNotBlank();
         assertThat(pairResponse.runnerId()).isNotNull();
         assertThat(pairResponse.expiresInSeconds()).isPositive();
@@ -188,10 +188,12 @@ class LocalRunnersResourceTest {
                 .pairingCode(pairResponse.pairingCode())
                 .runnerName("test-runner")
                 .build();
-        UUID runnerId = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
+        LocalRunnerConnectResponse connectResp = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
+        UUID runnerId = connectResp.runnerId();
         assertThat(runnerId).isEqualTo(pairResponse.runnerId());
+        assertThat(connectResp.projectId()).isEqualTo(projectId);
 
-        LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(API_KEY, TEST_WORKSPACE);
+        LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(projectId, API_KEY, TEST_WORKSPACE);
         assertThat(runnerPage.content()).extracting(LocalRunner::id).contains(runnerId);
         LocalRunner listedRunner = runnerPage.content().stream()
                 .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
@@ -220,8 +222,7 @@ class LocalRunnersResourceTest {
 
         CreateLocalRunnerJobRequest createJobRequest = CreateLocalRunnerJobRequest.builder()
                 .agentName("my-agent")
-                .runnerId(runnerId)
-                .project("default")
+                .projectId(projectId)
                 .inputs(new ObjectMapper().createObjectNode().put("prompt", "hello"))
                 .build();
         UUID jobId = runnersClient.createJob(createJobRequest, API_KEY, TEST_WORKSPACE);
@@ -275,19 +276,14 @@ class LocalRunnersResourceTest {
     }
 
     @Test
-    @DisplayName("Connect with API key (no pairing code), create and cancel job")
-    void apiKeyConnectAndCancelJob() {
-        LocalRunnerConnectRequest connectRequest = LocalRunnerConnectRequest.builder()
-                .runnerName("direct-runner")
-                .build();
-        UUID runnerId = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
-        assertThat(runnerId).isNotNull();
-
-        runnersClient.heartbeat(runnerId, API_KEY, TEST_WORKSPACE);
+    @DisplayName("Connect with pairing code, create and cancel job")
+    void pairingConnectAndCancelJob() {
+        UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+        UUID runnerId = connectRunnerWithPairing("cancel-runner", projectId, API_KEY, TEST_WORKSPACE);
 
         CreateLocalRunnerJobRequest request = CreateLocalRunnerJobRequest.builder()
-                .agentName("agent-x")
-                .runnerId(runnerId)
+                .agentName(AGENT_NAME)
+                .projectId(projectId)
                 .build();
         UUID jobId = runnersClient.createJob(request, API_KEY, TEST_WORKSPACE);
 
@@ -307,7 +303,8 @@ class LocalRunnersResourceTest {
 
         @Test
         void createsValidCode() {
-            LocalRunnerPairResponse resp = runnersClient.generatePairingCode(API_KEY, TEST_WORKSPACE);
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            LocalRunnerPairResponse resp = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
 
             assertThat(resp.pairingCode()).hasSize(6);
             assertThat(resp.pairingCode()).matches("[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}");
@@ -334,7 +331,8 @@ class LocalRunnersResourceTest {
 
         @Test
         void withPairingCodeFromDifferentWorkspace_returns400() {
-            LocalRunnerPairResponse pair = runnersClient.generatePairingCode(API_KEY, TEST_WORKSPACE);
+            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
+            LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
 
             LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
                     .pairingCode(pair.pairingCode())
@@ -343,6 +341,17 @@ class LocalRunnersResourceTest {
 
             try (var response = runnersClient.callConnect(req, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(400);
+            }
+        }
+
+        @Test
+        void withoutPairingCode_returns422() {
+            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
+                    .runnerName("runner")
+                    .build();
+
+            try (var response = runnersClient.callConnect(req, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(422);
             }
         }
     }
@@ -354,9 +363,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsConnectedRunners() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("list-runner-1", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("list-runner-1", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
             assertThat(page.content().get(0).id()).isEqualTo(runnerId);
             assertThat(page.content().get(0).status().getValue()).isEqualTo("connected");
@@ -365,10 +375,11 @@ class LocalRunnersResourceTest {
         @Test
         void showsDisconnectedWhenHeartbeatExpired() throws InterruptedException {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("list-runner-disconnect", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("list-runner-disconnect", projectId, ctx.apiKey, ctx.workspace);
             waitForHeartbeatExpiry();
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             LocalRunner runner = page.content().stream()
                     .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
             assertThat(runner.status().getValue()).isEqualTo("disconnected");
@@ -378,42 +389,51 @@ class LocalRunnersResourceTest {
         void excludesOtherWorkspaces() {
             var ctx1 = createIsolatedWorkspace();
             var ctx2 = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("list-runner-mine", ctx1.apiKey, ctx1.workspace);
-            connectRunner("other-ws-runner", ctx2.apiKey, ctx2.workspace);
+            UUID projectId1 = createProject(ctx1.apiKey, ctx1.workspace);
+            UUID projectId2 = createProject(ctx2.apiKey, ctx2.workspace);
+            UUID runnerId = connectRunnerWithPairing("list-runner-mine", projectId1, ctx1.apiKey, ctx1.workspace);
+            connectRunnerWithPairing("other-ws-runner", projectId2, ctx2.apiKey, ctx2.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx2.apiKey, ctx2.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId2, ctx2.apiKey, ctx2.workspace);
             assertThat(page.content()).extracting(LocalRunner::id).doesNotContain(runnerId);
         }
 
         @Test
         void emptyWhenNoRunners() {
             var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(ctx.apiKey, ctx.workspace);
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
             assertThat(page.content()).isEmpty();
         }
 
         @Test
+        void filtersByProjectId() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId1 = createProject(ctx.apiKey, ctx.workspace);
+            UUID projectId2 = createProject(ctx.apiKey, ctx.workspace);
+            UUID runner1 = connectRunnerWithPairing("proj1-runner", projectId1, ctx.apiKey, ctx.workspace);
+            UUID runner2 = connectRunnerWithPairing("proj2-runner", projectId2, ctx.apiKey, ctx.workspace);
+
+            LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId1, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().get(0).id()).isEqualTo(runner1);
+        }
+
+        @Test
         void paginatesCorrectly() {
-            String sharedWorkspace = randomUUID().toString();
-            String sharedWorkspaceId = randomUUID().toString();
-            String userName = randomUUID().toString();
-            String apiKey = randomUUID().toString();
-            mockTargetWorkspace(apiKey, sharedWorkspace, sharedWorkspaceId, userName);
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
             for (int i = 0; i < 3; i++) {
-                LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                        .runnerName("paginate-runner-" + i)
-                        .build();
-                UUID rid = runnersClient.connect(req, apiKey, sharedWorkspace);
-                runnersClient.heartbeat(rid, apiKey, sharedWorkspace);
+                connectRunnerWithPairing("paginate-runner-" + i, projectId, ctx.apiKey, ctx.workspace);
             }
 
-            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(0, 2, apiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page0 = runnersClient.listRunners(projectId, 0, 2, ctx.apiKey, ctx.workspace);
             assertThat(page0.content()).hasSize(2);
             assertThat(page0.total()).isEqualTo(3);
 
-            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(1, 2, apiKey, sharedWorkspace);
+            LocalRunner.LocalRunnerPage page1 = runnersClient.listRunners(projectId, 1, 2, ctx.apiKey, ctx.workspace);
             assertThat(page1.content()).hasSize(1);
         }
     }
@@ -425,10 +445,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsRunnerWithAgents() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("get-runner-agents", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("get-runner-agents", projectId, ctx.apiKey, ctx.workspace);
 
             LocalRunner.Agent agentInput = LocalRunner.Agent.builder()
-                    .project("my-project")
                     .description("Summarizes documents")
                     .language("python")
                     .executable("/usr/bin/python3.11")
@@ -442,7 +462,6 @@ class LocalRunnersResourceTest {
             assertThat(runner.agents()).hasSize(1);
             LocalRunner.Agent agent = runner.agents().get(0);
             assertThat(agent.name()).isEqualTo("agent1");
-            assertThat(agent.project()).isEqualTo("my-project");
             assertThat(agent.description()).isEqualTo("Summarizes documents");
             assertThat(agent.language()).isEqualTo("python");
             assertThat(agent.executable()).isEqualTo("/usr/bin/python3.11");
@@ -452,9 +471,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsEmptyAgentsWhenDisconnected() throws InterruptedException {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("get-runner-disconn", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("get-runner-disconn", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("my-project").build();
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
 
             waitForHeartbeatExpiry();
@@ -474,7 +494,8 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("get-runner-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("get-runner-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callGetRunner(runnerId, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
@@ -489,9 +510,10 @@ class LocalRunnersResourceTest {
         @Test
         void storesAndReturnsAgents() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-store", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-store", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
@@ -502,12 +524,13 @@ class LocalRunnersResourceTest {
         @Test
         void replacesExistingAgents() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-replace", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-replace", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent a = LocalRunner.Agent.builder().project("proj1").build();
+            LocalRunner.Agent a = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", a), ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent b = LocalRunner.Agent.builder().project("proj2").build();
+            LocalRunner.Agent b = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent2", b), ctx.apiKey, ctx.workspace);
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
@@ -518,7 +541,8 @@ class LocalRunnersResourceTest {
         @Test
         void clearsAgentsWhenEmpty() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-clear", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-clear", projectId, ctx.apiKey, ctx.workspace);
 
             LocalRunner.Agent a = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", a), ctx.apiKey, ctx.workspace);
@@ -531,9 +555,10 @@ class LocalRunnersResourceTest {
         @Test
         void storesAndReturnsAgentTimeout() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-timeout", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-timeout", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").timeout(120).build();
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(120).build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
@@ -544,9 +569,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsZeroTimeoutWhenNotSet() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-no-timeout", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-no-timeout", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
@@ -556,7 +582,8 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("reg-agents-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
             try (var response = runnersClient.callRegisterAgents(runnerId, Map.of("a", agent),
@@ -573,8 +600,9 @@ class LocalRunnersResourceTest {
         @Test
         void returnsCancelledJobIds() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("hb-cancelled", ctx.apiKey, ctx.workspace);
-            UUID jobId = createRunningJob(runnerId, AGENT_NAME, ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("hb-cancelled", projectId, ctx.apiKey, ctx.workspace);
+            UUID jobId = createRunningJob(runnerId, AGENT_NAME, projectId, ctx.apiKey, ctx.workspace);
             runnersClient.cancelJob(jobId, ctx.apiKey, ctx.workspace);
 
             LocalRunnerHeartbeatResponse resp = runnersClient.heartbeat(runnerId, ctx.apiKey, ctx.workspace);
@@ -587,7 +615,8 @@ class LocalRunnersResourceTest {
         @Test
         void returnsEmptyWhenNoCancellations() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("hb-no-cancel", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("hb-no-cancel", projectId, ctx.apiKey, ctx.workspace);
 
             LocalRunnerHeartbeatResponse resp = runnersClient.heartbeat(runnerId, ctx.apiKey, ctx.workspace);
             assertThat(resp.cancelledJobIds()).isEmpty();
@@ -596,8 +625,9 @@ class LocalRunnersResourceTest {
         @Test
         void throwsGoneForEvictedRunner() {
             var ctx = createIsolatedWorkspace();
-            UUID oldRunnerId = connectRunner("hb-evicted-old", ctx.apiKey, ctx.workspace);
-            connectRunner("hb-evicted-new", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID oldRunnerId = connectRunnerWithPairing("hb-evicted-old", projectId, ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("hb-evicted-new", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callHeartbeat(oldRunnerId, ctx.apiKey, ctx.workspace)) {
                 assertThat(response.getStatus()).isEqualTo(410);
@@ -612,12 +642,13 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void throwsNotFoundForWrongWorkspace() {
+        void throwsGoneForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("hb-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("hb-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callHeartbeat(runnerId, OTHER_API_KEY, OTHER_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(response.getStatus()).isEqualTo(410);
             }
         }
     }
@@ -627,27 +658,14 @@ class LocalRunnersResourceTest {
     class CreateJob {
 
         @Test
-        void usesUserDefaultRunner() {
+        void usesProjectScopedRunner() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-default-runner", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("cj-default-runner", projectId, ctx.apiKey, ctx.workspace);
 
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
-                    .build();
-            UUID jobId = runnersClient.createJob(req, ctx.apiKey, ctx.workspace);
-
-            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
-            assertThat(job.runnerId()).isEqualTo(runnerId);
-        }
-
-        @Test
-        void usesExplicitRunnerId() {
-            var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-explicit-runner", ctx.apiKey, ctx.workspace);
-
-            CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME)
-                    .runnerId(runnerId)
+                    .projectId(projectId)
                     .build();
             UUID jobId = runnersClient.createJob(req, ctx.apiKey, ctx.workspace);
 
@@ -658,9 +676,11 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundWhenNoRunner() {
             var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
+                    .projectId(projectId)
                     .build();
 
             try (var response = runnersClient.callCreateJob(req, ctx.apiKey, ctx.workspace)) {
@@ -671,12 +691,13 @@ class LocalRunnersResourceTest {
         @Test
         void throwsConflictWhenRunnerOffline() throws InterruptedException {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-offline", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-offline", projectId, ctx.apiKey, ctx.workspace);
             waitForHeartbeatExpiry();
 
             CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
                     .agentName(AGENT_NAME)
-                    .runnerId(runnerId)
+                    .projectId(projectId)
                     .build();
 
             try (var response = runnersClient.callCreateJob(req, ctx.apiKey, ctx.workspace)) {
@@ -687,44 +708,31 @@ class LocalRunnersResourceTest {
         @Test
         void throwsTooManyRequests() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-too-many", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-too-many", projectId, ctx.apiKey, ctx.workspace);
 
             for (int i = 0; i < 3; i++) {
                 runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                        .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                        .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
             }
 
             try (var response = runnersClient.callCreateJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace)) {
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace)) {
                 assertThat(response.getStatus()).isEqualTo(429);
             }
         }
 
         @Test
-        void defaultsProjectToDefault() {
-            var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-default-project", ctx.apiKey, ctx.workspace);
-
-            CreateLocalRunnerJobRequest req = CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME)
-                    .runnerId(runnerId)
-                    .build();
-            UUID jobId = runnersClient.createJob(req, ctx.apiKey, ctx.workspace);
-
-            LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
-            assertThat(job.project()).isEqualTo("default");
-        }
-
-        @Test
         void usesAgentTimeoutWhenSet() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-agent-timeout", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("cj-agent-timeout", projectId, ctx.apiKey, ctx.workspace);
 
             LocalRunner.Agent agent = LocalRunner.Agent.builder().timeout(300).build();
             runnersClient.registerAgents(runnerId, Map.of(AGENT_NAME, agent), ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.timeout()).isEqualTo(300);
@@ -733,13 +741,14 @@ class LocalRunnersResourceTest {
         @Test
         void fallsBackToConfigTimeoutWhenAgentHasNone() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-config-timeout", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("cj-config-timeout", projectId, ctx.apiKey, ctx.workspace);
 
-            LocalRunner.Agent agent = LocalRunner.Agent.builder().project("proj1").build();
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().build();
             runnersClient.registerAgents(runnerId, Map.of(AGENT_NAME, agent), ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.timeout()).isPositive();
@@ -748,7 +757,8 @@ class LocalRunnersResourceTest {
         @Test
         void storesMaskIdAndMetadata() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-mask-meta", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
             var metadata = LocalRunnerJobMetadata.builder()
                     .datasetId(randomUUID())
@@ -758,7 +768,7 @@ class LocalRunnersResourceTest {
                     .build();
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
@@ -769,10 +779,11 @@ class LocalRunnersResourceTest {
         @Test
         void storesMaskIdAndMetadataNullWhenNotProvided() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-no-mask-meta", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-no-mask-id", projectId, ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
@@ -783,10 +794,11 @@ class LocalRunnersResourceTest {
         @Test
         void fallsBackToConfigTimeoutWhenNoAgentsRegistered() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-no-agents", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-no-agents", projectId, ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(job.timeout()).isPositive();
@@ -800,10 +812,11 @@ class LocalRunnersResourceTest {
         @Test
         void returnsJobWhenPending() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("nj-pending", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-pending", projectId, ctx.apiKey, ctx.workspace);
 
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callNextJob(runnerId, ctx.apiKey, ctx.workspace)) {
                 assertThat(response.getStatus()).isEqualTo(200);
@@ -817,7 +830,8 @@ class LocalRunnersResourceTest {
         @Test
         void returnsMaskIdAndMetadataWhenClaimed() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("nj-mask-meta", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
             var metadata = LocalRunnerJobMetadata.builder()
                     .datasetId(randomUUID())
@@ -827,7 +841,7 @@ class LocalRunnersResourceTest {
                     .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob claimed = runnersClient.nextJob(runnerId, ctx.apiKey, ctx.workspace);
@@ -838,7 +852,8 @@ class LocalRunnersResourceTest {
         @Test
         void returnsEmptyWhenNoPendingJobs() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("nj-empty", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-empty", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callNextJob(runnerId, ctx.apiKey, ctx.workspace)) {
                 assertThat(response.getStatus()).isIn(200, 204);
@@ -851,7 +866,8 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("nj-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("nj-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callNextJob(runnerId, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
@@ -866,11 +882,12 @@ class LocalRunnersResourceTest {
         @Test
         void returnsJobsForRunner() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-runner", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("lj-runner", projectId, ctx.apiKey, ctx.workspace);
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
                     ctx.apiKey, ctx.workspace);
@@ -881,7 +898,8 @@ class LocalRunnersResourceTest {
         @Test
         void returnsMaskIdAndMetadataInList() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-mask-meta", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("lj-mask-id", projectId, ctx.apiKey, ctx.workspace);
             UUID maskId = randomUUID();
             var metadata = LocalRunnerJobMetadata.builder()
                     .datasetId(randomUUID())
@@ -891,7 +909,7 @@ class LocalRunnersResourceTest {
                     .build();
 
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).maskId(maskId).metadata(metadata).build(),
+                    .agentName(AGENT_NAME).projectId(projectId).maskId(maskId).metadata(metadata).build(),
                     ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
@@ -902,27 +920,29 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void filtersByProject() {
+        void filtersByProjectId() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-filter", ctx.apiKey, ctx.workspace);
-            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).project("proj-a").build(), ctx.apiKey, ctx.workspace);
-            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).project("proj-b").build(), ctx.apiKey, ctx.workspace);
+            UUID projectIdA = createProject(ctx.apiKey, ctx.workspace);
+            UUID projectIdB = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("lj-filter", projectIdA, ctx.apiKey, ctx.workspace);
 
-            LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, "proj-a", 0, 10,
+            runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
+                    .agentName(AGENT_NAME).projectId(projectIdA).build(), ctx.apiKey, ctx.workspace);
+
+            LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, projectIdA, 0, 10,
                     ctx.apiKey, ctx.workspace);
             assertThat(page.content()).hasSize(1);
-            assertThat(page.content().get(0).project()).isEqualTo("proj-a");
+            assertThat(page.content().get(0).projectId()).isEqualTo(projectIdA);
         }
 
         @Test
         void paginatesCorrectly() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-paginate", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("lj-paginate", projectId, ctx.apiKey, ctx.workspace);
             for (int i = 0; i < 3; i++) {
                 runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                        .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                        .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
             }
 
             LocalRunnerJob.LocalRunnerJobPage page0 = runnersClient.listJobs(runnerId, null, 0, 2,
@@ -938,11 +958,12 @@ class LocalRunnersResourceTest {
         @Test
         void sortsByCreatedAtDescending() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("lj-sort", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("lj-sort", projectId, ctx.apiKey, ctx.workspace);
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
             runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob.LocalRunnerJobPage page = runnersClient.listJobs(runnerId, null, 0, 10,
                     ctx.apiKey, ctx.workspace);
@@ -959,9 +980,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsJob() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gj-runner", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gj-runner", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             LocalRunnerJob fetched = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
             assertThat(fetched.id()).isEqualTo(jobId);
@@ -978,9 +1000,10 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gj-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gj-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callGetJob(jobId, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
@@ -995,9 +1018,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsAllLogs() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gl-all", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gl-all", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             List<LocalRunnerLogEntry> entries = List.of(
                     LocalRunnerLogEntry.builder().stream("stdout").text("line1").build(),
@@ -1013,9 +1037,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsLogsFromOffset() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gl-offset", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gl-offset", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             List<LocalRunnerLogEntry> entries = List.of(
                     LocalRunnerLogEntry.builder().stream("stdout").text("line1").build(),
@@ -1031,9 +1056,10 @@ class LocalRunnersResourceTest {
         @Test
         void returnsEmptyWhenOffsetBeyondEnd() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gl-beyond", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gl-beyond", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             runnersClient.appendLogs(jobId,
                     List.of(LocalRunnerLogEntry.builder().stream("stdout").text("line1").build()),
@@ -1053,9 +1079,10 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("gl-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("gl-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callGetJobLogs(jobId, 0, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
@@ -1070,8 +1097,9 @@ class LocalRunnersResourceTest {
         @Test
         void throwsBadRequestForInvalidStatus() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("rr-bad-status", ctx.apiKey, ctx.workspace);
-            UUID jobId = createRunningJob(runnerId, AGENT_NAME, ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("rr-bad-status", projectId, ctx.apiKey, ctx.workspace);
+            UUID jobId = createRunningJob(runnerId, AGENT_NAME, projectId, ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callReportResult(jobId,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.RUNNING).build(),
@@ -1092,9 +1120,10 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("rr-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("rr-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callReportResult(jobId,
                     LocalRunnerJobResultRequest.builder().status(LocalRunnerJobStatus.COMPLETED).build(),
@@ -1118,9 +1147,10 @@ class LocalRunnersResourceTest {
         @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
-            UUID runnerId = connectRunner("cj-cancel-wrong-ws", ctx.apiKey, ctx.workspace);
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("cj-cancel-wrong-ws", projectId, ctx.apiKey, ctx.workspace);
             UUID jobId = runnersClient.createJob(CreateLocalRunnerJobRequest.builder()
-                    .agentName(AGENT_NAME).runnerId(runnerId).build(), ctx.apiKey, ctx.workspace);
+                    .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
 
             try (var response = runnersClient.callCancelJob(jobId, OTHER_API_KEY, OTHER_WORKSPACE)) {
                 assertThat(response.getStatus()).isEqualTo(404);
