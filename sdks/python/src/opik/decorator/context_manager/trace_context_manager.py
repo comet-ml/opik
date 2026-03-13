@@ -73,10 +73,11 @@ def start_as_current_trace(
         trace_data.output = None
         raise
     finally:
-        client = opik_client.get_client_cached()
-        client.trace(**trace_data.init_end_time().as_parameters)
+        try:
+            client = opik_client.get_client_cached()
+            client.trace(**trace_data.init_end_time().as_parameters)
 
-        context_storage.pop_trace_data(ensure_id=trace_data.id)
-
-        if flush:
-            client.flush()
+            if flush:
+                client.flush()
+        finally:
+            context_storage.pop_trace_data(ensure_id=trace_data.id)
