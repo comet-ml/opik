@@ -120,6 +120,13 @@ class CostServiceTest {
                 Arguments.of("claude-haiku-4-5", "anthropic", true),
                 Arguments.of("claude-sonnet-4-5", "anthropic", true),
 
+                // Provider prefix + dot notation should work (prefix stripped, then dots normalized)
+                Arguments.of("anthropic/claude-3.5-sonnet-20241022", "anthropic", true),
+                Arguments.of("anthropic/claude-sonnet-4.5", "anthropic", true),
+
+                // Provider prefix + case variation should work
+                Arguments.of("anthropic/Claude-3.5-Sonnet-20241022", "anthropic", true),
+
                 // Unknown models should gracefully return zero
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
@@ -148,6 +155,33 @@ class CostServiceTest {
         assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
 
+    /**
+     * Test for issue #5621: LiteLLM OTel model names with provider prefix not found in pricing table.
+     *
+     * LiteLLM sends model names with provider prefix via gen_ai.request.model
+     * (e.g. "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022").
+     * These should be stripped before lookup to match the stored keys.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithProviderPrefix")
+    void calculateCost_shouldStripProviderPrefix_issue5621(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithProviderPrefix() {
+        return Stream.of(
+                Arguments.of("openai/gpt-4o", "openai"),
+                Arguments.of("openai/gpt-4o-mini", "openai"),
+                Arguments.of("anthropic/claude-3-5-sonnet-20241022", "anthropic"),
+                Arguments.of("anthropic/claude-3-5-haiku-20241022", "anthropic"));
+    }
+
     private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
         return Stream.of(
                 // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
@@ -156,6 +190,9 @@ class CostServiceTest {
                 Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
                 // 3. Base models without date suffix should still work
                 Arguments.of("gpt-5.2", "openai"),
-                Arguments.of("claude-sonnet-4.5", "anthropic"));
+                Arguments.of("claude-sonnet-4.5", "anthropic"),
+                // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
+                Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
     }
 }
