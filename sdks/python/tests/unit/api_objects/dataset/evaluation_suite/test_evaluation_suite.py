@@ -625,6 +625,112 @@ class TestValidateTaskResult:
         assert result == {"input": "hello", "output": "world"}
 
 
+class TestInternalRunOptimizationSuite:
+    """Tests for __internal_api__run_optimization_suite__."""
+
+    def test_passes_optimization_params_to_run_suite_evaluation(self):
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        fake_result = mock.MagicMock(spec=suite_types.EvaluationSuiteResult)
+
+        with mock.patch(
+            "opik.evaluation.evaluator.evaluate_suite",
+            return_value=fake_result,
+        ) as mock_run:
+            result = suite.__internal_api__run_optimization_suite__(
+                task=lambda data: {"input": data, "output": "resp"},
+                experiment_name="opt-exp",
+                verbose=0,
+                optimization_id="opt-123",
+                experiment_type="mini-batch",
+                dataset_item_ids=["item-1", "item-2"],
+                dataset_filter_string='input = "hello"',
+            )
+
+        assert result is fake_result
+        mock_run.assert_called_once()
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["optimization_id"] == "opt-123"
+        assert call_kwargs["experiment_type"] == "mini-batch"
+        assert call_kwargs["dataset_item_ids"] == ["item-1", "item-2"]
+        assert call_kwargs["dataset_filter_string"] == 'input = "hello"'
+        assert call_kwargs["dataset"] is mock_dataset
+
+    def test_without_optimization_params__defaults_to_none(self):
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        fake_result = mock.MagicMock(spec=suite_types.EvaluationSuiteResult)
+
+        with mock.patch(
+            "opik.evaluation.evaluator.evaluate_suite",
+            return_value=fake_result,
+        ) as mock_run:
+            suite.__internal_api__run_optimization_suite__(
+                task=lambda data: {"input": data, "output": "resp"},
+                experiment_name="basic-exp",
+                verbose=0,
+            )
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["optimization_id"] is None
+        assert call_kwargs["experiment_type"] is None
+        assert call_kwargs["dataset_item_ids"] is None
+        assert call_kwargs["dataset_filter_string"] is None
+
+    def test_passes_client_through(self):
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+        mock_client = mock.MagicMock()
+        fake_result = mock.MagicMock(spec=suite_types.EvaluationSuiteResult)
+
+        with mock.patch(
+            "opik.evaluation.evaluator.evaluate_suite",
+            return_value=fake_result,
+        ) as mock_run:
+            suite.__internal_api__run_optimization_suite__(
+                task=lambda data: {"input": data, "output": "resp"},
+                experiment_name="client-exp",
+                verbose=0,
+                client=mock_client,
+            )
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["client"] is mock_client
+
+    def test_run_delegates_to_internal_api(self):
+        mock_dataset = _create_mock_dataset()
+        suite = evaluation_suite.EvaluationSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        fake_result = mock.MagicMock(spec=suite_types.EvaluationSuiteResult)
+
+        with mock.patch(
+            "opik.evaluation.evaluator.evaluate_suite",
+            return_value=fake_result,
+        ) as mock_run:
+            result = suite.run(
+                task=lambda data: {"input": data, "output": "resp"},
+                experiment_name="run-exp",
+                verbose=0,
+            )
+
+        assert result is fake_result
+        mock_run.assert_called_once()
+
+
 class TestEvaluationSuiteResultPassRate:
     """Unit tests for EvaluationSuiteResult.pass_rate property."""
 

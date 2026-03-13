@@ -315,7 +315,6 @@ class Dataset(DatasetExportOperations):
         description: Optional[str],
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
-        dataset_type: Optional[str] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -324,7 +323,6 @@ class Dataset(DatasetExportOperations):
         self._description = description
         self._rest_client = rest_client
         self._dataset_items_count = dataset_items_count
-        self._dataset_type = dataset_type
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -345,11 +343,6 @@ class Dataset(DatasetExportOperations):
     def description(self) -> Optional[str]:
         """The description of the dataset."""
         return self._description
-
-    @property
-    def dataset_type(self) -> Optional[str]:
-        """The type of the dataset (e.g., 'dataset' or 'evaluation_suite')."""
-        return self._dataset_type
 
     @property
     def dataset_items_count(self) -> Optional[int]:
