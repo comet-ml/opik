@@ -16,7 +16,7 @@ export const LocalRunnerJob: core.serialization.ObjectSchema<serializers.LocalRu
         inputs: JsonNode.optional(),
         result: JsonNode.optional(),
         error: core.serialization.string().optional(),
-        project: core.serialization.string().optional(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
         maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
         metadata: LocalRunnerJobMetadata.optional(),
@@ -35,7 +35,7 @@ export declare namespace LocalRunnerJob {
         inputs?: JsonNode.Raw | null;
         result?: JsonNode.Raw | null;
         error?: string | null;
-        project?: string | null;
+        project_id?: string | null;
         trace_id?: string | null;
         mask_id?: string | null;
         metadata?: LocalRunnerJobMetadata.Raw | null;

@@ -78,6 +78,7 @@ export enum ManagementPermissionsNames {
   COMMENT_WRITE = "comment_write",
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
+  TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
 }
 
 export interface UserPermission {

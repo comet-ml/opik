@@ -24,6 +24,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canWriteComments,
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
+    canAnnotateTraceSpanThread,
     isPending,
   } = useUserPermission();
 
@@ -47,6 +48,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canWriteComments,
         canUpdateOnlineEvaluationRules,
         canUpdateAlerts,
+        canAnnotateTraceSpanThread,
       },
       isPending,
     }),
@@ -68,6 +70,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canWriteComments,
       canUpdateOnlineEvaluationRules,
       canUpdateAlerts,
+      canAnnotateTraceSpanThread,
       isPending,
     ],
   );

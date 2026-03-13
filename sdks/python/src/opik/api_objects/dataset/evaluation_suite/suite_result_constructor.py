@@ -50,7 +50,8 @@ def build_suite_result(
         item = items_cache.get(item_id)
         pass_threshold = 1
         if item is not None and item.execution_policy is not None:
-            pass_threshold = item.execution_policy.pass_threshold or 1
+            if item.execution_policy.pass_threshold is not None:
+                pass_threshold = item.execution_policy.pass_threshold
 
         runs_passed = sum(
             1

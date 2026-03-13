@@ -8,6 +8,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -342,6 +343,14 @@ class AgentConfigServiceImpl implements AgentConfigService {
         String userName = requestContext.get().getUserName();
         UUID projectId = request.projectId();
 
+        long distinctEnvNames = request.envs().stream()
+                .map(AgentConfigEnv::envName)
+                .distinct()
+                .count();
+        if (distinctEnvNames != request.envs().size()) {
+            throw new BadRequestException("Duplicate env names in request");
+        }
+
         log.info("Creating or updating {} environments for project '{}' in workspace '{}'",
                 request.envs().size(), projectId, workspaceId);
 
@@ -356,31 +365,33 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     .toList();
 
             List<AgentConfigEnv> existingEnvs = dao.getEnvsByNames(workspaceId, projectId, envNames);
-            Set<String> existingEnvNames = existingEnvs.stream()
-                    .map(AgentConfigEnv::envName)
-                    .collect(Collectors.toSet());
+            Map<String, AgentConfigEnv> existingByName = existingEnvs.stream()
+                    .collect(Collectors.toMap(AgentConfigEnv::envName, e -> e));
 
-            List<AgentConfigEnv> newEnvs = request.envs().stream()
-                    .filter(env -> !existingEnvNames.contains(env.envName()))
-                    .map(env -> env.toBuilder().id(idGenerator.generateId()).build())
-                    .toList();
+            List<UUID> idsToClose = new ArrayList<>();
+            List<AgentConfigEnv> envsToInsert = new ArrayList<>();
 
-            List<AgentConfigEnv> envsToUpdate = request.envs().stream()
-                    .filter(env -> existingEnvNames.contains(env.envName()))
-                    .toList();
-
-            if (!newEnvs.isEmpty()) {
-                log.info("Inserting {} new environments for project '{}' in workspace '{}': {}",
-                        newEnvs.size(), projectId, workspaceId,
-                        newEnvs.stream().map(AgentConfigEnv::envName).toList());
-                dao.batchInsertEnvs(workspaceId, projectId, config.id(), userName, userName, newEnvs);
+            for (AgentConfigEnv requested : request.envs()) {
+                AgentConfigEnv existing = existingByName.get(requested.envName());
+                if (existing == null) {
+                    envsToInsert.add(requested.toBuilder().id(idGenerator.generateId()).build());
+                } else if (!existing.blueprintId().equals(requested.blueprintId())) {
+                    idsToClose.add(existing.id());
+                    envsToInsert.add(requested.toBuilder().id(idGenerator.generateId()).build());
+                }
             }
 
-            if (!envsToUpdate.isEmpty()) {
-                log.info("Updating {} existing environments for project '{}' in workspace '{}': {}",
-                        envsToUpdate.size(), projectId, workspaceId,
-                        envsToUpdate.stream().map(AgentConfigEnv::envName).toList());
-                dao.batchUpdateEnvs(workspaceId, projectId, userName, envsToUpdate);
+            if (!idsToClose.isEmpty()) {
+                log.info("Closing {} existing environments for project '{}' in workspace '{}'",
+                        idsToClose.size(), projectId, workspaceId);
+                dao.batchCloseEnvs(workspaceId, projectId, idsToClose);
+            }
+
+            if (!envsToInsert.isEmpty()) {
+                log.info("Inserting {} environments for project '{}' in workspace '{}': {}",
+                        envsToInsert.size(), projectId, workspaceId,
+                        envsToInsert.stream().map(AgentConfigEnv::envName).toList());
+                dao.batchInsertEnvs(workspaceId, projectId, config.id(), userName, envsToInsert);
             }
 
             return null;

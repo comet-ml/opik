@@ -576,10 +576,10 @@ def _format_java_entry_3arg(enum_name: str, qualified: str, value: str, flag: bo
 
 
 def _finalize_entries(lines: list[str]) -> str:
-    """Turn the last entry's trailing comma into a semicolon, add blank line."""
+    """Turn the last entry's trailing comma into a semicolon."""
     if not lines:
-        return "    ;\n\n"
-    lines[-1] = lines[-1].rstrip().rstrip(",") + ";\n"
+        return "    ;\n"
+    lines[-1] = lines[-1].rstrip().rstrip(",") + ";"
     return "\n".join(lines) + "\n"
 
 
@@ -669,7 +669,7 @@ def regenerate_providers_ts(
             lines.append(f'  {entry.enum_name} = "{entry.value}",')
         sections.append("\n".join(lines))
 
-    new_body = "\n\n".join(sections) + "\n"
+    new_body = "\n\n".join(sections)
     return content[:opik_free_end] + new_body + content[enum_close:]
 
 
@@ -707,7 +707,12 @@ def regenerate_models_data_ts(
         lines = ["["]
         for entry in entries:
             lines.append("    {")
-            lines.append(f"      value: PROVIDER_MODEL_TYPE.{entry.enum_name},")
+            value_line = f"      value: PROVIDER_MODEL_TYPE.{entry.enum_name},"
+            if len(value_line) > 80:
+                lines.append("      value:")
+                lines.append(f"        PROVIDER_MODEL_TYPE.{entry.enum_name},")
+            else:
+                lines.append(value_line)
             lines.append(f'      label: "{entry.label}",')
             lines.append("    },")
         lines.append("  ]")

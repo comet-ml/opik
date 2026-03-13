@@ -10,6 +10,7 @@ export const LocalRunner: core.serialization.ObjectSchema<serializers.LocalRunne
     core.serialization.object({
         id: core.serialization.string().optional(),
         name: core.serialization.string().optional(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
         status: LocalRunnerStatus.optional(),
         connectedAt: core.serialization.property("connected_at", core.serialization.date().optional()),
         agents: core.serialization.list(Agent).optional(),
@@ -19,6 +20,7 @@ export declare namespace LocalRunner {
     export interface Raw {
         id?: string | null;
         name?: string | null;
+        project_id?: string | null;
         status?: LocalRunnerStatus.Raw | null;
         connected_at?: string | null;
         agents?: Agent.Raw[] | null;

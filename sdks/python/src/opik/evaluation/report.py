@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from rich import align, console, panel, table, text
 
 
+from opik.api_objects.dataset.evaluation_suite import types as suite_types
+
 from . import test_result, evaluation_result
 from .metrics import score_result
 
@@ -111,6 +113,139 @@ def display_experiment_results(
     )
 
     # Display results
+    console_container = console.Console()
+    console_container.print(panel_content)
+    console_container.print("Uploading results to Opik ... ")
+
+
+def display_suite_results(
+    suite_name: str,
+    total_time: float,
+    suite_result: suite_types.EvaluationSuiteResult,
+    verbose: int = 2,
+) -> None:
+    test_results = [
+        tr
+        for item_result in suite_result.item_results.values()
+        for tr in item_result.test_results
+    ]
+    nb_runs = len(test_results)
+    nb_items = suite_result.items_total
+    items_passed = suite_result.items_passed
+    items_total = suite_result.items_total
+    suite_passed = suite_result.all_items_passed
+
+    assertion_passed_count: Dict[str, int] = defaultdict(int)
+    assertion_total_count: Dict[str, int] = defaultdict(int)
+
+    for tr in test_results:
+        for score in tr.score_results:
+            assertion_total_count[score.name] += 1
+            score_passed = not score.scoring_failed and (
+                (isinstance(score.value, bool) and score.value) or score.value == 1
+            )
+            if score_passed:
+                assertion_passed_count[score.name] += 1
+
+    # Build display
+    time_text = text.Text(f"Total time:        {_format_time(total_time)}")
+    time_text.stylize("bold", 0, 18)
+    time_text = align.Align.left(time_text)
+
+    nb_samples_text = text.Text(f"Number of items:   {nb_items:,} ({nb_runs:,} runs)")
+    nb_samples_text.stylize("bold", 0, 18)
+    nb_samples_text = align.Align.left(nb_samples_text)
+
+    pass_rate = items_passed / items_total if items_total > 0 else None
+    if items_total == 0:
+        pass_style = "yellow bold"
+        pass_label = "NO ITEMS"
+    elif suite_passed:
+        pass_style = "green bold"
+        pass_label = "PASSED"
+    else:
+        pass_style = "red bold"
+        pass_label = "FAILED"
+    pass_text = text.Text(f"Suite result:      {pass_label}", style=pass_style)
+    pass_text.stylize("bold", 0, 18)
+    pass_text = align.Align.left(pass_text)
+
+    items_text = text.Text(f"Items passed:      {items_passed}/{items_total}")
+    items_text.stylize("bold", 0, 18)
+    items_text = align.Align.left(items_text)
+
+    rate_value = f"{pass_rate:.1%}" if pass_rate is not None else "N/A"
+    rate_text = text.Text(f"Pass rate:         {rate_value}")
+    rate_text.stylize("bold", 0, 18)
+    rate_text = align.Align.left(rate_text)
+
+    # Compute per-item timing averages
+    task_times = [
+        tr.task_execution_time
+        for tr in test_results
+        if tr.task_execution_time is not None
+    ]
+    scoring_times = [
+        tr.scoring_time for tr in test_results if tr.scoring_time is not None
+    ]
+
+    content = table.Table.grid()
+    content.add_row(text.Text(""))
+    content.add_row(time_text)
+    content.add_row(nb_samples_text)
+    content.add_row(pass_text)
+    content.add_row(items_text)
+    content.add_row(rate_text)
+
+    if task_times and scoring_times:
+        avg_task = sum(task_times) / len(task_times)
+        avg_scoring = sum(scoring_times) / len(scoring_times)
+        avg_total = avg_task + avg_scoring
+
+        avg_task_text = text.Text(f"Avg task time:     {avg_task:.2f}s")
+        avg_task_text.stylize("bold", 0, 18)
+        avg_scoring_text = text.Text(f"Avg scoring time:  {avg_scoring:.2f}s")
+        avg_scoring_text.stylize("bold", 0, 18)
+        avg_total_text = text.Text(f"Avg total time:    {avg_total:.2f}s")
+        avg_total_text.stylize("bold", 0, 18)
+
+        content.add_row(text.Text(""))
+        content.add_row(align.Align.left(avg_task_text))
+        content.add_row(align.Align.left(avg_scoring_text))
+        content.add_row(align.Align.left(avg_total_text))
+
+    if verbose >= 2 and assertion_total_count:
+        # Sort by pass rate ascending (most failed first)
+        sorted_assertions = sorted(
+            assertion_total_count.keys(),
+            key=lambda n: (
+                assertion_passed_count[n] / assertion_total_count[n]
+                if assertion_total_count[n] > 0
+                else 0.0
+            ),
+        )
+
+        score_strings = text.Text("")
+        for name in sorted_assertions:
+            passed = assertion_passed_count[name]
+            total = assertion_total_count[name]
+            rate = passed / total if total > 0 else 0.0
+            style = "green bold" if passed == total else "red bold"
+            score_strings += text.Text(
+                f"{name}: {rate:.0%} passed ({passed}/{total})\n",
+                style=style,
+            )
+
+        content.add_row(text.Text(""))
+        content.add_row(align.Align.left(score_strings))
+
+    panel_content = panel.Panel(
+        content,
+        title=f"{suite_name} ({nb_items} items, {nb_runs} runs)",
+        title_align="left",
+        expand=False,
+    )
+
     console_container = console.Console()
     console_container.print(panel_content)
     console_container.print("Uploading results to Opik ... ")
