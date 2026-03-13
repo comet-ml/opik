@@ -867,9 +867,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Getting output columns with versioning for dataset '{}', experimentIds '{}'", datasetId,
                     experimentIds);
 
-            return versionDao.getExperimentItemsOutputColumns(datasetId, experimentIds)
-                    .map(columns -> PageColumns.builder().columns(columns).build())
-                    .switchIfEmpty(Mono.just(PageColumns.empty()));
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                Optional<UUID> fallbackVersionId = getFallbackVersionId(datasetId, workspaceId);
+
+                if (fallbackVersionId.isEmpty()) {
+                    log.info("No versions found for dataset '{}', falling back to legacy DAO for output columns",
+                            datasetId);
+                    return dao.getOutputColumns(datasetId, experimentIds)
+                            .map(columns -> PageColumns.builder().columns(columns).build())
+                            .switchIfEmpty(Mono.just(PageColumns.empty()));
+                }
+
+                return versionDao.getExperimentItemsOutputColumns(datasetId, experimentIds, fallbackVersionId.get())
+                        .map(columns -> PageColumns.builder().columns(columns).build())
+                        .switchIfEmpty(Mono.just(PageColumns.empty()));
+            });
         }
 
         // Versioning toggle is OFF: use legacy table

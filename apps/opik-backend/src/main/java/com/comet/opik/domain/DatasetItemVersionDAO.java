@@ -71,7 +71,7 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
             UUID versionId);
 
-    Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
+    Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds, UUID versionId);
 
     Mono<ProjectStats> getExperimentItemsStats(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
@@ -641,31 +641,26 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     // Query to extract columns from trace output for experiment items view
     private static final String SELECT_EXPERIMENT_ITEMS_OUTPUT_COLUMNS = """
-            WITH dataset_items_scope AS (
-                SELECT DISTINCT
-                    div.id AS row_id,
-                    div.dataset_item_id AS stable_id,
-                    div.dataset_version_id
-                FROM experiments e
-                INNER JOIN dataset_item_versions div
-                    ON div.dataset_id = :datasetId
-                    AND div.workspace_id = :workspace_id
-                    AND div.dataset_version_id = e.dataset_version_id
-                WHERE e.workspace_id = :workspace_id
-                <if(experiment_ids)>AND e.id IN :experiment_ids<endif>
-                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                LIMIT 1 BY div.id
+            WITH experiments_resolved AS (
+                SELECT
+                    id,
+                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id = :datasetId
+                <if(experiment_ids)>AND id IN :experiment_ids<endif>
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ),
             experiment_items_scope AS (
                 SELECT
-                    trace_id,
-                    dataset_item_id
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-                AND dataset_item_id IN (SELECT row_id FROM dataset_items_scope)
-                <if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    ei.trace_id,
+                    ei.dataset_item_id
+                FROM experiment_items ei
+                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+                WHERE ei.workspace_id = :workspace_id
+                ORDER BY ei.id DESC, ei.last_updated_at DESC
+                LIMIT 1 BY ei.id
             )
             SELECT
                 mapFromArrays(
@@ -2149,8 +2144,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Mono<List<Column>> getExperimentItemsOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
-        log.debug("Getting experiment items output columns for dataset '{}'", datasetId);
+    public Mono<List<Column>> getExperimentItemsOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds,
+            @NonNull UUID versionId) {
+        log.debug("Getting experiment items output columns for dataset '{}', versionId '{}'", datasetId, versionId);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2164,7 +2160,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 var statement = connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
-                        .bind("datasetId", datasetId);
+                        .bind("datasetId", datasetId)
+                        .bind("versionId", versionId.toString());
 
                 if (CollectionUtils.isNotEmpty(experimentIds)) {
                     statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
