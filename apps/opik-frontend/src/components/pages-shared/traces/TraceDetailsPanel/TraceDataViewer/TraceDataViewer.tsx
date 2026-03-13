@@ -33,6 +33,7 @@ import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { formatDuration, formatDate } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDataViewerActionsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/UserCommentHoverList";
 import {
@@ -72,6 +73,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   isSpansLazyLoading,
   search,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   const rootScrollRef = useRef<HTMLDivElement>(null);
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
@@ -403,7 +408,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 <ConfigurableFeedbackScoreTable
                   title={isTrace ? "Trace scores" : "Span scores"}
                   feedbackScores={data.feedback_scores}
-                  onDeleteFeedbackScore={onDeleteFeedbackScore}
+                  onDeleteFeedbackScore={
+                    canAnnotateTraceSpanThread
+                      ? onDeleteFeedbackScore
+                      : undefined
+                  }
                   onAddHumanReview={() =>
                     setActiveSection(DetailsActionSection.Annotations)
                   }
@@ -416,7 +425,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   <ConfigurableFeedbackScoreTable
                     title="Span scores"
                     feedbackScores={traceData.span_feedback_scores}
-                    onDeleteFeedbackScore={onDeleteFeedbackScore}
+                    onDeleteFeedbackScore={
+                      canAnnotateTraceSpanThread
+                        ? onDeleteFeedbackScore
+                        : undefined
+                    }
                     onAddHumanReview={() =>
                       setActiveSection(DetailsActionSection.Annotations)
                     }

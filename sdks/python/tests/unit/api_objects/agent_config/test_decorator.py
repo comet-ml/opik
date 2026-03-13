@@ -297,14 +297,24 @@ class TestConfigDecoratorMaskAndEnv:
         assert envs[0].blueprint_id == "bp-test"
 
     def test_mask_id__no_existing_blueprint__does_not_pin_env(self, mock_backend):
+        mock_backend.set_blueprint_values(
+            [mock.Mock(key="MyConfig.temp", type="float", value=0.5)]
+        )
+
         @agent_config_decorator(mask_id="mask-1")
         @dataclasses.dataclass
         class MyConfig:
             temp: float = 0.8
 
-        MyConfig()
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+            instance = MyConfig()
+            _ = instance.temp
 
         mock_backend.agent_configs.create_or_update_envs.assert_not_called()
+        config = mock_update.call_args[1]["metadata"]["agent_configuration"]
+        assert config["_mask_id"] == "mask-1"
 
 
 class TestConfigDecoratorTraceMetadata:
@@ -334,6 +344,7 @@ class TestConfigDecoratorTraceMetadata:
             assert field_entry["value"] == 0.8
             assert field_entry["type"] == "float"
             assert "description" not in field_entry
+            assert "_mask_id" not in config
 
     def test_field_access_inside_trace__annotated_field__injects_description(
         self, mock_backend
@@ -1096,11 +1107,16 @@ class TestConfigDecoratorContextMask:
         instance = MyConfig()
         mock_backend.agent_configs.get_latest_blueprint.reset_mock()
 
-        with agent_config_context("mask-ctx"):
-            _ = instance.temp
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+            with agent_config_context("mask-ctx"):
+                _ = instance.temp
 
         call_kwargs = mock_backend.agent_configs.get_latest_blueprint.call_args[1]
         assert call_kwargs.get("mask_id") == "mask-ctx"
+        config = mock_update.call_args[1]["metadata"]["agent_configuration"]
+        assert config["_mask_id"] == "mask-ctx"
 
     def test_context_mask__env_pinned_instance__calls_get_blueprint_by_env_with_mask_id(
         self, mock_backend
@@ -1147,8 +1163,15 @@ class TestConfigDecoratorContextMask:
         instance = MyConfig()
         assert instance.temp == 0.8
 
-        with agent_config_context("mask-ctx"):
-            assert instance.temp == 0.3
+        with mock.patch(
+            "opik.api_objects.agent_config.decorator.opik_context.update_current_trace"
+        ) as mock_update:
+            with agent_config_context("mask-ctx"):
+                assert instance.temp == 0.3
+
+        config = mock_update.call_args[1]["metadata"]["agent_configuration"]
+        assert config["_mask_id"] == "mask-ctx"
+        assert config["values"]["MyConfig.temp"]["value"] == 0.3
 
     def test_context_mask__no_env__does_not_call_get_blueprint_by_env(
         self, mock_backend

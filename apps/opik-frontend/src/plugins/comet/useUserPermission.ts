@@ -177,6 +177,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canAnnotateTraceSpanThread = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.TRACE_SPAN_THREAD_ANNOTATE,
+      ),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -196,6 +204,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canCreateProjects,
     canWriteComments,
     canUpdateAlerts,
+    canAnnotateTraceSpanThread,
     isPending: isEnabled && isPending,
   };
 };

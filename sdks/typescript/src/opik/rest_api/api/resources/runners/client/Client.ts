@@ -287,6 +287,7 @@ export class RunnersClient {
      *
      * @example
      *     await client.runners.connectRunner({
+     *         pairingCode: "pairing_code",
      *         runnerName: "runner_name"
      *     })
      */
@@ -897,17 +898,19 @@ export class RunnersClient {
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.runners.listRunners()
+     *     await client.runners.listRunners({
+     *         projectId: "project_id"
+     *     })
      */
     public listRunners(
-        request: OpikApi.ListRunnersRequest = {},
+        request: OpikApi.ListRunnersRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): core.HttpResponsePromise<OpikApi.LocalRunnerPage> {
         return core.HttpResponsePromise.fromPromise(this.__listRunners(request, requestOptions));
     }
 
     private async __listRunners(
-        request: OpikApi.ListRunnersRequest = {},
+        request: OpikApi.ListRunnersRequest,
         requestOptions?: RunnersClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.LocalRunnerPage>> {
         const { projectId, page, size } = request;

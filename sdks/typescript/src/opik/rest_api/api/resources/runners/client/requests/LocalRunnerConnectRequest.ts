@@ -3,10 +3,11 @@
 /**
  * @example
  *     {
+ *         pairingCode: "pairing_code",
  *         runnerName: "runner_name"
  *     }
  */
 export interface LocalRunnerConnectRequest {
-    pairingCode?: string;
+    pairingCode: string;
     runnerName: string;
 }

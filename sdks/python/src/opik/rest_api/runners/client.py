@@ -127,20 +127,16 @@ class RunnersClient:
         return _response.data
 
     def connect_runner(
-        self,
-        *,
-        runner_name: str,
-        pairing_code: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> LocalRunnerConnectResponse:
         """
         Exchange a pairing code or API key for local runner credentials
 
         Parameters
         ----------
-        runner_name : str
+        pairing_code : str
 
-        pairing_code : typing.Optional[str]
+        runner_name : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -154,10 +150,10 @@ class RunnersClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.connect_runner(runner_name='runner_name', )
+        client.runners.connect_runner(pairing_code='pairing_code', runner_name='runner_name', )
         """
         _response = self._raw_client.connect_runner(
-            runner_name=runner_name, pairing_code=pairing_code, request_options=request_options
+            pairing_code=pairing_code, runner_name=runner_name, request_options=request_options
         )
         return _response.data
 
@@ -357,7 +353,7 @@ class RunnersClient:
     def list_runners(
         self,
         *,
-        project_id: typing.Optional[str] = None,
+        project_id: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -367,7 +363,7 @@ class RunnersClient:
 
         Parameters
         ----------
-        project_id : typing.Optional[str]
+        project_id : str
 
         page : typing.Optional[int]
 
@@ -385,7 +381,7 @@ class RunnersClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.runners.list_runners()
+        client.runners.list_runners(project_id='project_id', )
         """
         _response = self._raw_client.list_runners(
             project_id=project_id, page=page, size=size, request_options=request_options
@@ -609,20 +605,16 @@ class AsyncRunnersClient:
         return _response.data
 
     async def connect_runner(
-        self,
-        *,
-        runner_name: str,
-        pairing_code: typing.Optional[str] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, pairing_code: str, runner_name: str, request_options: typing.Optional[RequestOptions] = None
     ) -> LocalRunnerConnectResponse:
         """
         Exchange a pairing code or API key for local runner credentials
 
         Parameters
         ----------
-        runner_name : str
+        pairing_code : str
 
-        pairing_code : typing.Optional[str]
+        runner_name : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -638,11 +630,11 @@ class AsyncRunnersClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.runners.connect_runner(runner_name='runner_name', )
+            await client.runners.connect_runner(pairing_code='pairing_code', runner_name='runner_name', )
         asyncio.run(main())
         """
         _response = await self._raw_client.connect_runner(
-            runner_name=runner_name, pairing_code=pairing_code, request_options=request_options
+            pairing_code=pairing_code, runner_name=runner_name, request_options=request_options
         )
         return _response.data
 
@@ -862,7 +854,7 @@ class AsyncRunnersClient:
     async def list_runners(
         self,
         *,
-        project_id: typing.Optional[str] = None,
+        project_id: str,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -872,7 +864,7 @@ class AsyncRunnersClient:
 
         Parameters
         ----------
-        project_id : typing.Optional[str]
+        project_id : str
 
         page : typing.Optional[int]
 
@@ -892,7 +884,7 @@ class AsyncRunnersClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.runners.list_runners()
+            await client.runners.list_runners(project_id='project_id', )
         asyncio.run(main())
         """
         _response = await self._raw_client.list_runners(
