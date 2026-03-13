@@ -54,6 +54,8 @@ jobs:
             echo "No new models found, skipping PR creation."
           fi
 
+          rm -f sync_summary.txt sync_stderr.txt
+
       - name: Print summary
         if: always() && steps.sync.outputs.summary != ''
         run: |
