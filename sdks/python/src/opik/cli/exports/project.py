@@ -14,7 +14,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import opik
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
-from opik.rest_client_configurator.retry_decorator import opik_rest_retry
+from opik.rest_client_configurator import retry_decorator
 from ..export_manifest import ExportManifest
 from .utils import (
     debug_print,
@@ -32,7 +32,7 @@ console = Console()
 MAX_WORKERS = 10
 
 
-@opik_rest_retry
+@retry_decorator.opik_rest_retry
 def _fetch_spans(
     client: opik.Opik,
     trace: Any,

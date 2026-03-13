@@ -1,5 +1,6 @@
 """Experiment export functionality."""
 
+import json
 import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -468,10 +469,8 @@ def export_experiment_by_id(
                 # before store_all_trace_ids was called).  Extract trace IDs directly
                 # from the JSON file to avoid a get_items() API round-trip.
                 try:
-                    import json as _json
-
                     with open(experiment_files[0]) as _fh:
-                        _exp_data = _json.load(_fh)
+                        _exp_data = json.load(_fh)
                     trace_ids_from_json = [
                         item.get("trace_id")
                         for item in _exp_data.get("items", [])
@@ -495,7 +494,7 @@ def export_experiment_by_id(
                         "traces_skipped": len(trace_ids_from_json),
                     }
                     return (_empty2, 0, manifest)
-                except Exception as _e:
+                except (OSError, json.JSONDecodeError) as _e:
                     debug_print(
                         f"Could not read trace IDs from JSON for experiment "
                         f"{experiment_id}: {_e}; falling back to get_items() API call",

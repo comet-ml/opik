@@ -375,10 +375,11 @@ def _export_all_experiments(
                     None,  # Don't pass shared set; collect from manifest in main thread
                 )
                 # Release the semaphore slot as soon as the future completes so
-                # the submission loop can proceed even before as_completed runs.
-                # Without this, submitting more than max_workers*2 experiments
-                # deadlocks: the main thread blocks on acquire() while Loop 2
-                # (which calls release()) has not started yet.
+                # the submission loop can proceed even before as_completed drains
+                # the queue.  Without this, submitting more than max_workers*2
+                # experiments would deadlock: the main thread blocks on acquire()
+                # while the as_completed loop (which would call release()) has not
+                # started yet because the submission loop never finishes.
                 future.add_done_callback(lambda _f: semaphore.release())
                 future_to_exp[future] = exp
             for future in as_completed(future_to_exp):

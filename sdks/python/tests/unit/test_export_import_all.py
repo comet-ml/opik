@@ -997,3 +997,100 @@ class TestPaginate:
         result = list(_paginate(list_fn))
 
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# export_experiment_by_id — JSON-based fast path
+# ---------------------------------------------------------------------------
+
+
+class TestExportExperimentByIdJsonFastPath:
+    """Unit tests for the JSON-based fast path in export_experiment_by_id.
+
+    When an experiment JSON file already exists on disk but the per-experiment
+    manifest has no stored trace IDs (e.g. exported before the manifest feature
+    was added), trace IDs should be extracted directly from the JSON file
+    without making any get_items() API calls.
+    """
+
+    def test_json_fast_path_skips_get_items_and_returns_trace_ids(self, tmp_path):
+        """Fast path reads trace IDs from JSON, get_experiment_by_id not called."""
+        import json
+
+        from opik.cli.exports.experiment import export_experiment_by_id
+
+        experiment_id = "exp-abc-123"
+
+        # Create the experiment JSON file the fast path will read from disk.
+        experiment_file = tmp_path / f"experiment_my_exp_{experiment_id}.json"
+        experiment_data = {
+            "id": experiment_id,
+            "name": "my_exp",
+            "items": [
+                {"trace_id": "trace-1", "other": "data"},
+                {"trace_id": "trace-2", "other": "data"},
+                {"other": "no_trace_id_here"},  # should be ignored
+            ],
+        }
+        experiment_file.write_text(json.dumps(experiment_data))
+
+        # The ExportManifest created inside export_experiment_by_id will be
+        # freshly initialised (get_all_trace_ids() == None), which triggers
+        # the JSON fast path when the experiment file is present.
+
+        mock_client = MagicMock()
+        collector: set = set()
+
+        stats, file_written, _ = export_experiment_by_id(
+            mock_client,
+            tmp_path,
+            experiment_id,
+            max_traces=None,
+            force=False,
+            debug=False,
+            format="json",
+            trace_ids_collector=collector,
+        )
+
+        # API must not have been called — the fast path returns before any network I/O.
+        mock_client.get_experiment_by_id.assert_not_called()
+
+        # Collector should contain the two valid trace IDs from the JSON file.
+        assert collector == {"trace-1", "trace-2"}
+
+        # No new experiment file was written (the existing one was reused).
+        assert file_written == 0
+        assert stats.get("traces_skipped") == 2
+
+    def test_json_fast_path_falls_through_on_corrupt_json(self, tmp_path):
+        """If the JSON file is corrupt, the fast path falls through to the API."""
+        from opik.cli.exports.experiment import export_experiment_by_id
+
+        experiment_id = "exp-corrupt-456"
+
+        # Write a corrupt JSON file.
+        experiment_file = tmp_path / f"experiment_bad_{experiment_id}.json"
+        experiment_file.write_text("{ not valid json }")
+
+        mock_client = MagicMock()
+        mock_client.get_experiment_by_id.return_value = MagicMock(
+            name="my_exp",
+            id=experiment_id,
+            get_items=MagicMock(return_value=[]),
+        )
+
+        collector: set = set()
+
+        export_experiment_by_id(
+            mock_client,
+            tmp_path,
+            experiment_id,
+            max_traces=None,
+            force=False,
+            debug=False,
+            format="json",
+            trace_ids_collector=collector,
+        )
+
+        # Corrupt JSON triggers fallback; get_experiment_by_id must be called.
+        mock_client.get_experiment_by_id.assert_called_once_with(experiment_id)
