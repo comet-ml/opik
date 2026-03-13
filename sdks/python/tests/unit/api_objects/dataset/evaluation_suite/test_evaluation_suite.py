@@ -182,6 +182,16 @@ class TestEvaluatorValidation:
 
         assert result is None
 
+    def test_resolve_evaluators__with_empty_assertions__returns_empty_list(self):
+        result = validators.resolve_evaluators(
+            assertions=[],
+            evaluators=None,
+            context="test",
+        )
+
+        assert result is not None
+        assert result == []
+
 
 class TestValidateSuiteItems:
     def test_valid_items__passes(self):
@@ -280,7 +290,10 @@ class TestValidateSuiteItems:
                 [
                     {
                         "data": {"q": "Hello"},
-                        "execution_policy": {"runs_per_item": "3"},
+                        "execution_policy": {
+                            "runs_per_item": "3",
+                            "pass_threshold": 1,
+                        },
                     },
                 ]
             )
@@ -290,8 +303,9 @@ class TestValidateExecutionPolicy:
     def test_valid_policy__passes(self):
         validators.validate_execution_policy({"runs_per_item": 3, "pass_threshold": 2})
 
-    def test_partial_policy__passes(self):
-        validators.validate_execution_policy({"runs_per_item": 5})
+    def test_partial_policy__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing required keys"):
+            validators.validate_execution_policy({"runs_per_item": 5})
 
     def test_not_dict__raises_type_error(self):
         with pytest.raises(TypeError, match="must be a dict"):
@@ -303,11 +317,15 @@ class TestValidateExecutionPolicy:
 
     def test_non_int_value__raises_type_error(self):
         with pytest.raises(TypeError, match="must be an int"):
-            validators.validate_execution_policy({"runs_per_item": 3.5})
+            validators.validate_execution_policy(
+                {"runs_per_item": 3.5, "pass_threshold": 1}
+            )
 
     def test_string_value__raises_type_error(self):
         with pytest.raises(TypeError, match="must be an int"):
-            validators.validate_execution_policy({"pass_threshold": "2"})
+            validators.validate_execution_policy(
+                {"runs_per_item": 1, "pass_threshold": "2"}
+            )
 
 
 def _make_test_result(
