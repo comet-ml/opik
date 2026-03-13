@@ -117,3 +117,19 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{-   join "; " $cspParts -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Renders a value that contains template perhaps with scope if the scope is present.
+Usage:
+{{ include "common.tplvalues.render" (dict "value" .Values.path.to.value "context" $) }}
+*/}}
+{{- define "common.tplvalues.render" -}}
+{{- $value := typeOf .value -}}
+{{- if contains "map" $value -}}
+{{- tpl (toYaml .value) .context -}}
+{{- else if contains "slice" $value -}}
+{{- tpl (toYaml .value) .context -}}
+{{- else -}}
+{{- tpl (toYaml .value) .context -}}
+{{- end -}}
+{{- end -}}
