@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
+
+from typing_extensions import Required
+
+from ..execution_policy import ExecutionPolicy
 
 if TYPE_CHECKING:
     from opik.evaluation import evaluation_result, test_result
+
+
+class EvaluationSuiteItem(TypedDict, total=False):
+    """A test case item to add to an evaluation suite."""
+
+    data: Required[Dict[str, Any]]
+    assertions: List[str]
+    description: str
+    execution_policy: ExecutionPolicy
 
 
 @dataclasses.dataclass
@@ -73,10 +86,10 @@ class EvaluationSuiteResult:
         return self._item_results
 
     @property
-    def pass_rate(self) -> float:
-        """Pass rate: items_passed / items_total (0.0 to 1.0)."""
+    def pass_rate(self) -> Optional[float]:
+        """Pass rate: items_passed / items_total (0.0 to 1.0), or None if no items."""
         if self._items_total == 0:
-            return 1.0
+            return None
         return self._items_passed / self._items_total
 
     @property

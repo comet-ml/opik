@@ -401,6 +401,7 @@ from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
 from .local_runner import LocalRunner
+from .local_runner_connect_response import LocalRunnerConnectResponse
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
 from .local_runner_job_metadata import LocalRunnerJobMetadata
@@ -446,6 +447,7 @@ from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
 from .percentage_values_detailed import PercentageValuesDetailed
 from .percentage_values_public import PercentageValuesPublic
+from .permission import Permission
 from .project import Project
 from .project_detailed import ProjectDetailed
 from .project_detailed_visibility import ProjectDetailedVisibility
@@ -617,6 +619,7 @@ from .workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
 from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
+from .workspace_user_permissions import WorkspaceUserPermissions
 
 __all__ = [
     "Agent",
@@ -975,6 +978,7 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
+    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
     "LocalRunnerJobMetadata",
@@ -1020,6 +1024,7 @@ __all__ = [
     "PercentageValues",
     "PercentageValuesDetailed",
     "PercentageValuesPublic",
+    "Permission",
     "Project",
     "ProjectDetailed",
     "ProjectDetailedVisibility",
@@ -1189,4 +1194,5 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "WorkspaceUserPermissions",
 ]
