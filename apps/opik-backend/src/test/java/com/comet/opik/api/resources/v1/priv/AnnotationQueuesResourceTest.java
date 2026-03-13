@@ -30,6 +30,7 @@ import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
@@ -68,6 +69,10 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static org.apache.http.HttpStatus.SC_UNPROCESSABLE_ENTITY;
@@ -682,6 +687,34 @@ class AnnotationQueuesResourceTest {
 
             // Verify reviewers count all three traces (feedback + comments)
             verifyReviewers(retrievedQueue, 3L);
+        }
+
+        @Test
+        @DisplayName("Get annotation queue by id passes required permissions to auth endpoint")
+        void getAnnotationQueueByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var queue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .build();
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(queue)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+
+            wireMock.server().resetRequests();
+            annotationQueuesResourceClient.getAnnotationQueueById(queue.id(), apiKey, workspaceName, HttpStatus.SC_OK);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW.getValue()))));
         }
     }
 
@@ -1368,6 +1401,24 @@ class AnnotationQueuesResourceTest {
                                     .value(USER.substring(0, 3))
                                     .build(),
                             (Function<List<AnnotationQueue>, List<AnnotationQueue>>) queues -> queues));
+        }
+
+        @Test
+        @DisplayName("Find annotation queues passes required permissions to auth endpoint")
+        void findAnnotationQueuesPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            annotationQueuesResourceClient.findAnnotationQueues(1, 10, null, null, null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.ANNOTATION_QUEUE_VIEW.getValue()))));
         }
     }
 
