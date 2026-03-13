@@ -7,7 +7,6 @@ logging:
   #  Default: com.comet: DEBUG
   #  Description: Individual logger configuration
   loggers:
-    com.clickhouse.client.http.ClickHouseHttpClient: DEBUG
     com.comet: DEBUG
     com.comet.opik.infrastructure.llm: INFO
 
