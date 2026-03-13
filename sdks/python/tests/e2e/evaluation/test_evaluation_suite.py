@@ -973,6 +973,31 @@ def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
     }
 
 
+def test_evaluation_suite__update_with_empty_assertions__clears_assertions(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update(assertions=[]) clears all suite-level assertions.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test clearing assertions",
+        assertions=["Response is helpful", "Response is accurate"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    assert len(suite.get_assertions()) == 2
+
+    suite.update(assertions=[])
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+    assert retrieved.get_assertions() == []
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 1
+    assert policy["pass_threshold"] == 1
+
+
 # =============================================================================
 # TAGS
 # =============================================================================
