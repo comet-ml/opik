@@ -120,6 +120,13 @@ class CostServiceTest {
                 Arguments.of("claude-haiku-4-5", "anthropic", true),
                 Arguments.of("claude-sonnet-4-5", "anthropic", true),
 
+                // Provider prefix + dot notation should work (prefix stripped, then dots normalized)
+                Arguments.of("anthropic/claude-3.5-sonnet-20241022", "anthropic", true),
+                Arguments.of("anthropic/claude-sonnet-4.5", "anthropic", true),
+
+                // Provider prefix + case variation should work
+                Arguments.of("anthropic/Claude-3.5-Sonnet-20241022", "anthropic", true),
+
                 // Unknown models should gracefully return zero
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
@@ -183,6 +190,9 @@ class CostServiceTest {
                 Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
                 // 3. Base models without date suffix should still work
                 Arguments.of("gpt-5.2", "openai"),
-                Arguments.of("claude-sonnet-4.5", "anthropic"));
+                Arguments.of("claude-sonnet-4.5", "anthropic"),
+                // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
+                Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
     }
 }
