@@ -91,6 +91,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
         project_name: Optional project name for tracking.
         seed: Optional seed value for reproducible model generation.
         temperature: Optional temperature value for model generation.
+        reasoning_effort: Optional reasoning effort level for the model.
+            Supported values depend on the provider (e.g., "low", "medium", "high"
+            for OpenAI reasoning models).
 
     Example:
         >>> from opik.evaluation.suite_evaluators import LLMJudge
@@ -120,6 +123,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         project_name: Optional[str] = None,
         seed: Optional[int] = None,
         temperature: Optional[float] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -127,8 +131,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         self._seed = seed
         self._temperature = temperature
+        self._reasoning_effort = reasoning_effort
         self._model_name: str = model or llm_judge_config.DEFAULT_MODEL_NAME
-        self._init_model(temperature=temperature)
+        self._reasoning_effort = reasoning_effort or llm_judge_config.DEFAULT_REASONING_EFFORT
+        self._init_model()
 
     @property
     def assertions(self) -> List[str]:
@@ -140,6 +146,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
             self._model_name == other._model_name
             and self._temperature == other._temperature
             and self._seed == other._seed
+            and self._reasoning_effort == other._reasoning_effort
             and self.track == other.track
         )
 
@@ -175,17 +182,17 @@ class LLMJudge(base.BaseSuiteEvaluator):
             track=first.track,
             seed=first._seed,
             temperature=first._temperature,
+            reasoning_effort=first._reasoning_effort,
         )
 
-    def _init_model(
-        self,
-        temperature: Optional[float],
-    ) -> None:
-        model_kwargs = {}
-        if temperature is not None:
-            model_kwargs["temperature"] = temperature
+    def _init_model(self) -> None:
+        model_kwargs: Dict[str, Any] = {}
+        if self._temperature is not None:
+            model_kwargs["temperature"] = self._temperature
         if self._seed is not None:
             model_kwargs["seed"] = self._seed
+        if self._reasoning_effort is not None:
+            model_kwargs["reasoning_effort"] = self._reasoning_effort
 
         self._model = models_factory.get(
             model_name=self._model_name, track=self.track, **model_kwargs
