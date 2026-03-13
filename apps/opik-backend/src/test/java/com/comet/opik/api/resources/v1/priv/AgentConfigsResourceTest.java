@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvUpdate;
-import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -48,6 +47,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -875,6 +875,107 @@ class AgentConfigsResourceTest {
             agentConfigsResourceClient.getBlueprintByEnv("test-env", projectId, null, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("Success: reassigning env to different blueprint closes old record and creates new one")
+        void updateEnv__whenBlueprintChanged__thenCloseOldAndInsertNew() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var blueprint1 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("First blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("gpt-4").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint1Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var blueprint2 = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Second blueprint")
+                    .values(List.of(
+                            AgentConfigValue.builder().key("model").value("claude").type(ValueType.STRING).build()))
+                    .build();
+
+            var blueprint2Id = agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint2).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint1Id)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var result1 = agentConfigsResourceClient.getBlueprintByEnv("prod", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(result1.id()).isEqualTo(blueprint1Id);
+
+            agentConfigsResourceClient.createOrUpdateEnvs(
+                    AgentConfigEnvUpdate.builder()
+                            .projectId(projectId)
+                            .envs(List.of(AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(blueprint2Id)
+                                    .build()))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            var result2 = agentConfigsResourceClient.getBlueprintByEnv("prod", projectId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(result2.id()).isEqualTo(blueprint2Id);
+
+            var historyPage = agentConfigsResourceClient.getHistory(projectId, 1, 10, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_OK);
+            assertThat(historyPage.content()).hasSize(2);
+
+            var expectedBlueprints = List.of(
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("Second blueprint")
+                            .envs(List.of("prod"))
+                            .build(),
+                    AgentBlueprint.builder()
+                            .type(BlueprintType.BLUEPRINT)
+                            .description("First blueprint")
+                            .envs(null)
+                            .build());
+
+            assertThat(historyPage.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(GetBlueprintHistory.BLUEPRINT_IGNORED_FIELDS)
+                    .isEqualTo(expectedBlueprints);
+        }
+
+        @Test
+        @DisplayName("when request contains duplicate env names, then return 400")
+        void createOrUpdateEnvs__whenDuplicateEnvNames__thenReturn400() {
+            var projectName = UUID.randomUUID().toString();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var envUpdate = AgentConfigEnvUpdate.builder()
+                    .projectId(projectId)
+                    .envs(List.of(
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(UUID.randomUUID())
+                                    .build(),
+                            AgentConfigEnv.builder()
+                                    .envName("prod")
+                                    .blueprintId(UUID.randomUUID())
+                                    .build()))
+                    .build();
+
+            agentConfigsResourceClient.createOrUpdateEnvs(envUpdate, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
     }
 
     @Nested
@@ -985,9 +1086,20 @@ class AgentConfigsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class AutomaticBlueprintUpdates {
 
-        @Test
+        private static final String[] VALUE_IGNORED_FIELDS = new String[]{
+                "id", "projectId", "validFromBlueprintId", "validToBlueprintId"};
+
+        static Stream<Arguments> excludeProjectIdsForAutoUpdate() {
+            return Stream.of(
+                    arguments(null, "null exclude set"),
+                    arguments(Set.of(), "empty exclude set"));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource("excludeProjectIdsForAutoUpdate")
         @DisplayName("Success: when new prompt version created, blueprint with that prompt is auto-updated")
-        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint() {
+        void createPromptVersion__whenBlueprintReferencesPrompt__thenAutoUpdateBlueprint(
+                Set<UUID> excludeProjectIds, String description) {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1014,7 +1126,8 @@ class AgentConfigsResourceTest {
                     AgentConfigCreate.builder().projectId(projectId).blueprint(blueprint1).build(),
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
-            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
+            var promptVersion2 = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
+                    excludeProjectIds);
             var commit2 = promptVersion2.commit();
 
             Awaitility.await().untilAsserted(() -> {
@@ -1231,8 +1344,8 @@ class AgentConfigsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: no blueprint update when prompt version created with action=NO_ACTION")
-        void createPromptVersion__whenActionIsNoAction__thenBlueprintNotUpdated() throws InterruptedException {
+        @DisplayName("Success: no blueprint update when project is excluded via excludeBlueprintUpdateForProjects")
+        void createPromptVersion__whenProjectExcluded__thenBlueprintNotUpdated() throws InterruptedException {
             var projectName = UUID.randomUUID().toString();
             var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
 
@@ -1260,7 +1373,7 @@ class AgentConfigsResourceTest {
                     API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
             promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE,
-                    PromptVersionAction.NO_ACTION);
+                    Set.of(projectId));
 
             Thread.sleep(2000);
 

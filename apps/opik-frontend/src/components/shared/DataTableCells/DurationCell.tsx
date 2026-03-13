@@ -5,7 +5,9 @@ import isNumber from "lodash/isNumber";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { formatDuration } from "@/lib/date";
+import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
@@ -31,7 +33,14 @@ const CompareDurationCell: React.FC<
   const renderContent: SplitCellRenderContent = (
     item: ExperimentItem | undefined,
   ) => {
-    return formatDuration(item?.duration);
+    const formatted = formatDuration(item?.duration);
+    if (!isAggregatedItem(item)) return formatted;
+
+    return (
+      <TooltipWrapper content={getTrialAvgTooltip(item.trialCount)}>
+        <span>{formatted}</span>
+      </TooltipWrapper>
+    );
   };
 
   return (

@@ -81,7 +81,10 @@ public class ExperimentResourceClient {
                 .usage(null)
                 .projectId(null)
                 .datasetVersionId(null)
-                .datasetVersionSummary(null);
+                .datasetVersionSummary(null)
+                .passRate(null)
+                .passedCount(null)
+                .totalCount(null);
     }
 
     public List<Experiment> generateExperimentList() {
@@ -431,8 +434,9 @@ public class ExperimentResourceClient {
                 .path("names")
                 .queryParam("experiment_ids", ids);
         if (excludeCategoryNames != null) {
-            webTarget = webTarget.queryParam("exclude_category_names",
-                    JsonUtils.writeValueAsString(excludeCategoryNames));
+            for (String categoryName : excludeCategoryNames) {
+                webTarget = webTarget.queryParam("exclude_category_names", categoryName);
+            }
         }
         try (var response = webTarget
                 .request()

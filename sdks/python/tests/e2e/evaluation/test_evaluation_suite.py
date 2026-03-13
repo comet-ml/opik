@@ -8,7 +8,7 @@ These tests verify the core evaluation suite functionality:
 5. Persistence: create, get, update, delete operations
 
 Key concepts:
-- Assertions are evaluated by an LLMJudge built internally by the SDK
+- Assertions are checked by an LLM (internally using LLMJudge)
 - Suite-level assertions and execution_policy are stored at dataset version level
 - Item-level assertions and execution_policy are stored as dataset item fields
 - Items without assertions pass by default (no assertions to fail)
@@ -652,15 +652,12 @@ def test_evaluation_suite__create_get_and_run__end_to_end(
     assert "Geography: France capital" in retrieved_descriptions
     assert "Geography: Germany capital" in retrieved_descriptions
 
-    # Verify item-level evaluators survived the round-trip
-    items_with_evaluators = [i for i in retrieved_items if len(i["evaluators"]) > 0]
-    assert len(items_with_evaluators) == 1
+    # Verify item-level assertions survived the round-trip
+    items_with_assertions = [i for i in retrieved_items if len(i["assertions"]) > 0]
+    assert len(items_with_assertions) == 1
+    assert items_with_assertions[0]["assertions"] == [item_assertion]
 
-    from opik.evaluation.suite_evaluators import LLMJudge
-
-    assert isinstance(items_with_evaluators[0]["evaluators"][0], LLMJudge)
-
-    # 3. Run the retrieved suite — evaluators/execution_policy come from BE
+    # 3. Run the retrieved suite — assertions/execution_policy come from BE
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         question = item["input"]["question"]
         if "France" in question:
@@ -727,17 +724,15 @@ def test_evaluation_suite__delete_items__items_removed(
     assert len(remaining_items) == 2
 
 
-def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
+def test_evaluation_suite__get_assertions__returns_assertion_strings(
     opik_client: opik.Opik, dataset_name: str
 ):
     """
-    Test that get_evaluators() returns LLMJudge instances from suite-level config.
+    Test that get_assertions() returns assertion strings from suite-level config.
     """
-    from opik.evaluation.suite_evaluators import LLMJudge
-
     opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test get_evaluators",
+        description="Test get_assertions",
         assertions=[
             "Response is helpful",
             "Response is accurate",
@@ -748,9 +743,12 @@ def test_evaluation_suite__get_evaluators__returns_llm_judge_instances(
     # Retrieve from BE to verify persistence
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
-    evaluators = retrieved_suite.get_evaluators()
-    assert len(evaluators) == 1
-    assert all(isinstance(e, LLMJudge) for e in evaluators)
+    assertions = retrieved_suite.get_assertions()
+    assert set(assertions) == {
+        "Response is helpful",
+        "Response is accurate",
+        "Response is concise",
+    }
 
 
 def test_evaluation_suite__get_execution_policy__returns_persisted_policy(
@@ -803,8 +801,8 @@ def test_evaluation_suite__update__changes_assertions_and_policy(
     )
 
     # Verify initial state
-    evaluators = suite.get_evaluators()
-    assert len(evaluators) == 1
+    assertions = suite.get_assertions()
+    assert set(assertions) == {"Response is helpful"}
 
     policy = suite.get_execution_policy()
     assert policy["runs_per_item"] == 1
@@ -818,9 +816,8 @@ def test_evaluation_suite__update__changes_assertions_and_policy(
     # Retrieve from BE to verify persistence
     retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
 
-    updated_evaluators = retrieved_suite.get_evaluators()
-    assert len(updated_evaluators) == 1
-    assert set(updated_evaluators[0].assertions) == {
+    updated_assertions = retrieved_suite.get_assertions()
+    assert set(updated_assertions) == {
         "Response is accurate",
         "Response is concise",
     }
@@ -866,3 +863,235 @@ def test_get_or_create_evaluation_suite__new__creates_suite(
 
     retrieved = opik_client.get_evaluation_suite(name=dataset_name)
     assert retrieved.name == dataset_name
+
+
+def test_get_or_create_evaluation_suite__with_new_assertions__creates_new_version(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite with new assertions on an
+    existing suite creates a new version with those assertions.
+    """
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Original suite",
+        assertions=["Response is helpful"],
+    )
+
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        assertions=["Response is accurate", "Response is concise"],
+    )
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {
+        "Response is accurate",
+        "Response is concise",
+    }
+
+
+def test_get_or_create_evaluation_suite__with_new_policy__creates_new_version(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create_evaluation_suite with a new execution_policy
+    on an existing suite creates a new version, keeping existing assertions.
+    """
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Original suite",
+        assertions=["Response is helpful"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        execution_policy={"runs_per_item": 5, "pass_threshold": 3},
+    )
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 5
+    assert policy["pass_threshold"] == 3
+
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {"Response is helpful"}
+
+
+def test_evaluation_suite__update_assertions_only__keeps_existing_policy(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update() with only assertions keeps the existing execution policy.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test partial update",
+        assertions=["Response is helpful"],
+        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+    )
+
+    suite.update(assertions=["Response is accurate"])
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {"Response is accurate"}
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 3
+    assert policy["pass_threshold"] == 2
+
+
+def test_evaluation_suite__update_policy_only__keeps_existing_assertions(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that update() with only execution_policy keeps existing assertions.
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test partial update",
+        assertions=["Response is helpful", "Response is accurate"],
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+
+    suite.update(execution_policy={"runs_per_item": 5, "pass_threshold": 3})
+
+    retrieved = opik_client.get_evaluation_suite(name=dataset_name)
+
+    policy = retrieved.get_execution_policy()
+    assert policy["runs_per_item"] == 5
+    assert policy["pass_threshold"] == 3
+
+    assertions = retrieved.get_assertions()
+    assert set(assertions) == {
+        "Response is helpful",
+        "Response is accurate",
+    }
+
+
+# =============================================================================
+# TAGS
+# =============================================================================
+
+
+def test_evaluation_suite__create_with_tags__tags_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that tags passed to create_evaluation_suite are persisted
+    and can be retrieved via get_evaluation_suite().
+    """
+    opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Suite with tags",
+        tags=["regression", "v2"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["regression", "v2"]
+
+
+def test_evaluation_suite__update_tags__tags_updated(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that tags can be updated on an existing evaluation suite
+    and verified via get_evaluation_suite().
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Suite for tag update test",
+        tags=["initial"],
+    )
+
+    suite.update(tags=["updated", "new-tag"])
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["new-tag", "updated"]
+
+
+def test_get_or_create_evaluation_suite__with_tags__tags_persisted(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    Test that get_or_create passes tags on creation and updates.
+    """
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        tags=["v1"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert suite.get_tags() == ["v1"]
+
+    opik_client.get_or_create_evaluation_suite(
+        name=dataset_name,
+        tags=["v2", "production"],
+    )
+
+    suite = opik_client.get_evaluation_suite(dataset_name)
+    assert sorted(suite.get_tags()) == ["production", "v2"]
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__add_items_batch__all_items_persisted(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that add_items() adds multiple items in a single batch.
+    """
+    assertion = "The response is factually correct"
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test batch add_items",
+    )
+
+    suite.add_items(
+        [
+            {
+                "data": {"input": {"question": "What is the capital of France?"}},
+                "assertions": [assertion],
+            },
+            {
+                "data": {"input": {"question": "What is the capital of Germany?"}},
+                "assertions": [assertion],
+            },
+            {
+                "data": {"input": {"question": "What is the capital of Spain?"}},
+                "assertions": [assertion],
+            },
+        ]
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        answers = {
+            "What is the capital of France?": "Paris",
+            "What is the capital of Germany?": "Berlin",
+            "What is the capital of Spain?": "Madrid",
+        }
+        question = item["input"]["question"]
+        return {"input": item["input"], "output": answers.get(question, "Unknown")}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_evaluation_suite_result(
+        opik_client=opik_client,
+        suite_result=suite_result,
+        items_total=3,
+        items_passed=3,
+        experiment_items_count=3,
+        total_feedback_scores=3,
+        expected_score_names={assertion},
+    )

@@ -386,7 +386,7 @@ class ExperimentsClient:
         self,
         *,
         experiment_ids: typing.Optional[str] = None,
-        exclude_category_name: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
@@ -396,7 +396,7 @@ class ExperimentsClient:
         ----------
         experiment_ids : typing.Optional[str]
 
-        exclude_category_name : typing.Optional[str]
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -413,7 +413,9 @@ class ExperimentsClient:
         client.experiments.find_feedback_score_names()
         """
         _response = self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids, exclude_category_name=exclude_category_name, request_options=request_options
+            experiment_ids=experiment_ids,
+            exclude_category_names=exclude_category_names,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1120,7 +1122,7 @@ class AsyncExperimentsClient:
         self,
         *,
         experiment_ids: typing.Optional[str] = None,
-        exclude_category_name: typing.Optional[str] = None,
+        exclude_category_names: typing.Optional[typing.Union[str, typing.Sequence[str]]] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> FeedbackScoreNamesPublic:
         """
@@ -1130,7 +1132,7 @@ class AsyncExperimentsClient:
         ----------
         experiment_ids : typing.Optional[str]
 
-        exclude_category_name : typing.Optional[str]
+        exclude_category_names : typing.Optional[typing.Union[str, typing.Sequence[str]]]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1150,7 +1152,9 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_feedback_score_names(
-            experiment_ids=experiment_ids, exclude_category_name=exclude_category_name, request_options=request_options
+            experiment_ids=experiment_ids,
+            exclude_category_names=exclude_category_names,
+            request_options=request_options,
         )
         return _response.data
 

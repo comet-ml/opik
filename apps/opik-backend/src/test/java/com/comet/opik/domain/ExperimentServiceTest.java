@@ -5,7 +5,10 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.infrastructure.ExperimentAggregatesConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -26,11 +29,15 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExperimentServiceTest {
+
+    private static final String TEST_WORKSPACE_ID = "test-workspace-id";
+    private static final String TEST_USER_NAME = "test-user";
 
     private ExperimentService experimentService;
 
@@ -71,6 +78,9 @@ class ExperimentServiceTest {
     private FeatureFlags featureFlags;
 
     @Mock
+    private OpikConfiguration config;
+
+    @Mock
     private ExperimentGroupEnricher experimentGroupEnricher;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -78,6 +88,9 @@ class ExperimentServiceTest {
 
     @BeforeEach
     void setUp() {
+        var aggregatesConfig = new ExperimentAggregatesConfig();
+        lenient().when(config.getExperimentAggregates()).thenReturn(aggregatesConfig);
+
         experimentService = new ExperimentService(
                 experimentDAO,
                 experimentItemDAO,
@@ -91,6 +104,7 @@ class ExperimentServiceTest {
                 sortingFactory,
                 responseBuilder,
                 featureFlags,
+                config,
                 experimentGroupEnricher);
     }
 
@@ -123,7 +137,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -150,7 +167,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -180,7 +200,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -207,7 +230,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -234,7 +260,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -267,7 +296,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);
@@ -285,11 +317,12 @@ class ExperimentServiceTest {
 
             when(experimentDAO.getById(experimentId))
                     .thenReturn(Mono.empty());
-            when(experimentDAO.update(experimentId, experimentUpdate))
-                    .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .expectError(NotFoundException.class)
                     .verify();
 
@@ -317,7 +350,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.error(expectedError));
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .expectError(RuntimeException.class)
                     .verify();
 
@@ -343,7 +379,10 @@ class ExperimentServiceTest {
                     .thenReturn(Mono.empty());
 
             // when & then
-            StepVerifier.create(experimentService.update(experimentId, experimentUpdate))
+            StepVerifier.create(experimentService.update(experimentId, experimentUpdate)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, TEST_WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, TEST_USER_NAME)))
                     .verifyComplete();
 
             verify(experimentDAO).getById(experimentId);

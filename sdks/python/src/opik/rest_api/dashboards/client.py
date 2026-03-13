@@ -9,6 +9,10 @@ from ..types.dashboard_public import DashboardPublic
 from ..types.json_node_public import JsonNodePublic
 from ..types.json_node_write import JsonNodeWrite
 from .raw_client import AsyncRawDashboardsClient, RawDashboardsClient
+from .types.dashboard_update_public_scope import DashboardUpdatePublicScope
+from .types.dashboard_update_public_type import DashboardUpdatePublicType
+from .types.dashboard_write_scope import DashboardWriteScope
+from .types.dashboard_write_type import DashboardWriteType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -36,6 +40,7 @@ class DashboardsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
@@ -50,6 +55,8 @@ class DashboardsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -66,7 +73,7 @@ class DashboardsClient:
         client.dashboards.find_dashboards()
         """
         _response = self._raw_client.find_dashboards(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -75,6 +82,8 @@ class DashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        type: typing.Optional[DashboardWriteType] = OMIT,
+        scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
@@ -86,6 +95,10 @@ class DashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        type : typing.Optional[DashboardWriteType]
+
+        scope : typing.Optional[DashboardWriteScope]
 
         description : typing.Optional[str]
 
@@ -105,7 +118,7 @@ class DashboardsClient:
         }, )
         """
         _response = self._raw_client.create_dashboard(
-            name=name, config=config, description=description, request_options=request_options
+            name=name, config=config, type=type, scope=scope, description=description, request_options=request_options
         )
         return _response.data
 
@@ -165,6 +178,8 @@ class DashboardsClient:
         dashboard_id: str,
         *,
         name: typing.Optional[str] = OMIT,
+        type: typing.Optional[DashboardUpdatePublicType] = OMIT,
+        scope: typing.Optional[DashboardUpdatePublicScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         config: typing.Optional[JsonNodePublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -177,6 +192,10 @@ class DashboardsClient:
         dashboard_id : str
 
         name : typing.Optional[str]
+
+        type : typing.Optional[DashboardUpdatePublicType]
+
+        scope : typing.Optional[DashboardUpdatePublicScope]
 
         description : typing.Optional[str]
 
@@ -197,7 +216,13 @@ class DashboardsClient:
         client.dashboards.update_dashboard(dashboard_id='dashboardId', )
         """
         _response = self._raw_client.update_dashboard(
-            dashboard_id, name=name, description=description, config=config, request_options=request_options
+            dashboard_id,
+            name=name,
+            type=type,
+            scope=scope,
+            description=description,
+            config=config,
+            request_options=request_options,
         )
         return _response.data
 
@@ -250,6 +275,7 @@ class AsyncDashboardsClient:
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
@@ -264,6 +290,8 @@ class AsyncDashboardsClient:
         name : typing.Optional[str]
 
         sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -283,7 +311,7 @@ class AsyncDashboardsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_dashboards(
-            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+            page=page, size=size, name=name, sorting=sorting, filters=filters, request_options=request_options
         )
         return _response.data
 
@@ -292,6 +320,8 @@ class AsyncDashboardsClient:
         *,
         name: str,
         config: JsonNodeWrite,
+        type: typing.Optional[DashboardWriteType] = OMIT,
+        scope: typing.Optional[DashboardWriteScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPublic:
@@ -303,6 +333,10 @@ class AsyncDashboardsClient:
         name : str
 
         config : JsonNodeWrite
+
+        type : typing.Optional[DashboardWriteType]
+
+        scope : typing.Optional[DashboardWriteScope]
 
         description : typing.Optional[str]
 
@@ -325,7 +359,7 @@ class AsyncDashboardsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_dashboard(
-            name=name, config=config, description=description, request_options=request_options
+            name=name, config=config, type=type, scope=scope, description=description, request_options=request_options
         )
         return _response.data
 
@@ -393,6 +427,8 @@ class AsyncDashboardsClient:
         dashboard_id: str,
         *,
         name: typing.Optional[str] = OMIT,
+        type: typing.Optional[DashboardUpdatePublicType] = OMIT,
+        scope: typing.Optional[DashboardUpdatePublicScope] = OMIT,
         description: typing.Optional[str] = OMIT,
         config: typing.Optional[JsonNodePublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -405,6 +441,10 @@ class AsyncDashboardsClient:
         dashboard_id : str
 
         name : typing.Optional[str]
+
+        type : typing.Optional[DashboardUpdatePublicType]
+
+        scope : typing.Optional[DashboardUpdatePublicScope]
 
         description : typing.Optional[str]
 
@@ -428,7 +468,13 @@ class AsyncDashboardsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.update_dashboard(
-            dashboard_id, name=name, description=description, config=config, request_options=request_options
+            dashboard_id,
+            name=name,
+            type=type,
+            scope=scope,
+            description=description,
+            config=config,
+            request_options=request_options,
         )
         return _response.data
 

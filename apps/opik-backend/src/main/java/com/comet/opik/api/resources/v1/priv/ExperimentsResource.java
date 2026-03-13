@@ -76,7 +76,6 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
@@ -553,20 +552,18 @@ public class ExperimentsResource {
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(
             @QueryParam("experiment_ids") String experimentIdsQueryParam,
-            @QueryParam("exclude_category_names") String excludeCategoryNamesQueryParam) {
+            @QueryParam("exclude_category_names") @DefaultValue("suite_assertion") Set<String> excludeCategoryNames) {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
-
-        var resolvedExcludeCategories = resolveExcludeCategoryNames(excludeCategoryNamesQueryParam);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find feedback score names by experiment_ids '{}', on workspaceId '{}'",
                 experimentIds, workspaceId);
         FeedbackScoreNames feedbackScoreNames = feedbackScoreService
-                .getExperimentsFeedbackScoreNames(experimentIds, resolvedExcludeCategories)
+                .getExperimentsFeedbackScoreNames(experimentIds, excludeCategoryNames)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found feedback score names '{}' by experiment_ids '{}', on workspaceId '{}'",
@@ -575,12 +572,4 @@ public class ExperimentsResource {
         return Response.ok(feedbackScoreNames).build();
     }
 
-    private static final Set<String> DEFAULT_EXCLUDE_CATEGORY_NAMES = Set.of("suite_assertion");
-
-    private Set<String> resolveExcludeCategoryNames(String excludeCategoryNamesQueryParam) {
-        if (StringUtils.isNotBlank(excludeCategoryNamesQueryParam)) {
-            return ParamsValidator.get(excludeCategoryNamesQueryParam, String.class, "exclude_category_names");
-        }
-        return DEFAULT_EXCLUDE_CATEGORY_NAMES;
-    }
 }

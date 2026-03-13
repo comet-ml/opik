@@ -10,7 +10,7 @@ export const AgentConfigValueWrite: core.serialization.ObjectSchema<
     OpikApi.AgentConfigValueWrite
 > = core.serialization.object({
     key: core.serialization.string(),
-    value: core.serialization.string(),
+    value: core.serialization.string().optional(),
     type: AgentConfigValueWriteType,
     description: core.serialization.string().optional(),
 });
@@ -18,7 +18,7 @@ export const AgentConfigValueWrite: core.serialization.ObjectSchema<
 export declare namespace AgentConfigValueWrite {
     export interface Raw {
         key: string;
-        value: string;
+        value?: string | null;
         type: AgentConfigValueWriteType.Raw;
         description?: string | null;
     }

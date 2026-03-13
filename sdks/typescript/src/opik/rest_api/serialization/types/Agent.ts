@@ -7,7 +7,6 @@ import { Param } from "./Param.js";
 
 export const Agent: core.serialization.ObjectSchema<serializers.Agent.Raw, OpikApi.Agent> = core.serialization.object({
     name: core.serialization.string().optional(),
-    project: core.serialization.string().optional(),
     description: core.serialization.string().optional(),
     language: core.serialization.string().optional(),
     executable: core.serialization.string().optional(),
@@ -19,7 +18,6 @@ export const Agent: core.serialization.ObjectSchema<serializers.Agent.Raw, OpikA
 export declare namespace Agent {
     export interface Raw {
         name?: string | null;
-        project?: string | null;
         description?: string | null;
         language?: string | null;
         executable?: string | null;

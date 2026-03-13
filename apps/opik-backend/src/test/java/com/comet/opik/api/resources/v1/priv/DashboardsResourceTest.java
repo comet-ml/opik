@@ -2,17 +2,25 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
+import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.filter.DashboardField;
+import com.comet.opik.api.filter.DashboardFilter;
+import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RandomTestUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
@@ -43,8 +51,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -134,24 +144,39 @@ class DashboardsResourceTest {
     @DisplayName("Create dashboard")
     class CreateDashboard {
 
-        @Test
+        @ParameterizedTest
+        @MethodSource
         @DisplayName("Create dashboard with all fields")
-        void createDashboardWithAllFields() {
+        void createDashboardWithAllFields(DashboardType type, DashboardScope scope) {
             var uniqueName = "Test Dashboard " + UUID.randomUUID();
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .name(uniqueName)
                     .description("This is a test dashboard")
+                    .type(type)
+                    .scope(scope)
                     .build();
 
             var createdDashboard = dashboardResourceClient.createAndGet(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertDashboard(dashboard, createdDashboard);
+            var expectedDashboard = dashboard.toBuilder()
+                    .type(Optional.ofNullable(type).orElse(DashboardType.MULTI_PROJECT))
+                    .scope(Optional.ofNullable(scope).orElse(DashboardScope.WORKSPACE))
+                    .build();
+            assertDashboard(expectedDashboard, createdDashboard);
             assertThat(createdDashboard.id()).isNotNull();
             assertThat(createdDashboard.slug()).isNotNull();
             assertThat(createdDashboard.workspaceId()).isEqualTo(WORKSPACE_ID);
             assertThat(createdDashboard.createdBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedAt()).isNotNull();
+        }
+
+        static Stream<Arguments> createDashboardWithAllFields() {
+            var randomType = RandomTestUtils.randomEnumValue(DashboardType.class);
+            var randomScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
+            return Stream.of(
+                    Arguments.of(randomType, randomScope),
+                    Arguments.of(null, null));
         }
 
         @Test
@@ -361,6 +386,112 @@ class DashboardsResourceTest {
             assertDashboardPage(page2, 2, 2, dashboards.reversed().subList(2, 4));
         }
 
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Find dashboards with filters")
+        void findDashboardsWithFilters(
+                Function<List<Dashboard>, List<DashboardFilter>> getFilters,
+                Function<List<Dashboard>, List<Dashboard>> getExpected) {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboards = List.of(
+                    dashboardResourceClient.createPartialDashboard()
+                            .type(DashboardType.MULTI_PROJECT)
+                            .scope(DashboardScope.WORKSPACE)
+                            .build(),
+                    dashboardResourceClient.createPartialDashboard()
+                            .type(DashboardType.EXPERIMENTS)
+                            .scope(DashboardScope.INSIGHTS)
+                            .build(),
+                    dashboardResourceClient.createPartialDashboard()
+                            .type(DashboardType.MULTI_PROJECT)
+                            .scope(DashboardScope.INSIGHTS)
+                            .build());
+
+            var created = dashboards.stream()
+                    .map(d -> {
+                        var id = dashboardResourceClient.create(d, apiKey, workspaceName);
+                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    })
+                    .toList();
+
+            var filters = getFilters.apply(created);
+            var expected = getExpected.apply(created);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, null, filters,
+                    HttpStatus.SC_OK);
+
+            assertDashboardPage(page, 1, expected.size(), expected);
+        }
+
+        static Stream<Arguments> findDashboardsWithFilters() {
+            return Stream.of(
+                    // Filter by type
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.TYPE)
+                                            .operator(Operator.EQUAL)
+                                            .value(DashboardType.MULTI_PROJECT.getValue())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(2), dashboards.get(0))),
+                    // Filter by scope
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.SCOPE)
+                                            .operator(Operator.EQUAL)
+                                            .value(DashboardScope.INSIGHTS.getValue())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(2), dashboards.get(1))),
+                    // Filter by type and scope
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.TYPE)
+                                            .operator(Operator.EQUAL)
+                                            .value(DashboardType.MULTI_PROJECT.getValue())
+                                            .build(),
+                                    DashboardFilter.builder()
+                                            .field(DashboardField.SCOPE)
+                                            .operator(Operator.EQUAL)
+                                            .value(DashboardScope.INSIGHTS.getValue())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(2))));
+        }
+
+        @Test
+        @DisplayName("Find dashboards no filters returns all")
+        void findDashboardsNoFiltersReturnsAll() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard1 = dashboardResourceClient.createPartialDashboard()
+                    .type(DashboardType.MULTI_PROJECT)
+                    .scope(DashboardScope.WORKSPACE)
+                    .build();
+            var dashboard2 = dashboardResourceClient.createPartialDashboard()
+                    .type(DashboardType.EXPERIMENTS)
+                    .scope(DashboardScope.INSIGHTS)
+                    .build();
+
+            dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
+            dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
+
+            assertThat(page.content()).hasSize(2);
+            assertThat(page.total()).isEqualTo(2);
+        }
+
         @Test
         @DisplayName("Find dashboards with empty result")
         void findDashboardsWithEmptyResult() {
@@ -414,7 +545,7 @@ class DashboardsResourceTest {
         @MethodSource
         @DisplayName("Sort dashboards by valid fields")
         void findDashboards__whenSortingByValidFields__thenReturnDashboardsSorted(
-                Comparator<Dashboard> comparator, String sortingJson) {
+                Comparator<Dashboard> comparator, SortingField sorting) {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
@@ -431,7 +562,8 @@ class DashboardsResourceTest {
                     .sorted(comparator)
                     .toList();
 
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, sortingJson, HttpStatus.SC_OK);
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, List.of(sorting),
+                    HttpStatus.SC_OK);
 
             assertThat(page.sortableBy()).isNotEmpty();
             assertThat(page.content()).hasSize(5);
@@ -449,27 +581,27 @@ class DashboardsResourceTest {
             return Stream.of(
                     // ID field sorting
                     Arguments.of(idComparator,
-                            "[{\"field\":\"id\",\"direction\":\"ASC\"}]"),
+                            SortingField.builder().field("id").direction(Direction.ASC).build()),
                     Arguments.of(idComparator.reversed(),
-                            "[{\"field\":\"id\",\"direction\":\"DESC\"}]"),
+                            SortingField.builder().field("id").direction(Direction.DESC).build()),
 
                     // NAME field sorting
                     Arguments.of(nameComparator,
-                            "[{\"field\":\"name\",\"direction\":\"ASC\"}]"),
+                            SortingField.builder().field("name").direction(Direction.ASC).build()),
                     Arguments.of(nameComparator.reversed(),
-                            "[{\"field\":\"name\",\"direction\":\"DESC\"}]"),
+                            SortingField.builder().field("name").direction(Direction.DESC).build()),
 
                     // CREATED_AT field sorting
                     Arguments.of(createdAtComparator,
-                            "[{\"field\":\"created_at\",\"direction\":\"ASC\"}]"),
+                            SortingField.builder().field("created_at").direction(Direction.ASC).build()),
                     Arguments.of(createdAtComparator.reversed(),
-                            "[{\"field\":\"created_at\",\"direction\":\"DESC\"}]"),
+                            SortingField.builder().field("created_at").direction(Direction.DESC).build()),
 
                     // LAST_UPDATED_AT field sorting
                     Arguments.of(lastUpdatedAtComparator,
-                            "[{\"field\":\"last_updated_at\",\"direction\":\"ASC\"}]"),
+                            SortingField.builder().field("last_updated_at").direction(Direction.ASC).build()),
                     Arguments.of(lastUpdatedAtComparator.reversed(),
-                            "[{\"field\":\"last_updated_at\",\"direction\":\"DESC\"}]"));
+                            SortingField.builder().field("last_updated_at").direction(Direction.DESC).build()));
         }
 
         @Test
@@ -511,7 +643,8 @@ class DashboardsResourceTest {
             var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
 
             assertThat(page.sortableBy()).containsExactlyInAnyOrder(
-                    "id", "name", "description", "created_at", "last_updated_at", "created_by", "last_updated_by");
+                    "id", "name", "description", "type", "created_at", "last_updated_at", "created_by",
+                    "last_updated_by");
         }
     }
 
@@ -569,6 +702,46 @@ class DashboardsResourceTest {
 
             assertThat(updatedDashboard.config()).isEqualTo(newConfig);
             assertThat(updatedDashboard.lastUpdatedAt()).isNotNull();
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Update dashboard type and scope")
+        void updateDashboardTypeAndScope(DashboardType initialType, DashboardScope initialScope,
+                DashboardType updatedType, DashboardScope updatedScope) {
+            var dashboard = dashboardResourceClient.createPartialDashboard()
+                    .type(initialType)
+                    .scope(initialScope)
+                    .build();
+            var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+
+            var updateBuilder = DashboardUpdate.builder();
+            if (updatedType != null) {
+                updateBuilder.type(updatedType);
+            }
+            if (updatedScope != null) {
+                updateBuilder.scope(updatedScope);
+            }
+            var update = updateBuilder.build();
+
+            var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
+
+            assertThat(updatedDashboard.type()).isEqualTo(updatedType != null ? updatedType : initialType);
+            assertThat(updatedDashboard.scope()).isEqualTo(updatedScope != null ? updatedScope : initialScope);
+        }
+
+        static Stream<Arguments> updateDashboardTypeAndScope() {
+            var initialType = RandomTestUtils.randomEnumValue(DashboardType.class);
+            var initialScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
+            var differentType = initialType == DashboardType.MULTI_PROJECT
+                    ? DashboardType.EXPERIMENTS
+                    : DashboardType.MULTI_PROJECT;
+            var differentScope = initialScope == DashboardScope.WORKSPACE
+                    ? DashboardScope.INSIGHTS
+                    : DashboardScope.WORKSPACE;
+            return Stream.of(
+                    Arguments.of(initialType, initialScope, differentType, null),
+                    Arguments.of(initialType, initialScope, null, differentScope));
         }
 
         @Test

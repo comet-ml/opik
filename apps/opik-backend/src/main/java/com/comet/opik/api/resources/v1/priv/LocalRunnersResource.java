@@ -5,10 +5,12 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
 import com.comet.opik.api.runner.LocalRunnerConnectRequest;
+import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
+import com.comet.opik.api.runner.LocalRunnerPairRequest;
 import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import com.comet.opik.domain.LocalRunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
@@ -71,11 +73,14 @@ public class LocalRunnersResource {
     @Operation(operationId = "generatePairingCode", summary = "Generate a pairing code", description = "Generate a pairing code for a local runner in the current workspace", responses = {
             @ApiResponse(responseCode = "201", description = "Pairing code generated", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = LocalRunnerPairResponse.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
-    public Response generatePairingCode(@Context UriInfo uriInfo) {
+    public Response generatePairingCode(
+            @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerPairRequest.class))) @NotNull @Valid LocalRunnerPairRequest request,
+            @Context UriInfo uriInfo) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        LocalRunnerPairResponse response = runnerService.generatePairingCode(workspaceId, userName);
+        LocalRunnerPairResponse response = runnerService.generatePairingCode(workspaceId, userName,
+                request.projectId());
         var uri = uriInfo.getBaseUriBuilder()
                 .path("v1/private/local-runners/{runnerId}")
                 .build(response.runnerId());
@@ -86,7 +91,7 @@ public class LocalRunnersResource {
     @Path("/connections")
     @RateLimited
     @Operation(operationId = "connectRunner", summary = "Connect a local runner", description = "Exchange a pairing code or API key for local runner credentials", responses = {
-            @ApiResponse(responseCode = "201", description = "Runner connected", headers = @Header(name = "Location", description = "URI of the runner")),
+            @ApiResponse(responseCode = "201", description = "Runner connected", headers = @Header(name = "Location", description = "URI of the runner"), content = @Content(schema = @Schema(implementation = LocalRunnerConnectResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response connect(
@@ -95,23 +100,26 @@ public class LocalRunnersResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID runnerId = runnerService.connect(workspaceId, userName, request);
+        LocalRunnerConnectResponse connectResponse = runnerService.connect(workspaceId, userName, request);
         var uri = uriInfo.getBaseUriBuilder()
                 .path("v1/private/local-runners/{runnerId}")
-                .build(runnerId);
-        return Response.created(uri).build();
+                .build(connectResponse.runnerId());
+        return Response.created(uri).entity(connectResponse).build();
     }
 
     @GET
-    @Operation(operationId = "listRunners", summary = "List local runners", description = "List all local runners in the current workspace", responses = {
+    @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Runners list", content = @Content(schema = @Schema(implementation = LocalRunner.LocalRunnerPage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response listRunners(
+            @QueryParam("project_id") @NotNull UUID projectId,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(workspaceId, page, size);
+        String userName = requestContext.get().getUserName();
+        LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(workspaceId, userName, projectId, page,
+                size);
         return Response.ok(runnerPage).build();
     }
 
@@ -123,7 +131,8 @@ public class LocalRunnersResource {
     public Response getRunner(@PathParam("runnerId") UUID runnerId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        LocalRunner runner = runnerService.getRunner(workspaceId, runnerId);
+        String userName = requestContext.get().getUserName();
+        LocalRunner runner = runnerService.getRunner(workspaceId, userName, runnerId);
         return Response.ok(runner).build();
     }
 
@@ -138,7 +147,8 @@ public class LocalRunnersResource {
             @RequestBody(description = "Map of agent name to agent definition", content = @Content(schema = @Schema(implementation = Object.class))) @NotNull @Valid Map<String, LocalRunner.Agent> agents) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        runnerService.registerAgents(runnerId, workspaceId, agents);
+        String userName = requestContext.get().getUserName();
+        runnerService.registerAgents(runnerId, workspaceId, userName, agents);
         return Response.noContent().build();
     }
 
@@ -152,7 +162,8 @@ public class LocalRunnersResource {
     public Response heartbeat(@PathParam("runnerId") UUID runnerId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId);
+        String userName = requestContext.get().getUserName();
+        LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName);
         return Response.ok(response).build();
     }
 
@@ -180,12 +191,14 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "200", description = "Jobs list", content = @Content(schema = @Schema(implementation = LocalRunnerJob.LocalRunnerJobPage.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response listJobs(@PathParam("runnerId") UUID runnerId,
-            @QueryParam("project") String project,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        LocalRunnerJob.LocalRunnerJobPage jobPage = runnerService.listJobs(runnerId, project, workspaceId, page, size);
+        String userName = requestContext.get().getUserName();
+        LocalRunnerJob.LocalRunnerJobPage jobPage = runnerService.listJobs(runnerId, projectId, workspaceId, userName,
+                page, size);
         return Response.ok(jobPage).build();
     }
 
@@ -203,7 +216,8 @@ public class LocalRunnersResource {
         asyncResponse.setTimeout(pollTimeoutSeconds + bufferSeconds, TimeUnit.SECONDS);
         asyncResponse.setTimeoutHandler(ar -> ar.resume(Response.noContent().build()));
         String workspaceId = requestContext.get().getWorkspaceId();
-        runnerService.nextJob(runnerId, workspaceId)
+        String userName = requestContext.get().getUserName();
+        runnerService.nextJob(runnerId, workspaceId, userName)
                 .thenAccept(job -> {
                     if (job == null) {
                         asyncResponse.resume(Response.noContent().build());
@@ -232,7 +246,8 @@ public class LocalRunnersResource {
     public Response getJob(@PathParam("jobId") UUID jobId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        LocalRunnerJob job = runnerService.getJob(jobId, workspaceId);
+        String userName = requestContext.get().getUserName();
+        LocalRunnerJob job = runnerService.getJob(jobId, workspaceId, userName);
         return Response.ok(job).build();
     }
 
@@ -245,7 +260,8 @@ public class LocalRunnersResource {
             @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        List<LocalRunnerLogEntry> logs = runnerService.getJobLogs(jobId, offset, workspaceId);
+        String userName = requestContext.get().getUserName();
+        List<LocalRunnerLogEntry> logs = runnerService.getJobLogs(jobId, offset, workspaceId, userName);
         return Response.ok(logs).build();
     }
 
@@ -260,7 +276,8 @@ public class LocalRunnersResource {
             @RequestBody(content = @Content(array = @ArraySchema(schema = @Schema(implementation = LocalRunnerLogEntry.class)))) @NotNull @Valid List<@NotNull LocalRunnerLogEntry> entries) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        runnerService.appendLogs(jobId, workspaceId, entries);
+        String userName = requestContext.get().getUserName();
+        runnerService.appendLogs(jobId, workspaceId, userName, entries);
         return Response.noContent().build();
     }
 
@@ -274,7 +291,8 @@ public class LocalRunnersResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerJobResultRequest.class))) @NotNull @Valid LocalRunnerJobResultRequest result) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        runnerService.reportResult(jobId, workspaceId, result);
+        String userName = requestContext.get().getUserName();
+        runnerService.reportResult(jobId, workspaceId, userName, result);
         return Response.noContent().build();
     }
 
@@ -286,7 +304,8 @@ public class LocalRunnersResource {
     public Response cancelJob(@PathParam("jobId") UUID jobId) {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
-        runnerService.cancelJob(jobId, workspaceId);
+        String userName = requestContext.get().getUserName();
+        runnerService.cancelJob(jobId, workspaceId, userName);
         return Response.noContent().build();
     }
 

@@ -67,25 +67,19 @@ class TestEvaluatorValidation:
         assert suite.name == "test_suite"
 
     def test_add_item__with_non_llm_judge_evaluator__raises_type_error(self):
-        """Test that non-LLMJudge evaluators raise TypeError on add_item."""
-        mock_dataset = _create_mock_dataset()
-        suite = evaluation_suite.EvaluationSuite(
-            name="test_suite",
-            dataset_=mock_dataset,
-        )
-
+        """Test that non-LLMJudge evaluators raise TypeError via resolve_evaluators."""
         equals_metric = metrics.Equals()
 
         with pytest.raises(TypeError) as exc_info:
-            suite.add_item(
-                data={"input": "test"},
+            validators.resolve_evaluators(
+                assertions=None,
                 evaluators=[equals_metric],
+                context="item-level assertions",
             )
 
         assert "Evaluation suites only support LLMJudge evaluators" in str(
             exc_info.value
         )
-        assert "item-level evaluators" in str(exc_info.value)
 
     def test_add_item__with_assertions__succeeds(self):
         """Test that assertions shorthand is accepted in add_item."""
@@ -149,24 +143,20 @@ class TestEvaluatorValidation:
         assert len(item.evaluators) == 1
         assert item.evaluators[0].type == "llm_judge"
 
-    def test_add_item__with_both_assertions_and_evaluators__raises_value_error(self):
+    def test_resolve_evaluators__with_both_assertions_and_evaluators__raises_value_error(
+        self,
+    ):
         """Test that providing both assertions and evaluators raises ValueError."""
-        mock_dataset = _create_mock_dataset()
-        suite = evaluation_suite.EvaluationSuite(
-            name="test_suite",
-            dataset_=mock_dataset,
-        )
-
         llm_judge = suite_evaluators.LLMJudge(
             assertions=["Response is polite"],
             track=False,
         )
 
         with pytest.raises(ValueError, match="Cannot specify both"):
-            suite.add_item(
-                data={"input": "test"},
-                evaluators=[llm_judge],
+            validators.resolve_evaluators(
                 assertions=["Response is helpful"],
+                evaluators=[llm_judge],
+                context="item-level assertions",
             )
 
     def test_resolve_evaluators__with_assertions__returns_llm_judge(self):
@@ -191,6 +181,133 @@ class TestEvaluatorValidation:
         )
 
         assert result is None
+
+
+class TestValidateSuiteItems:
+    def test_valid_items__passes(self):
+        validators.validate_suite_items(
+            [
+                {"data": {"question": "Hello"}},
+                {"data": {"input": "test"}, "assertions": ["Is polite"]},
+            ]
+        )
+
+    def test_item_not_dict__raises_type_error(self):
+        with pytest.raises(TypeError, match="Item at index 1 must be a dict"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"question": "Hello"}},
+                    "not a dict",
+                ]
+            )
+
+    def test_item_missing_data__raises_value_error(self):
+        with pytest.raises(
+            ValueError, match="Item at index 0 is missing required key 'data'"
+        ):
+            validators.validate_suite_items(
+                [
+                    {"assertions": ["Is polite"]},
+                ]
+            )
+
+    def test_data_not_dict__raises_type_error(self):
+        with pytest.raises(TypeError, match="Item at index 0 'data' must be a dict"):
+            validators.validate_suite_items(
+                [
+                    {"data": "not a dict"},
+                ]
+            )
+
+    def test_empty_list__passes(self):
+        validators.validate_suite_items([])
+
+    def test_item_with_all_optional_fields__passes(self):
+        validators.validate_suite_items(
+            [
+                {
+                    "data": {"question": "Hello"},
+                    "assertions": ["Is polite"],
+                    "description": "Test case",
+                    "execution_policy": {"runs_per_item": 3, "pass_threshold": 2},
+                }
+            ]
+        )
+
+    def test_unknown_item_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="unknown keys"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"q": "Hello"}, "foo": "bar"},
+                ]
+            )
+
+    def test_assertions_not_list_of_strings__raises_type_error(self):
+        with pytest.raises(TypeError, match="'assertions' must be a list of strings"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"q": "Hello"}, "assertions": [123]},
+                ]
+            )
+
+    def test_assertions_not_list__raises_type_error(self):
+        with pytest.raises(TypeError, match="'assertions' must be a list of strings"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"q": "Hello"}, "assertions": "not a list"},
+                ]
+            )
+
+    def test_execution_policy_not_dict__raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a dict"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"q": "Hello"}, "execution_policy": "bad"},
+                ]
+            )
+
+    def test_execution_policy_unknown_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="unknown keys"):
+            validators.validate_suite_items(
+                [
+                    {"data": {"q": "Hello"}, "execution_policy": {"bad_key": 1}},
+                ]
+            )
+
+    def test_execution_policy_non_int_value__raises_type_error(self):
+        with pytest.raises(TypeError, match="must be an int"):
+            validators.validate_suite_items(
+                [
+                    {
+                        "data": {"q": "Hello"},
+                        "execution_policy": {"runs_per_item": "3"},
+                    },
+                ]
+            )
+
+
+class TestValidateExecutionPolicy:
+    def test_valid_policy__passes(self):
+        validators.validate_execution_policy({"runs_per_item": 3, "pass_threshold": 2})
+
+    def test_partial_policy__passes(self):
+        validators.validate_execution_policy({"runs_per_item": 5})
+
+    def test_not_dict__raises_type_error(self):
+        with pytest.raises(TypeError, match="must be a dict"):
+            validators.validate_execution_policy("bad")
+
+    def test_unknown_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="unknown keys"):
+            validators.validate_execution_policy({"runs_per_item": 3, "retry": True})
+
+    def test_non_int_value__raises_type_error(self):
+        with pytest.raises(TypeError, match="must be an int"):
+            validators.validate_execution_policy({"runs_per_item": 3.5})
+
+    def test_string_value__raises_type_error(self):
+        with pytest.raises(TypeError, match="must be an int"):
+            validators.validate_execution_policy({"pass_threshold": "2"})
 
 
 def _make_test_result(
@@ -486,6 +603,28 @@ class TestBuildSuiteResult:
         assert suite_result.item_results["item-1"].runs_passed == 0
 
 
+class TestValidateTaskResult:
+    def test_non_dict__raises_type_error(self):
+        with pytest.raises(
+            TypeError, match="must return a dict with 'input' and 'output'"
+        ):
+            evaluation_suite.validate_task_result("just a string")
+
+    def test_missing_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing.*output"):
+            evaluation_suite.validate_task_result({"input": "hello"})
+
+    def test_missing_both_keys__raises_value_error(self):
+        with pytest.raises(ValueError, match="missing"):
+            evaluation_suite.validate_task_result({"response": "hello"})
+
+    def test_valid_result__returns_dict(self):
+        result = evaluation_suite.validate_task_result(
+            {"input": "hello", "output": "world"}
+        )
+        assert result == {"input": "hello", "output": "world"}
+
+
 class TestEvaluationSuiteResultPassRate:
     """Unit tests for EvaluationSuiteResult.pass_rate property."""
 
@@ -519,8 +658,8 @@ class TestEvaluationSuiteResultPassRate:
 
         assert result.pass_rate == 0.3
 
-    def test_pass_rate__zero_items__returns_1(self):
-        """Edge case: no items evaluated should return 1.0 (vacuously true)."""
+    def test_pass_rate__zero_items__returns_none(self):
+        """Edge case: no items evaluated should return None."""
         result = suite_types.EvaluationSuiteResult(
             items_passed=0,
             items_total=0,
@@ -528,4 +667,4 @@ class TestEvaluationSuiteResultPassRate:
             evaluation_result_=mock.MagicMock(),
         )
 
-        assert result.pass_rate == 1.0
+        assert result.pass_rate is None

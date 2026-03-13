@@ -17,6 +17,7 @@ type UseCreatePromptVersionMutationParams = {
   changeDescription?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   type?: PROMPT_TYPE;
+  excludeBlueprintUpdateForProjects?: string[];
   onSuccess: (promptVersion: PromptVersion) => void;
 };
 
@@ -32,6 +33,7 @@ const useCreatePromptVersionMutation = () => {
       changeDescription,
       templateStructure,
       type,
+      excludeBlueprintUpdateForProjects,
     }: UseCreatePromptVersionMutationParams) => {
       const { data } = await api.post(`${PROMPTS_REST_ENDPOINT}versions`, {
         name,
@@ -42,6 +44,10 @@ const useCreatePromptVersionMutation = () => {
           ...(type && { type }),
         },
         ...(templateStructure && { template_structure: templateStructure }),
+        ...(excludeBlueprintUpdateForProjects?.length && {
+          exclude_blueprint_update_for_projects:
+            excludeBlueprintUpdateForProjects,
+        }),
       });
 
       return data;

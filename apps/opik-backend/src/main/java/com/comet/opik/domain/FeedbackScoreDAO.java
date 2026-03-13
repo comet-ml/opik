@@ -52,13 +52,13 @@ public interface FeedbackScoreDAO {
 
     Mono<Long> scoreBatchOfThreads(List<FeedbackScoreBatchItemThread> scores, @Nullable String author);
 
-    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, @NonNull Set<String> excludeCategoryNames);
+    Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId, Set<String> excludeCategoryNames);
 
-    Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type,
-            @NonNull Set<String> excludeCategoryNames);
+    Mono<List<String>> getSpanFeedbackScoreNames(UUID projectId, SpanType type,
+            Set<String> excludeCategoryNames);
 
     Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
-            @NonNull Set<String> excludeCategoryNames);
+            Set<String> excludeCategoryNames);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -429,20 +429,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(entityIds), "Argument 'entityIds' must not be empty");
         log.info("Deleting feedback scores for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
-        return switch (entityType) {
-            case TRACE ->
-                asyncTemplate.nonTransaction(connection -> cascadeSpanDelete(entityIds, projectId, connection))
-                        .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                        .then(Mono.defer(() -> asyncTemplate
-                                .nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, projectId,
-                                        connection))))
-                        .then();
-            case SPAN, THREAD ->
-                asyncTemplate
-                        .nonTransaction(
-                                connection -> deleteScoresByEntityIds(entityType, entityIds, projectId, connection))
-                        .then();
-        };
+        return asyncTemplate
+                .nonTransaction(connection -> deleteScoresByEntityIds(entityType, entityIds, projectId, connection))
+                .then();
     }
 
     @Override

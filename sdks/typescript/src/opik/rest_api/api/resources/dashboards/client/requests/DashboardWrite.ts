@@ -13,6 +13,8 @@ import type * as OpikApi from "../../../../index.js";
  */
 export interface DashboardWrite {
     name: string;
+    type?: OpikApi.DashboardWriteType;
+    scope?: OpikApi.DashboardWriteScope;
     description?: string;
     config: OpikApi.JsonNodeWrite;
 }

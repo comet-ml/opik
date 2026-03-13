@@ -50,6 +50,20 @@ class ExperimentPublic(UniversalBaseModel):
     """
 
     dataset_version_summary: typing.Optional[DatasetVersionSummaryPublic] = None
+    pass_rate: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments.
+    """
+
+    passed_count: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Number of items that passed for evaluation suite experiments. Null for regular experiments.
+    """
+
+    total_count: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Total number of items for evaluation suite experiments. Null for regular experiments.
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

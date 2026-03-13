@@ -12,9 +12,12 @@ import java.util.UUID;
 @Accessors(fluent = true)
 public class TracesUpdated extends BaseEvent {
     private final @NonNull Set<UUID> projectIds;
+    private final @NonNull Set<UUID> traceIds;
 
-    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull String userName) {
+    public TracesUpdated(@NonNull Set<UUID> projectIds, @NonNull Set<UUID> traceIds, @NonNull String workspaceId,
+            @NonNull String userName) {
         super(workspaceId, userName);
         this.projectIds = projectIds;
+        this.traceIds = traceIds;
     }
 }

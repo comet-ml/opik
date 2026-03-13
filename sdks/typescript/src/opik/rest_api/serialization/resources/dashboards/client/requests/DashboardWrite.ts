@@ -4,10 +4,14 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { JsonNodeWrite } from "../../../../types/JsonNodeWrite.js";
+import { DashboardWriteScope } from "../../types/DashboardWriteScope.js";
+import { DashboardWriteType } from "../../types/DashboardWriteType.js";
 
 export const DashboardWrite: core.serialization.Schema<serializers.DashboardWrite.Raw, OpikApi.DashboardWrite> =
     core.serialization.object({
         name: core.serialization.string(),
+        type: DashboardWriteType.optional(),
+        scope: DashboardWriteScope.optional(),
         description: core.serialization.string().optional(),
         config: JsonNodeWrite,
     });
@@ -15,6 +19,8 @@ export const DashboardWrite: core.serialization.Schema<serializers.DashboardWrit
 export declare namespace DashboardWrite {
     export interface Raw {
         name: string;
+        type?: DashboardWriteType.Raw | null;
+        scope?: DashboardWriteScope.Raw | null;
         description?: string | null;
         config: JsonNodeWrite.Raw;
     }

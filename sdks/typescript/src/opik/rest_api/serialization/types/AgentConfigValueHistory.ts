@@ -12,7 +12,7 @@ export const AgentConfigValueHistory: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     key: core.serialization.string(),
-    value: core.serialization.string(),
+    value: core.serialization.string().optional(),
     type: AgentConfigValueHistoryType,
     description: core.serialization.string().optional(),
     validFromBlueprintId: core.serialization.property(
@@ -27,7 +27,7 @@ export declare namespace AgentConfigValueHistory {
         id?: string | null;
         project_id?: string | null;
         key: string;
-        value: string;
+        value?: string | null;
         type: AgentConfigValueHistoryType.Raw;
         description?: string | null;
         valid_from_blueprint_id?: string | null;

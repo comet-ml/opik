@@ -4,7 +4,6 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.PromptVersionCommitsRequest;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -133,12 +132,12 @@ public class PromptResourceClient {
     }
 
     public PromptVersion createPromptVersion(Prompt prompt, String apiKey, String workspaceName,
-            PromptVersionAction action) {
+            Set<UUID> excludeBlueprintUpdateForProjects) {
 
         var request = CreatePromptVersion.builder()
                 .name(prompt.name())
                 .version(podamFactory.manufacturePojo(PromptVersion.class))
-                .action(action)
+                .excludeBlueprintUpdateForProjects(excludeBlueprintUpdateForProjects)
                 .build();
 
         try (var response = client.target(PROMPT_PATH.formatted(baseURI) + "/versions")

@@ -10,4 +10,7 @@ export interface AggregationData {
     duration?: OpikApi.PercentageValues;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
     experimentScores?: OpikApi.FeedbackScoreAverage[];
+    passRateAvg?: number;
+    passedCountSum?: number;
+    totalCountSum?: number;
 }

@@ -6,5 +6,5 @@
  */
 export interface FindFeedbackScoreNamesRequest {
     experimentIds?: string;
-    excludeCategoryName?: string;
+    excludeCategoryNames?: string | string[];
 }

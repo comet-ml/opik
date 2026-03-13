@@ -4,12 +4,16 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { JsonNodePublic } from "../../../../types/JsonNodePublic.js";
+import { DashboardUpdatePublicScope } from "../../types/DashboardUpdatePublicScope.js";
+import { DashboardUpdatePublicType } from "../../types/DashboardUpdatePublicType.js";
 
 export const DashboardUpdatePublic: core.serialization.Schema<
     serializers.DashboardUpdatePublic.Raw,
     OpikApi.DashboardUpdatePublic
 > = core.serialization.object({
     name: core.serialization.string().optional(),
+    type: DashboardUpdatePublicType.optional(),
+    scope: DashboardUpdatePublicScope.optional(),
     description: core.serialization.string().optional(),
     config: JsonNodePublic.optional(),
 });
@@ -17,6 +21,8 @@ export const DashboardUpdatePublic: core.serialization.Schema<
 export declare namespace DashboardUpdatePublic {
     export interface Raw {
         name?: string | null;
+        type?: DashboardUpdatePublicType.Raw | null;
+        scope?: DashboardUpdatePublicScope.Raw | null;
         description?: string | null;
         config?: JsonNodePublic.Raw | null;
     }

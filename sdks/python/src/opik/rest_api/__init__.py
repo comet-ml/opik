@@ -172,6 +172,8 @@ from .types import (
     CountValueStatPublic,
     DashboardPagePublic,
     DashboardPublic,
+    DashboardPublicScope,
+    DashboardPublicType,
     DataPointDouble,
     DataPointNumberPublic,
     Dataset,
@@ -357,6 +359,7 @@ from .types import (
     LlmAsJudgeOutputSchemaWrite,
     LlmAsJudgeOutputSchemaWriteType,
     LocalRunner,
+    LocalRunnerConnectResponse,
     LocalRunnerHeartbeatResponse,
     LocalRunnerJob,
     LocalRunnerJobMetadata,
@@ -402,6 +405,7 @@ from .types import (
     PercentageValues,
     PercentageValuesDetailed,
     PercentageValuesPublic,
+    Permission,
     Project,
     ProjectDetailed,
     ProjectDetailedVisibility,
@@ -571,6 +575,7 @@ from .types import (
     WorkspaceNameHolder,
     WorkspaceSpansCount,
     WorkspaceTraceCount,
+    WorkspaceUserPermissions,
 )
 from .errors import (
     BadGatewayError,
@@ -612,6 +617,7 @@ from . import (
     system_usage,
     traces,
     welcome_wizard,
+    workspace_permissions,
     workspaces,
 )
 from .alerts import GetWebhookExamplesRequestAlertType
@@ -622,6 +628,7 @@ from .attachments import (
     UploadAttachmentRequestEntityType,
 )
 from .client import AsyncOpikApi, OpikApi
+from .dashboards import DashboardUpdatePublicScope, DashboardUpdatePublicType, DashboardWriteScope, DashboardWriteType
 from .datasets import DatasetUpdateVisibility, DatasetWriteType, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
 from .experiments import ExperimentWriteEvaluationMethod, ExperimentWriteStatus, ExperimentWriteType
@@ -634,12 +641,7 @@ from .projects import (
     ProjectUpdateVisibility,
     ProjectWriteVisibility,
 )
-from .prompts import (
-    CreatePromptVersionDetailAction,
-    CreatePromptVersionDetailTemplateStructure,
-    PromptWriteTemplateStructure,
-    PromptWriteType,
-)
+from .prompts import CreatePromptVersionDetailTemplateStructure, PromptWriteTemplateStructure, PromptWriteType
 from .runners import LocalRunnerJobResultRequestStatus
 from .spans import (
     FindFeedbackScoreNames1RequestType,
@@ -821,10 +823,15 @@ __all__ = [
     "CompletionTokensDetails",
     "ConflictError",
     "CountValueStatPublic",
-    "CreatePromptVersionDetailAction",
     "CreatePromptVersionDetailTemplateStructure",
     "DashboardPagePublic",
     "DashboardPublic",
+    "DashboardPublicScope",
+    "DashboardPublicType",
+    "DashboardUpdatePublicScope",
+    "DashboardUpdatePublicType",
+    "DashboardWriteScope",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -1025,6 +1032,7 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
+    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
     "LocalRunnerJobMetadata",
@@ -1076,6 +1084,7 @@ __all__ = [
     "PercentageValues",
     "PercentageValuesDetailed",
     "PercentageValuesPublic",
+    "Permission",
     "Project",
     "ProjectDetailed",
     "ProjectDetailedVisibility",
@@ -1258,6 +1267,7 @@ __all__ = [
     "WorkspaceNameHolder",
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
+    "WorkspaceUserPermissions",
     "agent_configs",
     "alerts",
     "annotation_queues",
@@ -1284,5 +1294,6 @@ __all__ = [
     "system_usage",
     "traces",
     "welcome_wizard",
+    "workspace_permissions",
     "workspaces",
 ]

@@ -5,7 +5,6 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
-import com.comet.opik.api.PromptVersionAction;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
@@ -302,7 +301,7 @@ class PromptServiceImpl implements PromptService {
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
             postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
-                    createPromptVersion.action());
+                    createPromptVersion.excludeBlueprintUpdateForProjects());
 
             return savedPromptVersion;
         });
@@ -314,7 +313,7 @@ class PromptServiceImpl implements PromptService {
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
                 postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
-                        createPromptVersion.action());
+                        createPromptVersion.excludeBlueprintUpdateForProjects());
 
                 return savedPromptVersion;
             });
@@ -748,7 +747,7 @@ class PromptServiceImpl implements PromptService {
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
-            String userName, PromptVersionAction action) {
+            String userName, Set<UUID> excludeProjectIds) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
@@ -757,14 +756,13 @@ class PromptServiceImpl implements PromptService {
                 .payload(promptVersion)
                 .build());
 
-        if (action == PromptVersionAction.UPDATE_BLUEPRINT) {
-            eventBus.post(PromptVersionCreatedEvent.builder()
-                    .workspaceId(workspaceId)
-                    .promptId(promptVersion.promptId())
-                    .commit(promptVersion.commit())
-                    .userName(userName)
-                    .build());
-        }
+        eventBus.post(PromptVersionCreatedEvent.builder()
+                .workspaceId(workspaceId)
+                .promptId(promptVersion.promptId())
+                .commit(promptVersion.commit())
+                .userName(userName)
+                .excludeProjectIds(excludeProjectIds)
+                .build());
     }
 
     private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,

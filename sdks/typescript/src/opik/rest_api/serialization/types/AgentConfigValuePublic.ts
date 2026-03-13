@@ -12,7 +12,7 @@ export const AgentConfigValuePublic: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     key: core.serialization.string(),
-    value: core.serialization.string(),
+    value: core.serialization.string().optional(),
     type: AgentConfigValuePublicType,
     description: core.serialization.string().optional(),
     validFromBlueprintId: core.serialization.property(
@@ -27,7 +27,7 @@ export declare namespace AgentConfigValuePublic {
         id?: string | null;
         project_id?: string | null;
         key: string;
-        value: string;
+        value?: string | null;
         type: AgentConfigValuePublicType.Raw;
         description?: string | null;
         valid_from_blueprint_id?: string | null;
