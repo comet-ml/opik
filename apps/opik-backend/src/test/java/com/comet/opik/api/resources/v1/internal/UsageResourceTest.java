@@ -265,6 +265,7 @@ class UsageResourceTest {
                     .stream()
                     .map(e -> e.toBuilder()
                             .id(null)
+                            .projectId(null)
                             .build())
                     .toList();
             biInfoTest(datasets, DATASET_RESOURCE_URL_TEMPLATE, "datasets",

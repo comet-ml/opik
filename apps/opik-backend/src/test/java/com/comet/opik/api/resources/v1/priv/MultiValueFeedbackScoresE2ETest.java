@@ -584,7 +584,7 @@ class MultiValueFeedbackScoresE2ETest {
     @DisplayName("test score experiment by multiple authors")
     void testScoreExperimentByMultipleAuthors() {
         // first create a dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        var dataset = buildDataset().toBuilder()
                 .id(null)
                 .build();
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY1, TEST_WORKSPACE);
@@ -647,11 +647,15 @@ class MultiValueFeedbackScoresE2ETest {
         assertDatasetItemsWithExperimentItems(experimentId, datasetId, user1Score, user2Score);
     }
 
+    private Dataset buildDataset() {
+        return factory.manufacturePojo(Dataset.class).toBuilder().projectId(null).build();
+    }
+
     @Test
     @DisplayName("test score optimization by multiple authors")
     void testScoreOptimizationByMultipleAuthors() {
         // create a dataset
-        var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+        var dataset = buildDataset().toBuilder()
                 .id(null)
                 .build();
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY1, TEST_WORKSPACE);

@@ -494,6 +494,7 @@ class DailyUsageReportJobTest {
          */
         private void createDemoDataset(String datasetName, String apiKey, String workspaceName) {
             Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .projectId(null)
                     .name(datasetName)
                     .build();
 

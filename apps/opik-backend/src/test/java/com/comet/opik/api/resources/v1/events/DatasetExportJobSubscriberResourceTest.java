@@ -188,7 +188,7 @@ class DatasetExportJobSubscriberResourceTest {
         @DisplayName("should process export job successfully for empty dataset")
         void shouldProcessExportJobSuccessfully_forEmptyDataset() {
             // Given - Create a dataset without items
-            Dataset dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+            Dataset dataset = buildDataset().toBuilder()
                     .name("empty-dataset-" + UUID.randomUUID())
                     .build();
             datasetResourceClient.createDataset(dataset, API_KEY, WORKSPACE_NAME);
@@ -306,6 +306,12 @@ class DatasetExportJobSubscriberResourceTest {
             assertCsvFile(completedJob.filePath(), expectedColumns, expectedRowCount);
         }
 
+    }
+
+    private Dataset buildDataset() {
+        return podamFactory.manufacturePojo(Dataset.class).toBuilder()
+                .projectId(null)
+                .build();
     }
 
     @Nested
@@ -432,7 +438,7 @@ class DatasetExportJobSubscriberResourceTest {
 
     private Dataset createDatasetWithItemsAndColumns(Set<String> columns, int rowCount) {
         // Create dataset
-        Dataset dataset = podamFactory.manufacturePojo(Dataset.class).toBuilder()
+        Dataset dataset = buildDataset().toBuilder()
                 .name("test-dataset-" + UUID.randomUUID())
                 .build();
 

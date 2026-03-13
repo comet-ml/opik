@@ -6453,6 +6453,7 @@ class TracesResourceTest {
             var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(10);
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .name(datasetName)
+                    .projectId(null)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
