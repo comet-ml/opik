@@ -67,6 +67,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.ExperimentGroupMappers.bindGroupCriteria;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.FeedbackScoreAggregations;
 import static com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesModel.PassRateAggregation;
@@ -106,6 +107,9 @@ public interface ExperimentAggregatesDAO {
     Mono<ProjectStats> getExperimentItemsStatsFromAggregates(@NonNull UUID datasetId,
             @NonNull UUID versionId, @NonNull Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
+
+    Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria);
 }
 
 @Singleton
@@ -1374,6 +1378,36 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    private static final String SELECT_EXPERIMENT_AGGREGATION_COUNTS = """
+            SELECT
+                count() AS total,
+                countIf(has_aggregated) AS aggregated,
+                countIf(NOT has_aggregated) AS not_aggregated
+            FROM (
+                SELECT
+                    e.id,
+                    notEmpty(agg.id) AS has_aggregated
+                FROM experiments e FINAL
+                LEFT JOIN (
+                    SELECT
+                        toString(id) AS id
+                    FROM experiment_aggregates
+                    WHERE workspace_id = :workspace_id
+                    <if(experiment_ids)> AND id IN :experiment_ids <endif>
+                    <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                    <if(id)> AND id = :id <endif>
+                    <if(ids_list)> AND id IN :ids_list <endif>
+                ) agg ON e.id = agg.id
+                WHERE e.workspace_id = :workspace_id
+                <if(experiment_ids)> AND e.id IN :experiment_ids <endif>
+                <if(dataset_id)> AND e.dataset_id = :dataset_id <endif>
+                <if(id)> AND e.id = :id <endif>
+                <if(ids_list)> AND e.id IN :ids_list <endif>
+            )
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     @Override
     public Mono<Void> populateExperimentAggregate(UUID experimentId) {
 
@@ -2548,5 +2582,49 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                             (row, rowMetadata) -> StatsMapper.mapExperimentItemsStats(row)));
         }).singleOrEmpty())
                 .doOnError(error -> log.error("Failed to get experiment items stats from aggregates", error));
+    }
+
+    @Override
+    public Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
+        return asyncTemplate.nonTransaction(connection -> Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            var template = getSTWithLogComment(SELECT_EXPERIMENT_AGGREGATION_COUNTS,
+                    "get_aggregation_branch_counts", workspaceId, criteria.datasetId());
+
+            Optional.ofNullable(criteria.experimentIds())
+                    .filter(CollectionUtils::isNotEmpty)
+                    .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
+            Optional.ofNullable(criteria.datasetId())
+                    .ifPresent(datasetId -> template.add("dataset_id", datasetId));
+            Optional.ofNullable(criteria.id())
+                    .ifPresent(id -> template.add("id", id));
+            Optional.ofNullable(criteria.idsList())
+                    .filter(CollectionUtils::isNotEmpty)
+                    .ifPresent(idsList -> template.add("ids_list", idsList));
+
+            var statement = connection.createStatement(template.render());
+
+            Optional.ofNullable(criteria.experimentIds())
+                    .filter(CollectionUtils::isNotEmpty)
+                    .ifPresent(experimentIds -> statement.bind("experiment_ids",
+                            experimentIds.toArray(UUID[]::new)));
+            Optional.ofNullable(criteria.datasetId())
+                    .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
+            Optional.ofNullable(criteria.id())
+                    .ifPresent(id -> statement.bind("id", id));
+            Optional.ofNullable(criteria.idsList())
+                    .filter(CollectionUtils::isNotEmpty)
+                    .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result
+                            .map((row, metadata) -> new AggregatedExperimentCounts(
+                                    row.get("aggregated", Long.class),
+                                    row.get("not_aggregated", Long.class))))
+                    .next()
+                    .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
+        }));
     }
 }

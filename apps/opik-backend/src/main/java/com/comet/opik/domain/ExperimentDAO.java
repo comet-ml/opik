@@ -19,6 +19,9 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
+import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
+import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -66,9 +69,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.parseCommentsFromJson;
-import static com.comet.opik.domain.ExperimentAggregationSql.AggregatedExperimentCounts;
-import static com.comet.opik.domain.ExperimentAggregationSql.AggregationBranchCountsCriteria;
-import static com.comet.opik.domain.ExperimentAggregationSql.SELECT_AGGREGATED_EXPERIMENT_IDS;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
@@ -1552,6 +1552,7 @@ class ExperimentDAO {
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+    private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
     @WithSpan
     Mono<Void> insert(@NonNull Experiment experiment, @NonNull String executionPolicyJson) {
@@ -1951,47 +1952,7 @@ class ExperimentDAO {
 
     private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
             @NonNull AggregationBranchCountsCriteria criteria) {
-
-        return Mono.from(connectionFactory.create())
-                .flatMap(connection -> Mono.deferContextual(ctx -> {
-                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-                    var template = getSTWithLogComment(SELECT_AGGREGATED_EXPERIMENT_IDS,
-                            "get_aggregation_branch_counts", workspaceId, criteria.datasetId());
-
-                    Optional.ofNullable(criteria.experimentIds())
-                            .filter(CollectionUtils::isNotEmpty)
-                            .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
-                    Optional.ofNullable(criteria.datasetId())
-                            .ifPresent(datasetId -> template.add("dataset_id", datasetId));
-                    Optional.ofNullable(criteria.id())
-                            .ifPresent(id -> template.add("id", id));
-                    Optional.ofNullable(criteria.idsList())
-                            .filter(CollectionUtils::isNotEmpty)
-                            .ifPresent(idsList -> template.add("ids_list", idsList));
-
-                    var statement = connection.createStatement(template.render());
-
-                    Optional.ofNullable(criteria.experimentIds())
-                            .filter(CollectionUtils::isNotEmpty)
-                            .ifPresent(experimentIds -> statement.bind("experiment_ids",
-                                    experimentIds.toArray(UUID[]::new)));
-                    Optional.ofNullable(criteria.datasetId())
-                            .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
-                    Optional.ofNullable(criteria.id())
-                            .ifPresent(id -> statement.bind("id", id));
-                    Optional.ofNullable(criteria.idsList())
-                            .filter(CollectionUtils::isNotEmpty)
-                            .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(result -> result
-                                    .map((row, metadata) -> new AggregatedExperimentCounts(
-                                            row.get("aggregated", Long.class),
-                                            row.get("not_aggregated", Long.class))))
-                            .next()
-                            .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-                }));
+        return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
     private ST newFindTemplate(String query, ExperimentSearchCriteria criteria, String queryName, String workspaceId) {

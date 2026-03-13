@@ -12,6 +12,9 @@ import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
+import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -47,9 +50,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.ExperimentAggregationSql.AggregatedExperimentCounts;
-import static com.comet.opik.domain.ExperimentAggregationSql.AggregationBranchCountsCriteria;
-import static com.comet.opik.domain.ExperimentAggregationSql.SELECT_AGGREGATED_EXPERIMENT_IDS;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -2264,6 +2264,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
     @Override
     @WithSpan
@@ -2612,44 +2613,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
             @NonNull AggregationBranchCountsCriteria criteria) {
-        return asyncTemplate.nonTransaction(connection -> Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            ST template = getSTWithLogComment(SELECT_AGGREGATED_EXPERIMENT_IDS, "get_aggregation_branch_counts",
-                    workspaceId, criteria.datasetId());
-
-            Optional.ofNullable(criteria.experimentIds())
-                    .filter(CollectionUtils::isNotEmpty)
-                    .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
-            Optional.ofNullable(criteria.datasetId())
-                    .ifPresent(datasetId -> template.add("dataset_id", datasetId));
-            Optional.ofNullable(criteria.id())
-                    .ifPresent(id -> template.add("id", id));
-            Optional.ofNullable(criteria.idsList())
-                    .filter(CollectionUtils::isNotEmpty)
-                    .ifPresent(idsList -> template.add("ids_list", idsList));
-
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId);
-
-            Optional.ofNullable(criteria.experimentIds())
-                    .filter(CollectionUtils::isNotEmpty)
-                    .ifPresent(experimentIds -> statement.bind("experiment_ids",
-                            experimentIds.toArray(UUID[]::new)));
-            Optional.ofNullable(criteria.datasetId())
-                    .ifPresent(datasetId -> statement.bind("dataset_id", datasetId));
-            Optional.ofNullable(criteria.id())
-                    .ifPresent(id -> statement.bind("id", id));
-            Optional.ofNullable(criteria.idsList())
-                    .filter(CollectionUtils::isNotEmpty)
-                    .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, metadata) -> new AggregatedExperimentCounts(
-                            row.get("aggregated", Long.class),
-                            row.get("not_aggregated", Long.class))))
-                    .next()
-                    .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
-        }));
+        return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
     }
 
     @Override
